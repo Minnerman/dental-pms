@@ -73,11 +73,20 @@ export default function ChangePasswordPage() {
         router.replace("/login");
         return;
       }
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.detail || `Password update failed (${res.status})`);
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text();
+      let data: { detail?: string; message?: string } | null = null;
+      if (contentType.includes("application/json") && text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
       }
-      setMessage(data.message || "Password updated.");
+      if (!res.ok) {
+        throw new Error(data?.detail || text || `Password update failed (${res.status})`);
+      }
+      setMessage(data?.message || "Password updated.");
       setOldPassword("");
       setNewPassword("");
       setConfirm("");

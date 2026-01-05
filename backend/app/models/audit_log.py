@@ -19,7 +19,7 @@ class AuditLog(Base):
         ForeignKey("users.id"), nullable=True
     )
     actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(64), nullable=False)
     request_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
