@@ -1,0 +1,83 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+type HealthPayload = {
+  status?: string;
+  message?: string;
+  detail?: string;
+};
+
+export default function Home() {
+  const [apiOk, setApiOk] = useState<boolean | null>(null);
+  const [httpStatus, setHttpStatus] = useState<number | null>(null);
+  const [payload, setPayload] = useState<HealthPayload | null>(null);
+  const [error, setError] = useState<string>("");
+  const [checkedAt, setCheckedAt] = useState<string>("");
+
+  useEffect(() => {
+    const run = async () => {
+      const url = "/api/health";
+      setApiOk(null);
+      setHttpStatus(null);
+      setPayload(null);
+      setError("");
+
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        setHttpStatus(res.status);
+        const text = await res.text();
+
+        let parsed: HealthPayload | null = null;
+        try {
+          parsed = JSON.parse(text) as HealthPayload;
+        } catch {
+          parsed = { message: text };
+        }
+
+        setPayload(parsed);
+        setApiOk(res.ok);
+      } catch (err) {
+        setApiOk(false);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setCheckedAt(new Date().toISOString());
+      }
+    };
+
+    void run();
+  }, []);
+
+  return (
+    <main style={{ fontFamily: "system-ui", padding: 24 }}>
+      <h1>Dental PMS</h1>
+      <p>Frontend is running.</p>
+      <p>
+        <strong>API health:</strong>{" "}
+        {apiOk === null ? "checking..." : apiOk ? "ok" : "unreachable"}
+      </p>
+      <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd" }}>
+        <div>
+          <strong>URL:</strong> /api/health
+        </div>
+        <div>
+          <strong>HTTP status:</strong>{" "}
+          {httpStatus === null ? "n/a" : httpStatus}
+        </div>
+        <div>
+          <strong>Payload:</strong>{" "}
+          {payload ? JSON.stringify(payload) : "n/a"}
+        </div>
+        <div>
+          <strong>Error:</strong> {error || "none"}
+        </div>
+        <div>
+          <strong>Checked at:</strong> {checkedAt || "n/a"}
+        </div>
+      </div>
+      <p style={{ marginTop: 16, opacity: 0.8 }}>
+        Next step: implement authentication, roles, patients, appointments, notes.
+      </p>
+    </main>
+  );
+}

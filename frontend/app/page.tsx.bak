@@ -1,0 +1,21 @@
+export default async function Home() {
+  let status = "unknown";
+  try {
+    const res = await fetch("/api/health", { cache: "no-store" });
+    const data = await res.json();
+    status = data?.status ?? "unknown";
+  } catch {
+    status = "unreachable";
+  }
+
+  return (
+    <main style={{ fontFamily: "system-ui", padding: 24 }}>
+      <h1>Dental PMS</h1>
+      <p>Frontend is running.</p>
+      <p><strong>API health:</strong> {status}</p>
+      <p style={{ marginTop: 16, opacity: 0.8 }}>
+        Next step: implement authentication, roles, patients, appointments, notes.
+      </p>
+    </main>
+  );
+}
