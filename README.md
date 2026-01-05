@@ -18,11 +18,16 @@ From the repo root:
    cp .env.example .env
 
 2) Start:
-   docker compose up -d --build
+   docker compose up -d
 
 3) Check services:
+- Health: ./ops/health.sh
 - Backend: http://localhost:8000/health
 - Frontend: http://localhost:3000
+
+## Where it runs
+- http://<server-ip>:3100
+- Tailscale: http://<tailscale-ip>:3100
 
 ## Stop
 docker compose down
@@ -39,6 +44,7 @@ docker compose down
 ## Auth / RBAC
 - MVP auth + roles: `docs/AUTH_RBAC.md`
 - Login UI: `/login`
+- `/api/me` returns 401/403 when logged out (normal); UI should show signed-out state without a red error toast.
 
 ## Middleware
 Invalid numeric IDs (e.g. `/patients/INVALID`) are handled in `frontend/middleware.ts`.

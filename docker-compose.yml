@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16
     container_name: dental_pms_db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -20,6 +21,7 @@ services:
     build:
       context: ./backend
     container_name: dental_pms_backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@db:5432/$POSTGRES_DB
       JWT_SECRET: ${JWT_SECRET}
