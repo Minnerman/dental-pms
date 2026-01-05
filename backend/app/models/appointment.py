@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base, SoftDeleteMixin
@@ -33,5 +33,7 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
     appointment_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     clinician: Mapped[str | None] = mapped_column(String(200), nullable=True)
     location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_domiciliary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    visit_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     patient = relationship("Patient", back_populates="appointments", lazy="joined")

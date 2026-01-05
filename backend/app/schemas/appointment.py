@@ -17,6 +17,8 @@ class AppointmentCreate(BaseModel):
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
+    is_domiciliary: bool = False
+    visit_address: Optional[str] = None
 
 
 class AppointmentUpdate(BaseModel):
@@ -27,6 +29,8 @@ class AppointmentUpdate(BaseModel):
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
+    is_domiciliary: Optional[bool] = None
+    visit_address: Optional[str] = None
 
 
 class AppointmentOut(BaseModel):
@@ -41,6 +45,8 @@ class AppointmentOut(BaseModel):
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
+    is_domiciliary: bool
+    visit_address: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     created_by: ActorOut

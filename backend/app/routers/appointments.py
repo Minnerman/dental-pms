@@ -25,6 +25,7 @@ def list_appointments(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     q: str | None = Query(default=None),
+    domiciliary: bool | None = Query(default=None),
     include_deleted: bool = Query(default=False),
 ):
     stmt = select(Appointment)
@@ -46,6 +47,8 @@ def list_appointments(
         stmt = stmt.where(Appointment.starts_at >= from_dt)
     if to_dt:
         stmt = stmt.where(Appointment.starts_at <= to_dt)
+    if domiciliary is not None:
+        stmt = stmt.where(Appointment.is_domiciliary == domiciliary)
     return list(db.scalars(stmt))
 
 
@@ -70,9 +73,15 @@ def create_appointment(
         appointment_type=payload.appointment_type,
         clinician=payload.clinician,
         location=payload.location,
+        is_domiciliary=payload.is_domiciliary,
+        visit_address=payload.visit_address,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
     )
+    if appt.is_domiciliary and not (appt.visit_address or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visit address required")
+    if not appt.is_domiciliary:
+        appt.visit_address = None
     db.add(appt)
     db.flush()
     log_event(
@@ -131,6 +140,16 @@ def update_appointment(
         appt.appointment_type = payload.appointment_type
     if payload.location is not None:
         appt.location = payload.location
+    if payload.is_domiciliary is not None:
+        appt.is_domiciliary = payload.is_domiciliary
+    if payload.visit_address is not None:
+        appt.visit_address = payload.visit_address
+    next_is_domiciliary = appt.is_domiciliary
+    next_visit_address = appt.visit_address
+    if next_is_domiciliary and not (next_visit_address or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visit address required")
+    if not next_is_domiciliary:
+        appt.visit_address = None
     appt.updated_by_user_id = user.id
     db.add(appt)
     log_event(
