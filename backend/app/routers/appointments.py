@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -10,7 +10,7 @@ from app.models.appointment import Appointment
 from app.models.audit_log import AuditLog
 from app.models.patient import Patient
 from app.models.user import User
-from app.schemas.appointment import AppointmentCreate, AppointmentOut
+from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
 from app.schemas.audit_log import AuditLogOut
 from app.services.audit import log_event, snapshot_model
 
@@ -24,9 +24,20 @@ def list_appointments(
     patient_id: int | None = Query(default=None),
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    q: str | None = Query(default=None),
     include_deleted: bool = Query(default=False),
 ):
-    stmt = select(Appointment).order_by(Appointment.starts_at.desc())
+    stmt = select(Appointment)
+    if q:
+        q_like = f"%{q.strip().lower()}%"
+        stmt = stmt.join(Patient).where(
+            or_(
+                Patient.first_name.ilike(q_like),
+                Patient.last_name.ilike(q_like),
+                (Patient.first_name + " " + Patient.last_name).ilike(q_like),
+            )
+        )
+    stmt = stmt.order_by(Appointment.starts_at.desc())
     if not include_deleted:
         stmt = stmt.where(Appointment.deleted_at.is_(None))
     if patient_id:
@@ -52,9 +63,11 @@ def create_appointment(
 
     appt = Appointment(
         patient_id=payload.patient_id,
+        clinician_user_id=payload.clinician_user_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
         status=payload.status,
+        appointment_type=payload.appointment_type,
         clinician=payload.clinician,
         location=payload.location,
         created_by_user_id=user.id,
@@ -65,10 +78,68 @@ def create_appointment(
     log_event(
         db,
         actor=user,
-        action="create",
+        action="appointment.created",
         entity_type="appointment",
         entity_id=str(appt.id),
         before_obj=None,
+        after_obj=appt,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(appt)
+    return appt
+
+
+@router.get("/{appointment_id}", response_model=AppointmentOut)
+def get_appointment(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    appt = db.get(Appointment, appointment_id)
+    if not appt or appt.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    return appt
+
+
+@router.patch("/{appointment_id}", response_model=AppointmentOut)
+def update_appointment(
+    appointment_id: int,
+    payload: AppointmentUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    appt = db.get(Appointment, appointment_id)
+    if not appt or appt.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+
+    before_data = snapshot_model(appt)
+    if payload.starts_at is not None:
+        appt.starts_at = payload.starts_at
+    if payload.ends_at is not None:
+        appt.ends_at = payload.ends_at
+    if payload.status is not None:
+        appt.status = payload.status
+    if payload.clinician is not None:
+        appt.clinician = payload.clinician
+    if payload.clinician_user_id is not None:
+        appt.clinician_user_id = payload.clinician_user_id
+    if payload.appointment_type is not None:
+        appt.appointment_type = payload.appointment_type
+    if payload.location is not None:
+        appt.location = payload.location
+    appt.updated_by_user_id = user.id
+    db.add(appt)
+    log_event(
+        db,
+        actor=user,
+        action="appointment.updated",
+        entity_type="appointment",
+        entity_id=str(appt.id),
+        before_data=before_data,
         after_obj=appt,
         request_id=request_id,
         ip_address=request.client.host if request else None,
@@ -100,7 +171,7 @@ def archive_appointment(
     log_event(
         db,
         actor=user,
-        action="delete",
+        action="appointment.archived",
         entity_type="appointment",
         entity_id=str(appt.id),
         before_data=before_data,
@@ -135,7 +206,7 @@ def restore_appointment(
     log_event(
         db,
         actor=user,
-        action="restore",
+        action="appointment.restored",
         entity_type="appointment",
         entity_id=str(appt.id),
         before_data=before_data,

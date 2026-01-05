@@ -20,6 +20,9 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    clinician_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[AppointmentStatus] = mapped_column(
@@ -27,6 +30,7 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
         default=AppointmentStatus.booked,
         nullable=False,
     )
+    appointment_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     clinician: Mapped[str | None] = mapped_column(String(200), nullable=True)
     location: Mapped[str | None] = mapped_column(String(120), nullable=True)
 

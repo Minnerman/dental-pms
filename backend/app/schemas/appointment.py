@@ -10,9 +10,21 @@ from app.schemas.patient import PatientSummary
 
 class AppointmentCreate(BaseModel):
     patient_id: int
+    clinician_user_id: Optional[int] = None
     starts_at: datetime
     ends_at: datetime
     status: AppointmentStatus = AppointmentStatus.booked
+    appointment_type: Optional[str] = None
+    clinician: Optional[str] = None
+    location: Optional[str] = None
+
+
+class AppointmentUpdate(BaseModel):
+    clinician_user_id: Optional[int] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    status: Optional[AppointmentStatus] = None
+    appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
 
@@ -22,9 +34,11 @@ class AppointmentOut(BaseModel):
 
     id: int
     patient: PatientSummary
+    clinician_user_id: Optional[int] = None
     starts_at: datetime
     ends_at: datetime
     status: AppointmentStatus
+    appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
     created_at: datetime

@@ -11,6 +11,9 @@ from app.routers.appointments import router as appointments_router
 from app.routers.audit import router as audit_router
 from app.routers.me import router as me_router
 from app.routers.notes import router as notes_router, patient_router as patient_notes_router
+from app.routers.notes import appointment_router as appointment_notes_router
+from app.routers.notes import appointment_router as appointment_notes_router
+from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.patients import router as patients_router
 from app.routers.timeline import router as timeline_router
 from app.routers.users import router as users_router
@@ -60,5 +63,8 @@ app.include_router(patients_router)
 app.include_router(appointments_router)
 app.include_router(notes_router)
 app.include_router(patient_notes_router)
+app.include_router(appointment_notes_router)
+app.include_router(appointment_notes_router)
+app.include_router(appointment_notes_router)
 app.include_router(audit_router)
 app.include_router(timeline_router)
