@@ -9,12 +9,14 @@ from app.deps import get_current_user
 from app.models.audit_log import AuditLog
 from app.models.note import Note
 from app.models.patient import Patient
+from app.models.appointment import Appointment
 from app.models.user import User
 from app.schemas.note import NoteCreate, NoteOut
 from app.schemas.audit_log import AuditLogOut
 from app.services.audit import log_event, snapshot_model
 
 patient_router = APIRouter(prefix="/patients/{patient_id}/notes", tags=["notes"])
+appointment_router = APIRouter(prefix="/appointments/{appointment_id}/notes", tags=["notes"])
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
@@ -61,7 +63,7 @@ def create_note(
     log_event(
         db,
         actor=user,
-        action="create",
+        action="note.created",
         entity_type="note",
         entity_id=str(note.id),
         before_obj=None,
@@ -72,6 +74,22 @@ def create_note(
     db.commit()
     db.refresh(note)
     return note
+
+
+@appointment_router.get("", response_model=list[NoteOut])
+def list_appointment_notes(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    include_deleted: bool = Query(default=False),
+):
+    appt = db.get(Appointment, appointment_id)
+    if appt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    stmt = select(Note).where(Note.appointment_id == appointment_id).order_by(Note.created_at.desc())
+    if not include_deleted:
+        stmt = stmt.where(Note.deleted_at.is_(None))
+    return list(db.scalars(stmt))
 
 
 @patient_router.post("/{note_id}/archive", response_model=NoteOut)
@@ -97,7 +115,7 @@ def archive_note(
     log_event(
         db,
         actor=user,
-        action="delete",
+        action="note.archived",
         entity_type="note",
         entity_id=str(note.id),
         before_data=before_data,
@@ -133,7 +151,7 @@ def restore_note(
     log_event(
         db,
         actor=user,
-        action="restore",
+        action="note.restored",
         entity_type="note",
         entity_id=str(note.id),
         before_data=before_data,
@@ -164,6 +182,46 @@ def list_all_notes(
     return list(db.scalars(stmt))
 
 
+@router.post("", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
+def create_note_global(
+    payload: NoteCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    if payload.patient_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="patient_id required")
+    patient = db.get(Patient, payload.patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+    note = Note(
+        patient_id=payload.patient_id,
+        appointment_id=payload.appointment_id,
+        body=payload.body,
+        note_type=payload.note_type,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(note)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="note.created",
+        entity_type="note",
+        entity_id=str(note.id),
+        before_obj=None,
+        after_obj=note,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(note)
+    return note
+
+
 @router.post("/{note_id}/archive", response_model=NoteOut)
 def archive_note_global(
     note_id: int,
@@ -186,7 +244,7 @@ def archive_note_global(
     log_event(
         db,
         actor=user,
-        action="delete",
+        action="note.archived",
         entity_type="note",
         entity_id=str(note.id),
         before_data=before_data,
@@ -221,7 +279,7 @@ def restore_note_global(
     log_event(
         db,
         actor=user,
-        action="restore",
+        action="note.restored",
         entity_type="note",
         entity_id=str(note.id),
         before_data=before_data,

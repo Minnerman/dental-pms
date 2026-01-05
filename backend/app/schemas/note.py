@@ -8,6 +8,7 @@ from app.schemas.actor import ActorOut
 
 
 class NoteCreate(BaseModel):
+    patient_id: Optional[int] = None
     body: str
     note_type: NoteType = NoteType.clinical
     appointment_id: Optional[int] = None
