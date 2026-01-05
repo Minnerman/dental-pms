@@ -28,3 +28,14 @@ CONFIRM=YES ./ops/db_restore.sh ./backups/dental-pms-YYYYmmdd-HHMM.sql
 Notes:
 - Requires the database container to be running.
 - If you need to restore into a fresh DB, ensure the DB exists and credentials are correct before restoring.
+
+## Retention / rotation guidance
+- Suggested retention: keep daily backups for 14 days and monthly backups for 6 months (adjust to your needs).
+- Review candidates for deletion (safe, no changes made):
+```bash
+find backups -type f -name '*.sql' -mtime +30 -print
+```
+- Destructive (deletes files older than 30 days):
+```bash
+find backups -type f -name '*.sql' -mtime +30 -delete
+```
