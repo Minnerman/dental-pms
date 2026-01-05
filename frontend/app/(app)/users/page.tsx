@@ -33,7 +33,7 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [resetUser, setResetUser] = useState<User | null>(null);
   const [resetPassword, setResetPassword] = useState("");
-  const [resetResult, setResetResult] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
   const [email, setEmail] = useState("");
@@ -163,14 +163,22 @@ export default function UsersPage() {
   async function submitPasswordReset(e: React.FormEvent) {
     e.preventDefault();
     if (!resetUser) return;
+    if (resetPassword.trim().length < 12) {
+      setError("Temporary password must be at least 12 characters.");
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setError("Temporary passwords do not match.");
+      return;
+    }
     setResetLoading(true);
     setError(null);
-    setResetResult(null);
+    setNotice(null);
     try {
       const res = await apiFetch(`/api/users/${resetUser.id}/reset-password`, {
         method: "POST",
         body: JSON.stringify({
-          temp_password: resetPassword.trim() || undefined,
+          temp_password: resetPassword.trim(),
         }),
       });
       if (res.status === 401) {
@@ -182,12 +190,22 @@ export default function UsersPage() {
         setError("Not authorized to reset passwords.");
         return;
       }
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.detail || `Failed to reset password (HTTP ${res.status})`);
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text();
+      let data: { detail?: string; message?: string } | null = null;
+      if (contentType.includes("application/json") && text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
       }
-      setResetResult(data.temp_password);
+      if (!res.ok) {
+        throw new Error(data?.detail || text || `Failed to reset password (HTTP ${res.status})`);
+      }
+      setNotice(data?.message || "Temporary password set. User will be forced to change it.");
       setResetPassword("");
+      setResetConfirm("");
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reset password");
@@ -196,20 +214,10 @@ export default function UsersPage() {
     }
   }
 
-  async function copyResetPassword() {
-    if (!resetResult) return;
-    try {
-      await navigator.clipboard.writeText(resetResult);
-      setNotice("Temporary password copied.");
-    } catch {
-      setNotice("Copy failed. Please copy manually.");
-    }
-  }
-
   function closeResetModal() {
     setResetUser(null);
     setResetPassword("");
-    setResetResult(null);
+    setResetConfirm("");
   }
 
   return (
@@ -256,8 +264,8 @@ export default function UsersPage() {
                   onChange={(e) => setFullName(e.target.value)}
                 />
               </div>
-              <div className="stack" style={{ gap: 8 }}>
-                <label className="label">Password</label>
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Password</label>
                 <div className="input-wrap">
                   <input
                     className="input"
@@ -371,15 +379,16 @@ export default function UsersPage() {
 
               <form onSubmit={submitPasswordReset} className="stack">
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Temporary password (optional)</label>
+                  <label className="label">Temporary password</label>
                   <div className="input-wrap">
                     <input
                       className="input"
                       type={showPassword ? "text" : "password"}
                       value={resetPassword}
                       onChange={(e) => setResetPassword(e.target.value)}
-                      placeholder="Leave blank to auto-generate"
-                      minLength={8}
+                      placeholder="At least 12 characters"
+                      minLength={12}
+                      required
                     />
                     <button
                       type="button"
@@ -391,19 +400,21 @@ export default function UsersPage() {
                     </button>
                   </div>
                 </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Confirm temporary password</label>
+                  <input
+                    className="input"
+                    type={showPassword ? "text" : "password"}
+                    value={resetConfirm}
+                    onChange={(e) => setResetConfirm(e.target.value)}
+                    minLength={12}
+                    required
+                  />
+                </div>
                 <button className="btn btn-primary" disabled={resetLoading}>
                   {resetLoading ? "Resetting..." : "Reset password"}
                 </button>
               </form>
-
-              {resetResult && (
-                <div className="notice" style={{ display: "grid", gap: 8 }}>
-                  <div>Temporary password: <strong>{resetResult}</strong></div>
-                  <button className="btn btn-secondary" onClick={copyResetPassword}>
-                    Copy to clipboard
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
