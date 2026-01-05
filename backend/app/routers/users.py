@@ -78,6 +78,7 @@ def patch_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     previous_role = user.role
+    previous_active = user.is_active
     updated = update_user(
         db,
         user=user,
@@ -95,6 +96,17 @@ def patch_user(
             entity_id=str(updated.id),
             before_data={"role": previous_role.value},
             after_data={"role": updated.role.value},
+        )
+        db.commit()
+    if payload.is_active is not None and updated.is_active != previous_active:
+        log_event(
+            db,
+            actor=admin,
+            action="user.activated" if updated.is_active else "user.deactivated",
+            entity_type="user",
+            entity_id=str(updated.id),
+            before_data={"is_active": previous_active},
+            after_data={"is_active": updated.is_active},
         )
         db.commit()
     return updated

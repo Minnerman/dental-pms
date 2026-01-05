@@ -17,13 +17,7 @@ from app.schemas.auth import (
     PasswordResetResponse,
     Token,
 )
-from app.services.users import (
-    authenticate,
-    get_user_by_email,
-    reset_password_with_token,
-    set_password,
-    set_password_reset_token,
-)
+from app.services.users import get_user_by_email, reset_password_with_token, set_password, set_password_reset_token
 from app.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -46,8 +40,10 @@ RESET_CONFIRM_LIMITER = SimpleRateLimiter(
 
 @router.post("/login", response_model=Token)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = authenticate(db, payload.email, payload.password)
-    if not user:
+    user = get_user_by_email(db, payload.email)
+    if user and not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_access_token(
         subject=str(user.id),

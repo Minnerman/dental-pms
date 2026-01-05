@@ -23,8 +23,21 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t || `Login failed (${res.status})`);
+        const contentType = res.headers.get("content-type") || "";
+        const text = await res.text();
+        let detail = text;
+        if (contentType.includes("application/json") && text) {
+          try {
+            const data = JSON.parse(text) as { detail?: string };
+            detail = data.detail || detail;
+          } catch {
+            // ignore
+          }
+        }
+        if (res.status === 403 && detail === "Account disabled") {
+          throw new Error("Your account is disabled. Contact an administrator.");
+        }
+        throw new Error(detail || `Login failed (${res.status})`);
       }
       const data = await res.json();
       setToken(data.access_token);

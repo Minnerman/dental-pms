@@ -36,6 +36,7 @@ export default function UsersPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<User | null>(null);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -184,6 +185,34 @@ export default function UsersPage() {
         const msg = await res.text();
         throw new Error(msg || `Failed to update user (HTTP ${res.status})`);
       }
+      setNotice("User disabled.");
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update user");
+    }
+  }
+
+  async function enableUser(userId: number) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: true }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setError("Not authorized to update users.");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update user (HTTP ${res.status})`);
+      }
+      setNotice("User enabled.");
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update user");
@@ -248,6 +277,10 @@ export default function UsersPage() {
     setResetUser(null);
     setResetPassword("");
     setResetConfirm("");
+  }
+
+  function closeStatusModal() {
+    setStatusTarget(null);
   }
 
   return (
@@ -460,6 +493,39 @@ export default function UsersPage() {
           </div>
         )}
 
+        {statusTarget && (
+          <div className="card" style={{ margin: 0 }}>
+            <div className="stack">
+              <div className="row">
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Disable user</h3>
+                  <p style={{ color: "var(--muted)" }}>
+                    Disable access for {statusTarget.email}? They will not be able to sign in.
+                  </p>
+                </div>
+                <button className="btn btn-secondary" type="button" onClick={closeStatusModal}>
+                  Cancel
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const id = statusTarget.id;
+                    closeStatusModal();
+                    void disableUser(id);
+                  }}
+                >
+                  Confirm disable
+                </button>
+                <button className="btn btn-secondary" onClick={closeStatusModal}>
+                  Keep active
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="card" style={{ margin: 0 }}>
           {loading ? (
             <div className="badge">Loading users…</div>
@@ -480,16 +546,28 @@ export default function UsersPage() {
                     <td>{user.full_name || "—"}</td>
                     <td>{user.email}</td>
                     <td>{user.role}</td>
-                    <td>{user.is_active ? "Active" : "Disabled"}</td>
+                    <td>
+                      <span className="badge">
+                        {user.is_active ? "Active" : "Disabled"}
+                      </span>
+                    </td>
                     <td>
                       <div className="table-actions">
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => disableUser(user.id)}
-                          disabled={!user.is_active}
-                        >
-                          Disable
-                        </button>
+                        {user.is_active ? (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => setStatusTarget(user)}
+                          >
+                            Disable
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => enableUser(user.id)}
+                          >
+                            Enable
+                          </button>
+                        )}
                         <button
                           className="btn btn-secondary"
                           onClick={() => {
