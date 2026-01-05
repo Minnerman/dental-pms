@@ -1,5 +1,6 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings, validate_settings
@@ -17,6 +18,16 @@ from app.services.users import seed_initial_admin
 
 app = FastAPI(title="Dental PMS API", version="0.1.0")
 logger = logging.getLogger("dental_pms.startup")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = request.headers.get("x-request-id")
+    logger.exception("Unhandled server error", extra={"request_id": request_id})
+    payload = {"detail": "Internal server error"}
+    if request_id:
+        payload["request_id"] = request_id
+    return JSONResponse(status_code=500, content=payload)
 
 
 @app.on_event("startup")
