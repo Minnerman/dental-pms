@@ -37,6 +37,9 @@ export default function LoginPage() {
         if (res.status === 403 && detail === "Account disabled") {
           throw new Error("Your account is disabled. Contact an administrator.");
         }
+        if (res.status === 429) {
+          throw new Error("Too many login attempts. Please wait and try again.");
+        }
         throw new Error(detail || `Login failed (${res.status})`);
       }
       const data = await res.json();

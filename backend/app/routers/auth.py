@@ -36,10 +36,17 @@ RESET_REQUEST_LIMITER = SimpleRateLimiter(
 RESET_CONFIRM_LIMITER = SimpleRateLimiter(
     max_events=RESET_CONFIRM_PER_MINUTE, window_seconds=60
 )
+LOGIN_LIMITER = SimpleRateLimiter(max_events=10, window_seconds=60)
+LOGIN_IP_LIMITER = SimpleRateLimiter(max_events=20, window_seconds=60)
 
 
 @router.post("/login", response_model=Token)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    ip_address = request.client.host if request else "unknown"
+    rate_key = f"{ip_address}:{payload.email.lower().strip()}"
+    if not LOGIN_LIMITER.allow(rate_key) or not LOGIN_IP_LIMITER.allow(ip_address):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts")
+
     user = get_user_by_email(db, payload.email)
     if user and not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
