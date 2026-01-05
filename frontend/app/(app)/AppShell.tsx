@@ -60,6 +60,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PatientSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [lastQuery, setLastQuery] = useState("");
 
   useEffect(() => {
     const token = getToken();
@@ -120,9 +122,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const trimmed = searchQuery.trim();
     if (trimmed.length < 2) {
       setSearchResults([]);
+      setActiveIndex(-1);
+      setSearching(false);
       return;
     }
     const handle = setTimeout(async () => {
+      if (trimmed === lastQuery) {
+        setSearching(false);
+        return;
+      }
       setSearching(true);
       try {
         const res = await apiFetch(`/api/patients/search?q=${encodeURIComponent(trimmed)}`);
@@ -134,17 +142,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const data = (await res.json()) as PatientSearchResult[];
           setSearchResults(data);
+          setActiveIndex(data.length ? 0 : -1);
         } else {
           setSearchResults([]);
+          setActiveIndex(-1);
         }
       } catch {
         setSearchResults([]);
+        setActiveIndex(-1);
       } finally {
         setSearching(false);
+        setLastQuery(trimmed);
       }
     }, 250);
     return () => clearTimeout(handle);
-  }, [searchQuery, router]);
+  }, [searchQuery, router, lastQuery]);
 
   if (checking) {
     return (
@@ -156,6 +168,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const tabs = [...baseTabs, ...(isAdmin ? [{ href: "/users", label: "Users" }] : [])];
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href));
+  const showDropdown = searchQuery.trim().length >= 2;
+  const showNoResults =
+    !searching &&
+    showDropdown &&
+    searchQuery.trim() === lastQuery &&
+    searchResults.length === 0;
 
   return (
     <div className="app-shell">
@@ -168,13 +186,42 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               placeholder="Search patients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (!showDropdown) return;
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActiveIndex((prev) =>
+                    Math.min(prev + 1, Math.max(searchResults.length - 1, 0))
+                  );
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActiveIndex((prev) => Math.max(prev - 1, 0));
+                }
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const next =
+                    searchResults[activeIndex] || searchResults[0] || undefined;
+                  if (next) {
+                    setSearchQuery("");
+                    setSearchResults([]);
+                    setActiveIndex(-1);
+                    router.push(`/patients/${next.id}`);
+                  }
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSearchResults([]);
+                  setActiveIndex(-1);
+                }
+              }}
             />
             {searching && (
               <div className="badge" style={{ position: "absolute", right: 8, top: 8 }}>
                 Searching
               </div>
             )}
-            {searchResults.length > 0 && (
+            {showDropdown && (searchResults.length > 0 || showNoResults) && (
               <div
                 className="card"
                 style={{
@@ -187,25 +234,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   gap: 6,
                 }}
               >
-                {searchResults.map((patient) => (
-                  <button
-                    key={patient.id}
-                    className="btn btn-secondary"
-                    style={{ justifyContent: "space-between" }}
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSearchResults([]);
-                      router.push(`/patients/${patient.id}`);
-                    }}
-                  >
-                    <span>
-                      {patient.first_name} {patient.last_name}
-                    </span>
-                    <span style={{ color: "var(--muted)" }}>
-                      {patient.date_of_birth || "DOB —"} · {patient.phone || "No phone"}
-                    </span>
-                  </button>
-                ))}
+                {showNoResults ? (
+                  <div className="notice">No results</div>
+                ) : (
+                  searchResults.map((patient, idx) => (
+                    <button
+                      key={patient.id}
+                      className={idx === activeIndex ? "btn btn-primary" : "btn btn-secondary"}
+                      style={{ justifyContent: "space-between" }}
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSearchResults([]);
+                        setActiveIndex(-1);
+                        router.push(`/patients/${patient.id}`);
+                      }}
+                    >
+                      <span>
+                        {patient.first_name} {patient.last_name}
+                      </span>
+                      <span style={{ color: "var(--muted)" }}>
+                        {patient.date_of_birth || "DOB —"} · {patient.phone || "No phone"}
+                      </span>
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
