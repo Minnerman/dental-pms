@@ -10,7 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.patient import Patient
 from app.services.audit import log_event, snapshot_model
 from app.schemas.audit_log import AuditLogOut
-from app.schemas.patient import PatientCreate, PatientOut, PatientUpdate
+from app.schemas.patient import PatientCreate, PatientOut, PatientSearchOut, PatientUpdate
 from app.models.user import User
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -20,7 +20,8 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 def list_patients(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
-    query: str | None = Query(default=None),
+    query: str | None = Query(default=None, alias="query"),
+    q: str | None = Query(default=None, alias="q"),
     email: str | None = Query(default=None),
     dob: date | None = Query(default=None),
     include_deleted: bool = Query(default=False),
@@ -30,8 +31,9 @@ def list_patients(
     stmt = select(Patient).order_by(Patient.last_name, Patient.first_name)
     if not include_deleted:
         stmt = stmt.where(Patient.deleted_at.is_(None))
-    if query:
-        like = f"%{query.strip()}%"
+    search = q or query
+    if search:
+        like = f"%{search.strip()}%"
         stmt = stmt.where(
             or_(
                 Patient.first_name.ilike(like),
@@ -45,6 +47,30 @@ def list_patients(
     if dob:
         stmt = stmt.where(Patient.date_of_birth == dob)
     stmt = stmt.limit(limit).offset(offset)
+    return list(db.scalars(stmt))
+
+
+@router.get("/search", response_model=list[PatientSearchOut])
+def search_patients(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    q: str = Query(min_length=1),
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    term = q.strip()
+    like = f"%{term}%"
+    stmt = select(Patient).where(Patient.deleted_at.is_(None))
+    criteria = [
+        Patient.first_name.ilike(like),
+        Patient.last_name.ilike(like),
+        Patient.phone.ilike(like),
+    ]
+    try:
+        parsed = date.fromisoformat(term)
+        criteria.append(Patient.date_of_birth == parsed)
+    except ValueError:
+        pass
+    stmt = stmt.where(or_(*criteria)).order_by(Patient.last_name, Patient.first_name).limit(limit)
     return list(db.scalars(stmt))
 
 
@@ -69,6 +95,9 @@ def create_patient(
         city=payload.city,
         postcode=payload.postcode,
         notes=payload.notes,
+        allergies=payload.allergies,
+        medical_alerts=payload.medical_alerts,
+        safeguarding_notes=payload.safeguarding_notes,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
     )

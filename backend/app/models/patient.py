@@ -24,6 +24,9 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     postcode: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allergies: Mapped[str | None] = mapped_column(Text, nullable=True)
+    medical_alerts: Mapped[str | None] = mapped_column(Text, nullable=True)
+    safeguarding_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     appointments = relationship("Appointment", back_populates="patient")
     notes_list = relationship("Note", back_populates="patient")

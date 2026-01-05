@@ -19,6 +19,9 @@ class PatientBase(BaseModel):
     city: Optional[str] = None
     postcode: Optional[str] = None
     notes: Optional[str] = None
+    allergies: Optional[str] = None
+    medical_alerts: Optional[str] = None
+    safeguarding_notes: Optional[str] = None
 
 
 class PatientCreate(PatientBase):
@@ -38,6 +41,9 @@ class PatientUpdate(BaseModel):
     city: Optional[str] = None
     postcode: Optional[str] = None
     notes: Optional[str] = None
+    allergies: Optional[str] = None
+    medical_alerts: Optional[str] = None
+    safeguarding_notes: Optional[str] = None
 
 
 class PatientOut(PatientBase):
@@ -58,3 +64,13 @@ class PatientSummary(BaseModel):
     id: int
     first_name: str
     last_name: str
+
+
+class PatientSearchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    date_of_birth: Optional[date] = None
+    phone: Optional[str] = None
