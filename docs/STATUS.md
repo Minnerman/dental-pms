@@ -48,6 +48,7 @@
 - Alembic migrations added; forward-fill removed; baseline stamped and upgrade applied
 - 2026-01-05: Frontend service restarted; port 3100 responding again
 - 2026-01-05: Treat /api/me 401/403 as signed-out state to avoid error toast
+- 2026-01-05: Repo initialized + compose restart policy and README updates (commits 69579f6, 153cbb1)
 
 ## Known issues
 - None known.
