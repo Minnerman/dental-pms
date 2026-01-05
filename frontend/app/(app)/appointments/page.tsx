@@ -15,6 +15,8 @@ type Appointment = {
   appointment_type?: string | null;
   clinician?: string | null;
   location?: string | null;
+  is_domiciliary: boolean;
+  visit_address?: string | null;
   starts_at: string;
   ends_at: string;
   status: string;
@@ -34,6 +36,8 @@ type AppointmentNote = {
   created_by: Actor;
 };
 
+type DomiciliaryFilter = "all" | "clinic" | "domiciliary";
+
 export default function AppointmentsPage() {
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -46,10 +50,13 @@ export default function AppointmentsPage() {
   const [clinicianUserId, setClinicianUserId] = useState("");
   const [appointmentType, setAppointmentType] = useState("");
   const [location, setLocation] = useState("");
+  const [isDomiciliary, setIsDomiciliary] = useState(false);
+  const [visitAddress, setVisitAddress] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [domiciliaryFilter, setDomiciliaryFilter] = useState<DomiciliaryFilter>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +65,9 @@ export default function AppointmentsPage() {
   const [noteBody, setNoteBody] = useState("");
   const [notes, setNotes] = useState<AppointmentNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [detailDomiciliary, setDetailDomiciliary] = useState(false);
+  const [detailVisitAddress, setDetailVisitAddress] = useState("");
+  const [savingDetail, setSavingDetail] = useState(false);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -76,6 +86,8 @@ export default function AppointmentsPage() {
       if (rangeFrom) params.set("from", new Date(rangeFrom).toISOString());
       if (rangeTo) params.set("to", new Date(rangeTo).toISOString());
       if (patientQuery.trim()) params.set("q", patientQuery.trim());
+      if (domiciliaryFilter === "clinic") params.set("domiciliary", "false");
+      if (domiciliaryFilter === "domiciliary") params.set("domiciliary", "true");
       const res = await apiFetch(`/api/appointments?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -124,11 +136,15 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     void loadAppointments();
-  }, [rangeFrom, rangeTo]);
+  }, [rangeFrom, rangeTo, domiciliaryFilter]);
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedPatientId || !startsAt || !endsAt) return;
+    if (isDomiciliary && !visitAddress.trim()) {
+      setError("Visit address is required for domiciliary visits.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -142,6 +158,8 @@ export default function AppointmentsPage() {
           status: "booked",
           appointment_type: appointmentType.trim() || undefined,
           location: location.trim() || undefined,
+          is_domiciliary: isDomiciliary,
+          visit_address: isDomiciliary ? visitAddress.trim() : undefined,
         }),
       });
       if (res.status === 401) {
@@ -157,6 +175,8 @@ export default function AppointmentsPage() {
       setClinicianUserId("");
       setAppointmentType("");
       setLocation("");
+      setIsDomiciliary(false);
+      setVisitAddress("");
       setStartsAt("");
       setEndsAt("");
       setShowNewModal(false);
@@ -223,6 +243,45 @@ export default function AppointmentsPage() {
     }
   }
 
+  async function saveAppointmentDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedAppointment) return;
+    if (detailDomiciliary && !detailVisitAddress.trim()) {
+      setError("Visit address is required for domiciliary visits.");
+      return;
+    }
+    setSavingDetail(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/appointments/${selectedAppointment.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          is_domiciliary: detailDomiciliary,
+          visit_address: detailDomiciliary ? detailVisitAddress.trim() : null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+      }
+      const updated = (await res.json()) as Appointment;
+      setSelectedAppointment(updated);
+      setDetailDomiciliary(updated.is_domiciliary);
+      setDetailVisitAddress(updated.visit_address || "");
+      setNotice("Appointment updated.");
+      await loadAppointments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update appointment");
+    } finally {
+      setSavingDetail(false);
+    }
+  }
+
   async function archiveAppointment(appointmentId: number) {
     if (!confirm("Archive this appointment?")) return;
     setError(null);
@@ -281,6 +340,23 @@ export default function AppointmentsPage() {
             <button className="btn btn-primary" onClick={() => setShowNewModal(true)}>
               New appointment
             </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              {([
+                { id: "all", label: "All" },
+                { id: "clinic", label: "Clinic" },
+                { id: "domiciliary", label: "Domiciliary" },
+              ] as const).map((item) => (
+                <button
+                  key={item.id}
+                  className={
+                    item.id === domiciliaryFilter ? "btn btn-primary" : "btn btn-secondary"
+                  }
+                  onClick={() => setDomiciliaryFilter(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input
                 type="checkbox"
@@ -362,6 +438,11 @@ export default function AppointmentsPage() {
                     <td>{new Date(appt.ends_at).toLocaleString()}</td>
                     <td>
                       {appt.patient.first_name} {appt.patient.last_name}
+                      {appt.is_domiciliary && (
+                        <span className="badge" style={{ marginLeft: 8 }}>
+                          Domiciliary
+                        </span>
+                      )}
                     </td>
                     <td>{appt.clinician || "—"}</td>
                     <td>
@@ -386,6 +467,8 @@ export default function AppointmentsPage() {
                           className="btn btn-secondary"
                           onClick={() => {
                             setSelectedAppointment(appt);
+                            setDetailDomiciliary(appt.is_domiciliary);
+                            setDetailVisitAddress(appt.visit_address || "");
                             void loadAppointmentNotes(appt.id);
                           }}
                         >
@@ -507,6 +590,30 @@ export default function AppointmentsPage() {
                     placeholder="Room 1"
                   />
                 </div>
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={isDomiciliary}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsDomiciliary(checked);
+                      if (!checked) setVisitAddress("");
+                    }}
+                  />
+                  Domiciliary (home visit)
+                </label>
+                {isDomiciliary && (
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Visit address</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      value={visitAddress}
+                      onChange={(e) => setVisitAddress(e.target.value)}
+                      placeholder="Full address for the home visit"
+                    />
+                  </div>
+                )}
                 <button className="btn btn-primary" disabled={saving}>
                   {saving ? "Saving..." : "Create appointment"}
                 </button>
@@ -551,6 +658,35 @@ export default function AppointmentsPage() {
                   <strong>Location:</strong> {selectedAppointment.location || "—"}
                 </div>
               </div>
+
+              <form onSubmit={saveAppointmentDetails} className="stack">
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={detailDomiciliary}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setDetailDomiciliary(checked);
+                      if (!checked) setDetailVisitAddress("");
+                    }}
+                  />
+                  Domiciliary (home visit)
+                </label>
+                {detailDomiciliary && (
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Visit address</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      value={detailVisitAddress}
+                      onChange={(e) => setDetailVisitAddress(e.target.value)}
+                    />
+                  </div>
+                )}
+                <button className="btn btn-secondary" disabled={savingDetail}>
+                  {savingDetail ? "Saving..." : "Save details"}
+                </button>
+              </form>
 
               <form onSubmit={addAppointmentNote} className="stack">
                 <label className="label">Quick note</label>
