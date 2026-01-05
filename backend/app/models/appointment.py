@@ -37,6 +37,7 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
     visit_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     patient = relationship("Patient", back_populates="appointments", lazy="joined")
+    invoices = relationship("Invoice", back_populates="appointment")
 
     @property
     def patient_has_alerts(self) -> bool:
