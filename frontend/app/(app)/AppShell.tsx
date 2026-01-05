@@ -88,7 +88,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const isUsersRoute = pathname?.startsWith("/users");
-  const isAdmin = me?.role === "superadmin";
+  const isAdmin = me
+    ? [
+        "superadmin",
+        "senior_admin",
+        "dentist",
+        "nurse",
+        "receptionist",
+        "reception",
+      ].includes(me.role)
+    : false;
 
   useEffect(() => {
     if (!checking && isUsersRoute && !isAdmin) {

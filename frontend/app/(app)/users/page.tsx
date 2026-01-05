@@ -17,6 +17,7 @@ const fallbackRoles = [
   "dentist",
   "senior_admin",
   "reception",
+  "receptionist",
   "nurse",
   "external",
 ];
@@ -39,12 +40,21 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("reception");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [role, setRole] = useState("receptionist");
   const [isActive, setIsActive] = useState(true);
 
+  const createRoles = useMemo(() => {
+    const allowed = roles.filter((r) => ["dentist", "nurse", "receptionist"].includes(r));
+    return allowed.length ? allowed : ["dentist", "nurse", "receptionist"];
+  }, [roles]);
+
   const isFormValid = useMemo(
-    () => email.trim().length > 3 && password.trim().length >= 8,
-    [email, password]
+    () =>
+      email.trim().length > 3 &&
+      password.trim().length >= 12 &&
+      password === passwordConfirm,
+    [email, password, passwordConfirm]
   );
 
   async function loadUsers() {
@@ -96,6 +106,16 @@ export default function UsersPage() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    if (password.trim().length < 12) {
+      setError("Temporary password must be at least 12 characters.");
+      setSaving(false);
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError("Passwords do not match.");
+      setSaving(false);
+      return;
+    }
     try {
       const res = await apiFetch("/api/users", {
         method: "POST",
@@ -103,7 +123,7 @@ export default function UsersPage() {
           email: email.trim(),
           full_name: fullName.trim(),
           role,
-          password,
+          temp_password: password,
           is_active: isActive,
         }),
       });
@@ -116,14 +136,24 @@ export default function UsersPage() {
         setError("Not authorized to create users.");
         return;
       }
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text();
+      let data: { detail?: string } | null = null;
+      if (contentType.includes("application/json") && text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to create user (HTTP ${res.status})`);
+        throw new Error(data?.detail || text || `Failed to create user (HTTP ${res.status})`);
       }
       setEmail("");
       setFullName("");
       setPassword("");
-      setRole("reception");
+      setPasswordConfirm("");
+      setRole("receptionist");
       setIsActive(true);
       setShowForm(false);
       await loadUsers();
@@ -264,8 +294,8 @@ export default function UsersPage() {
                   onChange={(e) => setFullName(e.target.value)}
                 />
               </div>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Password</label>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Password</label>
                 <div className="input-wrap">
                   <input
                     className="input"
@@ -273,7 +303,7 @@ export default function UsersPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={8}
+                    minLength={12}
                   />
                   <button
                     type="button"
@@ -327,8 +357,19 @@ export default function UsersPage() {
                   </button>
                 </div>
                 <span style={{ color: "var(--muted)", fontSize: 12 }}>
-                  Use at least 8 characters.
+                  Use at least 12 characters.
                 </span>
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Confirm password</label>
+                <input
+                  className="input"
+                  type={showPassword ? "text" : "password"}
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  required
+                  minLength={12}
+                />
               </div>
               <div className="stack" style={{ gap: 8 }}>
                 <label className="label">Role</label>
@@ -337,7 +378,7 @@ export default function UsersPage() {
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                 >
-                  {roles.map((r) => (
+                  {createRoles.map((r) => (
                     <option key={r} value={r}>
                       {r}
                     </option>
