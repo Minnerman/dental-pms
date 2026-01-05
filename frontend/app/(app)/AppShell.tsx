@@ -14,6 +14,14 @@ type Me = {
   must_change_password: boolean;
 };
 
+type PatientSearchResult = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  phone?: string | null;
+};
+
 const baseTabs = [
   { href: "/", label: "Home" },
   { href: "/patients", label: "Patients" },
@@ -49,6 +57,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PatientSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const token = getToken();
@@ -105,6 +116,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [checking, isUsersRoute, isAdmin, router]);
 
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await apiFetch(`/api/patients/search?q=${encodeURIComponent(trimmed)}`);
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (res.ok) {
+          const data = (await res.json()) as PatientSearchResult[];
+          setSearchResults(data);
+        } else {
+          setSearchResults([]);
+        }
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchQuery, router]);
+
   if (checking) {
     return (
       <main className="page-center">
@@ -121,6 +162,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="app-top">
         <div className="app-top-bar">
           <h1 className="app-title">Dental PMS</h1>
+          <div style={{ position: "relative", flex: 1, maxWidth: 420 }}>
+            <input
+              className="input"
+              placeholder="Search patients..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searching && (
+              <div className="badge" style={{ position: "absolute", right: 8, top: 8 }}>
+                Searching
+              </div>
+            )}
+            {searchResults.length > 0 && (
+              <div
+                className="card"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                {searchResults.map((patient) => (
+                  <button
+                    key={patient.id}
+                    className="btn btn-secondary"
+                    style={{ justifyContent: "space-between" }}
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSearchResults([]);
+                      router.push(`/patients/${patient.id}`);
+                    }}
+                  >
+                    <span>
+                      {patient.first_name} {patient.last_name}
+                    </span>
+                    <span style={{ color: "var(--muted)" }}>
+                      {patient.date_of_birth || "DOB —"} · {patient.phone || "No phone"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <div className="badge">{me ? `${me.email} · ${me.role}` : "Signed in"}</div>
             <ThemeToggle />

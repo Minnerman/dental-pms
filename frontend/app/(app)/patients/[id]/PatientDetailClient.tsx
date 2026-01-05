@@ -19,7 +19,14 @@ type Patient = {
   date_of_birth?: string | null;
   phone?: string | null;
   email?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  postcode?: string | null;
   notes?: string | null;
+  allergies?: string | null;
+  medical_alerts?: string | null;
+  safeguarding_notes?: string | null;
   created_at: string;
   updated_at: string;
   created_by: Actor;
@@ -61,6 +68,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
   async function loadPatient() {
     setLoading(true);
@@ -126,6 +134,34 @@ export default function PatientDetailClient({ id }: { id: string }) {
     void loadTimeline();
   }, [patientId]);
 
+  const alerts = [
+    patient?.allergies ? { label: "Allergies", tone: "danger" } : null,
+    patient?.medical_alerts ? { label: "Medical alert", tone: "warning" } : null,
+    patient?.safeguarding_notes ? { label: "Safeguarding", tone: "warning" } : null,
+  ].filter(Boolean) as { label: string; tone: "danger" | "warning" }[];
+
+  function buildAddress(p: Patient | null) {
+    if (!p) return "";
+    return [p.address_line1, p.address_line2, p.city, p.postcode]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  async function copyAddress() {
+    if (!patient) return;
+    const address = buildAddress(patient);
+    if (!address) {
+      setCopyNotice("No address on file.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopyNotice("Address copied.");
+    } catch {
+      setCopyNotice("Copy failed. Please copy manually.");
+    }
+  }
+
   async function savePatient(e: React.FormEvent) {
     e.preventDefault();
     if (!patient) return;
@@ -140,6 +176,13 @@ export default function PatientDetailClient({ id }: { id: string }) {
           email: patient.email,
           phone: patient.phone,
           date_of_birth: patient.date_of_birth,
+          address_line1: patient.address_line1,
+          address_line2: patient.address_line2,
+          city: patient.city,
+          postcode: patient.postcode,
+          allergies: patient.allergies,
+          medical_alerts: patient.medical_alerts,
+          safeguarding_notes: patient.safeguarding_notes,
           notes: patient.notes,
         }),
       });
@@ -239,17 +282,87 @@ export default function PatientDetailClient({ id }: { id: string }) {
         <div className="notice">{error}</div>
       ) : patient ? (
         <div className="stack">
-          <div className="card">
-            <div className="stack">
-              <div>
-                <h2 style={{ margin: 0 }}>
-                  {patient.first_name} {patient.last_name}
-                </h2>
-                <div style={{ color: "var(--muted)" }}>
-                  Patient #{patient.id} • Created by {patient.created_by.email}
+          <div className="card" style={{ position: "sticky", top: 12, zIndex: 1 }}>
+            <div className="stack" style={{ gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>
+                    {patient.first_name} {patient.last_name}
+                  </h2>
+                  <div style={{ color: "var(--muted)" }}>
+                    Patient #{patient.id} • Created by {patient.created_by.email}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  {alerts.length === 0 && <span className="badge">No alerts</span>}
+                  {alerts.map((alert) => (
+                    <span
+                      key={alert.label}
+                      className="badge"
+                      style={{
+                        background: alert.tone === "danger" ? "#b13636" : "#b07b24",
+                        color: "white",
+                      }}
+                    >
+                      {alert.label}
+                    </span>
+                  ))}
                 </div>
               </div>
 
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div className="label">DOB</div>
+                  <div>{patient.date_of_birth || "—"}</div>
+                </div>
+                <div>
+                  <div className="label">Phone</div>
+                  <div>{patient.phone || "—"}</div>
+                </div>
+                <div>
+                  <div className="label">Email</div>
+                  <div>{patient.email || "—"}</div>
+                </div>
+                <div>
+                  <div className="label">Address</div>
+                  <div>{buildAddress(patient) || "—"}</div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button className="btn btn-secondary" type="button" onClick={copyAddress}>
+                  Copy address
+                </button>
+                {copyNotice && <span className="badge">{copyNotice}</span>}
+              </div>
+
+              {(patient.allergies || patient.medical_alerts || patient.safeguarding_notes) && (
+                <div className="grid grid-3">
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div className="label">Allergies</div>
+                    <div>{patient.allergies || "—"}</div>
+                  </div>
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div className="label">Medical alerts</div>
+                    <div>{patient.medical_alerts || "—"}</div>
+                  </div>
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div className="label">Safeguarding</div>
+                    <div>{patient.safeguarding_notes || "—"}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="stack">
               <div className="tabs">
                 <button
                   className={`tab ${tab === "summary" ? "active" : ""}`}
@@ -336,6 +449,102 @@ export default function PatientDetailClient({ id }: { id: string }) {
                         onChange={(e) =>
                           setPatient((prev) =>
                             prev ? { ...prev, date_of_birth: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Address line 1</label>
+                      <input
+                        className="input"
+                        value={patient.address_line1 ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, address_line1: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Address line 2</label>
+                      <input
+                        className="input"
+                        value={patient.address_line2 ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, address_line2: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">City</label>
+                      <input
+                        className="input"
+                        value={patient.city ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, city: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Postcode</label>
+                      <input
+                        className="input"
+                        value={patient.postcode ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, postcode: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-3">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Allergies</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={patient.allergies ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, allergies: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Medical alerts</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={patient.medical_alerts ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, medical_alerts: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Safeguarding notes</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={patient.safeguarding_notes ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, safeguarding_notes: e.target.value } : prev
                           )
                         }
                       />

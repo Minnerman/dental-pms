@@ -27,6 +27,17 @@ type Appointment = {
 };
 
 type Patient = { id: number; first_name: string; last_name: string };
+type PatientDetail = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  allergies?: string | null;
+  medical_alerts?: string | null;
+  safeguarding_notes?: string | null;
+};
 type UserOption = { id: number; email: string; full_name: string; role: string; is_active: boolean };
 
 type AppointmentNote = {
@@ -65,6 +76,8 @@ export default function AppointmentsPage() {
   const [noteBody, setNoteBody] = useState("");
   const [notes, setNotes] = useState<AppointmentNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [detailPatient, setDetailPatient] = useState<PatientDetail | null>(null);
+  const [loadingPatientDetail, setLoadingPatientDetail] = useState(false);
   const [detailDomiciliary, setDetailDomiciliary] = useState(false);
   const [detailVisitAddress, setDetailVisitAddress] = useState("");
   const [savingDetail, setSavingDetail] = useState(false);
@@ -206,6 +219,28 @@ export default function AppointmentsPage() {
       setNotes([]);
     } finally {
       setLoadingNotes(false);
+    }
+  }
+
+  async function loadPatientDetail(patientId: number) {
+    setLoadingPatientDetail(true);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.ok) {
+        const data = (await res.json()) as PatientDetail;
+        setDetailPatient(data);
+      } else {
+        setDetailPatient(null);
+      }
+    } catch {
+      setDetailPatient(null);
+    } finally {
+      setLoadingPatientDetail(false);
     }
   }
 
@@ -470,6 +505,7 @@ export default function AppointmentsPage() {
                             setDetailDomiciliary(appt.is_domiciliary);
                             setDetailVisitAddress(appt.visit_address || "");
                             void loadAppointmentNotes(appt.id);
+                            void loadPatientDetail(appt.patient.id);
                           }}
                         >
                           Details
@@ -638,6 +674,7 @@ export default function AppointmentsPage() {
                   onClick={() => {
                     setSelectedAppointment(null);
                     setNotes([]);
+                    setDetailPatient(null);
                   }}
                 >
                   Close
@@ -658,6 +695,58 @@ export default function AppointmentsPage() {
                   <strong>Location:</strong> {selectedAppointment.location || "—"}
                 </div>
               </div>
+
+              {loadingPatientDetail ? (
+                <div className="badge">Loading patient alerts…</div>
+              ) : detailPatient ? (
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <div>
+                      <strong>Patient alerts</strong>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {!detailPatient.allergies &&
+                        !detailPatient.medical_alerts &&
+                        !detailPatient.safeguarding_notes && <span className="badge">None</span>}
+                      {detailPatient.allergies && (
+                        <span className="badge" style={{ background: "#b13636", color: "white" }}>
+                          Allergies
+                        </span>
+                      )}
+                      {detailPatient.medical_alerts && (
+                        <span className="badge" style={{ background: "#b07b24", color: "white" }}>
+                          Medical alerts
+                        </span>
+                      )}
+                      {detailPatient.safeguarding_notes && (
+                        <span className="badge" style={{ background: "#b07b24", color: "white" }}>
+                          Safeguarding
+                        </span>
+                      )}
+                    </div>
+                    {detailPatient.allergies && (
+                      <div>
+                        <div className="label">Allergies</div>
+                        <div>{detailPatient.allergies}</div>
+                      </div>
+                    )}
+                    {detailPatient.medical_alerts && (
+                      <div>
+                        <div className="label">Medical alerts</div>
+                        <div>{detailPatient.medical_alerts}</div>
+                      </div>
+                    )}
+                    {detailPatient.safeguarding_notes && (
+                      <div>
+                        <div className="label">Safeguarding</div>
+                        <div>{detailPatient.safeguarding_notes}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="notice">Unable to load patient alerts.</div>
+              )}
 
               <form onSubmit={saveAppointmentDetails} className="stack">
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
