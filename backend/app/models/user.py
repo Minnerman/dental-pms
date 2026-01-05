@@ -12,6 +12,7 @@ class Role(str, enum.Enum):
     dentist = "dentist"
     senior_admin = "senior_admin"
     reception = "reception"
+    receptionist = "receptionist"
     nurse = "nurse"
     external = "external"
     superadmin = "superadmin"

@@ -7,7 +7,7 @@ from app.deps import require_admin
 from app.models.user import Role, User
 from app.schemas.user import UserCreate, UserOut, UserPasswordResetRequest, UserPasswordResetResponse, UserUpdate
 from app.services.audit import log_event
-from app.services.users import create_user, get_user_by_id, set_password, update_user
+from app.services.users import create_user, get_user_by_email, get_user_by_id, set_password, update_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -24,16 +24,30 @@ def list_users(
 def add_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    admin: User = Depends(require_admin),
 ):
-    return create_user(
+    existing = get_user_by_email(db, payload.email)
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
+    user = create_user(
         db,
         email=payload.email,
-        password=payload.password,
+        password=payload.temp_password,
         full_name=payload.full_name,
         role=Role(payload.role),
         is_active=True,
+        must_change_password=True,
     )
+    log_event(
+        db,
+        actor=admin,
+        action="user.created",
+        entity_type="user",
+        entity_id=str(user.id),
+        after_data={"email": user.email, "role": user.role.value},
+    )
+    db.commit()
+    return user
 
 
 @router.get("/roles", response_model=list[str])
@@ -58,12 +72,13 @@ def patch_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    admin: User = Depends(require_admin),
 ):
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return update_user(
+    previous_role = user.role
+    updated = update_user(
         db,
         user=user,
         full_name=payload.full_name,
@@ -71,6 +86,18 @@ def patch_user(
         is_active=payload.is_active,
         password=payload.password,
     )
+    if payload.role and updated.role != previous_role:
+        log_event(
+            db,
+            actor=admin,
+            action="user.role_changed",
+            entity_type="user",
+            entity_id=str(updated.id),
+            before_data={"role": previous_role.value},
+            after_data={"role": updated.role.value},
+        )
+        db.commit()
+    return updated
 
 
 @router.post("/{user_id}/reset-password", response_model=UserPasswordResetResponse)

@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -14,13 +15,14 @@ class UserOut(BaseModel):
     role: RoleEnum
     is_active: bool
     must_change_password: bool
+    created_at: datetime
 
 
 class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = ""
     role: RoleEnum
-    password: str
+    temp_password: str = Field(min_length=12)
 
 
 class UserUpdate(BaseModel):
