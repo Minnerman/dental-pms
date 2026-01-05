@@ -44,6 +44,46 @@ type Note = {
   deleted_at?: string | null;
 };
 
+type InvoiceSummary = {
+  id: number;
+  patient_id: number;
+  appointment_id?: number | null;
+  invoice_number: string;
+  issue_date?: string | null;
+  due_date?: string | null;
+  status: string;
+  subtotal_pence: number;
+  discount_pence: number;
+  total_pence: number;
+  paid_pence: number;
+  balance_pence: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type InvoiceLine = {
+  id: number;
+  description: string;
+  quantity: number;
+  unit_price_pence: number;
+  line_total_pence: number;
+};
+
+type Payment = {
+  id: number;
+  amount_pence: number;
+  method: string;
+  paid_at: string;
+  reference?: string | null;
+  received_by_user_id: number;
+};
+
+type InvoiceDetail = InvoiceSummary & {
+  notes?: string | null;
+  lines: InvoiceLine[];
+  payments: Payment[];
+};
+
 type TimelineItem = {
   entity_type: string;
   entity_id: string;
@@ -60,7 +100,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const patientId = id;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [tab, setTab] = useState<"summary" | "notes">("summary");
+  const [tab, setTab] = useState<"summary" | "notes" | "invoices">("summary");
   const [loading, setLoading] = useState(true);
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -69,6 +109,26 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
+  const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
+  const [lineDescription, setLineDescription] = useState("");
+  const [lineQuantity, setLineQuantity] = useState("1");
+  const [lineUnitPrice, setLineUnitPrice] = useState("");
+  const [lineDrafts, setLineDrafts] = useState<
+    Record<number, { description: string; quantity: string; unit_price: string }>
+  >({});
+  const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [invoiceDiscount, setInvoiceDiscount] = useState("");
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentDate, setPaymentDate] = useState("");
 
   async function loadPatient() {
     setLoading(true);
@@ -128,10 +188,65 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function loadInvoices() {
+    setLoadingInvoices(true);
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices?patient_id=${patientId}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load invoices (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as InvoiceSummary[];
+      setInvoices(data);
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to load invoices");
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }
+
+  async function loadInvoiceDetail(invoiceId: number) {
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${invoiceId}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load invoice (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as InvoiceDetail;
+      setSelectedInvoice(data);
+      setInvoiceNotes(data.notes || "");
+      setInvoiceDiscount((data.discount_pence / 100).toFixed(2));
+      const drafts: Record<number, { description: string; quantity: string; unit_price: string }> =
+        {};
+      data.lines.forEach((line) => {
+        drafts[line.id] = {
+          description: line.description,
+          quantity: String(line.quantity),
+          unit_price: (line.unit_price_pence / 100).toFixed(2),
+        };
+      });
+      setLineDrafts(drafts);
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to load invoice");
+    }
+  }
+
   useEffect(() => {
     void loadPatient();
     void loadNotes();
     void loadTimeline();
+    void loadInvoices();
   }, [patientId]);
 
   const alerts = [
@@ -160,6 +275,19 @@ export default function PatientDetailClient({ id }: { id: string }) {
     } catch {
       setCopyNotice("Copy failed. Please copy manually.");
     }
+  }
+
+  function formatPence(value: number) {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+    }).format(value / 100);
+  }
+
+  function toPence(raw: string) {
+    const parsed = Number(raw);
+    if (Number.isNaN(parsed)) return null;
+    return Math.max(0, Math.round(parsed * 100));
   }
 
   async function savePatient(e: React.FormEvent) {
@@ -228,6 +356,271 @@ export default function PatientDetailClient({ id }: { id: string }) {
       setError(err instanceof Error ? err.message : "Failed to add note");
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function createInvoice() {
+    if (creatingInvoice) return;
+    setCreatingInvoice(true);
+    setInvoiceError(null);
+    const discountPence = toPence(newInvoiceDiscount || "0");
+    if (discountPence === null) {
+      setInvoiceError("Discount must be a number.");
+      setCreatingInvoice(false);
+      return;
+    }
+    try {
+      const res = await apiFetch("/api/invoices", {
+        method: "POST",
+        body: JSON.stringify({
+          patient_id: Number(patientId),
+          notes: newInvoiceNotes.trim() || undefined,
+          discount_pence: discountPence,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to create invoice (HTTP ${res.status})`);
+      }
+      const invoice = (await res.json()) as InvoiceDetail;
+      setNewInvoiceNotes("");
+      setNewInvoiceDiscount("");
+      await loadInvoices();
+      setSelectedInvoice(invoice);
+      setInvoiceNotes(invoice.notes || "");
+      setInvoiceDiscount((invoice.discount_pence / 100).toFixed(2));
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to create invoice");
+    } finally {
+      setCreatingInvoice(false);
+    }
+  }
+
+  async function saveInvoiceMeta() {
+    if (!selectedInvoice) return;
+    setInvoiceError(null);
+    const discountPence = toPence(invoiceDiscount || "0");
+    if (discountPence === null) {
+      setInvoiceError("Discount must be a number.");
+      return;
+    }
+    const payload: { notes?: string | null; discount_pence?: number } = {
+      notes: invoiceNotes.trim() || null,
+    };
+    if (selectedInvoice.status === "draft") {
+      payload.discount_pence = discountPence;
+    }
+    try {
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update invoice (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as InvoiceDetail;
+      setSelectedInvoice(data);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to update invoice");
+    }
+  }
+
+  async function addInvoiceLine() {
+    if (!selectedInvoice) return;
+    const quantity = Number(lineQuantity);
+    const unitPence = toPence(lineUnitPrice);
+    if (!lineDescription.trim() || Number.isNaN(quantity) || quantity < 1 || unitPence === null) {
+      setInvoiceError("Enter a description, quantity, and unit price.");
+      return;
+    }
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/lines`, {
+        method: "POST",
+        body: JSON.stringify({
+          description: lineDescription.trim(),
+          quantity,
+          unit_price_pence: unitPence,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to add line (HTTP ${res.status})`);
+      }
+      setLineDescription("");
+      setLineQuantity("1");
+      setLineUnitPrice("");
+      await loadInvoiceDetail(selectedInvoice.id);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to add line");
+    }
+  }
+
+  async function updateInvoiceLine(lineId: number) {
+    if (!selectedInvoice) return;
+    const draft = lineDrafts[lineId];
+    if (!draft) return;
+    const quantity = Number(draft.quantity);
+    const unitPence = toPence(draft.unit_price);
+    if (!draft.description.trim() || Number.isNaN(quantity) || quantity < 1 || unitPence === null) {
+      setInvoiceError("Enter a description, quantity, and unit price.");
+      return;
+    }
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/lines/${lineId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          description: draft.description.trim(),
+          quantity,
+          unit_price_pence: unitPence,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update line (HTTP ${res.status})`);
+      }
+      await loadInvoiceDetail(selectedInvoice.id);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to update line");
+    }
+  }
+
+  async function deleteInvoiceLine(lineId: number) {
+    if (!selectedInvoice) return;
+    if (!confirm("Remove this line item?")) return;
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/lines/${lineId}`, {
+        method: "DELETE",
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok && res.status !== 204) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to delete line (HTTP ${res.status})`);
+      }
+      await loadInvoiceDetail(selectedInvoice.id);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to delete line");
+    }
+  }
+
+  async function issueInvoice() {
+    if (!selectedInvoice) return;
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/issue`, { method: "POST" });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to issue invoice (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as InvoiceDetail;
+      setSelectedInvoice(data);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to issue invoice");
+    }
+  }
+
+  async function voidInvoice() {
+    if (!selectedInvoice) return;
+    if (!confirm("Void this invoice?")) return;
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/void`, { method: "POST" });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to void invoice (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as InvoiceDetail;
+      setSelectedInvoice(data);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to void invoice");
+    }
+  }
+
+  async function addPayment() {
+    if (!selectedInvoice) return;
+    if (recordingPayment) return;
+    const amountPence = toPence(paymentAmount);
+    if (amountPence === null || amountPence <= 0) {
+      setInvoiceError("Payment amount must be a number.");
+      return;
+    }
+    setRecordingPayment(true);
+    setInvoiceError(null);
+    try {
+      const paidAt =
+        paymentDate.trim() !== ""
+          ? new Date(paymentDate).toISOString()
+          : new Date().toISOString();
+      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/payments`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount_pence: amountPence,
+          method: paymentMethod,
+          paid_at: paidAt,
+          reference: paymentReference.trim() || null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to add payment (HTTP ${res.status})`);
+      }
+      setPaymentAmount("");
+      setPaymentReference("");
+      setPaymentDate("");
+      await loadInvoiceDetail(selectedInvoice.id);
+      await loadInvoices();
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to add payment");
+    } finally {
+      setRecordingPayment(false);
     }
   }
 
@@ -375,6 +768,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   onClick={() => setTab("notes")}
                 >
                   Notes ({notes.length})
+                </button>
+                <button
+                  className={`tab ${tab === "invoices" ? "active" : ""}`}
+                  onClick={() => setTab("invoices")}
+                >
+                  Invoices ({invoices.length})
                 </button>
                 <Link className="tab" href={`/patients/${patientId}/timeline`}>
                   Timeline
@@ -578,7 +977,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
                     )}
                   </div>
                 </form>
-              ) : (
+              ) : tab === "notes" ? (
                 <div className="stack">
                   <div className="row">
                     <button
@@ -631,6 +1030,387 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       ))
                     )}
                   </div>
+                </div>
+              ) : (
+                <div className="stack">
+                  <div className="row">
+                    <button className="btn btn-secondary" type="button" onClick={loadInvoices}>
+                      Refresh
+                    </button>
+                  </div>
+
+                  {invoiceError && <div className="notice">{invoiceError}</div>}
+                  {loadingInvoices ? (
+                    <div className="badge">Loading invoices…</div>
+                  ) : invoices.length === 0 ? (
+                    <div className="notice">No invoices yet.</div>
+                  ) : (
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Invoice</th>
+                          <th>Issued</th>
+                          <th>Status</th>
+                          <th>Total</th>
+                          <th>Balance</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoices.map((invoice) => (
+                          <tr key={invoice.id}>
+                            <td>{invoice.invoice_number}</td>
+                            <td>{invoice.issue_date || "—"}</td>
+                            <td>{invoice.status}</td>
+                            <td>{formatPence(invoice.total_pence)}</td>
+                            <td>{formatPence(invoice.balance_pence)}</td>
+                            <td>
+                              <div className="table-actions">
+                                <button
+                                  className="btn btn-secondary"
+                                  onClick={() => loadInvoiceDetail(invoice.id)}
+                                >
+                                  View
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack">
+                      <h4 style={{ marginTop: 0 }}>New invoice details</h4>
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="label">Notes</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          value={newInvoiceNotes}
+                          onChange={(e) => setNewInvoiceNotes(e.target.value)}
+                          placeholder="Optional notes for this invoice"
+                        />
+                      </div>
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="label">Discount (£)</label>
+                        <input
+                          className="input"
+                          value={newInvoiceDiscount}
+                          onChange={(e) => setNewInvoiceDiscount(e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <button className="btn btn-primary" type="button" onClick={createInvoice}>
+                        {creatingInvoice ? "Creating..." : "New invoice"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedInvoice && (
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack">
+                        <div className="row">
+                          <div>
+                            <h3 style={{ marginTop: 0 }}>{selectedInvoice.invoice_number}</h3>
+                            <div style={{ color: "var(--muted)" }}>
+                              Status: {selectedInvoice.status} · Issued:{" "}
+                              {selectedInvoice.issue_date || "—"}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {selectedInvoice.status === "draft" && (
+                              <button className="btn btn-primary" onClick={issueInvoice}>
+                                Issue invoice
+                              </button>
+                            )}
+                            {selectedInvoice.status !== "void" && (
+                              <button className="btn btn-secondary" onClick={voidInvoice}>
+                                Void invoice
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-3">
+                          <div>
+                            <div className="label">Subtotal</div>
+                            <div>{formatPence(selectedInvoice.subtotal_pence)}</div>
+                          </div>
+                          <div>
+                            <div className="label">Discount</div>
+                            <div>{formatPence(selectedInvoice.discount_pence)}</div>
+                          </div>
+                          <div>
+                            <div className="label">Total</div>
+                            <div>{formatPence(selectedInvoice.total_pence)}</div>
+                          </div>
+                          <div>
+                            <div className="label">Paid</div>
+                            <div>{formatPence(selectedInvoice.paid_pence)}</div>
+                          </div>
+                          <div>
+                            <div className="label">Balance</div>
+                            <div>{formatPence(selectedInvoice.balance_pence)}</div>
+                          </div>
+                        </div>
+
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Invoice notes</label>
+                          <textarea
+                            className="input"
+                            rows={3}
+                            value={invoiceNotes}
+                            onChange={(e) => setInvoiceNotes(e.target.value)}
+                          />
+                        </div>
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Discount (£)</label>
+                          <input
+                            className="input"
+                            value={invoiceDiscount}
+                            onChange={(e) => setInvoiceDiscount(e.target.value)}
+                            disabled={selectedInvoice.status !== "draft"}
+                          />
+                        </div>
+                        <button className="btn btn-secondary" type="button" onClick={saveInvoiceMeta}>
+                          Save invoice
+                        </button>
+
+                        <div className="card" style={{ margin: 0 }}>
+                          <div className="stack">
+                            <h4 style={{ marginTop: 0 }}>Line items</h4>
+                            {selectedInvoice.lines.length === 0 ? (
+                              <div className="notice">No line items yet.</div>
+                            ) : (
+                              <table className="table">
+                                <thead>
+                                  <tr>
+                                    <th>Description</th>
+                                    <th>Qty</th>
+                                    <th>Unit (£)</th>
+                                    <th>Total</th>
+                                    <th>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedInvoice.lines.map((line) => (
+                                    <tr key={line.id}>
+                                      <td>
+                                        <input
+                                          className="input"
+                                          value={lineDrafts[line.id]?.description || ""}
+                                          onChange={(e) =>
+                                            setLineDrafts((prev) => ({
+                                              ...prev,
+                                              [line.id]: {
+                                                ...prev[line.id],
+                                                description: e.target.value,
+                                              },
+                                            }))
+                                          }
+                                          disabled={selectedInvoice.status !== "draft"}
+                                        />
+                                      </td>
+                                      <td>
+                                        <input
+                                          className="input"
+                                          value={lineDrafts[line.id]?.quantity || ""}
+                                          onChange={(e) =>
+                                            setLineDrafts((prev) => ({
+                                              ...prev,
+                                              [line.id]: {
+                                                ...prev[line.id],
+                                                quantity: e.target.value,
+                                              },
+                                            }))
+                                          }
+                                          disabled={selectedInvoice.status !== "draft"}
+                                        />
+                                      </td>
+                                      <td>
+                                        <input
+                                          className="input"
+                                          value={lineDrafts[line.id]?.unit_price || ""}
+                                          onChange={(e) =>
+                                            setLineDrafts((prev) => ({
+                                              ...prev,
+                                              [line.id]: {
+                                                ...prev[line.id],
+                                                unit_price: e.target.value,
+                                              },
+                                            }))
+                                          }
+                                          disabled={selectedInvoice.status !== "draft"}
+                                        />
+                                      </td>
+                                      <td>{formatPence(line.line_total_pence)}</td>
+                                      <td>
+                                        <div className="table-actions">
+                                          <button
+                                            className="btn btn-secondary"
+                                            disabled={selectedInvoice.status !== "draft"}
+                                            onClick={() => updateInvoiceLine(line.id)}
+                                          >
+                                            Update
+                                          </button>
+                                          <button
+                                            className="btn btn-secondary"
+                                            disabled={selectedInvoice.status !== "draft"}
+                                            onClick={() => deleteInvoiceLine(line.id)}
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+
+                            <div className="grid grid-3">
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Description</label>
+                                <input
+                                  className="input"
+                                  value={lineDescription}
+                                  onChange={(e) => setLineDescription(e.target.value)}
+                                  disabled={selectedInvoice.status !== "draft"}
+                                />
+                              </div>
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Qty</label>
+                                <input
+                                  className="input"
+                                  value={lineQuantity}
+                                  onChange={(e) => setLineQuantity(e.target.value)}
+                                  disabled={selectedInvoice.status !== "draft"}
+                                />
+                              </div>
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Unit price (£)</label>
+                                <input
+                                  className="input"
+                                  value={lineUnitPrice}
+                                  onChange={(e) => setLineUnitPrice(e.target.value)}
+                                  disabled={selectedInvoice.status !== "draft"}
+                                />
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-primary"
+                              type="button"
+                              onClick={addInvoiceLine}
+                              disabled={selectedInvoice.status !== "draft"}
+                            >
+                              Add line
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="card" style={{ margin: 0 }}>
+                          <div className="stack">
+                            <h4 style={{ marginTop: 0 }}>Payments</h4>
+                            {selectedInvoice.payments.length === 0 ? (
+                              <div className="notice">No payments recorded.</div>
+                            ) : (
+                              <table className="table">
+                                <thead>
+                                  <tr>
+                                    <th>Date</th>
+                                    <th>Method</th>
+                                    <th>Amount</th>
+                                    <th>Reference</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedInvoice.payments.map((payment) => (
+                                    <tr key={payment.id}>
+                                      <td>{new Date(payment.paid_at).toLocaleDateString()}</td>
+                                      <td>{payment.method}</td>
+                                      <td>{formatPence(payment.amount_pence)}</td>
+                                      <td>{payment.reference || "—"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+
+                            <div className="grid grid-3">
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Amount (£)</label>
+                                <input
+                                  className="input"
+                                  value={paymentAmount}
+                                  onChange={(e) => setPaymentAmount(e.target.value)}
+                                  disabled={
+                                    selectedInvoice.status === "draft" ||
+                                    selectedInvoice.status === "void"
+                                  }
+                                />
+                              </div>
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Method</label>
+                                <select
+                                  className="input"
+                                  value={paymentMethod}
+                                  onChange={(e) => setPaymentMethod(e.target.value)}
+                                  disabled={
+                                    selectedInvoice.status === "draft" ||
+                                    selectedInvoice.status === "void"
+                                  }
+                                >
+                                  <option value="card">Card</option>
+                                  <option value="cash">Cash</option>
+                                  <option value="bank_transfer">Bank transfer</option>
+                                  <option value="other">Other</option>
+                                </select>
+                              </div>
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Paid date</label>
+                                <input
+                                  className="input"
+                                  type="date"
+                                  value={paymentDate}
+                                  onChange={(e) => setPaymentDate(e.target.value)}
+                                  disabled={
+                                    selectedInvoice.status === "draft" ||
+                                    selectedInvoice.status === "void"
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Reference</label>
+                              <input
+                                className="input"
+                                value={paymentReference}
+                                onChange={(e) => setPaymentReference(e.target.value)}
+                                disabled={
+                                  selectedInvoice.status === "draft" ||
+                                  selectedInvoice.status === "void"
+                                }
+                              />
+                            </div>
+                            <button
+                              className="btn btn-primary"
+                              type="button"
+                              onClick={addPayment}
+                              disabled={
+                                recordingPayment ||
+                                selectedInvoice.status === "draft" ||
+                                selectedInvoice.status === "void"
+                              }
+                            >
+                              {recordingPayment ? "Recording..." : "Record payment"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
