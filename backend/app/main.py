@@ -8,6 +8,7 @@ from app.db.session import SessionLocal, engine
 from app.models import Base
 from app.routers.auth import router as auth_router
 from app.routers.appointments import router as appointments_router
+from app.routers.invoices import router as invoices_router
 from app.routers.audit import router as audit_router
 from app.routers.me import router as me_router
 from app.routers.notes import router as notes_router, patient_router as patient_notes_router
@@ -61,6 +62,7 @@ app.include_router(me_router)
 app.include_router(users_router)
 app.include_router(patients_router)
 app.include_router(appointments_router)
+app.include_router(invoices_router)
 app.include_router(notes_router)
 app.include_router(patient_notes_router)
 app.include_router(appointment_notes_router)
