@@ -1,4 +1,3 @@
-import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -84,8 +83,8 @@ def reset_user_password(
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    temp_password = payload.temp_password or secrets.token_urlsafe(12)
-    if len(temp_password) < 8:
+    temp_password = payload.temp_password
+    if len(temp_password) < 12:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too short")
     if len(temp_password.encode("utf-8")) > 72:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long")
@@ -99,4 +98,4 @@ def reset_user_password(
         after_data={"status": "issued"},
     )
     db.commit()
-    return UserPasswordResetResponse(temp_password=temp_password)
+    return UserPasswordResetResponse(message="Temporary password set.")

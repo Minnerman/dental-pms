@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import Role as RoleEnum
 
@@ -31,8 +31,8 @@ class UserUpdate(BaseModel):
 
 
 class UserPasswordResetRequest(BaseModel):
-    temp_password: Optional[str] = None
+    temp_password: str = Field(min_length=12)
 
 
 class UserPasswordResetResponse(BaseModel):
-    temp_password: str
+    message: str
