@@ -1,8 +1,8 @@
-import os
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.settings import settings
 from app.core.security import create_access_token, generate_reset_token, hash_reset_token, verify_password
 from app.db.session import get_db
 from app.services.audit import log_event
@@ -28,13 +28,13 @@ from app.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me")
-JWT_ALG = os.getenv("JWT_ALG", "HS256")
-EXPIRES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
-RESET_EXPIRES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
-RESET_DEBUG = os.getenv("RESET_TOKEN_DEBUG", "").lower() in {"1", "true", "yes"}
-RESET_REQUESTS_PER_MINUTE = int(os.getenv("RESET_REQUESTS_PER_MINUTE", "5"))
-RESET_CONFIRM_PER_MINUTE = int(os.getenv("RESET_CONFIRM_PER_MINUTE", "10"))
+JWT_SECRET = settings.secret_key
+JWT_ALG = settings.jwt_alg
+EXPIRES = settings.access_token_expire_minutes
+RESET_EXPIRES = settings.reset_token_expire_minutes
+RESET_DEBUG = settings.reset_token_debug
+RESET_REQUESTS_PER_MINUTE = settings.reset_requests_per_minute
+RESET_CONFIRM_PER_MINUTE = settings.reset_confirm_per_minute
 
 RESET_REQUEST_LIMITER = SimpleRateLimiter(
     max_events=RESET_REQUESTS_PER_MINUTE, window_seconds=60

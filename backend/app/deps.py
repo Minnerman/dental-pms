@@ -1,14 +1,14 @@
-import os
 from fastapi import Depends, Header, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.settings import settings
 from app.db.session import get_db
 from app.models.user import User
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me")
-JWT_ALG = os.getenv("JWT_ALG", "HS256")
+JWT_SECRET = settings.secret_key
+JWT_ALG = settings.jwt_alg
 
 
 def get_current_user(

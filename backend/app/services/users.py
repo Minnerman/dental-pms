@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
@@ -33,6 +33,7 @@ def create_user(
     full_name: str = "",
     role: Role = Role.reception,
     is_active: bool = True,
+    must_change_password: bool = False,
 ) -> User:
     now = datetime.now(timezone.utc)
     user = User(
@@ -40,7 +41,7 @@ def create_user(
         full_name=full_name,
         role=role,
         is_active=is_active,
-        must_change_password=False,
+        must_change_password=must_change_password,
         hashed_password=hash_password(password),
         created_at=now,
         updated_at=now,
@@ -63,6 +64,25 @@ def ensure_admin_user(db: Session, *, email: str, password: str) -> User:
         role=Role.superadmin,
         is_active=True,
     )
+
+
+def user_count(db: Session) -> int:
+    return int(db.scalar(select(func.count(User.id))) or 0)
+
+
+def seed_initial_admin(db: Session, *, email: str, password: str) -> bool:
+    if user_count(db) > 0:
+        return False
+    create_user(
+        db,
+        email=email,
+        password=password,
+        full_name="Admin",
+        role=Role.superadmin,
+        is_active=True,
+        must_change_password=True,
+    )
+    return True
 
 
 def update_user(

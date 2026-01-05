@@ -1,11 +1,9 @@
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://dental_pms:change-me@localhost:5432/dental_pms",
-)
+from app.core.settings import settings
+
+DATABASE_URL = settings.database_url
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
