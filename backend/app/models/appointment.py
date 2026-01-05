@@ -37,3 +37,18 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
     visit_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     patient = relationship("Patient", back_populates="appointments", lazy="joined")
+
+    @property
+    def patient_has_alerts(self) -> bool:
+        patient = self.patient
+        if not patient:
+            return False
+        return any(
+            value.strip()
+            for value in (
+                patient.allergies,
+                patient.medical_alerts,
+                patient.safeguarding_notes,
+            )
+            if value
+        )

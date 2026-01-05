@@ -38,6 +38,7 @@ class AppointmentOut(BaseModel):
 
     id: int
     patient: PatientSummary
+    patient_has_alerts: bool = False
     clinician_user_id: Optional[int] = None
     starts_at: datetime
     ends_at: datetime

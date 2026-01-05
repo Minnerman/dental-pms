@@ -11,6 +11,7 @@ type PatientSummary = { id: number; first_name: string; last_name: string };
 type Appointment = {
   id: number;
   patient: PatientSummary;
+  patient_has_alerts: boolean;
   clinician_user_id?: number | null;
   appointment_type?: string | null;
   clinician?: string | null;
@@ -476,6 +477,15 @@ export default function AppointmentsPage() {
                       {appt.is_domiciliary && (
                         <span className="badge" style={{ marginLeft: 8 }}>
                           Domiciliary
+                        </span>
+                      )}
+                      {appt.patient_has_alerts && (
+                        <span
+                          className="badge"
+                          style={{ marginLeft: 8, background: "#b07b24", color: "white" }}
+                          title="Patient has alerts on file"
+                        >
+                          Alerts
                         </span>
                       )}
                     </td>
