@@ -46,6 +46,10 @@ docker compose down
 - Login UI: `/login`
 - `/api/me` returns 401/403 when logged out (normal); UI should show signed-out state without a red error toast.
 
+## Production notes
+- Deploy guide: `docs/DEPLOY.md`
+- First run: `docs/FIRST_RUN.md`
+
 ## Middleware
 Invalid numeric IDs (e.g. `/patients/INVALID`) are handled in `frontend/middleware.ts`.
 The middleware rewrites such requests to `/__notfound__`, whose page triggers `notFound()`.

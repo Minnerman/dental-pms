@@ -15,6 +15,7 @@ cd dental-pms
 cp .env.example .env
 ```
 Never commit `.env`.
+See `docs/FIRST_RUN.md` for first-time setup steps.
 
 ## Start / stop / restart
 ```bash
