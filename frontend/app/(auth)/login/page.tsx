@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { apiFetch, setToken } from "@/lib/auth";
+import { login, setToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,39 +18,17 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        const text = await res.text();
-        let detail = text;
-        if (contentType.includes("application/json") && text) {
-          try {
-            const data = JSON.parse(text) as { detail?: string };
-            detail = data.detail || detail;
-          } catch {
-            // ignore
-          }
-        }
-        if (res.status === 403 && detail === "Account disabled") {
-          throw new Error("Your account is disabled. Contact an administrator.");
-        }
-        if (res.status === 429) {
-          throw new Error("Too many login attempts. Please wait and try again.");
-        }
-        throw new Error(detail || `Login failed (${res.status})`);
-      }
-      const data = await res.json();
-      setToken(data.access_token);
-      if (data.must_change_password) {
+      const { accessToken, mustChangePassword } = await login(email, password);
+      setToken(accessToken);
+      if (mustChangePassword) {
         router.push("/change-password");
       } else {
-        router.push("/");
+        router.push("/patients");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const message =
+        err instanceof Error && err.message ? err.message : "Invalid credentials";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -140,6 +118,9 @@ export default function LoginPage() {
             <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? "Signing in..." : "Sign in"}
             </button>
+            <p style={{ margin: 0, fontSize: 12, opacity: 0.6 }}>
+              API base: {process.env.NEXT_PUBLIC_API_BASE ?? "/api"}
+            </p>
           </form>
           <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
             <Link href="/forgot-password" style={{ textDecoration: "underline" }}>

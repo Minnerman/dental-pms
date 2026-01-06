@@ -22,6 +22,8 @@ services:
       context: ./backend
     container_name: dental_pms_backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       APP_ENV: ${APP_ENV}
       DATABASE_URL: postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@db:5432/$POSTGRES_DB
@@ -54,7 +56,7 @@ services:
     working_dir: /app
     command: ["npm","run","dev","--","--hostname","0.0.0.0","--port","3000"]
     environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:${BACKEND_PORT}
+      - NEXT_PUBLIC_API_BASE=/api
     ports:
       - "${FRONTEND_PORT}:3000"
     depends_on:

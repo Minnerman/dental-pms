@@ -52,6 +52,7 @@
 - 2026-01-06: Invoices + payments MVP (patient tab), INV-000001 numbering via id
 - 2026-01-06: Invoice + receipt PDFs (ReportLab) with download buttons
 - 2026-01-06: Updated invoice/receipt PDF headers to Clinic for Implant & Orthodontic Dentistry; 7 Chapel Road, Worthing, West Sussex BN11 1EG; Tel: 01903 821822; dental-worthing.co.uk
+- 2026-01-06: Added admin reset script, removed login debug banner, and documented env recreation guidance
 
 ## Known issues
 - None known.
