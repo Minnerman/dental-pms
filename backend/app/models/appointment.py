@@ -11,8 +11,16 @@ from app.models.base import AuditMixin, Base, SoftDeleteMixin
 
 class AppointmentStatus(str, enum.Enum):
     booked = "booked"
-    cancelled = "cancelled"
+    arrived = "arrived"
+    in_progress = "in_progress"
     completed = "completed"
+    cancelled = "cancelled"
+    no_show = "no_show"
+
+
+class AppointmentLocationType(str, enum.Enum):
+    clinic = "clinic"
+    visit = "visit"
 
 
 class Appointment(Base, AuditMixin, SoftDeleteMixin):
@@ -33,6 +41,12 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
     appointment_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     clinician: Mapped[str | None] = mapped_column(String(200), nullable=True)
     location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    location_type: Mapped[AppointmentLocationType] = mapped_column(
+        Enum(AppointmentLocationType, name="appointment_location_type"),
+        default=AppointmentLocationType.clinic,
+        nullable=False,
+    )
+    location_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_domiciliary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     visit_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 

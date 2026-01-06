@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.appointment import AppointmentStatus
+from app.models.appointment import AppointmentLocationType, AppointmentStatus
 from app.schemas.actor import ActorOut
 from app.schemas.patient import PatientSummary
 
@@ -17,7 +17,9 @@ class AppointmentCreate(BaseModel):
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
-    is_domiciliary: bool = False
+    location_type: Optional[AppointmentLocationType] = None
+    location_text: Optional[str] = None
+    is_domiciliary: Optional[bool] = None
     visit_address: Optional[str] = None
 
 
@@ -29,6 +31,8 @@ class AppointmentUpdate(BaseModel):
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
+    location_type: Optional[AppointmentLocationType] = None
+    location_text: Optional[str] = None
     is_domiciliary: Optional[bool] = None
     visit_address: Optional[str] = None
 
@@ -46,6 +50,8 @@ class AppointmentOut(BaseModel):
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
     location: Optional[str] = None
+    location_type: AppointmentLocationType
+    location_text: Optional[str] = None
     is_domiciliary: bool
     visit_address: Optional[str] = None
     created_at: datetime

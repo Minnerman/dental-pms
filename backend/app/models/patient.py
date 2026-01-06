@@ -15,6 +15,13 @@ class PatientCategory(str, enum.Enum):
     denplan = "DENPLAN"
 
 
+class CareSetting(str, enum.Enum):
+    clinic = "CLINIC"
+    home = "HOME"
+    care_home = "CARE_HOME"
+    hospital = "HOSPITAL"
+
+
 class Patient(Base, AuditMixin, SoftDeleteMixin):
     __tablename__ = "patients"
 
@@ -37,6 +44,16 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     )
     denplan_member_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
     denplan_plan_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    care_setting: Mapped[CareSetting] = mapped_column(
+        Enum(CareSetting, name="care_setting"),
+        default=CareSetting.clinic,
+        nullable=False,
+    )
+    visit_address_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    primary_contact_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    primary_contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    primary_contact_relationship: Mapped[str | None] = mapped_column(String(80), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     allergies: Mapped[str | None] = mapped_column(Text, nullable=True)
     medical_alerts: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -6,7 +6,24 @@ import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
 type Actor = { id: number; email: string; role: string };
-type PatientSummary = { id: number; first_name: string; last_name: string };
+type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
+type CareSetting = "CLINIC" | "HOME" | "CARE_HOME" | "HOSPITAL";
+type AppointmentStatus =
+  | "booked"
+  | "arrived"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+  | "no_show";
+type AppointmentLocationType = "clinic" | "visit";
+
+type PatientSummary = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  patient_category: PatientCategory;
+  care_setting: CareSetting;
+};
 
 type Appointment = {
   id: number;
@@ -16,18 +33,26 @@ type Appointment = {
   appointment_type?: string | null;
   clinician?: string | null;
   location?: string | null;
+  location_type: AppointmentLocationType;
+  location_text?: string | null;
   is_domiciliary: boolean;
   visit_address?: string | null;
   starts_at: string;
   ends_at: string;
-  status: string;
+  status: AppointmentStatus;
   created_by: Actor;
   updated_by?: Actor | null;
   updated_at: string;
   deleted_at?: string | null;
 };
 
-type Patient = { id: number; first_name: string; last_name: string };
+type Patient = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  care_setting: CareSetting;
+  visit_address_text?: string | null;
+};
 type PatientDetail = {
   id: number;
   first_name: string;
@@ -35,6 +60,12 @@ type PatientDetail = {
   date_of_birth?: string | null;
   phone?: string | null;
   email?: string | null;
+  care_setting: CareSetting;
+  visit_address_text?: string | null;
+  access_notes?: string | null;
+  primary_contact_name?: string | null;
+  primary_contact_phone?: string | null;
+  primary_contact_relationship?: string | null;
   allergies?: string | null;
   medical_alerts?: string | null;
   safeguarding_notes?: string | null;
@@ -48,7 +79,22 @@ type AppointmentNote = {
   created_by: Actor;
 };
 
-type DomiciliaryFilter = "all" | "clinic" | "domiciliary";
+type LocationFilter = "all" | "clinic" | "visit";
+
+const categoryLabels: Record<PatientCategory, string> = {
+  CLINIC_PRIVATE: "Clinic (Private)",
+  DOMICILIARY_PRIVATE: "Domiciliary (Private)",
+  DENPLAN: "Denplan",
+};
+
+const statusLabels: Record<AppointmentStatus, string> = {
+  booked: "Booked",
+  arrived: "Arrived",
+  in_progress: "In progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  no_show: "No show",
+};
 
 export default function AppointmentsPage() {
   const router = useRouter();
@@ -56,19 +102,20 @@ export default function AppointmentsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
-  const [rangeFrom, setRangeFrom] = useState("");
-  const [rangeTo, setRangeTo] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [clinicianUserId, setClinicianUserId] = useState("");
   const [appointmentType, setAppointmentType] = useState("");
   const [location, setLocation] = useState("");
-  const [isDomiciliary, setIsDomiciliary] = useState(false);
-  const [visitAddress, setVisitAddress] = useState("");
+  const [locationType, setLocationType] = useState<AppointmentLocationType>("clinic");
+  const [locationText, setLocationText] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [domiciliaryFilter, setDomiciliaryFilter] = useState<DomiciliaryFilter>("all");
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +126,9 @@ export default function AppointmentsPage() {
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [detailPatient, setDetailPatient] = useState<PatientDetail | null>(null);
   const [loadingPatientDetail, setLoadingPatientDetail] = useState(false);
-  const [detailDomiciliary, setDetailDomiciliary] = useState(false);
-  const [detailVisitAddress, setDetailVisitAddress] = useState("");
+  const [detailLocationType, setDetailLocationType] =
+    useState<AppointmentLocationType>("clinic");
+  const [detailLocationText, setDetailLocationText] = useState("");
   const [savingDetail, setSavingDetail] = useState(false);
 
   const filteredPatients = useMemo(() => {
@@ -97,11 +145,13 @@ export default function AppointmentsPage() {
     try {
       const params = new URLSearchParams();
       if (includeDeleted) params.set("include_deleted", "1");
-      if (rangeFrom) params.set("from", new Date(rangeFrom).toISOString());
-      if (rangeTo) params.set("to", new Date(rangeTo).toISOString());
+      if (selectedDate) {
+        params.set("date", selectedDate);
+        params.set("view", "day");
+      }
       if (patientQuery.trim()) params.set("q", patientQuery.trim());
-      if (domiciliaryFilter === "clinic") params.set("domiciliary", "false");
-      if (domiciliaryFilter === "domiciliary") params.set("domiciliary", "true");
+      if (locationFilter === "clinic") params.set("location_type", "clinic");
+      if (locationFilter === "visit") params.set("location_type", "visit");
       const res = await apiFetch(`/api/appointments?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -110,7 +160,8 @@ export default function AppointmentsPage() {
       }
       if (!res.ok) throw new Error(`Failed to load appointments (HTTP ${res.status})`);
       const data = (await res.json()) as Appointment[];
-      setAppointments(data);
+      const sorted = [...data].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+      setAppointments(sorted);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load appointments");
     } finally {
@@ -142,6 +193,55 @@ export default function AppointmentsPage() {
     }
   }
 
+  async function updateAppointmentStatus(appointmentId: number, status: AppointmentStatus) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/appointments/${appointmentId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+      }
+      const updated = (await res.json()) as Appointment;
+      setAppointments((prev) =>
+        prev.map((appt) => (appt.id === updated.id ? updated : appt))
+      );
+      setNotice(`Status updated to ${statusLabels[status]}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update appointment");
+    }
+  }
+
+  async function createEstimateForAppointment(appt: Appointment) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${appt.patient.id}/estimates`, {
+        method: "POST",
+        body: JSON.stringify({ appointment_id: appt.id }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to create estimate (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as { id: number };
+      setNotice(`Estimate created (EST-${data.id}).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create estimate");
+    }
+  }
+
   useEffect(() => {
     void loadAppointments();
     void loadPatients();
@@ -150,12 +250,27 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     void loadAppointments();
-  }, [rangeFrom, rangeTo, domiciliaryFilter]);
+  }, [selectedDate, locationFilter]);
+
+  useEffect(() => {
+    if (!selectedPatientId) return;
+    const patient = patients.find((p) => String(p.id) === selectedPatientId);
+    if (!patient) return;
+    if (patient.care_setting !== "CLINIC") {
+      setLocationType("visit");
+      if (!locationText.trim()) {
+        setLocationText(patient.visit_address_text || "");
+      }
+    } else {
+      setLocationType("clinic");
+      setLocationText("");
+    }
+  }, [selectedPatientId, patients, locationText]);
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedPatientId || !startsAt || !endsAt) return;
-    if (isDomiciliary && !visitAddress.trim()) {
+    if (locationType === "visit" && !locationText.trim()) {
       setError("Visit address is required for domiciliary visits.");
       return;
     }
@@ -172,8 +287,8 @@ export default function AppointmentsPage() {
           status: "booked",
           appointment_type: appointmentType.trim() || undefined,
           location: location.trim() || undefined,
-          is_domiciliary: isDomiciliary,
-          visit_address: isDomiciliary ? visitAddress.trim() : undefined,
+          location_type: locationType,
+          location_text: locationText.trim() || undefined,
         }),
       });
       if (res.status === 401) {
@@ -189,8 +304,8 @@ export default function AppointmentsPage() {
       setClinicianUserId("");
       setAppointmentType("");
       setLocation("");
-      setIsDomiciliary(false);
-      setVisitAddress("");
+      setLocationType("clinic");
+      setLocationText("");
       setStartsAt("");
       setEndsAt("");
       setShowNewModal(false);
@@ -282,7 +397,7 @@ export default function AppointmentsPage() {
   async function saveAppointmentDetails(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedAppointment) return;
-    if (detailDomiciliary && !detailVisitAddress.trim()) {
+    if (detailLocationType === "visit" && !detailLocationText.trim()) {
       setError("Visit address is required for domiciliary visits.");
       return;
     }
@@ -292,8 +407,8 @@ export default function AppointmentsPage() {
       const res = await apiFetch(`/api/appointments/${selectedAppointment.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          is_domiciliary: detailDomiciliary,
-          visit_address: detailDomiciliary ? detailVisitAddress.trim() : null,
+          location_type: detailLocationType,
+          location_text: detailLocationText.trim() || null,
         }),
       });
       if (res.status === 401) {
@@ -307,8 +422,8 @@ export default function AppointmentsPage() {
       }
       const updated = (await res.json()) as Appointment;
       setSelectedAppointment(updated);
-      setDetailDomiciliary(updated.is_domiciliary);
-      setDetailVisitAddress(updated.visit_address || "");
+      setDetailLocationType(updated.location_type);
+      setDetailLocationText(updated.location_text || "");
       setNotice("Appointment updated.");
       await loadAppointments();
     } catch (err) {
@@ -380,14 +495,14 @@ export default function AppointmentsPage() {
               {([
                 { id: "all", label: "All" },
                 { id: "clinic", label: "Clinic" },
-                { id: "domiciliary", label: "Domiciliary" },
+                { id: "visit", label: "Visits" },
               ] as const).map((item) => (
                 <button
                   key={item.id}
                   className={
-                    item.id === domiciliaryFilter ? "btn btn-primary" : "btn btn-secondary"
+                    item.id === locationFilter ? "btn btn-primary" : "btn btn-secondary"
                   }
-                  onClick={() => setDomiciliaryFilter(item.id)}
+                  onClick={() => setLocationFilter(item.id)}
                 >
                   {item.label}
                 </button>
@@ -416,25 +531,14 @@ export default function AppointmentsPage() {
 
         <div className="card" style={{ margin: 0 }}>
           <div className="stack" style={{ gap: 12 }}>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
-              <div className="stack" style={{ gap: 8 }}>
-                <label className="label">From</label>
-                <input
-                  className="input"
-                  type="date"
-                  value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
-                />
-              </div>
-              <div className="stack" style={{ gap: 8 }}>
-                <label className="label">To</label>
-                <input
-                  className="input"
-                  type="date"
-                  value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
-                />
-              </div>
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Day</label>
+              <input
+                className="input"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
             </div>
             <div className="stack" style={{ gap: 8 }}>
               <label className="label">Search patient</label>
@@ -455,30 +559,23 @@ export default function AppointmentsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Start</th>
-                  <th>End</th>
+                  <th>Time</th>
                   <th>Patient</th>
-                  <th>Clinician</th>
+                  <th>Category</th>
                   <th>Status</th>
-                  <th>Created by</th>
-                  <th>Last edited by</th>
-                  <th>Last edited</th>
-                  <th>Audit</th>
+                  <th>Location</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {appointments.map((appt) => (
                   <tr key={appt.id}>
-                    <td>{new Date(appt.starts_at).toLocaleString()}</td>
-                    <td>{new Date(appt.ends_at).toLocaleString()}</td>
+                    <td>
+                      {new Date(appt.starts_at).toLocaleTimeString()} -{" "}
+                      {new Date(appt.ends_at).toLocaleTimeString()}
+                    </td>
                     <td>
                       {appt.patient.first_name} {appt.patient.last_name}
-                      {appt.is_domiciliary && (
-                        <span className="badge" style={{ marginLeft: 8 }}>
-                          Domiciliary
-                        </span>
-                      )}
                       {appt.patient_has_alerts && (
                         <span
                           className="badge"
@@ -489,22 +586,16 @@ export default function AppointmentsPage() {
                         </span>
                       )}
                     </td>
-                    <td>{appt.clinician || "—"}</td>
                     <td>
-                      {appt.status}
-                      {appt.deleted_at && (
-                        <span className="badge" style={{ marginLeft: 8 }}>
-                          Archived
-                        </span>
-                      )}
+                      <span className="badge">{categoryLabels[appt.patient.patient_category]}</span>
                     </td>
-                    <td>{appt.created_by.email}</td>
-                    <td>{appt.updated_by?.email || appt.created_by.email}</td>
-                    <td>{new Date(appt.updated_at).toLocaleString()}</td>
                     <td>
-                      <Link className="btn btn-secondary" href={`/appointments/${appt.id}/audit`}>
-                        View audit
-                      </Link>
+                      <span className="badge">{statusLabels[appt.status]}</span>
+                    </td>
+                    <td>
+                      {appt.location_type === "visit"
+                        ? appt.location_text || "Visit"
+                        : appt.location || "Clinic"}
                     </td>
                     <td>
                       <div className="table-actions">
@@ -512,29 +603,59 @@ export default function AppointmentsPage() {
                           className="btn btn-secondary"
                           onClick={() => {
                             setSelectedAppointment(appt);
-                            setDetailDomiciliary(appt.is_domiciliary);
-                            setDetailVisitAddress(appt.visit_address || "");
+                            setDetailLocationType(appt.location_type);
+                            setDetailLocationText(appt.location_text || "");
                             void loadAppointmentNotes(appt.id);
                             void loadPatientDetail(appt.patient.id);
                           }}
                         >
-                          Details
+                          Open
                         </button>
-                        {appt.deleted_at ? (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => restoreAppointment(appt.id)}
-                          >
-                            Restore
-                          </button>
-                        ) : (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => archiveAppointment(appt.id)}
-                          >
-                            Archive
-                          </button>
-                        )}
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setSelectedAppointment(appt);
+                            setDetailLocationType(appt.location_type);
+                            setDetailLocationText(appt.location_text || "");
+                            void loadAppointmentNotes(appt.id);
+                            void loadPatientDetail(appt.patient.id);
+                          }}
+                        >
+                          Add note
+                        </button>
+                        <Link className="btn btn-secondary" href={`/patients/${appt.patient.id}`}>
+                          Patient
+                        </Link>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => updateAppointmentStatus(appt.id, "arrived")}
+                        >
+                          Arrived
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => updateAppointmentStatus(appt.id, "in_progress")}
+                        >
+                          In progress
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => updateAppointmentStatus(appt.id, "completed")}
+                        >
+                          Completed
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => updateAppointmentStatus(appt.id, "cancelled")}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => createEstimateForAppointment(appt)}
+                        >
+                          Create estimate
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -636,26 +757,29 @@ export default function AppointmentsPage() {
                     placeholder="Room 1"
                   />
                 </div>
-                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={isDomiciliary}
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Location type</label>
+                  <select
+                    className="input"
+                    value={locationType}
                     onChange={(e) => {
-                      const checked = e.target.checked;
-                      setIsDomiciliary(checked);
-                      if (!checked) setVisitAddress("");
+                      const next = e.target.value as AppointmentLocationType;
+                      setLocationType(next);
+                      if (next === "clinic") setLocationText("");
                     }}
-                  />
-                  Domiciliary (home visit)
-                </label>
-                {isDomiciliary && (
+                  >
+                    <option value="clinic">Clinic</option>
+                    <option value="visit">Visit</option>
+                  </select>
+                </div>
+                {locationType === "visit" && (
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Visit address</label>
                     <textarea
                       className="input"
                       rows={3}
-                      value={visitAddress}
-                      onChange={(e) => setVisitAddress(e.target.value)}
+                      value={locationText}
+                      onChange={(e) => setLocationText(e.target.value)}
                       placeholder="Full address for the home visit"
                     />
                   </div>
@@ -693,7 +817,7 @@ export default function AppointmentsPage() {
 
               <div className="stack" style={{ gap: 6 }}>
                 <div>
-                  <strong>Status:</strong> {selectedAppointment.status}
+                  <strong>Status:</strong> {statusLabels[selectedAppointment.status]}
                 </div>
                 <div>
                   <strong>Clinician:</strong> {selectedAppointment.clinician || "Unassigned"}
@@ -702,7 +826,10 @@ export default function AppointmentsPage() {
                   <strong>Type:</strong> {selectedAppointment.appointment_type || "—"}
                 </div>
                 <div>
-                  <strong>Location:</strong> {selectedAppointment.location || "—"}
+                  <strong>Location type:</strong> {selectedAppointment.location_type}
+                </div>
+                <div>
+                  <strong>Location:</strong> {selectedAppointment.location_text || "—"}
                 </div>
               </div>
 
@@ -758,27 +885,60 @@ export default function AppointmentsPage() {
                 <div className="notice">Unable to load patient alerts.</div>
               )}
 
+              {detailPatient?.care_setting && detailPatient.care_setting !== "CLINIC" && (
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <div>
+                      <strong>Visit summary</strong>
+                    </div>
+                    <div>
+                      <div className="label">Visit address</div>
+                      <div>{detailPatient.visit_address_text || "—"}</div>
+                    </div>
+                    <div>
+                      <div className="label">Access notes</div>
+                      <div>{detailPatient.access_notes || "—"}</div>
+                    </div>
+                    <div>
+                      <div className="label">Primary contact</div>
+                      <div>
+                        {detailPatient.primary_contact_name || "—"}{" "}
+                        {detailPatient.primary_contact_relationship
+                          ? `(${detailPatient.primary_contact_relationship})`
+                          : ""}
+                        {detailPatient.primary_contact_phone
+                          ? ` · ${detailPatient.primary_contact_phone}`
+                          : ""}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={saveAppointmentDetails} className="stack">
-                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={detailDomiciliary}
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Location type</label>
+                  <select
+                    className="input"
+                    value={detailLocationType}
                     onChange={(e) => {
-                      const checked = e.target.checked;
-                      setDetailDomiciliary(checked);
-                      if (!checked) setDetailVisitAddress("");
+                      const next = e.target.value as AppointmentLocationType;
+                      setDetailLocationType(next);
+                      if (next === "clinic") setDetailLocationText("");
                     }}
-                  />
-                  Domiciliary (home visit)
-                </label>
-                {detailDomiciliary && (
+                  >
+                    <option value="clinic">Clinic</option>
+                    <option value="visit">Visit</option>
+                  </select>
+                </div>
+                {detailLocationType === "visit" && (
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Visit address</label>
                     <textarea
                       className="input"
                       rows={3}
-                      value={detailVisitAddress}
-                      onChange={(e) => setDetailVisitAddress(e.target.value)}
+                      value={detailLocationText}
+                      onChange={(e) => setDetailLocationText(e.target.value)}
                     />
                   </div>
                 )}

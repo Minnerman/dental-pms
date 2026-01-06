@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import or_, select
@@ -6,12 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import get_current_user
-from app.models.appointment import Appointment
+from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.audit_log import AuditLog
-from app.models.patient import Patient
+from app.models.estimate import Estimate
+from app.models.patient import CareSetting, Patient
 from app.models.user import User
 from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
 from app.schemas.audit_log import AuditLogOut
+from app.schemas.estimate import EstimateOut
 from app.services.audit import log_event, snapshot_model
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
@@ -24,8 +26,11 @@ def list_appointments(
     patient_id: int | None = Query(default=None),
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    date_filter: date | None = Query(default=None, alias="date"),
+    _view: str | None = Query(default=None, alias="view"),
     q: str | None = Query(default=None),
     domiciliary: bool | None = Query(default=None),
+    location_type: AppointmentLocationType | None = Query(default=None),
     include_deleted: bool = Query(default=False),
 ):
     stmt = select(Appointment)
@@ -43,12 +48,19 @@ def list_appointments(
         stmt = stmt.where(Appointment.deleted_at.is_(None))
     if patient_id:
         stmt = stmt.where(Appointment.patient_id == patient_id)
+    if date_filter and not (from_dt or to_dt):
+        day_start = datetime.combine(date_filter, time.min, tzinfo=timezone.utc)
+        day_end = datetime.combine(date_filter, time.max, tzinfo=timezone.utc)
+        from_dt = day_start
+        to_dt = day_end
     if from_dt:
         stmt = stmt.where(Appointment.starts_at >= from_dt)
     if to_dt:
         stmt = stmt.where(Appointment.starts_at <= to_dt)
     if domiciliary is not None:
         stmt = stmt.where(Appointment.is_domiciliary == domiciliary)
+    if location_type is not None:
+        stmt = stmt.where(Appointment.location_type == location_type)
     return list(db.scalars(stmt))
 
 
@@ -64,24 +76,47 @@ def create_appointment(
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
 
+    location_type = payload.location_type
+    if location_type is None:
+        if payload.is_domiciliary is not None:
+            location_type = (
+                AppointmentLocationType.visit
+                if payload.is_domiciliary
+                else AppointmentLocationType.clinic
+            )
+        elif patient.care_setting != CareSetting.clinic:
+            location_type = AppointmentLocationType.visit
+        else:
+            location_type = AppointmentLocationType.clinic
+
+    location_text = payload.location_text
+    if not location_text:
+        location_text = payload.visit_address or payload.location
+    if location_type == AppointmentLocationType.visit and not (location_text or "").strip():
+        location_text = patient.visit_address_text
+
     appt = Appointment(
         patient_id=payload.patient_id,
         clinician_user_id=payload.clinician_user_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
-        status=payload.status,
+        status=payload.status or AppointmentStatus.booked,
         appointment_type=payload.appointment_type,
         clinician=payload.clinician,
         location=payload.location,
-        is_domiciliary=payload.is_domiciliary,
-        visit_address=payload.visit_address,
+        location_type=location_type,
+        location_text=location_text,
+        is_domiciliary=location_type == AppointmentLocationType.visit,
+        visit_address=location_text if location_type == AppointmentLocationType.visit else None,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
     )
-    if appt.is_domiciliary and not (appt.visit_address or "").strip():
+    if appt.location_type == AppointmentLocationType.visit and not (appt.location_text or "").strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visit address required")
-    if not appt.is_domiciliary:
+    if appt.location_type == AppointmentLocationType.clinic:
+        appt.location_text = None
         appt.visit_address = None
+        appt.is_domiciliary = False
     db.add(appt)
     db.flush()
     log_event(
@@ -140,16 +175,31 @@ def update_appointment(
         appt.appointment_type = payload.appointment_type
     if payload.location is not None:
         appt.location = payload.location
+    if payload.location_type is not None:
+        appt.location_type = payload.location_type
+    if payload.location_text is not None:
+        appt.location_text = payload.location_text
     if payload.is_domiciliary is not None:
         appt.is_domiciliary = payload.is_domiciliary
     if payload.visit_address is not None:
         appt.visit_address = payload.visit_address
-    next_is_domiciliary = appt.is_domiciliary
-    next_visit_address = appt.visit_address
-    if next_is_domiciliary and not (next_visit_address or "").strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visit address required")
-    if not next_is_domiciliary:
+    if payload.location_type is None and payload.is_domiciliary is not None:
+        appt.location_type = (
+            AppointmentLocationType.visit
+            if appt.is_domiciliary
+            else AppointmentLocationType.clinic
+        )
+    if payload.location_text is None and payload.visit_address is not None:
+        appt.location_text = appt.visit_address
+    if appt.location_type == AppointmentLocationType.visit:
+        if not (appt.location_text or "").strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visit address required")
+        appt.is_domiciliary = True
+        appt.visit_address = appt.location_text
+    else:
+        appt.is_domiciliary = False
         appt.visit_address = None
+        appt.location_text = None
     appt.updated_by_user_id = user.id
     db.add(appt)
     log_event(
@@ -257,3 +307,55 @@ def appointment_audit(
         .offset(offset)
     )
     return list(db.scalars(stmt))
+
+
+@router.get("/{appointment_id}/estimates", response_model=list[EstimateOut])
+def appointment_estimates(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    appt = db.get(Appointment, appointment_id)
+    if not appt or appt.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    stmt = select(Estimate).where(Estimate.appointment_id == appointment_id)
+    return list(db.scalars(stmt))
+
+
+@router.post("/{appointment_id}/attach-estimate/{estimate_id}", response_model=EstimateOut)
+def attach_estimate_to_appointment(
+    appointment_id: int,
+    estimate_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    appt = db.get(Appointment, appointment_id)
+    if not appt or appt.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    estimate = db.get(Estimate, estimate_id)
+    if not estimate:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estimate not found")
+    if estimate.patient_id != appt.patient_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Estimate does not belong to appointment patient",
+        )
+    estimate.appointment_id = appointment_id
+    estimate.updated_by_user_id = user.id
+    db.add(estimate)
+    log_event(
+        db,
+        actor=user,
+        action="estimate.attached_to_appointment",
+        entity_type="estimate",
+        entity_id=str(estimate.id),
+        before_obj=None,
+        after_obj=estimate,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(estimate)
+    return estimate

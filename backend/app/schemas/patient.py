@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.models.patient import PatientCategory
+from app.models.patient import CareSetting, PatientCategory
 from app.schemas.actor import ActorOut
 
 
@@ -22,6 +22,12 @@ class PatientBase(BaseModel):
     patient_category: PatientCategory = PatientCategory.clinic_private
     denplan_member_no: Optional[str] = None
     denplan_plan_name: Optional[str] = None
+    care_setting: CareSetting = CareSetting.clinic
+    visit_address_text: Optional[str] = None
+    access_notes: Optional[str] = None
+    primary_contact_name: Optional[str] = None
+    primary_contact_phone: Optional[str] = None
+    primary_contact_relationship: Optional[str] = None
     notes: Optional[str] = None
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None
@@ -47,6 +53,12 @@ class PatientUpdate(BaseModel):
     patient_category: Optional[PatientCategory] = None
     denplan_member_no: Optional[str] = None
     denplan_plan_name: Optional[str] = None
+    care_setting: Optional[CareSetting] = None
+    visit_address_text: Optional[str] = None
+    access_notes: Optional[str] = None
+    primary_contact_name: Optional[str] = None
+    primary_contact_phone: Optional[str] = None
+    primary_contact_relationship: Optional[str] = None
     notes: Optional[str] = None
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None
@@ -71,6 +83,8 @@ class PatientSummary(BaseModel):
     id: int
     first_name: str
     last_name: str
+    patient_category: PatientCategory
+    care_setting: CareSetting
 
 
 class PatientSearchOut(BaseModel):

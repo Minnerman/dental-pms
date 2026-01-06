@@ -5,6 +5,7 @@ import { useState } from "react";
 import { apiFetch, clearToken } from "@/lib/auth";
 
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
+type CareSetting = "CLINIC" | "HOME" | "CARE_HOME" | "HOSPITAL";
 
 export default function NewPatientPage() {
   const router = useRouter();
@@ -17,6 +18,12 @@ export default function NewPatientPage() {
     useState<PatientCategory>("CLINIC_PRIVATE");
   const [denplanPlanName, setDenplanPlanName] = useState("");
   const [denplanMemberNo, setDenplanMemberNo] = useState("");
+  const [careSetting, setCareSetting] = useState<CareSetting>("CLINIC");
+  const [visitAddressText, setVisitAddressText] = useState("");
+  const [accessNotes, setAccessNotes] = useState("");
+  const [primaryContactName, setPrimaryContactName] = useState("");
+  const [primaryContactPhone, setPrimaryContactPhone] = useState("");
+  const [primaryContactRelationship, setPrimaryContactRelationship] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +43,12 @@ export default function NewPatientPage() {
           patient_category: patientCategory,
           denplan_plan_name: patientCategory === "DENPLAN" ? denplanPlanName || null : null,
           denplan_member_no: patientCategory === "DENPLAN" ? denplanMemberNo || null : null,
+          care_setting: careSetting,
+          visit_address_text: visitAddressText || null,
+          access_notes: accessNotes || null,
+          primary_contact_name: primaryContactName || null,
+          primary_contact_phone: primaryContactPhone || null,
+          primary_contact_relationship: primaryContactRelationship || null,
         }),
       });
       if (res.status === 401) {
@@ -144,6 +157,67 @@ export default function NewPatientPage() {
                 value={denplanMemberNo}
                 onChange={(e) => setDenplanMemberNo(e.target.value)}
               />
+            </div>
+          </div>
+        )}
+        <div className="stack" style={{ gap: 8 }}>
+          <label className="label">Care setting</label>
+          <select
+            className="input"
+            value={careSetting}
+            onChange={(e) => setCareSetting(e.target.value as CareSetting)}
+          >
+            <option value="CLINIC">Clinic</option>
+            <option value="HOME">Home</option>
+            <option value="CARE_HOME">Care home</option>
+            <option value="HOSPITAL">Hospital</option>
+          </select>
+        </div>
+        {careSetting !== "CLINIC" && (
+          <div className="stack" style={{ gap: 12 }}>
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Visit address</label>
+              <textarea
+                className="input"
+                rows={2}
+                value={visitAddressText}
+                onChange={(e) => setVisitAddressText(e.target.value)}
+              />
+            </div>
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Access notes</label>
+              <textarea
+                className="input"
+                rows={2}
+                value={accessNotes}
+                onChange={(e) => setAccessNotes(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr 1fr" }}>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Primary contact</label>
+                <input
+                  className="input"
+                  value={primaryContactName}
+                  onChange={(e) => setPrimaryContactName(e.target.value)}
+                />
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Contact phone</label>
+                <input
+                  className="input"
+                  value={primaryContactPhone}
+                  onChange={(e) => setPrimaryContactPhone(e.target.value)}
+                />
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Relationship</label>
+                <input
+                  className="input"
+                  value={primaryContactRelationship}
+                  onChange={(e) => setPrimaryContactRelationship(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         )}
