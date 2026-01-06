@@ -13,11 +13,10 @@ from app.models.invoice import Invoice, Payment
 
 CLINIC_NAME = "Clinic for Implant & Orthodontic Dentistry"
 CLINIC_ADDRESS_LINES = [
-    "123 Dental Street",
-    "London",
-    "W1A 1AA",
+    "7 Chapel Road, Worthing, West Sussex BN11 1EG",
+    "dental-worthing.co.uk",
 ]
-CLINIC_PHONE = "Tel: 020 7123 4567"
+CLINIC_PHONE = "Tel: 01903 821822"
 
 
 def _format_gbp(pence: int) -> str:
@@ -28,10 +27,11 @@ def _draw_header(pdf: canvas.Canvas, title: str) -> None:
     pdf.setFont("Helvetica-Bold", 16)
     pdf.drawString(20 * mm, 280 * mm, CLINIC_NAME)
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(20 * mm, 274 * mm, CLINIC_ADDRESS_LINES[0])
-    pdf.drawString(20 * mm, 270 * mm, CLINIC_ADDRESS_LINES[1])
-    pdf.drawString(20 * mm, 266 * mm, CLINIC_ADDRESS_LINES[2])
-    pdf.drawString(20 * mm, 262 * mm, CLINIC_PHONE)
+    y = 274 * mm
+    for line in CLINIC_ADDRESS_LINES:
+        pdf.drawString(20 * mm, y, line)
+        y -= 4 * mm
+    pdf.drawString(20 * mm, y, CLINIC_PHONE)
     pdf.setFont("Helvetica-Bold", 14)
     pdf.drawRightString(190 * mm, 280 * mm, title)
     pdf.setStrokeColor(colors.lightgrey)
@@ -162,10 +162,11 @@ def build_payment_receipt(payment: Payment) -> bytes:
     pdf.setFont("Helvetica-Bold", 16)
     pdf.drawString(20 * mm, 280 * mm, CLINIC_NAME)
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(20 * mm, 274 * mm, CLINIC_ADDRESS_LINES[0])
-    pdf.drawString(20 * mm, 270 * mm, CLINIC_ADDRESS_LINES[1])
-    pdf.drawString(20 * mm, 266 * mm, CLINIC_ADDRESS_LINES[2])
-    pdf.drawString(20 * mm, 262 * mm, CLINIC_PHONE)
+    y = 274 * mm
+    for line in CLINIC_ADDRESS_LINES:
+        pdf.drawString(20 * mm, y, line)
+        y -= 4 * mm
+    pdf.drawString(20 * mm, y, CLINIC_PHONE)
     pdf.setFont("Helvetica-Bold", 14)
     pdf.drawRightString(190 * mm, 280 * mm, "Payment receipt")
     pdf.setStrokeColor(colors.lightgrey)
