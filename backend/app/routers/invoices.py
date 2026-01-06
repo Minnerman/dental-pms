@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.schemas.invoice import (
     PaymentOut,
 )
 from app.services.audit import log_event, snapshot_model
+from app.services.pdf import build_invoice_pdf
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -453,3 +454,33 @@ def add_payment(
     db.commit()
     db.refresh(payment)
     return payment
+
+
+@router.get("/{invoice_id}/pdf")
+def get_invoice_pdf(
+    invoice_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    pdf_bytes = build_invoice_pdf(invoice)
+    log_event(
+        db,
+        actor=user,
+        action="invoice.pdf_generated",
+        entity_type="invoice",
+        entity_id=str(invoice.id),
+        before_obj=None,
+        after_obj=invoice,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    headers = {
+        "Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'
+    }
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
