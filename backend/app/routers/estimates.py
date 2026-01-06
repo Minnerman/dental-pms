@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -9,6 +9,8 @@ from app.models.estimate import Estimate, EstimateFeeType, EstimateItem, Estimat
 from app.models.patient import Patient
 from app.models.treatment import Treatment
 from app.models.user import User
+from app.services.audit import log_event
+from app.services.estimate_pdf import build_estimate_pdf
 from app.schemas.estimate import (
     EstimateCreate,
     EstimateItemCreate,
@@ -238,3 +240,29 @@ def delete_estimate_item(
     db.add(estimate)
     db.commit()
     return None
+
+
+@router.get("/{estimate_id}/pdf")
+def get_estimate_pdf(
+    estimate_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("superadmin")),
+    request_id: str | None = Header(default=None),
+):
+    estimate = get_estimate_or_404(db, estimate_id)
+    pdf_bytes = build_estimate_pdf(estimate)
+    log_event(
+        db,
+        actor=user,
+        action="estimate.pdf_generated",
+        entity_type="estimate",
+        entity_id=str(estimate.id),
+        before_obj=None,
+        after_obj=estimate,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    headers = {"Content-Disposition": f'attachment; filename="estimate-{estimate.id}.pdf"'}
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

@@ -951,6 +951,41 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  function buildEstimateFilename() {
+    const date = new Date().toISOString().slice(0, 10);
+    if (!patient) return `Estimate_${patientId}_${date}.pdf`;
+    const rawName = `${patient.first_name}_${patient.last_name}`;
+    const safeName = rawName.replace(/[^a-zA-Z0-9-_]+/g, "_");
+    return `Estimate_${safeName}_${date}.pdf`;
+  }
+
+  async function downloadEstimatePdf(estimateId: number) {
+    setEstimateError(null);
+    try {
+      const res = await apiFetch(`/api/estimates/${estimateId}/pdf`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = buildEstimateFilename();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to download PDF");
+    }
+  }
+
   async function archivePatient() {
     if (!confirm("Archive this patient?")) return;
     try {
@@ -1542,6 +1577,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => downloadEstimatePdf(selectedEstimate.id)}
+                            >
+                              Download PDF
+                            </button>
                             <button
                               className="btn btn-secondary"
                               onClick={() => updateEstimateStatus("ISSUED")}
