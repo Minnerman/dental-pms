@@ -84,3 +84,5 @@
 - python:3.12-slim
 - node:18-slim
 - bcrypt==3.2.2
+
+- 2026-01-06 Added appointments day view + domiciliary patient fields + appointment↔estimate linkages (health OK)
