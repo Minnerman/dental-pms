@@ -49,13 +49,15 @@
 - 2026-01-05: Frontend service restarted; port 3100 responding again
 - 2026-01-05: Treat /api/me 401/403 as signed-out state to avoid error toast
 - 2026-01-05: Repo initialized + compose restart policy and README updates (commits 69579f6, 153cbb1)
-- 2026-01-06: Updated invoice/receipt PDF headers with clinic details
+- 2026-01-06: Invoices + payments MVP (patient tab), INV-000001 numbering via id
+- 2026-01-06: Invoice + receipt PDFs (ReportLab) with download buttons
+- 2026-01-06: Updated invoice/receipt PDF headers to Clinic for Implant & Orthodontic Dentistry; 7 Chapel Road, Worthing, West Sussex BN11 1EG; Tel: 01903 821822; dental-worthing.co.uk
 
 ## Known issues
 - None known.
 
-## Next tasks
-1) Identify next UX improvement or feature request
+## Next up
+- Document templates (prescriptions/letters) OR global invoices list page + basic cash-up summary
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev
