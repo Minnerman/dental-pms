@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import inspect
@@ -17,6 +18,8 @@ def snapshot_model(obj: Any | None) -> dict | None:
     for column in mapper.columns:
         key = column.key
         value = getattr(obj, key)
+        if isinstance(value, (datetime, date)):
+            value = value.isoformat()
         if hasattr(value, "value"):
             value = value.value
         data[key] = value
