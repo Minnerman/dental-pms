@@ -1,8 +1,8 @@
 from datetime import date, datetime, time, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.deps import get_current_user
@@ -15,8 +15,33 @@ from app.schemas.appointment import AppointmentCreate, AppointmentOut, Appointme
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.estimate import EstimateOut
 from app.services.audit import log_event, snapshot_model
+from app.services.run_sheet_pdf import build_run_sheet_pdf
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
+
+
+@router.get("/range", response_model=list[AppointmentOut])
+def list_appointments_range(
+    start: date,
+    end: date,
+    location: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    start_dt = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end, time.max, tzinfo=timezone.utc)
+    stmt = (
+        select(Appointment)
+        .where(Appointment.deleted_at.is_(None))
+        .where(Appointment.starts_at >= start_dt, Appointment.starts_at <= end_dt)
+        .options(selectinload(Appointment.patient))
+        .order_by(Appointment.starts_at.asc())
+    )
+    if location == "clinic":
+        stmt = stmt.where(Appointment.location_type == AppointmentLocationType.clinic)
+    elif location == "visit":
+        stmt = stmt.where(Appointment.location_type == AppointmentLocationType.visit)
+    return list(db.scalars(stmt))
 
 
 @router.get("", response_model=list[AppointmentOut])
@@ -359,3 +384,32 @@ def attach_estimate_to_appointment(
     db.commit()
     db.refresh(estimate)
     return estimate
+
+
+@router.get("/run-sheet.pdf")
+def get_run_sheet_pdf(
+    date: date,
+    end: date | None = Query(default=None),
+    location: str | None = Query(default="visit"),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    end_date = end or date
+    start_dt = datetime.combine(date, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+    stmt = (
+        select(Appointment)
+        .where(Appointment.deleted_at.is_(None))
+        .where(Appointment.starts_at >= start_dt, Appointment.starts_at <= end_dt)
+        .options(selectinload(Appointment.patient), selectinload(Appointment.estimates))
+        .order_by(Appointment.starts_at.asc())
+    )
+    if location == "clinic":
+        stmt = stmt.where(Appointment.location_type == AppointmentLocationType.clinic)
+    elif location == "visit":
+        stmt = stmt.where(Appointment.location_type == AppointmentLocationType.visit)
+
+    appointments = list(db.scalars(stmt))
+    pdf_bytes = build_run_sheet_pdf(appointments, date, end_date)
+    headers = {"Content-Disposition": 'attachment; filename="run-sheet.pdf"'}
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

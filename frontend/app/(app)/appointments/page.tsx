@@ -80,6 +80,7 @@ type AppointmentNote = {
 };
 
 type LocationFilter = "all" | "clinic" | "visit";
+type ViewMode = "day" | "week";
 
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
@@ -105,6 +106,7 @@ export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().slice(0, 10);
   });
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [clinicianUserId, setClinicianUserId] = useState("");
   const [appointmentType, setAppointmentType] = useState("");
@@ -131,6 +133,8 @@ export default function AppointmentsPage() {
   const [detailLocationText, setDetailLocationText] = useState("");
   const [savingDetail, setSavingDetail] = useState(false);
 
+  const timeFormat: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
     if (!q) return patients;
@@ -139,20 +143,90 @@ export default function AppointmentsPage() {
     );
   }, [patientQuery, patients]);
 
+  function toDateKey(value: Date) {
+    return value.toLocaleDateString("en-CA");
+  }
+
+  function getWeekStart(dateStr: string) {
+    const base = new Date(`${dateStr}T00:00`);
+    const day = base.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    base.setDate(base.getDate() + diff);
+    return base;
+  }
+
+  const weekDates = useMemo(() => {
+    if (viewMode !== "week") return [];
+    const start = getWeekStart(selectedDate);
+    return Array.from({ length: 7 }).map((_, idx) => {
+      const next = new Date(start);
+      next.setDate(start.getDate() + idx);
+      return next;
+    });
+  }, [selectedDate, viewMode]);
+
+  const weekRangeLabel = useMemo(() => {
+    if (viewMode !== "week") return "";
+    const start = getWeekStart(selectedDate);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return `${toDateKey(start)} to ${toDateKey(end)}`;
+  }, [selectedDate, viewMode]);
+
+  const groupedAppointments = useMemo(() => {
+    const groups: Record<string, Appointment[]> = {};
+    for (const appt of appointments) {
+      const key = toDateKey(new Date(appt.starts_at));
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(appt);
+    }
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    }
+    return groups;
+  }, [appointments]);
+
+  function openAppointment(appt: Appointment) {
+    setSelectedAppointment(appt);
+    setDetailLocationType(appt.location_type);
+    setDetailLocationText(appt.location_text || "");
+    void loadAppointmentNotes(appt.id);
+    void loadPatientDetail(appt.patient.id);
+  }
+
+  function handleViewModeChange(mode: ViewMode) {
+    if (mode === viewMode) return;
+    if (mode === "week") {
+      setSelectedDate(toDateKey(getWeekStart(selectedDate)));
+    }
+    setViewMode(mode);
+  }
+
   async function loadAppointments(includeDeleted: boolean = showArchived) {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (includeDeleted) params.set("include_deleted", "1");
-      if (selectedDate) {
-        params.set("date", selectedDate);
-        params.set("view", "day");
+      let url = "/api/appointments";
+      if (viewMode === "week") {
+        const start = getWeekStart(selectedDate);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        params.set("start", toDateKey(start));
+        params.set("end", toDateKey(end));
+        if (locationFilter !== "all") params.set("location", locationFilter);
+        url = "/api/appointments/range";
+      } else {
+        if (includeDeleted) params.set("include_deleted", "1");
+        if (selectedDate) {
+          params.set("date", selectedDate);
+          params.set("view", "day");
+        }
+        if (patientQuery.trim()) params.set("q", patientQuery.trim());
+        if (locationFilter === "clinic") params.set("location_type", "clinic");
+        if (locationFilter === "visit") params.set("location_type", "visit");
       }
-      if (patientQuery.trim()) params.set("q", patientQuery.trim());
-      if (locationFilter === "clinic") params.set("location_type", "clinic");
-      if (locationFilter === "visit") params.set("location_type", "visit");
-      const res = await apiFetch(`/api/appointments?${params.toString()}`);
+      const res = await apiFetch(`${url}?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
@@ -242,6 +316,46 @@ export default function AppointmentsPage() {
     }
   }
 
+  async function downloadRunSheet() {
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (viewMode === "week") {
+        const start = getWeekStart(selectedDate);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        params.set("date", toDateKey(start));
+        params.set("end", toDateKey(end));
+      } else {
+        params.set("date", selectedDate);
+      }
+      params.set("location", "visit");
+      const res = await apiFetch(`/api/appointments/run-sheet.pdf?${params.toString()}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download run sheet (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const label =
+        viewMode === "week" ? `week-of-${toDateKey(getWeekStart(selectedDate))}` : selectedDate;
+      link.href = url;
+      link.download = `Run_Sheet_${label}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download run sheet");
+    }
+  }
+
   useEffect(() => {
     void loadAppointments();
     void loadPatients();
@@ -250,7 +364,7 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     void loadAppointments();
-  }, [selectedDate, locationFilter]);
+  }, [selectedDate, locationFilter, viewMode]);
 
   useEffect(() => {
     if (!selectedPatientId) return;
@@ -492,6 +606,17 @@ export default function AppointmentsPage() {
               New appointment
             </button>
             <div style={{ display: "flex", gap: 6 }}>
+              {(["day", "week"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  className={mode === viewMode ? "btn btn-primary" : "btn btn-secondary"}
+                  onClick={() => handleViewModeChange(mode)}
+                >
+                  {mode === "day" ? "Day" : "Week"}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
               {([
                 { id: "all", label: "All" },
                 { id: "clinic", label: "Clinic" },
@@ -520,6 +645,11 @@ export default function AppointmentsPage() {
               />
               Show archived
             </label>
+            {locationFilter === "visit" && (
+              <button className="btn btn-secondary" onClick={downloadRunSheet}>
+                Download run sheet
+              </button>
+            )}
             <button className="btn btn-secondary" onClick={() => loadAppointments()}>
               Refresh
             </button>
@@ -532,13 +662,16 @@ export default function AppointmentsPage() {
         <div className="card" style={{ margin: 0 }}>
           <div className="stack" style={{ gap: 12 }}>
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Day</label>
+              <label className="label">{viewMode === "week" ? "Week of" : "Day"}</label>
               <input
                 className="input"
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
               />
+              {viewMode === "week" && (
+                <div style={{ color: "var(--muted)", fontSize: 12 }}>{weekRangeLabel}</div>
+              )}
             </div>
             <div className="stack" style={{ gap: 8 }}>
               <label className="label">Search patient</label>
@@ -555,7 +688,7 @@ export default function AppointmentsPage() {
         <div className="card" style={{ margin: 0 }}>
           {loading ? (
             <div className="badge">Loading appointments…</div>
-          ) : (
+          ) : viewMode === "day" ? (
             <table className="table">
               <thead>
                 <tr>
@@ -571,8 +704,8 @@ export default function AppointmentsPage() {
                 {appointments.map((appt) => (
                   <tr key={appt.id}>
                     <td>
-                      {new Date(appt.starts_at).toLocaleTimeString()} -{" "}
-                      {new Date(appt.ends_at).toLocaleTimeString()}
+                      {new Date(appt.starts_at).toLocaleTimeString([], timeFormat)} -{" "}
+                      {new Date(appt.ends_at).toLocaleTimeString([], timeFormat)}
                     </td>
                     <td>
                       {appt.patient.first_name} {appt.patient.last_name}
@@ -601,25 +734,13 @@ export default function AppointmentsPage() {
                       <div className="table-actions">
                         <button
                           className="btn btn-secondary"
-                          onClick={() => {
-                            setSelectedAppointment(appt);
-                            setDetailLocationType(appt.location_type);
-                            setDetailLocationText(appt.location_text || "");
-                            void loadAppointmentNotes(appt.id);
-                            void loadPatientDetail(appt.patient.id);
-                          }}
+                          onClick={() => openAppointment(appt)}
                         >
                           Open
                         </button>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => {
-                            setSelectedAppointment(appt);
-                            setDetailLocationType(appt.location_type);
-                            setDetailLocationText(appt.location_text || "");
-                            void loadAppointmentNotes(appt.id);
-                            void loadPatientDetail(appt.patient.id);
-                          }}
+                          onClick={() => openAppointment(appt)}
                         >
                           Add note
                         </button>
@@ -662,6 +783,73 @@ export default function AppointmentsPage() {
                 ))}
               </tbody>
             </table>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+              }}
+            >
+              {weekDates.map((day) => {
+                const key = toDateKey(day);
+                const items = groupedAppointments[key] || [];
+                return (
+                  <div key={key} className="card" style={{ margin: 0 }}>
+                    <div style={{ fontWeight: 600 }}>
+                      {day.toLocaleDateString(undefined, {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                      })}
+                    </div>
+                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{key}</div>
+                    <div className="stack" style={{ marginTop: 10 }}>
+                      {items.length === 0 ? (
+                        <div className="notice">No appointments</div>
+                      ) : (
+                        items.map((appt) => (
+                          <div key={appt.id} className="card" style={{ margin: 0 }}>
+                            <div style={{ fontWeight: 600 }}>
+                              {new Date(appt.starts_at).toLocaleTimeString([], timeFormat)} -{" "}
+                              {new Date(appt.ends_at).toLocaleTimeString([], timeFormat)}
+                            </div>
+                            <div>
+                              {appt.patient.first_name} {appt.patient.last_name}
+                            </div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <span className="badge">{statusLabels[appt.status]}</span>
+                              <span className="badge">
+                                {categoryLabels[appt.patient.patient_category]}
+                              </span>
+                              <span className="badge">
+                                {appt.location_type === "visit"
+                                  ? appt.location_text || "Visit"
+                                  : appt.location || "Clinic"}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => openAppointment(appt)}
+                              >
+                                Open
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => createEstimateForAppointment(appt)}
+                              >
+                                Estimate
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
