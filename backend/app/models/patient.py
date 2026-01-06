@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import enum
 from datetime import date
 
-from sqlalchemy import Date, String, Text
+from sqlalchemy import Date, Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base, SoftDeleteMixin
+
+
+class PatientCategory(str, enum.Enum):
+    clinic_private = "CLINIC_PRIVATE"
+    domiciliary_private = "DOMICILIARY_PRIVATE"
+    denplan = "DENPLAN"
 
 
 class Patient(Base, AuditMixin, SoftDeleteMixin):
@@ -23,6 +30,13 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     address_line2: Mapped[str | None] = mapped_column(String(200), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     postcode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    patient_category: Mapped[PatientCategory] = mapped_column(
+        Enum(PatientCategory, name="patient_category"),
+        default=PatientCategory.clinic_private,
+        nullable=False,
+    )
+    denplan_member_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    denplan_plan_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     allergies: Mapped[str | None] = mapped_column(Text, nullable=True)
     medical_alerts: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -31,3 +45,4 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     appointments = relationship("Appointment", back_populates="patient")
     notes_list = relationship("Note", back_populates="patient")
     invoices = relationship("Invoice", back_populates="patient")
+    estimates = relationship("Estimate", back_populates="patient")

@@ -12,6 +12,8 @@ type Actor = {
   role: string;
 };
 
+type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
+
 type Patient = {
   id: number;
   first_name: string;
@@ -23,6 +25,9 @@ type Patient = {
   address_line2?: string | null;
   city?: string | null;
   postcode?: string | null;
+  patient_category: PatientCategory;
+  denplan_member_no?: string | null;
+  denplan_plan_name?: string | null;
   notes?: string | null;
   allergies?: string | null;
   medical_alerts?: string | null;
@@ -95,12 +100,58 @@ type TimelineItem = {
   link?: string | null;
 };
 
+type EstimateStatus = "DRAFT" | "ISSUED" | "ACCEPTED" | "DECLINED" | "SUPERSEDED";
+type EstimateFeeType = "FIXED" | "RANGE";
+
+type EstimateItem = {
+  id: number;
+  treatment_id?: number | null;
+  description: string;
+  qty: number;
+  fee_type: EstimateFeeType;
+  unit_amount_pence?: number | null;
+  min_unit_amount_pence?: number | null;
+  max_unit_amount_pence?: number | null;
+  sort_order: number;
+};
+
+type Estimate = {
+  id: number;
+  patient_id: number;
+  appointment_id?: number | null;
+  category_snapshot: PatientCategory;
+  status: EstimateStatus;
+  valid_until?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  items: EstimateItem[];
+};
+
+type Treatment = {
+  id: number;
+  code?: string | null;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  default_duration_minutes?: number | null;
+  is_denplan_included_default: boolean;
+};
+
+const categoryLabels: Record<PatientCategory, string> = {
+  CLINIC_PRIVATE: "Clinic (Private)",
+  DOMICILIARY_PRIVATE: "Domiciliary (Private)",
+  DENPLAN: "Denplan",
+};
+
 export default function PatientDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const patientId = id;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [tab, setTab] = useState<"summary" | "notes" | "invoices">("summary");
+  const [tab, setTab] = useState<"summary" | "notes" | "invoices" | "estimates">(
+    "summary"
+  );
   const [loading, setLoading] = useState(true);
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -129,6 +180,21 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
+  const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [loadingEstimates, setLoadingEstimates] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [creatingEstimate, setCreatingEstimate] = useState(false);
+  const [estimateNotes, setEstimateNotes] = useState("");
+  const [estimateValidUntil, setEstimateValidUntil] = useState("");
+  const [estimateItemTreatmentId, setEstimateItemTreatmentId] = useState("");
+  const [estimateItemDescription, setEstimateItemDescription] = useState("");
+  const [estimateItemQty, setEstimateItemQty] = useState("1");
+  const [estimateItemFeeType, setEstimateItemFeeType] = useState<EstimateFeeType>("FIXED");
+  const [estimateItemAmount, setEstimateItemAmount] = useState("");
+  const [estimateItemMinAmount, setEstimateItemMinAmount] = useState("");
+  const [estimateItemMaxAmount, setEstimateItemMaxAmount] = useState("");
+  const [treatments, setTreatments] = useState<Treatment[]>([]);
 
   async function loadPatient() {
     setLoading(true);
@@ -242,11 +308,217 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function loadTreatments() {
+    try {
+      const res = await apiFetch("/api/treatments?include_inactive=1");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.ok) {
+        const data = (await res.json()) as Treatment[];
+        setTreatments(data);
+      }
+    } catch {
+      setTreatments([]);
+    }
+  }
+
+  async function loadEstimates() {
+    setLoadingEstimates(true);
+    setEstimateError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/estimates`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load estimates (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as Estimate[];
+      setEstimates(data);
+      if (selectedEstimate) {
+        const next = data.find((estimate) => estimate.id === selectedEstimate.id) || null;
+        setSelectedEstimate(next);
+      }
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to load estimates");
+    } finally {
+      setLoadingEstimates(false);
+    }
+  }
+
+  async function loadEstimateDetail(estimateId: number) {
+    setEstimateError(null);
+    try {
+      const res = await apiFetch(`/api/estimates/${estimateId}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load estimate (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as Estimate;
+      setSelectedEstimate(data);
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to load estimate");
+    }
+  }
+
+  async function createEstimate() {
+    if (creatingEstimate) return;
+    setCreatingEstimate(true);
+    setEstimateError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/estimates`, {
+        method: "POST",
+        body: JSON.stringify({
+          notes: estimateNotes || null,
+          valid_until: estimateValidUntil || null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to create estimate (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as Estimate;
+      setEstimateNotes("");
+      setEstimateValidUntil("");
+      await loadEstimates();
+      setSelectedEstimate(data);
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to create estimate");
+    } finally {
+      setCreatingEstimate(false);
+    }
+  }
+
+  async function addEstimateItem() {
+    if (!selectedEstimate) return;
+    setEstimateError(null);
+    const qty = Number(estimateItemQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setEstimateError("Quantity must be a positive number.");
+      return;
+    }
+    const payload: Record<string, unknown> = {
+      treatment_id: estimateItemTreatmentId ? Number(estimateItemTreatmentId) : null,
+      description: estimateItemDescription || null,
+      qty,
+      fee_type: estimateItemFeeType,
+    };
+
+    if (estimateItemFeeType === "FIXED") {
+      const amount = toPence(estimateItemAmount);
+      if (amount === null) {
+        setEstimateError("Enter a valid fixed amount.");
+        return;
+      }
+      payload.unit_amount_pence = amount;
+    } else {
+      const min = toPence(estimateItemMinAmount);
+      const max = toPence(estimateItemMaxAmount);
+      if (min === null || max === null) {
+        setEstimateError("Enter valid min/max values for a range.");
+        return;
+      }
+      payload.min_unit_amount_pence = min;
+      payload.max_unit_amount_pence = max;
+    }
+
+    try {
+      const res = await apiFetch(`/api/estimates/${selectedEstimate.id}/items`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to add estimate item (HTTP ${res.status})`);
+      }
+      setEstimateItemTreatmentId("");
+      setEstimateItemDescription("");
+      setEstimateItemQty("1");
+      setEstimateItemFeeType("FIXED");
+      setEstimateItemAmount("");
+      setEstimateItemMinAmount("");
+      setEstimateItemMaxAmount("");
+      await loadEstimateDetail(selectedEstimate.id);
+      await loadEstimates();
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to add estimate item");
+    }
+  }
+
+  async function deleteEstimateItem(itemId: number) {
+    if (!selectedEstimate) return;
+    setEstimateError(null);
+    try {
+      const res = await apiFetch(`/api/estimates/${selectedEstimate.id}/items/${itemId}`, {
+        method: "DELETE",
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to delete estimate item (HTTP ${res.status})`);
+      }
+      await loadEstimateDetail(selectedEstimate.id);
+      await loadEstimates();
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to delete estimate item");
+    }
+  }
+
+  async function updateEstimateStatus(nextStatus: EstimateStatus) {
+    if (!selectedEstimate) return;
+    setEstimateError(null);
+    try {
+      const res = await apiFetch(`/api/estimates/${selectedEstimate.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update estimate (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as Estimate;
+      setSelectedEstimate(data);
+      await loadEstimates();
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : "Failed to update estimate");
+    }
+  }
+
   useEffect(() => {
     void loadPatient();
     void loadNotes();
     void loadTimeline();
     void loadInvoices();
+    void loadTreatments();
+    void loadEstimates();
   }, [patientId]);
 
   const alerts = [
@@ -284,6 +556,29 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }).format(value / 100);
   }
 
+  function formatEstimateTotal(items: EstimateItem[]) {
+    if (!items.length) return "—";
+    let minTotal = 0;
+    let maxTotal = 0;
+    let hasRange = false;
+    items.forEach((item) => {
+      const qty = Math.max(item.qty || 1, 1);
+      if (item.fee_type === "RANGE") {
+        hasRange = true;
+        minTotal += (item.min_unit_amount_pence ?? 0) * qty;
+        maxTotal += (item.max_unit_amount_pence ?? 0) * qty;
+      } else {
+        const value = (item.unit_amount_pence ?? 0) * qty;
+        minTotal += value;
+        maxTotal += value;
+      }
+    });
+    if (hasRange) {
+      return `${formatPence(minTotal)} - ${formatPence(maxTotal)}`;
+    }
+    return formatPence(minTotal);
+  }
+
   function toPence(raw: string) {
     const parsed = Number(raw);
     if (Number.isNaN(parsed)) return null;
@@ -308,6 +603,11 @@ export default function PatientDetailClient({ id }: { id: string }) {
           address_line2: patient.address_line2,
           city: patient.city,
           postcode: patient.postcode,
+          patient_category: patient.patient_category,
+          denplan_plan_name:
+            patient.patient_category === "DENPLAN" ? patient.denplan_plan_name : null,
+          denplan_member_no:
+            patient.patient_category === "DENPLAN" ? patient.denplan_member_no : null,
           allergies: patient.allergies,
           medical_alerts: patient.medical_alerts,
           safeguarding_notes: patient.safeguarding_notes,
@@ -750,8 +1050,30 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   <div>{patient.email || "—"}</div>
                 </div>
                 <div>
+                  <div className="label">Category</div>
+                  <div>
+                    <span className="badge">{categoryLabels[patient.patient_category]}</span>
+                  </div>
+                </div>
+                <div>
                   <div className="label">Address</div>
                   <div>{buildAddress(patient) || "—"}</div>
+                </div>
+                <div>
+                  <div className="label">Denplan plan</div>
+                  <div>
+                    {patient.patient_category === "DENPLAN" && patient.denplan_plan_name
+                      ? patient.denplan_plan_name
+                      : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="label">Denplan member</div>
+                  <div>
+                    {patient.patient_category === "DENPLAN" && patient.denplan_member_no
+                      ? patient.denplan_member_no
+                      : "—"}
+                  </div>
                 </div>
               </div>
 
@@ -801,6 +1123,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   onClick={() => setTab("invoices")}
                 >
                   Invoices ({invoices.length})
+                </button>
+                <button
+                  className={`tab ${tab === "estimates" ? "active" : ""}`}
+                  onClick={() => setTab("estimates")}
+                >
+                  Estimates ({estimates.length})
                 </button>
                 <Link className="tab" href={`/patients/${patientId}/timeline`}>
                   Timeline
@@ -879,6 +1207,67 @@ export default function PatientDetailClient({ id }: { id: string }) {
                         }
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Patient category</label>
+                      <select
+                        className="input"
+                        value={patient.patient_category}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  patient_category: e.target.value as PatientCategory,
+                                }
+                              : prev
+                          )
+                        }
+                      >
+                        <option value="CLINIC_PRIVATE">Clinic (Private)</option>
+                        <option value="DOMICILIARY_PRIVATE">Domiciliary (Private)</option>
+                        <option value="DENPLAN">Denplan</option>
+                      </select>
+                      {patient.patient_category === "DENPLAN" && (
+                        <p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>
+                          Most care included; excluded items can be added as private charges via
+                          estimates.
+                        </p>
+                      )}
+                    </div>
+                    {patient.patient_category === "DENPLAN" ? (
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="label">Denplan plan name</label>
+                        <input
+                          className="input"
+                          value={patient.denplan_plan_name ?? ""}
+                          onChange={(e) =>
+                            setPatient((prev) =>
+                              prev ? { ...prev, denplan_plan_name: e.target.value } : prev
+                            )
+                          }
+                        />
+                        <label className="label">Denplan member number</label>
+                        <input
+                          className="input"
+                          value={patient.denplan_member_no ?? ""}
+                          onChange={(e) =>
+                            setPatient((prev) =>
+                              prev ? { ...prev, denplan_member_no: e.target.value } : prev
+                            )
+                          }
+                        />
+                      </div>
+                    ) : (
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="label">Denplan plan name</label>
+                        <input className="input" value="—" readOnly />
+                        <label className="label">Denplan member number</label>
+                        <input className="input" value="—" readOnly />
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-2">
@@ -1057,6 +1446,260 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       ))
                     )}
                   </div>
+                </div>
+              ) : tab === "estimates" ? (
+                <div className="stack">
+                  <div className="row">
+                    <button className="btn btn-secondary" type="button" onClick={loadEstimates}>
+                      Refresh
+                    </button>
+                  </div>
+
+                  {estimateError && <div className="notice">{estimateError}</div>}
+                  {loadingEstimates ? (
+                    <div className="badge">Loading estimates…</div>
+                  ) : estimates.length === 0 ? (
+                    <div className="notice">No estimates yet.</div>
+                  ) : (
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Estimate</th>
+                          <th>Status</th>
+                          <th>Created</th>
+                          <th>Total</th>
+                          <th>Appointment</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {estimates.map((estimate) => (
+                          <tr key={estimate.id}>
+                            <td>EST-{estimate.id}</td>
+                            <td>{estimate.status}</td>
+                            <td>{new Date(estimate.created_at).toLocaleString()}</td>
+                            <td>{formatEstimateTotal(estimate.items)}</td>
+                            <td>{estimate.appointment_id ?? "—"}</td>
+                            <td>
+                              <div className="table-actions">
+                                <button
+                                  className="btn btn-secondary"
+                                  onClick={() => loadEstimateDetail(estimate.id)}
+                                >
+                                  View
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack">
+                      <h4 style={{ marginTop: 0 }}>New estimate</h4>
+                      <div className="grid grid-2">
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Valid until</label>
+                          <input
+                            className="input"
+                            type="date"
+                            value={estimateValidUntil}
+                            onChange={(e) => setEstimateValidUntil(e.target.value)}
+                          />
+                        </div>
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Notes</label>
+                          <input
+                            className="input"
+                            value={estimateNotes}
+                            onChange={(e) => setEstimateNotes(e.target.value)}
+                            placeholder="Optional estimate notes"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={createEstimate}
+                        disabled={creatingEstimate}
+                      >
+                        {creatingEstimate ? "Creating..." : "Create estimate"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedEstimate && (
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack">
+                        <div className="row">
+                          <div>
+                            <h3 style={{ marginTop: 0 }}>EST-{selectedEstimate.id}</h3>
+                            <div style={{ color: "var(--muted)" }}>
+                              Status: {selectedEstimate.status} · Category:{" "}
+                              {categoryLabels[selectedEstimate.category_snapshot]}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => updateEstimateStatus("ISSUED")}
+                            >
+                              Mark issued
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => updateEstimateStatus("ACCEPTED")}
+                            >
+                              Mark accepted
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => updateEstimateStatus("DECLINED")}
+                            >
+                              Mark declined
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Add line item</label>
+                          <div className="grid grid-3">
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Treatment</label>
+                              <select
+                                className="input"
+                                value={estimateItemTreatmentId}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  setEstimateItemTreatmentId(next);
+                                  if (!estimateItemDescription && next) {
+                                    const treatment = treatments.find(
+                                      (item) => String(item.id) === next
+                                    );
+                                    if (treatment) {
+                                      setEstimateItemDescription(treatment.name);
+                                    }
+                                  }
+                                }}
+                              >
+                                <option value="">Free text</option>
+                                {treatments.map((treatment) => (
+                                  <option key={treatment.id} value={treatment.id}>
+                                    {treatment.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Description</label>
+                              <input
+                                className="input"
+                                value={estimateItemDescription}
+                                onChange={(e) => setEstimateItemDescription(e.target.value)}
+                                placeholder="e.g. Composite filling"
+                              />
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Qty</label>
+                              <input
+                                className="input"
+                                value={estimateItemQty}
+                                onChange={(e) => setEstimateItemQty(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-3">
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Fee type</label>
+                              <select
+                                className="input"
+                                value={estimateItemFeeType}
+                                onChange={(e) =>
+                                  setEstimateItemFeeType(e.target.value as EstimateFeeType)
+                                }
+                              >
+                                <option value="FIXED">Fixed</option>
+                                <option value="RANGE">Range</option>
+                              </select>
+                            </div>
+                            {estimateItemFeeType === "FIXED" ? (
+                              <div className="stack" style={{ gap: 8 }}>
+                                <label className="label">Amount (£)</label>
+                                <input
+                                  className="input"
+                                  value={estimateItemAmount}
+                                  onChange={(e) => setEstimateItemAmount(e.target.value)}
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Min (£)</label>
+                                  <input
+                                    className="input"
+                                    value={estimateItemMinAmount}
+                                    onChange={(e) => setEstimateItemMinAmount(e.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Max (£)</label>
+                                  <input
+                                    className="input"
+                                    value={estimateItemMaxAmount}
+                                    onChange={(e) => setEstimateItemMaxAmount(e.target.value)}
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <button className="btn btn-primary" type="button" onClick={addEstimateItem}>
+                            Add item
+                          </button>
+                        </div>
+
+                        {selectedEstimate.items.length === 0 ? (
+                          <div className="notice">No items yet.</div>
+                        ) : (
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                <th>Description</th>
+                                <th>Qty</th>
+                                <th>Fee</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedEstimate.items.map((item) => (
+                                <tr key={item.id}>
+                                  <td>{item.description}</td>
+                                  <td>{item.qty}</td>
+                                  <td>
+                                    {item.fee_type === "RANGE"
+                                      ? `${formatPence(item.min_unit_amount_pence ?? 0)} - ${formatPence(
+                                          item.max_unit_amount_pence ?? 0
+                                        )}`
+                                      : formatPence(item.unit_amount_pence ?? 0)}
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => deleteEstimateItem(item.id)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="stack">

@@ -38,6 +38,7 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
 
     patient = relationship("Patient", back_populates="appointments", lazy="joined")
     invoices = relationship("Invoice", back_populates="appointment")
+    estimates = relationship("Estimate", back_populates="appointment")
 
     @property
     def patient_has_alerts(self) -> bool:

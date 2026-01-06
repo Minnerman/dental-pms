@@ -17,6 +17,8 @@ from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.patients import router as patients_router
+from app.routers.treatments import router as treatments_router
+from app.routers.estimates import router as estimates_router, patient_router as patient_estimates_router
 from app.routers.timeline import router as timeline_router
 from app.routers.users import router as users_router
 from app.services.users import seed_initial_admin
@@ -70,5 +72,8 @@ app.include_router(patient_notes_router)
 app.include_router(appointment_notes_router)
 app.include_router(appointment_notes_router)
 app.include_router(appointment_notes_router)
+app.include_router(treatments_router)
+app.include_router(estimates_router)
+app.include_router(patient_estimates_router)
 app.include_router(audit_router)
 app.include_router(timeline_router)

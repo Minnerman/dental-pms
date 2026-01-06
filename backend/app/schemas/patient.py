@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
+from app.models.patient import PatientCategory
 from app.schemas.actor import ActorOut
 
 
@@ -18,6 +19,9 @@ class PatientBase(BaseModel):
     address_line2: Optional[str] = None
     city: Optional[str] = None
     postcode: Optional[str] = None
+    patient_category: PatientCategory = PatientCategory.clinic_private
+    denplan_member_no: Optional[str] = None
+    denplan_plan_name: Optional[str] = None
     notes: Optional[str] = None
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None
@@ -40,6 +44,9 @@ class PatientUpdate(BaseModel):
     address_line2: Optional[str] = None
     city: Optional[str] = None
     postcode: Optional[str] = None
+    patient_category: Optional[PatientCategory] = None
+    denplan_member_no: Optional[str] = None
+    denplan_plan_name: Optional[str] = None
     notes: Optional[str] = None
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None

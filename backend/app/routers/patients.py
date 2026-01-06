@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.audit_log import AuditLog
-from app.models.patient import Patient
+from app.models.patient import Patient, PatientCategory
 from app.services.audit import log_event, snapshot_model
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.patient import PatientCreate, PatientOut, PatientSearchOut, PatientUpdate
@@ -24,6 +24,7 @@ def list_patients(
     q: str | None = Query(default=None, alias="q"),
     email: str | None = Query(default=None),
     dob: date | None = Query(default=None),
+    category: PatientCategory | None = Query(default=None),
     include_deleted: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -46,6 +47,8 @@ def list_patients(
         stmt = stmt.where(Patient.email.ilike(f"%{email.strip()}%"))
     if dob:
         stmt = stmt.where(Patient.date_of_birth == dob)
+    if category:
+        stmt = stmt.where(Patient.patient_category == category)
     stmt = stmt.limit(limit).offset(offset)
     return list(db.scalars(stmt))
 
@@ -94,6 +97,9 @@ def create_patient(
         address_line2=payload.address_line2,
         city=payload.city,
         postcode=payload.postcode,
+        patient_category=payload.patient_category,
+        denplan_member_no=payload.denplan_member_no,
+        denplan_plan_name=payload.denplan_plan_name,
         notes=payload.notes,
         allergies=payload.allergies,
         medical_alerts=payload.medical_alerts,

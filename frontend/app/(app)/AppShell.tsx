@@ -111,6 +111,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         "reception",
       ].includes(me.role)
     : false;
+  const isSuperadmin = me?.role === "superadmin";
 
   useEffect(() => {
     if (!checking && isUsersRoute && !isAdmin) {
@@ -166,7 +167,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const tabs = [...baseTabs, ...(isAdmin ? [{ href: "/users", label: "Users" }] : [])];
+  const tabs = [
+    ...baseTabs,
+    ...(isSuperadmin ? [{ href: "/treatments", label: "Treatments" }] : []),
+    ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
+  ];
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href));
   const showDropdown = searchQuery.trim().length >= 2;
   const showNoResults =

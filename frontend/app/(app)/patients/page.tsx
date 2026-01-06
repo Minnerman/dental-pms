@@ -11,6 +11,8 @@ type Actor = {
   role: string;
 };
 
+type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
+
 type Patient = {
   id: number;
   first_name: string;
@@ -18,9 +20,16 @@ type Patient = {
   date_of_birth?: string | null;
   phone?: string | null;
   updated_at: string;
+  patient_category: PatientCategory;
   created_by?: Actor | null;
   updated_by?: Actor | null;
   deleted_at?: string | null;
+};
+
+const categoryLabels: Record<PatientCategory, string> = {
+  CLINIC_PRIVATE: "Clinic (Private)",
+  DOMICILIARY_PRIVATE: "Domiciliary (Private)",
+  DENPLAN: "Denplan",
 };
 
 export default function PatientsPage() {
@@ -29,6 +38,7 @@ export default function PatientsPage() {
   const [query, setQuery] = useState("");
   const [emailFilter, setEmailFilter] = useState("");
   const [dobFilter, setDobFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<PatientCategory | "">("");
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +47,7 @@ export default function PatientsPage() {
     query?: string;
     email?: string;
     dob?: string;
+    category?: PatientCategory | "";
     includeDeleted?: boolean;
   }) {
     setLoading(true);
@@ -45,6 +56,7 @@ export default function PatientsPage() {
     if (filters?.query) params.set("query", filters.query);
     if (filters?.email) params.set("email", filters.email);
     if (filters?.dob) params.set("dob", filters.dob);
+    if (filters?.category) params.set("category", filters.category);
     if (filters?.includeDeleted ?? showArchived) params.set("include_deleted", "1");
     try {
       const res = await apiFetch(`/api/patients?${params.toString()}`);
@@ -92,7 +104,12 @@ export default function PatientsPage() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                void loadPatients({ query, email: emailFilter, dob: dobFilter });
+                void loadPatients({
+                  query,
+                  email: emailFilter,
+                  dob: dobFilter,
+                  category: categoryFilter,
+                });
               }
             }}
           />
@@ -103,7 +120,12 @@ export default function PatientsPage() {
             onChange={(e) => setEmailFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                void loadPatients({ query, email: emailFilter, dob: dobFilter });
+                void loadPatients({
+                  query,
+                  email: emailFilter,
+                  dob: dobFilter,
+                  category: categoryFilter,
+                });
               }
             }}
           />
@@ -113,9 +135,26 @@ export default function PatientsPage() {
             value={dobFilter}
             onChange={(e) => setDobFilter(e.target.value)}
           />
+          <select
+            className="input"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value as PatientCategory | "")}
+          >
+            <option value="">All categories</option>
+            <option value="CLINIC_PRIVATE">Clinic (Private)</option>
+            <option value="DOMICILIARY_PRIVATE">Domiciliary (Private)</option>
+            <option value="DENPLAN">Denplan</option>
+          </select>
           <button
             className="btn btn-secondary"
-            onClick={() => loadPatients({ query, email: emailFilter, dob: dobFilter })}
+            onClick={() =>
+              loadPatients({
+                query,
+                email: emailFilter,
+                dob: dobFilter,
+                category: categoryFilter,
+              })
+            }
           >
             Search
           </button>
@@ -126,7 +165,13 @@ export default function PatientsPage() {
               onChange={(e) => {
                 const next = e.target.checked;
                 setShowArchived(next);
-                void loadPatients({ query, email: emailFilter, dob: dobFilter, includeDeleted: next });
+                void loadPatients({
+                  query,
+                  email: emailFilter,
+                  dob: dobFilter,
+                  category: categoryFilter,
+                  includeDeleted: next,
+                });
               }}
             />
             Show archived
@@ -145,6 +190,7 @@ export default function PatientsPage() {
                   <th>Name</th>
                   <th>DOB</th>
                   <th>Phone</th>
+                  <th>Category</th>
                   <th>Last edited</th>
                   <th>Last edited by</th>
                 </tr>
@@ -164,6 +210,9 @@ export default function PatientsPage() {
                     </td>
                     <td>{patient.date_of_birth || "—"}</td>
                     <td>{patient.phone || "—"}</td>
+                    <td>
+                      <span className="badge">{categoryLabels[patient.patient_category]}</span>
+                    </td>
                     <td>{new Date(patient.updated_at).toLocaleString()}</td>
                     <td>{patient.updated_by?.email || patient.created_by?.email || "—"}</td>
                   </tr>
