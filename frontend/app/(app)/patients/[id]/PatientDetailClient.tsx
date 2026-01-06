@@ -624,6 +624,33 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function downloadPdf(path: string, filename: string) {
+    setInvoiceError(null);
+    try {
+      const res = await apiFetch(path);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to download PDF");
+    }
+  }
+
   async function archivePatient() {
     if (!confirm("Archive this patient?")) return;
     try {
@@ -1120,6 +1147,17 @@ export default function PatientDetailClient({ id }: { id: string }) {
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() =>
+                                downloadPdf(
+                                  `/api/invoices/${selectedInvoice.id}/pdf`,
+                                  `${selectedInvoice.invoice_number}.pdf`
+                                )
+                              }
+                            >
+                              Download PDF
+                            </button>
                             {selectedInvoice.status === "draft" && (
                               <button className="btn btn-primary" onClick={issueInvoice}>
                                 Issue invoice
@@ -1323,6 +1361,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                     <th>Method</th>
                                     <th>Amount</th>
                                     <th>Reference</th>
+                                    <th>Receipt</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1332,6 +1371,19 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                       <td>{payment.method}</td>
                                       <td>{formatPence(payment.amount_pence)}</td>
                                       <td>{payment.reference || "—"}</td>
+                                      <td>
+                                        <button
+                                          className="btn btn-secondary"
+                                          onClick={() =>
+                                            downloadPdf(
+                                              `/api/payments/${payment.id}/receipt.pdf`,
+                                              `receipt-${selectedInvoice.invoice_number}-${payment.id}.pdf`
+                                            )
+                                          }
+                                        >
+                                          Receipt
+                                        </button>
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
