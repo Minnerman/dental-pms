@@ -7,6 +7,7 @@ from app.models.note import Note, NoteType
 from app.models.invoice import Invoice, InvoiceLine, InvoiceStatus, Payment, PaymentMethod
 from app.models.treatment import Treatment, TreatmentFee, FeeType
 from app.models.estimate import Estimate, EstimateItem, EstimateStatus, EstimateFeeType
+from app.models.practice_schedule import PracticeHour, PracticeClosure, PracticeOverride
 
 __all__ = [
     "Base",
@@ -33,4 +34,7 @@ __all__ = [
     "EstimateItem",
     "EstimateStatus",
     "EstimateFeeType",
+    "PracticeHour",
+    "PracticeClosure",
+    "PracticeOverride",
 ]

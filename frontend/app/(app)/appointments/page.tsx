@@ -1,9 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import listPlugin from "@fullcalendar/list";
+import type {
+  DateSelectArg,
+  DatesSetArg,
+  EventClickArg,
+  EventDropArg,
+  EventResizeDoneArg,
+} from "@fullcalendar/core";
 import { apiFetch, clearToken } from "@/lib/auth";
+import "@fullcalendar/core/main.css";
+import "@fullcalendar/daygrid/main.css";
+import "@fullcalendar/timegrid/main.css";
+import "@fullcalendar/list/main.css";
 
 type Actor = { id: number; email: string; role: string };
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
@@ -70,7 +86,14 @@ type PatientDetail = {
   medical_alerts?: string | null;
   safeguarding_notes?: string | null;
 };
-type UserOption = { id: number; email: string; full_name: string; role: string; is_active: boolean };
+
+type UserOption = {
+  id: number;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+};
 
 type AppointmentNote = {
   id: number;
@@ -79,8 +102,41 @@ type AppointmentNote = {
   created_by: Actor;
 };
 
+type PracticeHour = {
+  day_of_week: number;
+  start_time: string | null;
+  end_time: string | null;
+  is_closed: boolean;
+};
+
+type PracticeClosure = {
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+};
+
+type PracticeOverride = {
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  is_closed: boolean;
+  reason: string | null;
+};
+
+type PracticeSchedule = {
+  hours: PracticeHour[];
+  closures: PracticeClosure[];
+  overrides: PracticeOverride[];
+};
+
 type LocationFilter = "all" | "clinic" | "visit";
-type ViewMode = "day" | "week";
+
+type CalendarRange = {
+  start: string;
+  end: string;
+  view: string;
+  anchor: string;
+};
 
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
@@ -97,16 +153,40 @@ const statusLabels: Record<AppointmentStatus, string> = {
   no_show: "No show",
 };
 
+const statusColors: Record<AppointmentStatus, string> = {
+  booked: "#2f6fed",
+  arrived: "#2da44e",
+  in_progress: "#d97706",
+  completed: "#6b7280",
+  cancelled: "#dc2626",
+  no_show: "#7f1d1d",
+};
+
+function toDateKey(value: Date) {
+  return value.toLocaleDateString("en-CA");
+}
+
+function addDays(dateStr: string, days: number) {
+  const base = new Date(`${dateStr}T00:00:00`);
+  base.setDate(base.getDate() + days);
+  return toDateKey(base);
+}
+
+function toLocalDateTimeInput(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
 export default function AppointmentsPage() {
   const router = useRouter();
+  const calendarRef = useRef<FullCalendar | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
-  const [selectedDate, setSelectedDate] = useState(() => {
-    return new Date().toISOString().slice(0, 10);
-  });
-  const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [clinicianUserId, setClinicianUserId] = useState("");
   const [appointmentType, setAppointmentType] = useState("");
@@ -116,7 +196,6 @@ export default function AppointmentsPage() {
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -132,8 +211,7 @@ export default function AppointmentsPage() {
     useState<AppointmentLocationType>("clinic");
   const [detailLocationText, setDetailLocationText] = useState("");
   const [savingDetail, setSavingDetail] = useState(false);
-
-  const timeFormat: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  const [range, setRange] = useState<CalendarRange | null>(null);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -143,48 +221,82 @@ export default function AppointmentsPage() {
     );
   }, [patientQuery, patients]);
 
-  function toDateKey(value: Date) {
-    return value.toLocaleDateString("en-CA");
-  }
+  const calendarEvents = useMemo(() => {
+    const appointmentEvents = appointments.map((appt) => ({
+      id: String(appt.id),
+      title: `${appt.patient.first_name} ${appt.patient.last_name}`,
+      start: appt.starts_at,
+      end: appt.ends_at,
+      extendedProps: { appointment: appt },
+    }));
 
-  function getWeekStart(dateStr: string) {
-    const base = new Date(`${dateStr}T00:00`);
-    const day = base.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    base.setDate(base.getDate() + diff);
-    return base;
-  }
+    if (!schedule) return appointmentEvents;
 
-  const weekDates = useMemo(() => {
-    if (viewMode !== "week") return [];
-    const start = getWeekStart(selectedDate);
-    return Array.from({ length: 7 }).map((_, idx) => {
-      const next = new Date(start);
-      next.setDate(start.getDate() + idx);
-      return next;
+    const backgroundEvents: {
+      id: string;
+      start: string;
+      end?: string;
+      display: "background";
+      backgroundColor: string;
+      editable: boolean;
+    }[] = [];
+
+    schedule.closures.forEach((closure, index) => {
+      backgroundEvents.push({
+        id: `closure-${index}`,
+        start: closure.start_date,
+        end: addDays(closure.end_date, 1),
+        display: "background",
+        backgroundColor: "rgba(120, 120, 120, 0.2)",
+        editable: false,
+      });
     });
-  }, [selectedDate, viewMode]);
 
-  const weekRangeLabel = useMemo(() => {
-    if (viewMode !== "week") return "";
-    const start = getWeekStart(selectedDate);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return `${toDateKey(start)} to ${toDateKey(end)}`;
-  }, [selectedDate, viewMode]);
+    schedule.overrides.forEach((override, index) => {
+      if (override.is_closed) {
+        backgroundEvents.push({
+          id: `override-closed-${index}`,
+          start: override.date,
+          end: addDays(override.date, 1),
+          display: "background",
+          backgroundColor: "rgba(220, 38, 38, 0.18)",
+          editable: false,
+        });
+      } else if (override.start_time && override.end_time) {
+        const start = `${override.date}T${override.start_time}`;
+        const end = `${override.date}T${override.end_time}`;
+        backgroundEvents.push({
+          id: `override-pre-${index}`,
+          start: `${override.date}T00:00:00`,
+          end: start,
+          display: "background",
+          backgroundColor: "rgba(120, 120, 120, 0.16)",
+          editable: false,
+        });
+        backgroundEvents.push({
+          id: `override-post-${index}`,
+          start: end,
+          end: `${override.date}T23:59:59`,
+          display: "background",
+          backgroundColor: "rgba(120, 120, 120, 0.16)",
+          editable: false,
+        });
+      }
+    });
 
-  const groupedAppointments = useMemo(() => {
-    const groups: Record<string, Appointment[]> = {};
-    for (const appt of appointments) {
-      const key = toDateKey(new Date(appt.starts_at));
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(appt);
-    }
-    for (const key of Object.keys(groups)) {
-      groups[key].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-    }
-    return groups;
-  }, [appointments]);
+    return [...appointmentEvents, ...backgroundEvents];
+  }, [appointments, schedule]);
+
+  const businessHours = useMemo(() => {
+    if (!schedule) return [];
+    return schedule.hours
+      .filter((hour) => !hour.is_closed && hour.start_time && hour.end_time)
+      .map((hour) => ({
+        daysOfWeek: [(hour.day_of_week + 1) % 7],
+        startTime: hour.start_time?.slice(0, 5) ?? "",
+        endTime: hour.end_time?.slice(0, 5) ?? "",
+      }));
+  }, [schedule]);
 
   function openAppointment(appt: Appointment) {
     setSelectedAppointment(appt);
@@ -194,39 +306,32 @@ export default function AppointmentsPage() {
     void loadPatientDetail(appt.patient.id);
   }
 
-  function handleViewModeChange(mode: ViewMode) {
-    if (mode === viewMode) return;
-    if (mode === "week") {
-      setSelectedDate(toDateKey(getWeekStart(selectedDate)));
+  async function loadSchedule() {
+    try {
+      const res = await apiFetch("/api/settings/schedule");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) throw new Error(`Failed to load schedule (HTTP ${res.status})`);
+      const data = (await res.json()) as PracticeSchedule;
+      setSchedule(data);
+    } catch {
+      setSchedule(null);
     }
-    setViewMode(mode);
   }
 
-  async function loadAppointments(includeDeleted: boolean = showArchived) {
+  async function loadAppointments() {
+    if (!range) return;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      let url = "/api/appointments";
-      if (viewMode === "week") {
-        const start = getWeekStart(selectedDate);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        params.set("start", toDateKey(start));
-        params.set("end", toDateKey(end));
-        if (locationFilter !== "all") params.set("location", locationFilter);
-        url = "/api/appointments/range";
-      } else {
-        if (includeDeleted) params.set("include_deleted", "1");
-        if (selectedDate) {
-          params.set("date", selectedDate);
-          params.set("view", "day");
-        }
-        if (patientQuery.trim()) params.set("q", patientQuery.trim());
-        if (locationFilter === "clinic") params.set("location_type", "clinic");
-        if (locationFilter === "visit") params.set("location_type", "visit");
-      }
-      const res = await apiFetch(`${url}?${params.toString()}`);
+      params.set("start", range.start);
+      params.set("end", range.end);
+      if (locationFilter !== "all") params.set("location", locationFilter);
+      const res = await apiFetch(`/api/appointments/range?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
@@ -234,8 +339,7 @@ export default function AppointmentsPage() {
       }
       if (!res.ok) throw new Error(`Failed to load appointments (HTTP ${res.status})`);
       const data = (await res.json()) as Appointment[];
-      const sorted = [...data].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-      setAppointments(sorted);
+      setAppointments(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load appointments");
     } finally {
@@ -284,13 +388,35 @@ export default function AppointmentsPage() {
         throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
       }
       const updated = (await res.json()) as Appointment;
-      setAppointments((prev) =>
-        prev.map((appt) => (appt.id === updated.id ? updated : appt))
-      );
+      setAppointments((prev) => prev.map((appt) => (appt.id === updated.id ? updated : appt)));
       setNotice(`Status updated to ${statusLabels[status]}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update appointment");
     }
+  }
+
+  async function updateAppointmentTimes(
+    appointmentId: number,
+    startsAt: Date,
+    endsAt: Date
+  ) {
+    const res = await apiFetch(`/api/appointments/${appointmentId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+      }),
+    });
+    if (res.status === 401) {
+      clearToken();
+      router.replace("/login");
+      return null;
+    }
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+    }
+    return (await res.json()) as Appointment;
   }
 
   async function createEstimateForAppointment(appt: Appointment) {
@@ -317,18 +443,12 @@ export default function AppointmentsPage() {
   }
 
   async function downloadRunSheet() {
+    if (!range) return;
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (viewMode === "week") {
-        const start = getWeekStart(selectedDate);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        params.set("date", toDateKey(start));
-        params.set("end", toDateKey(end));
-      } else {
-        params.set("date", selectedDate);
-      }
+      params.set("date", range.start);
+      if (range.start !== range.end) params.set("end", range.end);
       params.set("location", "visit");
       const res = await apiFetch(`/api/appointments/run-sheet.pdf?${params.toString()}`);
       if (res.status === 401) {
@@ -343,8 +463,7 @@ export default function AppointmentsPage() {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const label =
-        viewMode === "week" ? `week-of-${toDateKey(getWeekStart(selectedDate))}` : selectedDate;
+      const label = range.view.includes("Week") ? `week-of-${range.start}` : range.start;
       link.href = url;
       link.download = `Run_Sheet_${label}.pdf`;
       document.body.appendChild(link);
@@ -357,14 +476,14 @@ export default function AppointmentsPage() {
   }
 
   useEffect(() => {
-    void loadAppointments();
+    void loadSchedule();
     void loadPatients();
     void loadUsers();
   }, []);
 
   useEffect(() => {
     void loadAppointments();
-  }, [selectedDate, locationFilter, viewMode]);
+  }, [range, locationFilter]);
 
   useEffect(() => {
     if (!selectedPatientId) return;
@@ -547,48 +666,72 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function archiveAppointment(appointmentId: number) {
-    if (!confirm("Archive this appointment?")) return;
-    setError(null);
+  function handleDatesSet(arg: DatesSetArg) {
+    const end = new Date(arg.end);
+    end.setDate(end.getDate() - 1);
+    setRange({
+      start: toDateKey(arg.start),
+      end: toDateKey(end),
+      view: arg.view.type,
+      anchor: toDateKey(arg.view.currentStart),
+    });
+  }
+
+  function handleSelect(selection: DateSelectArg) {
+    if (selection.allDay) {
+      setError("Select a time slot in day/week view to create an appointment.");
+      return;
+    }
+    setStartsAt(toLocalDateTimeInput(selection.start));
+    setEndsAt(toLocalDateTimeInput(selection.end));
+    setShowNewModal(true);
+  }
+
+  async function handleEventDrop(info: EventDropArg) {
+    const appt = info.event.extendedProps.appointment as Appointment | undefined;
+    if (!appt || !info.event.start || !info.event.end) return;
     try {
-      const res = await apiFetch(`/api/appointments/${appointmentId}/archive`, {
-        method: "POST",
-      });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
+      const updated = await updateAppointmentTimes(
+        appt.id,
+        info.event.start,
+        info.event.end
+      );
+      if (updated) {
+        setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       }
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to archive appointment (HTTP ${res.status})`);
-      }
-      await loadAppointments();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive appointment");
+      info.revert();
+      setError(err instanceof Error ? err.message : "Failed to reschedule appointment");
     }
   }
 
-  async function restoreAppointment(appointmentId: number) {
-    if (!confirm("Restore this appointment?")) return;
-    setError(null);
+  async function handleEventResize(info: EventResizeDoneArg) {
+    const appt = info.event.extendedProps.appointment as Appointment | undefined;
+    if (!appt || !info.event.start || !info.event.end) return;
     try {
-      const res = await apiFetch(`/api/appointments/${appointmentId}/restore`, {
-        method: "POST",
-      });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
+      const updated = await updateAppointmentTimes(
+        appt.id,
+        info.event.start,
+        info.event.end
+      );
+      if (updated) {
+        setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       }
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to restore appointment (HTTP ${res.status})`);
-      }
-      await loadAppointments();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore appointment");
+      info.revert();
+      setError(err instanceof Error ? err.message : "Failed to resize appointment");
     }
+  }
+
+  function handleEventClick(info: EventClickArg) {
+    const appt = info.event.extendedProps.appointment as Appointment | undefined;
+    if (appt) openAppointment(appt);
+  }
+
+  function jumpToDate(value: string) {
+    const api = calendarRef.current?.getApi();
+    if (!api) return;
+    api.gotoDate(value);
   }
 
   return (
@@ -598,24 +741,13 @@ export default function AppointmentsPage() {
           <div>
             <h2 style={{ marginTop: 0 }}>Appointments</h2>
             <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-              Schedule and track upcoming appointments.
+              Plan your clinic and visit diary across day, week, and month views.
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button className="btn btn-primary" onClick={() => setShowNewModal(true)}>
               New appointment
             </button>
-            <div style={{ display: "flex", gap: 6 }}>
-              {(["day", "week"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  className={mode === viewMode ? "btn btn-primary" : "btn btn-secondary"}
-                  onClick={() => handleViewModeChange(mode)}
-                >
-                  {mode === "day" ? "Day" : "Week"}
-                </button>
-              ))}
-            </div>
             <div style={{ display: "flex", gap: 6 }}>
               {([
                 { id: "all", label: "All" },
@@ -633,224 +765,99 @@ export default function AppointmentsPage() {
                 </button>
               ))}
             </div>
+            {locationFilter === "visit" &&
+              range &&
+              ["timeGridDay", "timeGridWeek", "listWeek"].includes(range.view) && (
+                <button className="btn btn-secondary" onClick={downloadRunSheet}>
+                  Download run sheet
+                </button>
+              )}
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="label" style={{ margin: 0 }}>
+                Jump to
+              </span>
               <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  setShowArchived(next);
-                  void loadAppointments(next);
-                }}
+                className="input"
+                type="date"
+                value={range?.anchor ?? ""}
+                onChange={(e) => jumpToDate(e.target.value)}
               />
-              Show archived
             </label>
-            {locationFilter === "visit" && (
-              <button className="btn btn-secondary" onClick={downloadRunSheet}>
-                Download run sheet
-              </button>
-            )}
-            <button className="btn btn-secondary" onClick={() => loadAppointments()}>
-              Refresh
-            </button>
           </div>
         </div>
 
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
 
-        <div className="card" style={{ margin: 0 }}>
-          <div className="stack" style={{ gap: 12 }}>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">{viewMode === "week" ? "Week of" : "Day"}</label>
-              <input
-                className="input"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
-              {viewMode === "week" && (
-                <div style={{ color: "var(--muted)", fontSize: 12 }}>{weekRangeLabel}</div>
-              )}
-            </div>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Search patient</label>
-              <input
-                className="input"
-                placeholder="Start typing a name"
-                value={patientQuery}
-                onChange={(e) => setPatientQuery(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ margin: 0 }}>
-          {loading ? (
-            <div className="badge">Loading appointments…</div>
-          ) : viewMode === "day" ? (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Patient</th>
-                  <th>Category</th>
-                  <th>Status</th>
-                  <th>Location</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {appointments.map((appt) => (
-                  <tr key={appt.id}>
-                    <td>
-                      {new Date(appt.starts_at).toLocaleTimeString([], timeFormat)} -{" "}
-                      {new Date(appt.ends_at).toLocaleTimeString([], timeFormat)}
-                    </td>
-                    <td>
-                      {appt.patient.first_name} {appt.patient.last_name}
-                      {appt.patient_has_alerts && (
-                        <span
-                          className="badge"
-                          style={{ marginLeft: 8, background: "#b07b24", color: "white" }}
-                          title="Patient has alerts on file"
-                        >
-                          Alerts
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="badge">{categoryLabels[appt.patient.patient_category]}</span>
-                    </td>
-                    <td>
-                      <span className="badge">{statusLabels[appt.status]}</span>
-                    </td>
-                    <td>
-                      {appt.location_type === "visit"
-                        ? appt.location_text || "Visit"
-                        : appt.location || "Clinic"}
-                    </td>
-                    <td>
-                      <div className="table-actions">
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => openAppointment(appt)}
-                        >
-                          Open
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => openAppointment(appt)}
-                        >
-                          Add note
-                        </button>
-                        <Link className="btn btn-secondary" href={`/patients/${appt.patient.id}`}>
-                          Patient
-                        </Link>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateAppointmentStatus(appt.id, "arrived")}
-                        >
-                          Arrived
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateAppointmentStatus(appt.id, "in_progress")}
-                        >
-                          In progress
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateAppointmentStatus(appt.id, "completed")}
-                        >
-                          Completed
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => updateAppointmentStatus(appt.id, "cancelled")}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => createEstimateForAppointment(appt)}
-                        >
-                          Create estimate
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-              }}
-            >
-              {weekDates.map((day) => {
-                const key = toDateKey(day);
-                const items = groupedAppointments[key] || [];
-                return (
-                  <div key={key} className="card" style={{ margin: 0 }}>
-                    <div style={{ fontWeight: 600 }}>
-                      {day.toLocaleDateString(undefined, {
-                        weekday: "short",
-                        day: "2-digit",
-                        month: "short",
-                      })}
-                    </div>
-                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{key}</div>
-                    <div className="stack" style={{ marginTop: 10 }}>
-                      {items.length === 0 ? (
-                        <div className="notice">No appointments</div>
-                      ) : (
-                        items.map((appt) => (
-                          <div key={appt.id} className="card" style={{ margin: 0 }}>
-                            <div style={{ fontWeight: 600 }}>
-                              {new Date(appt.starts_at).toLocaleTimeString([], timeFormat)} -{" "}
-                              {new Date(appt.ends_at).toLocaleTimeString([], timeFormat)}
-                            </div>
-                            <div>
-                              {appt.patient.first_name} {appt.patient.last_name}
-                            </div>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              <span className="badge">{statusLabels[appt.status]}</span>
-                              <span className="badge">
-                                {categoryLabels[appt.patient.patient_category]}
-                              </span>
-                              <span className="badge">
-                                {appt.location_type === "visit"
-                                  ? appt.location_text || "Visit"
-                                  : appt.location || "Clinic"}
-                              </span>
-                            </div>
-                            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                              <button
-                                className="btn btn-secondary"
-                                onClick={() => openAppointment(appt)}
-                              >
-                                Open
-                              </button>
-                              <button
-                                className="btn btn-secondary"
-                                onClick={() => createEstimateForAppointment(appt)}
-                              >
-                                Estimate
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+        <div className="card" style={{ margin: 0, padding: 16 }}>
+          {loading && <div className="badge">Loading appointments…</div>}
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, listPlugin]}
+            initialView="timeGridWeek"
+            height="auto"
+            editable
+            selectable
+            selectMirror
+            eventResizableFromStart
+            businessHours={businessHours}
+            events={calendarEvents}
+            nowIndicator
+            headerToolbar={{
+              left: "prev,next today",
+              center: "title",
+              right: "timeGridDay,timeGridWeek,dayGridMonth,listWeek",
+            }}
+            eventClick={handleEventClick}
+            eventDrop={handleEventDrop}
+            eventResize={handleEventResize}
+            select={handleSelect}
+            datesSet={handleDatesSet}
+            eventConstraint={businessHours.length ? "businessHours" : undefined}
+            selectConstraint={businessHours.length ? "businessHours" : undefined}
+            eventDidMount={(info) => {
+              const appt = info.event.extendedProps.appointment as Appointment | undefined;
+              if (!appt) return;
+              info.el.style.backgroundColor = statusColors[appt.status];
+              info.el.style.borderColor = statusColors[appt.status];
+              if (appt.location_type === "visit") {
+                info.el.style.boxShadow = "0 0 0 2px rgba(255,255,255,0.5) inset";
+              }
+            }}
+            eventContent={(arg) => {
+              const appt = arg.event.extendedProps.appointment as Appointment | undefined;
+              if (!appt) return null;
+              return (
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {arg.timeText} {appt.patient.first_name} {appt.patient.last_name}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <span
+                      className="badge"
+                      style={{
+                        color: "white",
+                        borderColor: "transparent",
+                        background: "rgba(255, 255, 255, 0.2)",
+                      }}
+                    >
+                      {statusLabels[appt.status]}
+                    </span>
+                    <span
+                      className="badge"
+                      style={{
+                        color: "white",
+                        borderColor: "transparent",
+                        background: "rgba(255, 255, 255, 0.2)",
+                      }}
+                    >
+                      {appt.location_type === "visit" ? "Visit" : "Clinic"}
+                    </span>
+                  </div>
+                </div>
+              );
+            }}
+          />
         </div>
 
         {showNewModal && (
@@ -1102,6 +1109,47 @@ export default function AppointmentsPage() {
                   </div>
                 </div>
               )}
+
+              <div className="stack" style={{ gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "arrived")}
+                  >
+                    Arrived
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "in_progress")}
+                  >
+                    In progress
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "completed")}
+                  >
+                    Completed
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "cancelled")}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => createEstimateForAppointment(selectedAppointment)}
+                  >
+                    Create estimate
+                  </button>
+                  <Link
+                    className="btn btn-secondary"
+                    href={`/patients/${selectedAppointment.patient.id}`}
+                  >
+                    Patient
+                  </Link>
+                </div>
+              </div>
 
               <form onSubmit={saveAppointmentDetails} className="stack">
                 <div className="stack" style={{ gap: 8 }}>

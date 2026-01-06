@@ -274,3 +274,41 @@ button {
     padding: 24px 20px;
   }
 }
+
+.fc {
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.fc .fc-button {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #07120e;
+}
+
+.fc .fc-timegrid-slot {
+  border-color: var(--border);
+}
+
+.fc .fc-daygrid-day-frame,
+.fc .fc-timegrid-col {
+  background: var(--panel);
+}
+
+.fc .fc-event {
+  border-radius: 10px;
+  padding: 2px;
+}

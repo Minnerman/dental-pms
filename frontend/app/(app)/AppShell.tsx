@@ -170,6 +170,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const tabs = [
     ...baseTabs,
     ...(isSuperadmin ? [{ href: "/treatments", label: "Treatments" }] : []),
+    ...(isSuperadmin ? [{ href: "/settings/schedule", label: "Schedule" }] : []),
     ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
   ];
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href));

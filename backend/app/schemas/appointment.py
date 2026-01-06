@@ -13,6 +13,7 @@ class AppointmentCreate(BaseModel):
     clinician_user_id: Optional[int] = None
     starts_at: datetime
     ends_at: datetime
+    allow_outside_hours: Optional[bool] = False
     status: AppointmentStatus = AppointmentStatus.booked
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None
@@ -27,6 +28,7 @@ class AppointmentUpdate(BaseModel):
     clinician_user_id: Optional[int] = None
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
+    allow_outside_hours: Optional[bool] = False
     status: Optional[AppointmentStatus] = None
     appointment_type: Optional[str] = None
     clinician: Optional[str] = None

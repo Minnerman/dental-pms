@@ -10,12 +10,13 @@ from app.models.appointment import Appointment, AppointmentLocationType, Appoint
 from app.models.audit_log import AuditLog
 from app.models.estimate import Estimate
 from app.models.patient import CareSetting, Patient
-from app.models.user import User
+from app.models.user import Role, User
 from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.estimate import EstimateOut
 from app.services.audit import log_event, snapshot_model
 from app.services.run_sheet_pdf import build_run_sheet_pdf
+from app.services.schedule import load_schedule, validate_appointment_window
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -120,6 +121,13 @@ def create_appointment(
     if location_type == AppointmentLocationType.visit and not (location_text or "").strip():
         location_text = patient.visit_address_text
 
+    allow_outside = bool(payload.allow_outside_hours) and user.role == Role.superadmin
+    if not allow_outside:
+        hours, closures, overrides = load_schedule(db)
+        ok, reason = validate_appointment_window(payload.starts_at, payload.ends_at, hours, closures, overrides)
+        if not ok:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+
     appt = Appointment(
         patient_id=payload.patient_id,
         clinician_user_id=payload.clinician_user_id,
@@ -184,6 +192,16 @@ def update_appointment(
     appt = db.get(Appointment, appointment_id)
     if not appt or appt.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+
+    if payload.starts_at is not None or payload.ends_at is not None:
+        starts_at = payload.starts_at or appt.starts_at
+        ends_at = payload.ends_at or appt.ends_at
+        allow_outside = bool(payload.allow_outside_hours) and user.role == Role.superadmin
+        if not allow_outside:
+            hours, closures, overrides = load_schedule(db)
+            ok, reason = validate_appointment_window(starts_at, ends_at, hours, closures, overrides)
+            if not ok:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
     before_data = snapshot_model(appt)
     if payload.starts_at is not None:
