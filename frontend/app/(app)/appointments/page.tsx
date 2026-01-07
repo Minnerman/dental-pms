@@ -16,10 +16,6 @@ import type {
   EventResizeDoneArg,
 } from "@fullcalendar/core";
 import { apiFetch, clearToken } from "@/lib/auth";
-import "@fullcalendar/core/main.css";
-import "@fullcalendar/daygrid/main.css";
-import "@fullcalendar/timegrid/main.css";
-import "@fullcalendar/list/main.css";
 
 type Actor = { id: number; email: string; role: string };
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
