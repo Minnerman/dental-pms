@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -7,13 +8,27 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.audit_log import AuditLog
-from app.models.patient import Patient, PatientCategory
+from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.services.audit import log_event, snapshot_model
 from app.schemas.audit_log import AuditLogOut
-from app.schemas.patient import PatientCreate, PatientOut, PatientSearchOut, PatientUpdate
+from app.schemas.patient import (
+    PatientCreate,
+    PatientOut,
+    PatientSearchOut,
+    PatientUpdate,
+    RecallUpdate,
+)
 from app.models.user import User
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+def add_months(base_date: date, months: int) -> date:
+    month_index = base_date.month - 1 + months
+    year = base_date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(base_date.day, monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 @router.get("", response_model=list[PatientOut])
@@ -110,9 +125,16 @@ def create_patient(
         allergies=payload.allergies,
         medical_alerts=payload.medical_alerts,
         safeguarding_notes=payload.safeguarding_notes,
+        alerts_financial=payload.alerts_financial,
+        alerts_access=payload.alerts_access,
+        recall_interval_months=payload.recall_interval_months or 6,
+        recall_due_date=payload.recall_due_date,
+        recall_status=payload.recall_status,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
     )
+    if patient.recall_due_date and not patient.recall_status:
+        patient.recall_status = RecallStatus.due
     db.add(patient)
     db.flush()
     log_event(
@@ -164,6 +186,16 @@ def update_patient(
     before_data = snapshot_model(patient)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(patient, field, value)
+    if any(
+        field in payload.model_fields_set
+        for field in ("recall_due_date", "recall_interval_months", "recall_status")
+    ):
+        patient.recall_last_set_at = datetime.now(timezone.utc)
+        patient.recall_last_set_by_user_id = user.id
+        if patient.recall_due_date and not patient.recall_status:
+            patient.recall_status = RecallStatus.due
+        if not patient.recall_due_date:
+            patient.recall_status = None
     patient.updated_by_user_id = user.id
     patient.updated_at = datetime.now(timezone.utc)
     db.add(patient)
@@ -241,6 +273,54 @@ def restore_patient(
         db,
         actor=user,
         action="restore",
+        entity_type="patient",
+        entity_id=str(patient.id),
+        before_data=before_data,
+        after_obj=patient,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(patient)
+    return patient
+
+
+@router.post("/{patient_id}/recall", response_model=PatientOut)
+def set_patient_recall(
+    patient_id: int,
+    payload: RecallUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+    before_data = snapshot_model(patient)
+    if payload.interval_months is not None:
+        patient.recall_interval_months = payload.interval_months
+    if payload.due_date is not None:
+        patient.recall_due_date = payload.due_date
+    elif payload.interval_months is not None:
+        patient.recall_due_date = add_months(
+            date.today(), max(patient.recall_interval_months, 1)
+        )
+    if payload.status is not None:
+        patient.recall_status = payload.status
+    elif patient.recall_due_date and not patient.recall_status:
+        patient.recall_status = RecallStatus.due
+
+    patient.recall_last_set_at = datetime.now(timezone.utc)
+    patient.recall_last_set_by_user_id = user.id
+    patient.updated_by_user_id = user.id
+    patient.updated_at = datetime.now(timezone.utc)
+    db.add(patient)
+    log_event(
+        db,
+        actor=user,
+        action="patient.recall.updated",
         entity_type="patient",
         entity_id=str(patient.id),
         before_data=before_data,

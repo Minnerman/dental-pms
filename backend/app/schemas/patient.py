@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.models.patient import CareSetting, PatientCategory
+from app.models.patient import CareSetting, PatientCategory, RecallStatus
 from app.schemas.actor import ActorOut
 
 
@@ -32,6 +32,11 @@ class PatientBase(BaseModel):
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None
     safeguarding_notes: Optional[str] = None
+    alerts_financial: Optional[str] = None
+    alerts_access: Optional[str] = None
+    recall_interval_months: Optional[int] = 6
+    recall_due_date: Optional[date] = None
+    recall_status: Optional[RecallStatus] = None
 
 
 class PatientCreate(PatientBase):
@@ -63,6 +68,11 @@ class PatientUpdate(BaseModel):
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None
     safeguarding_notes: Optional[str] = None
+    alerts_financial: Optional[str] = None
+    alerts_access: Optional[str] = None
+    recall_interval_months: Optional[int] = None
+    recall_due_date: Optional[date] = None
+    recall_status: Optional[RecallStatus] = None
 
 
 class PatientOut(PatientBase):
@@ -75,6 +85,8 @@ class PatientOut(PatientBase):
     updated_by: Optional[ActorOut] = None
     deleted_at: Optional[datetime] = None
     deleted_by: Optional[ActorOut] = None
+    recall_last_set_at: Optional[datetime] = None
+    recall_last_set_by_user_id: Optional[int] = None
 
 
 class PatientSummary(BaseModel):
@@ -85,6 +97,12 @@ class PatientSummary(BaseModel):
     last_name: str
     patient_category: PatientCategory
     care_setting: CareSetting
+    allergies: Optional[str] = None
+    medical_alerts: Optional[str] = None
+    alerts_financial: Optional[str] = None
+    alerts_access: Optional[str] = None
+    recall_due_date: Optional[date] = None
+    recall_status: Optional[RecallStatus] = None
 
 
 class PatientSearchOut(BaseModel):
@@ -95,3 +113,24 @@ class PatientSearchOut(BaseModel):
     last_name: str
     date_of_birth: Optional[date] = None
     phone: Optional[str] = None
+
+
+class RecallUpdate(BaseModel):
+    interval_months: Optional[int] = None
+    due_date: Optional[date] = None
+    status: Optional[RecallStatus] = None
+
+
+class PatientRecallOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    phone: Optional[str] = None
+    postcode: Optional[str] = None
+    recall_interval_months: Optional[int] = None
+    recall_due_date: Optional[date] = None
+    recall_status: Optional[RecallStatus] = None
+    recall_last_set_at: Optional[datetime] = None
+    balance_pence: Optional[int] = None

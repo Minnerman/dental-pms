@@ -70,6 +70,8 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
                 patient.allergies,
                 patient.medical_alerts,
                 patient.safeguarding_notes,
+                patient.alerts_financial,
+                patient.alerts_access,
             )
             if value
         )

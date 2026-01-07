@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import enum
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Enum, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base, SoftDeleteMixin
@@ -20,6 +20,13 @@ class CareSetting(str, enum.Enum):
     home = "HOME"
     care_home = "CARE_HOME"
     hospital = "HOSPITAL"
+
+
+class RecallStatus(str, enum.Enum):
+    due = "due"
+    contacted = "contacted"
+    booked = "booked"
+    not_required = "not_required"
 
 
 class Patient(Base, AuditMixin, SoftDeleteMixin):
@@ -58,6 +65,19 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     allergies: Mapped[str | None] = mapped_column(Text, nullable=True)
     medical_alerts: Mapped[str | None] = mapped_column(Text, nullable=True)
     safeguarding_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alerts_financial: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alerts_access: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recall_interval_months: Mapped[int] = mapped_column(Integer, default=6, nullable=False)
+    recall_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    recall_status: Mapped[RecallStatus | None] = mapped_column(
+        Enum(RecallStatus, name="recall_status"), nullable=True
+    )
+    recall_last_set_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    recall_last_set_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
 
     appointments = relationship("Appointment", back_populates="patient")
     notes_list = relationship("Note", back_populates="patient")
