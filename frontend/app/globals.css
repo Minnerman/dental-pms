@@ -46,6 +46,10 @@ html[data-theme="light"] {
   --r4-status-cancelled: #f0a3a3;
   --r4-status-dna: #f1b2b2;
   --r4-status-noshow: #e8a9a9;
+  --r4-flag-allergy: #f6b2b2;
+  --r4-flag-medical: #f3d8a6;
+  --r4-flag-financial: #b6d4f1;
+  --r4-flag-access: #bfe5d0;
 }
 
 html[data-theme="dark"] {
@@ -95,6 +99,10 @@ html[data-theme="dark"] {
   --r4-status-cancelled: #6b3434;
   --r4-status-dna: #673030;
   --r4-status-noshow: #5f2a2a;
+  --r4-flag-allergy: #5f2a2a;
+  --r4-flag-medical: #4f3a1f;
+  --r4-flag-financial: #27425c;
+  --r4-flag-access: #21503a;
 }
 
 * {
@@ -425,6 +433,43 @@ button {
 
 .day-sheet-patient {
   font-weight: 600;
+}
+
+.day-sheet-flags {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.patient-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.patient-flag[data-flag="allergy"] {
+  background: var(--r4-flag-allergy);
+}
+
+.patient-flag[data-flag="medical"] {
+  background: var(--r4-flag-medical);
+}
+
+.patient-flag[data-flag="financial"] {
+  background: var(--r4-flag-financial);
+}
+
+.patient-flag[data-flag="access"] {
+  background: var(--r4-flag-access);
 }
 
 .day-sheet-status {

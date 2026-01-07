@@ -33,6 +33,10 @@ type PatientSummary = {
   last_name: string;
   patient_category: PatientCategory;
   care_setting: CareSetting;
+  allergies?: string | null;
+  medical_alerts?: string | null;
+  alerts_financial?: string | null;
+  alerts_access?: string | null;
 };
 
 type Appointment = {
@@ -78,6 +82,10 @@ type Patient = {
   address_line2?: string | null;
   city?: string | null;
   postcode?: string | null;
+  allergies?: string | null;
+  medical_alerts?: string | null;
+  alerts_financial?: string | null;
+  alerts_access?: string | null;
 };
 type PatientDetail = {
   id: number;
@@ -95,6 +103,8 @@ type PatientDetail = {
   allergies?: string | null;
   medical_alerts?: string | null;
   safeguarding_notes?: string | null;
+  alerts_financial?: string | null;
+  alerts_access?: string | null;
 };
 
 type UserOption = {
@@ -301,6 +311,19 @@ function buildShortAddress(patient?: Patient) {
   return [patient.address_line1, patient.address_line2, patient.city, patient.postcode]
     .filter(Boolean)
     .join(", ");
+}
+
+function buildPatientAlertFlags(
+  patient?: PatientSummary | Patient | null
+): Array<{ key: string; label: string; short: string; value?: string | null }> {
+  if (!patient) return [];
+  const flags = [
+    { key: "allergy", label: "Allergy", short: "A", value: patient.allergies },
+    { key: "medical", label: "Medical", short: "M", value: patient.medical_alerts },
+    { key: "financial", label: "Financial", short: "F", value: patient.alerts_financial },
+    { key: "access", label: "Access", short: "AC", value: patient.alerts_access },
+  ];
+  return flags.filter((flag) => (flag.value || "").trim().length > 0);
 }
 
 function getScheduleDayIndex(date: Date) {
@@ -1553,6 +1576,7 @@ export default function AppointmentsPage() {
                       Boolean(appt.cancel_reason) || (noteCache[appt.id]?.length ?? 0) > 0;
                     const isHighlighted =
                       highlightedAppointmentId && String(appt.id) === highlightedAppointmentId;
+                    const alertFlags = buildPatientAlertFlags(patient ?? appt.patient);
                     return (
                       <tr
                         key={appt.id}
@@ -1578,6 +1602,20 @@ export default function AppointmentsPage() {
                         <td className="day-sheet-time">{formatTimeRange(appt.starts_at, appt.ends_at)}</td>
                         <td className="day-sheet-patient">
                           {appt.patient.last_name.toUpperCase()}, {appt.patient.first_name}
+                          {alertFlags.length > 0 && (
+                            <span className="day-sheet-flags">
+                              {alertFlags.map((flag) => (
+                                <span
+                                  key={flag.key}
+                                  className="patient-flag"
+                                  data-flag={flag.key}
+                                  title={`${flag.label}: ${flag.value}`}
+                                >
+                                  {flag.short}
+                                </span>
+                              ))}
+                            </span>
+                          )}
                           {hasNotes && (
                             <span
                               className="day-sheet-note-icon"
