@@ -9,6 +9,13 @@ from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.treatment import Treatment, TreatmentFee, FeeType
 from app.models.estimate import Estimate, EstimateItem, EstimateStatus, EstimateFeeType
 from app.models.practice_schedule import PracticeHour, PracticeClosure, PracticeOverride
+from app.models.clinical import (
+    Procedure,
+    ProcedureStatus,
+    ToothNote,
+    TreatmentPlanItem,
+    TreatmentPlanStatus,
+)
 
 __all__ = [
     "Base",
@@ -41,4 +48,9 @@ __all__ = [
     "PracticeHour",
     "PracticeClosure",
     "PracticeOverride",
+    "Procedure",
+    "ProcedureStatus",
+    "ToothNote",
+    "TreatmentPlanItem",
+    "TreatmentPlanStatus",
 ]

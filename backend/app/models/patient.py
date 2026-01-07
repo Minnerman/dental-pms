@@ -83,3 +83,6 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     notes_list = relationship("Note", back_populates="patient")
     invoices = relationship("Invoice", back_populates="patient")
     estimates = relationship("Estimate", back_populates="patient")
+    tooth_notes = relationship("ToothNote", back_populates="patient")
+    procedures = relationship("Procedure", back_populates="patient")
+    treatment_plan_items = relationship("TreatmentPlanItem", back_populates="patient")
