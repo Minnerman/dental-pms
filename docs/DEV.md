@@ -18,6 +18,10 @@
 3) `docker compose up -d backend`
 4) `./ops/health.sh`
 
+## Ledger backfill
+- Dry run: `docker compose run --rm backend python -m app.scripts.ledger_backfill --dry-run`
+- Apply: `docker compose run --rm backend python -m app.scripts.ledger_backfill --apply`
+
 ## Troubleshooting
 - Frontend proxy may take a few seconds after restart; `./ops/health.sh` retries.
 - If migrations fail, confirm `alembic current` and `alembic heads` match.

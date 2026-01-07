@@ -24,6 +24,7 @@ This doc maps common R4 workflows to the PMS UI.
 ## Finance / Ledger
 - Patient ledger: `/patients/[id]` Ledger tab with charges/payments and running balance.
 - Quick payment: Patient home -> Finance panel -> Add payment.
+- Cash-up: `/cashup` daily totals by payment method.
 
 ## Notes and treatments
 - Notes master-detail: `/notes` left list + right detail.
