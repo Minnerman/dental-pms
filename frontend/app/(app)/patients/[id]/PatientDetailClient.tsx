@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
@@ -15,6 +15,7 @@ type Actor = {
 
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
 type CareSetting = "CLINIC" | "HOME" | "CARE_HOME" | "HOSPITAL";
+type RecallStatus = "due" | "contacted" | "booked" | "not_required";
 type AppointmentStatus =
   | "booked"
   | "arrived"
@@ -47,6 +48,12 @@ type Patient = {
   allergies?: string | null;
   medical_alerts?: string | null;
   safeguarding_notes?: string | null;
+  alerts_financial?: string | null;
+  alerts_access?: string | null;
+  recall_interval_months?: number | null;
+  recall_due_date?: string | null;
+  recall_status?: RecallStatus | null;
+  recall_last_set_at?: string | null;
   created_at: string;
   updated_at: string;
   created_by: Actor;
@@ -196,9 +203,17 @@ const appointmentStatusLabels: Record<AppointmentStatus, string> = {
   no_show: "No show",
 };
 
+const recallStatusLabels: Record<RecallStatus, string> = {
+  due: "Due",
+  contacted: "Contacted",
+  booked: "Booked",
+  not_required: "Not required",
+};
+
 
 export default function PatientDetailClient({ id }: { id: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const patientId = id;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -265,6 +280,13 @@ export default function PatientDetailClient({ id }: { id: string }) {
   >("clinic");
   const [bookingLocationText, setBookingLocationText] = useState("");
   const [bookingSaving, setBookingSaving] = useState(false);
+  const [bookingMarkRecall, setBookingMarkRecall] = useState(false);
+  const [recallInterval, setRecallInterval] = useState("6");
+  const [recallDueDate, setRecallDueDate] = useState("");
+  const [recallStatus, setRecallStatus] = useState<RecallStatus>("due");
+  const [recallSaving, setRecallSaving] = useState(false);
+  const [recallError, setRecallError] = useState<string | null>(null);
+  const [handledBookParam, setHandledBookParam] = useState(false);
 
   async function loadPatient() {
     setLoading(true);
@@ -660,10 +682,32 @@ export default function PatientDetailClient({ id }: { id: string }) {
     void loadUsers();
   }, [patientId]);
 
+  useEffect(() => {
+    if (!patient) return;
+    setRecallInterval(String(patient.recall_interval_months ?? 6));
+    setRecallDueDate(patient.recall_due_date ?? "");
+    if (patient.recall_status) {
+      setRecallStatus(patient.recall_status);
+    } else {
+      setRecallStatus("due");
+    }
+    setBookingMarkRecall(Boolean(patient.recall_due_date));
+  }, [patient?.id]);
+
+  useEffect(() => {
+    if (!patient || handledBookParam) return;
+    if (searchParams?.get("book") === "1") {
+      openBookingModal();
+      setHandledBookParam(true);
+    }
+  }, [patient, handledBookParam, searchParams]);
+
   const alerts = [
     patient?.allergies ? { label: "Allergies", tone: "danger" } : null,
     patient?.medical_alerts ? { label: "Medical alert", tone: "warning" } : null,
     patient?.safeguarding_notes ? { label: "Safeguarding", tone: "warning" } : null,
+    patient?.alerts_financial ? { label: "Financial", tone: "warning" } : null,
+    patient?.alerts_access ? { label: "Access", tone: "warning" } : null,
   ].filter(Boolean) as { label: string; tone: "danger" | "warning" }[];
 
   function buildAddress(p: Patient | null) {
@@ -700,6 +744,13 @@ export default function PatientDetailClient({ id }: { id: string }) {
       currency: "GBP",
       minimumFractionDigits: 2,
     }).format(pence / 100);
+  }
+
+  function formatShortDate(value?: string | null) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return parsed.toLocaleDateString("en-GB");
   }
 
   function getDefaultBookingSlot() {
@@ -798,6 +849,8 @@ export default function PatientDetailClient({ id }: { id: string }) {
           allergies: patient.allergies,
           medical_alerts: patient.medical_alerts,
           safeguarding_notes: patient.safeguarding_notes,
+          alerts_financial: patient.alerts_financial,
+          alerts_access: patient.alerts_access,
           notes: patient.notes,
         }),
       });
@@ -816,6 +869,37 @@ export default function PatientDetailClient({ id }: { id: string }) {
       setError(err instanceof Error ? err.message : "Failed to update patient");
     } finally {
       setSavingPatient(false);
+    }
+  }
+
+  async function updateRecall(payload: {
+    interval_months?: number | null;
+    due_date?: string | null;
+    status?: RecallStatus | null;
+  }) {
+    if (!patient) return;
+    setRecallSaving(true);
+    setRecallError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patient.id}/recall`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as Patient;
+      setPatient(data);
+    } catch (err) {
+      setRecallError(err instanceof Error ? err.message : "Failed to update recall");
+    } finally {
+      setRecallSaving(false);
     }
   }
 
@@ -1270,6 +1354,9 @@ export default function PatientDetailClient({ id }: { id: string }) {
       }
       const created = (await res.json()) as AppointmentSummary;
       setShowBookingModal(false);
+      if (bookingMarkRecall) {
+        await updateRecall({ status: "booked" });
+      }
       await loadAppointments();
       router.push(`/appointments?date=${bookingDate}&appointment=${created.id}`);
     } catch (err) {
@@ -1318,6 +1405,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       {alert.label}
                     </span>
                   ))}
+                  {patient.recall_due_date ? (
+                    <span className="badge">
+                      Recall {recallStatusLabels[patient.recall_status || "due"]} ·{" "}
+                      {formatShortDate(patient.recall_due_date)}
+                    </span>
+                  ) : (
+                    <span className="badge">Recall not set</span>
+                  )}
                 </div>
               </div>
 
@@ -1335,6 +1430,18 @@ export default function PatientDetailClient({ id }: { id: string }) {
                 <div>
                   <div className="label">Phone</div>
                   <div>{patient.phone || "—"}</div>
+                </div>
+                <div>
+                  <div className="label">Recall due</div>
+                  <div>{formatShortDate(patient.recall_due_date)}</div>
+                </div>
+                <div>
+                  <div className="label">Recall status</div>
+                  <div>
+                    <span className="badge">
+                      {recallStatusLabels[patient.recall_status || "due"]}
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <div className="label">Email</div>
@@ -1404,7 +1511,11 @@ export default function PatientDetailClient({ id }: { id: string }) {
                 {copyNotice && <span className="badge">{copyNotice}</span>}
               </div>
 
-              {(patient.allergies || patient.medical_alerts || patient.safeguarding_notes) && (
+              {(patient.allergies ||
+                patient.medical_alerts ||
+                patient.safeguarding_notes ||
+                patient.alerts_financial ||
+                patient.alerts_access) && (
                 <div className="grid grid-3">
                   <div className="stack" style={{ gap: 6 }}>
                     <div className="label">Allergies</div>
@@ -1417,6 +1528,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   <div className="stack" style={{ gap: 6 }}>
                     <div className="label">Safeguarding</div>
                     <div>{patient.safeguarding_notes || "—"}</div>
+                  </div>
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div className="label">Financial</div>
+                    <div>{patient.alerts_financial || "—"}</div>
+                  </div>
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div className="label">Access needs</div>
+                    <div>{patient.alerts_access || "—"}</div>
                   </div>
                 </div>
               )}
@@ -1484,7 +1603,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <div className="badge">Recall due: —</div>
+                      <div className="badge">
+                        Recall{" "}
+                        {patient.recall_due_date
+                          ? `${recallStatusLabels[patient.recall_status || "due"]} · ${formatShortDate(
+                              patient.recall_due_date
+                            )}`
+                          : "not set"}
+                      </div>
                       <div className="badge">
                         Balance:{" "}
                         {loadingInvoices
@@ -1500,6 +1626,87 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       >
                         Book appointment
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack">
+                      <div className="row">
+                        <div>
+                          <h4 style={{ marginTop: 0 }}>Recall</h4>
+                          <div style={{ color: "var(--muted)" }}>
+                            Due {formatShortDate(patient.recall_due_date)} ·{" "}
+                            {recallStatusLabels[patient.recall_status || "due"]}
+                          </div>
+                        </div>
+                        {recallError && <span className="badge">{recallError}</span>}
+                      </div>
+                      <div className="grid grid-3">
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Interval (months)</label>
+                          <input
+                            className="input"
+                            value={recallInterval}
+                            onChange={(e) => setRecallInterval(e.target.value)}
+                          />
+                        </div>
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Due date</label>
+                          <input
+                            className="input"
+                            type="date"
+                            value={recallDueDate}
+                            onChange={(e) => setRecallDueDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Status</label>
+                          <select
+                            className="input"
+                            value={recallStatus}
+                            onChange={(e) =>
+                              setRecallStatus(e.target.value as RecallStatus)
+                            }
+                          >
+                            <option value="due">Due</option>
+                            <option value="contacted">Contacted</option>
+                            <option value="booked">Booked</option>
+                            <option value="not_required">Not required</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="row">
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          disabled={recallSaving}
+                          onClick={() => {
+                            const parsed = Number(recallInterval);
+                            const interval = Number.isNaN(parsed) ? null : parsed;
+                            void updateRecall({
+                              interval_months: interval,
+                              due_date: recallDueDate || null,
+                              status: recallStatus || null,
+                            });
+                          }}
+                        >
+                          {recallSaving ? "Saving..." : "Save recall"}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => void updateRecall({ status: "contacted" })}
+                        >
+                          Mark contacted
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => void updateRecall({ status: "not_required" })}
+                        >
+                          Not required
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1822,6 +2029,34 @@ export default function PatientDetailClient({ id }: { id: string }) {
                         onChange={(e) =>
                           setPatient((prev) =>
                             prev ? { ...prev, safeguarding_notes: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Financial alerts</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={patient.alerts_financial ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, alerts_financial: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Access needs</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={patient.alerts_access ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, alerts_access: e.target.value } : prev
                           )
                         }
                       />
@@ -2899,6 +3134,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       />
                     </div>
                   )}
+                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={bookingMarkRecall}
+                      onChange={(e) => setBookingMarkRecall(e.target.checked)}
+                    />
+                    Mark recall as booked
+                  </label>
                   <button className="btn btn-primary" disabled={bookingSaving}>
                     {bookingSaving ? "Saving..." : "Create appointment"}
                   </button>
