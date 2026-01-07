@@ -39,6 +39,13 @@ html[data-theme="light"] {
   --cal-event-no-show-bg: #f6d7d7;
   --cal-event-no-show-border: #e08c8c;
   --cal-event-no-show-text: #5f1414;
+  --r4-status-booked: #b7cffc;
+  --r4-status-arrived: #9fe6bf;
+  --r4-status-inprogress: #f7d199;
+  --r4-status-complete: #c6ccd6;
+  --r4-status-cancelled: #f0a3a3;
+  --r4-status-dna: #f1b2b2;
+  --r4-status-noshow: #e8a9a9;
 }
 
 html[data-theme="dark"] {
@@ -81,6 +88,13 @@ html[data-theme="dark"] {
   --cal-event-no-show-bg: #3a1f1f;
   --cal-event-no-show-border: #a85d5d;
   --cal-event-no-show-text: #f2c6c6;
+  --r4-status-booked: #314569;
+  --r4-status-arrived: #2d5c44;
+  --r4-status-inprogress: #6c4f1f;
+  --r4-status-complete: #3c434f;
+  --r4-status-cancelled: #6b3434;
+  --r4-status-dna: #673030;
+  --r4-status-noshow: #5f2a2a;
 }
 
 * {
@@ -419,16 +433,69 @@ button {
   gap: 6px;
 }
 
-.day-sheet-status-pill {
+.day-sheet-note-icon {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.day-sheet-tooltip {
+  position: fixed;
+  max-width: 320px;
+  padding: 10px 12px;
+  background: var(--panel);
   border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  z-index: 60;
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.r4-status-pill {
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.r4-status-pill[data-status="booked"] {
+  background: var(--r4-status-booked);
+}
+
+.r4-status-pill[data-status="arrived"] {
+  background: var(--r4-status-arrived);
+}
+
+.r4-status-pill[data-status="in_progress"] {
+  background: var(--r4-status-inprogress);
+}
+
+.r4-status-pill[data-status="completed"] {
+  background: var(--r4-status-complete);
+}
+
+.r4-status-pill[data-status="cancelled"] {
+  background: var(--r4-status-cancelled);
+}
+
+.r4-status-pill[data-status="no_show"] {
+  background: var(--r4-status-noshow);
 }
 
 .row-muted {
   opacity: 0.6;
   text-decoration: line-through;
+}
+
+.row-highlight {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: rgba(51, 255, 180, 0.08);
 }
 
 .table th {
@@ -447,7 +514,36 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: var(--badge-bg);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.status-icon[data-status="booked"] {
+  background: var(--r4-status-booked);
+}
+
+.status-icon[data-status="arrived"] {
+  background: var(--r4-status-arrived);
+}
+
+.status-icon[data-status="in_progress"] {
+  background: var(--r4-status-inprogress);
+}
+
+.status-icon[data-status="completed"] {
+  background: var(--r4-status-complete);
+}
+
+.status-icon[data-status="cancelled"] {
+  background: var(--r4-status-cancelled);
+}
+
+.status-icon[data-status="no_show"] {
+  background: var(--r4-status-noshow);
 }
 
 @media (max-width: 960px) {

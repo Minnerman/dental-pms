@@ -167,6 +167,15 @@ const statusLabels: Record<AppointmentStatus, string> = {
   no_show: "No show",
 };
 
+const daySheetStatusLabels: Record<AppointmentStatus, string> = {
+  booked: "Booked",
+  arrived: "Arrived",
+  in_progress: "In Tx",
+  completed: "Complete",
+  cancelled: "Cancelled",
+  no_show: "DNA",
+};
+
 const statusThemeTokens: Record<
   AppointmentStatus,
   { bg: string; border: string; text: string }
@@ -398,6 +407,25 @@ export default function AppointmentsPage() {
     null
   );
   const [lastSelectedSlot, setLastSelectedSlot] = useState<Date | null>(null);
+  const [noteCache, setNoteCache] = useState<Record<number, string[]>>({});
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    content: string;
+  } | null>(null);
+  const [isEditingAppointment, setIsEditingAppointment] = useState(false);
+  const [editStartsAt, setEditStartsAt] = useState("");
+  const [editEndsAt, setEditEndsAt] = useState("");
+  const [editDuration, setEditDuration] = useState("30");
+  const [editAppointmentType, setEditAppointmentType] = useState("");
+  const [editClinicianUserId, setEditClinicianUserId] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editLocationType, setEditLocationType] =
+    useState<AppointmentLocationType>("clinic");
+  const [editLocationText, setEditLocationText] = useState("");
+  const [editStatus, setEditStatus] = useState<AppointmentStatus>("booked");
+  const [editCancelReason, setEditCancelReason] = useState("");
+  const [editNoteBody, setEditNoteBody] = useState("");
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -523,12 +551,29 @@ export default function AppointmentsPage() {
     };
   }, [schedule]);
 
-  function openAppointment(appt: Appointment) {
+  function openAppointment(appt: Appointment, mode: "view" | "edit" = "view") {
     setSelectedAppointment(appt);
+    setSelectedAppointmentId(appt.id);
+    setIsEditingAppointment(mode === "edit");
     setDetailLocationType(appt.location_type);
     setDetailLocationText(appt.location_text || "");
     void loadAppointmentNotes(appt.id);
     void loadPatientDetail(appt.patient.id);
+    setEditStartsAt(toLocalDateTimeInput(new Date(appt.starts_at)));
+    setEditEndsAt(toLocalDateTimeInput(new Date(appt.ends_at)));
+    const diffMinutes = Math.round(
+      (new Date(appt.ends_at).getTime() - new Date(appt.starts_at).getTime()) / 60000
+    );
+    const roundedDuration = Math.max(10, Math.round(diffMinutes / 10) * 10);
+    setEditDuration(String(roundedDuration));
+    setEditAppointmentType(appt.appointment_type || "");
+    setEditClinicianUserId(appt.clinician_user_id ? String(appt.clinician_user_id) : "");
+    setEditLocation(appt.location || "");
+    setEditLocationType(appt.location_type);
+    setEditLocationText(appt.location_text || "");
+    setEditStatus(appt.status);
+    setEditCancelReason(appt.cancel_reason || "");
+    setEditNoteBody("");
   }
 
   async function loadSchedule() {
@@ -545,6 +590,50 @@ export default function AppointmentsPage() {
     } catch {
       setSchedule(null);
     }
+  }
+
+  async function ensureNotesLoaded(appointmentId: number) {
+    if (noteCache[appointmentId]) return;
+    try {
+      const res = await apiFetch(`/api/appointments/${appointmentId}/notes`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
+        return;
+      }
+      const data = (await res.json()) as AppointmentNote[];
+      const bodies = data.map((note) => note.body).filter(Boolean);
+      setNoteCache((prev) => ({ ...prev, [appointmentId]: bodies }));
+    } catch {
+      setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
+    }
+  }
+
+  function buildTooltipContent(appt: Appointment) {
+    const notes = noteCache[appt.id] || [];
+    const lines: string[] = [];
+    if (notes.length > 0) {
+      lines.push("Notes:");
+      notes.slice(0, 2).forEach((note) => lines.push(`- ${note}`));
+    }
+    if (appt.cancel_reason) {
+      lines.push(`Cancel reason: ${appt.cancel_reason}`);
+    }
+    return lines.join("\n");
+  }
+
+  function showTooltip(event: { clientX: number; clientY: number }, appt: Appointment) {
+    const content = buildTooltipContent(appt);
+    if (!content) return;
+    const maxWidth = 320;
+    const padding = 12;
+    const x = Math.min(event.clientX + padding, window.innerWidth - maxWidth - padding);
+    const y = Math.min(event.clientY + padding, window.innerHeight - 160);
+    setTooltip({ x, y, content });
   }
 
   async function loadAppointments() {
@@ -907,6 +996,106 @@ export default function AppointmentsPage() {
       await loadAppointments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update appointment");
+    } finally {
+      setSavingDetail(false);
+    }
+  }
+
+  function handleEditStartChange(value: string) {
+    setEditStartsAt(value);
+    const start = new Date(value);
+    if (Number.isNaN(start.getTime())) return;
+    const duration = Number(editDuration || "30");
+    const nextEnd = new Date(start);
+    nextEnd.setMinutes(nextEnd.getMinutes() + duration);
+    setEditEndsAt(toLocalDateTimeInput(nextEnd));
+  }
+
+  function handleEditEndChange(value: string) {
+    setEditEndsAt(value);
+    const start = new Date(editStartsAt);
+    const end = new Date(value);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+    const diffMinutes = Math.max(
+      10,
+      Math.round((end.getTime() - start.getTime()) / 60000)
+    );
+    setEditDuration(String(Math.round(diffMinutes / 10) * 10));
+  }
+
+  function handleEditDurationChange(value: string) {
+    setEditDuration(value);
+    const start = new Date(editStartsAt);
+    if (Number.isNaN(start.getTime())) return;
+    const duration = Number(value || "30");
+    const nextEnd = new Date(start);
+    nextEnd.setMinutes(nextEnd.getMinutes() + duration);
+    setEditEndsAt(toLocalDateTimeInput(nextEnd));
+  }
+
+  async function saveAppointmentEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedAppointment) return;
+    const start = new Date(editStartsAt);
+    const end = new Date(editEndsAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setError("Start and end times are required.");
+      return;
+    }
+    if ((editStatus === "cancelled" || editStatus === "no_show") && !editCancelReason.trim()) {
+      setError("Cancel reason is required for cancelled/no-show.");
+      return;
+    }
+    setSavingDetail(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/appointments/${selectedAppointment.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          starts_at: start.toISOString(),
+          ends_at: end.toISOString(),
+          appointment_type: editAppointmentType.trim() || null,
+          clinician_user_id: editClinicianUserId ? Number(editClinicianUserId) : null,
+          location: editLocation.trim() || null,
+          location_type: editLocationType,
+          location_text: editLocationType === "visit" ? editLocationText.trim() || null : null,
+          status: editStatus,
+          cancel_reason:
+            editStatus === "cancelled" || editStatus === "no_show"
+              ? editCancelReason.trim()
+              : null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+      }
+      const updated = (await res.json()) as Appointment;
+      if (editNoteBody.trim()) {
+        await apiFetch("/api/notes", {
+          method: "POST",
+          body: JSON.stringify({
+            patient_id: updated.patient.id,
+            appointment_id: updated.id,
+            body: editNoteBody.trim(),
+            note_type: "clinical",
+          }),
+        });
+        setEditNoteBody("");
+      }
+      setSelectedAppointment(updated);
+      setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setIsEditingAppointment(false);
+      setNotice("Appointment updated.");
+      await loadAppointments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update appointment");
+      await loadAppointments();
     } finally {
       setSavingDetail(false);
     }
@@ -1360,11 +1549,16 @@ export default function AppointmentsPage() {
                     const address = buildShortAddress(patient);
                     const isCancelled =
                       appt.status === "cancelled" || appt.status === "no_show";
+                    const hasNotes =
+                      Boolean(appt.cancel_reason) || (noteCache[appt.id]?.length ?? 0) > 0;
+                    const isHighlighted =
+                      highlightedAppointmentId && String(appt.id) === highlightedAppointmentId;
                     return (
                       <tr
                         key={appt.id}
-                        className={isCancelled ? "row-muted" : undefined}
+                        className={`${isCancelled ? "row-muted" : ""}${isHighlighted ? " row-highlight" : ""}`}
                         onClick={() => setSelectedAppointmentId(appt.id)}
+                        onDoubleClick={() => openAppointment(appt, "edit")}
                         onContextMenu={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -1375,10 +1569,24 @@ export default function AppointmentsPage() {
                             appointment: appt,
                           });
                         }}
+                        onMouseEnter={(event) => {
+                          void ensureNotesLoaded(appt.id);
+                          if (hasNotes) showTooltip(event, appt);
+                        }}
+                        onMouseLeave={() => setTooltip(null)}
                       >
                         <td className="day-sheet-time">{formatTimeRange(appt.starts_at, appt.ends_at)}</td>
                         <td className="day-sheet-patient">
                           {appt.patient.last_name.toUpperCase()}, {appt.patient.first_name}
+                          {hasNotes && (
+                            <span
+                              className="day-sheet-note-icon"
+                              onMouseEnter={(event) => showTooltip(event, appt)}
+                              onMouseLeave={() => setTooltip(null)}
+                            >
+                              🛈
+                            </span>
+                          )}
                         </td>
                         <td>{toAppointmentCode(appt.appointment_type)}</td>
                         <td>{patient?.phone || "—"}</td>
@@ -1387,14 +1595,10 @@ export default function AppointmentsPage() {
                           <div className="day-sheet-status">
                             <StatusIcon status={appt.status} />
                             <span
-                              className="day-sheet-status-pill"
-                              style={{
-                                background: statusThemeTokens[appt.status].bg,
-                                color: statusThemeTokens[appt.status].text,
-                                borderColor: statusThemeTokens[appt.status].border,
-                              }}
+                              className="r4-status-pill"
+                              data-status={appt.status}
                             >
-                              {statusLabels[appt.status]}
+                              {daySheetStatusLabels[appt.status]}
                             </span>
                           </div>
                         </td>
@@ -1488,6 +1692,15 @@ export default function AppointmentsPage() {
             >
               Copy
             </button>
+          </div>
+        )}
+        {tooltip && (
+          <div
+            className="day-sheet-tooltip"
+            style={{ top: tooltip.y, left: tooltip.x }}
+            onMouseLeave={() => setTooltip(null)}
+          >
+            {tooltip.content}
           </div>
         )}
         {!loading && appointments.length === 0 && (
@@ -1632,229 +1845,406 @@ export default function AppointmentsPage() {
                     {new Date(selectedAppointment.starts_at).toLocaleString()}
                   </p>
                 </div>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setSelectedAppointment(null);
-                    setNotes([]);
-                    setDetailPatient(null);
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="stack" style={{ gap: 6 }}>
-                <div>
-                  <strong>Status:</strong> {statusLabels[selectedAppointment.status]}
-                </div>
-                <div>
-                  <strong>Clinician:</strong> {selectedAppointment.clinician || "Unassigned"}
-                </div>
-                <div>
-                  <strong>Type:</strong> {selectedAppointment.appointment_type || "—"}
-                </div>
-                <div>
-                  <strong>Location type:</strong> {selectedAppointment.location_type}
-                </div>
-                <div>
-                  <strong>Location:</strong> {selectedAppointment.location_text || "—"}
-                </div>
-              </div>
-
-              {loadingPatientDetail ? (
-                <div className="badge">Loading patient alerts…</div>
-              ) : detailPatient ? (
-                <div className="card" style={{ margin: 0 }}>
-                  <div className="stack" style={{ gap: 8 }}>
-                    <div>
-                      <strong>Patient alerts</strong>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {!detailPatient.allergies &&
-                        !detailPatient.medical_alerts &&
-                        !detailPatient.safeguarding_notes && <span className="badge">None</span>}
-                      {detailPatient.allergies && (
-                        <span className="badge" style={{ background: "#b13636", color: "white" }}>
-                          Allergies
-                        </span>
-                      )}
-                      {detailPatient.medical_alerts && (
-                        <span className="badge" style={{ background: "#b07b24", color: "white" }}>
-                          Medical alerts
-                        </span>
-                      )}
-                      {detailPatient.safeguarding_notes && (
-                        <span className="badge" style={{ background: "#b07b24", color: "white" }}>
-                          Safeguarding
-                        </span>
-                      )}
-                    </div>
-                    {detailPatient.allergies && (
-                      <div>
-                        <div className="label">Allergies</div>
-                        <div>{detailPatient.allergies}</div>
-                      </div>
-                    )}
-                    {detailPatient.medical_alerts && (
-                      <div>
-                        <div className="label">Medical alerts</div>
-                        <div>{detailPatient.medical_alerts}</div>
-                      </div>
-                    )}
-                    {detailPatient.safeguarding_notes && (
-                      <div>
-                        <div className="label">Safeguarding</div>
-                        <div>{detailPatient.safeguarding_notes}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="notice">Unable to load patient alerts.</div>
-              )}
-
-              {detailPatient?.care_setting && detailPatient.care_setting !== "CLINIC" && (
-                <div className="card" style={{ margin: 0 }}>
-                  <div className="stack" style={{ gap: 8 }}>
-                    <div>
-                      <strong>Visit summary</strong>
-                    </div>
-                    <div>
-                      <div className="label">Visit address</div>
-                      <div>{detailPatient.visit_address_text || "—"}</div>
-                    </div>
-                    <div>
-                      <div className="label">Access notes</div>
-                      <div>{detailPatient.access_notes || "—"}</div>
-                    </div>
-                    <div>
-                      <div className="label">Primary contact</div>
-                      <div>
-                        {detailPatient.primary_contact_name || "—"}{" "}
-                        {detailPatient.primary_contact_relationship
-                          ? `(${detailPatient.primary_contact_relationship})`
-                          : ""}
-                        {detailPatient.primary_contact_phone
-                          ? ` · ${detailPatient.primary_contact_phone}`
-                          : ""}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="stack" style={{ gap: 8 }}>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="btn btn-secondary"
-                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "arrived")}
+                    onClick={() => setIsEditingAppointment((prev) => !prev)}
                   >
-                    Arrived
+                    {isEditingAppointment ? "View" : "Edit"}
                   </button>
                   <button
                     className="btn btn-secondary"
-                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "in_progress")}
-                  >
-                    In progress
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "completed")}
-                  >
-                    Completed
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "cancelled")}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "no_show")}
-                  >
-                    No show
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => createEstimateForAppointment(selectedAppointment)}
-                  >
-                    Create estimate
-                  </button>
-                  <Link
-                    className="btn btn-secondary"
-                    href={`/patients/${selectedAppointment.patient.id}`}
-                  >
-                    Patient
-                  </Link>
-                </div>
-              </div>
-
-              <form onSubmit={saveAppointmentDetails} className="stack">
-                <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Location type</label>
-                  <select
-                    className="input"
-                    value={detailLocationType}
-                    onChange={(e) => {
-                      const next = e.target.value as AppointmentLocationType;
-                      setDetailLocationType(next);
-                      if (next === "clinic") setDetailLocationText("");
+                    onClick={() => {
+                      setSelectedAppointment(null);
+                      setNotes([]);
+                      setDetailPatient(null);
+                      setIsEditingAppointment(false);
                     }}
                   >
-                    <option value="clinic">Clinic</option>
-                    <option value="visit">Visit</option>
-                  </select>
+                    Close
+                  </button>
                 </div>
-                {detailLocationType === "visit" && (
+              </div>
+
+              {isEditingAppointment ? (
+                <form onSubmit={saveAppointmentEdit} className="stack">
+                  <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Start</label>
+                      <input
+                        className="input"
+                        type="datetime-local"
+                        value={editStartsAt}
+                        onChange={(event) => handleEditStartChange(event.target.value)}
+                        step={600}
+                        required
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">End</label>
+                      <input
+                        className="input"
+                        type="datetime-local"
+                        value={editEndsAt}
+                        onChange={(event) => handleEditEndChange(event.target.value)}
+                        step={600}
+                        required
+                      />
+                    </div>
+                  </div>
                   <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">Visit address</label>
+                    <label className="label">Duration</label>
+                    <select
+                      className="input"
+                      value={editDuration}
+                      onChange={(event) => handleEditDurationChange(event.target.value)}
+                    >
+                      {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map(
+                        (minutes) => (
+                          <option key={minutes} value={String(minutes)}>
+                            {minutes} minutes
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Appointment type</label>
+                    <input
+                      className="input"
+                      value={editAppointmentType}
+                      onChange={(event) => setEditAppointmentType(event.target.value)}
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Clinician</label>
+                    <select
+                      className="input"
+                      value={editClinicianUserId}
+                      onChange={(event) => setEditClinicianUserId(event.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.full_name || user.email} ({user.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Location / room</label>
+                    <input
+                      className="input"
+                      value={editLocation}
+                      onChange={(event) => setEditLocation(event.target.value)}
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Location type</label>
+                    <select
+                      className="input"
+                      value={editLocationType}
+                      onChange={(event) => {
+                        const next = event.target.value as AppointmentLocationType;
+                        setEditLocationType(next);
+                        if (next === "clinic") setEditLocationText("");
+                      }}
+                    >
+                      <option value="clinic">Clinic</option>
+                      <option value="visit">Visit</option>
+                    </select>
+                  </div>
+                  {editLocationType === "visit" && (
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Visit address</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={editLocationText}
+                        onChange={(event) => setEditLocationText(event.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Status</label>
+                    <select
+                      className="input"
+                      value={editStatus}
+                      onChange={(event) =>
+                        setEditStatus(event.target.value as AppointmentStatus)
+                      }
+                    >
+                      <option value="booked">Booked</option>
+                      <option value="arrived">Arrived</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                      <option value="no_show">No show</option>
+                    </select>
+                  </div>
+                  {(editStatus === "cancelled" || editStatus === "no_show") && (
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Cancel reason</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={editCancelReason}
+                        onChange={(event) => setEditCancelReason(event.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Add note</label>
                     <textarea
                       className="input"
                       rows={3}
-                      value={detailLocationText}
-                      onChange={(e) => setDetailLocationText(e.target.value)}
+                      value={editNoteBody}
+                      onChange={(event) => setEditNoteBody(event.target.value)}
+                      placeholder="Add a note for this appointment"
                     />
                   </div>
-                )}
-                <button className="btn btn-secondary" disabled={savingDetail}>
-                  {savingDetail ? "Saving..." : "Save details"}
-                </button>
-              </form>
-
-              <form onSubmit={addAppointmentNote} className="stack">
-                <label className="label">Quick note</label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  value={noteBody}
-                  onChange={(e) => setNoteBody(e.target.value)}
-                  placeholder="Add a brief clinical note"
-                />
-                <button className="btn btn-primary" disabled={saving}>
-                  {saving ? "Saving..." : "Add note"}
-                </button>
-              </form>
-
-              {loadingNotes ? (
-                <div className="badge">Loading notes…</div>
+                  <div className="row">
+                    <button className="btn btn-primary" disabled={savingDetail}>
+                      {savingDetail ? "Saving..." : "Save changes"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setIsEditingAppointment(false)}
+                    >
+                      Cancel edit
+                    </button>
+                  </div>
+                </form>
               ) : (
-                <div className="stack">
-                  {notes.length === 0 ? (
-                    <div className="notice">No notes yet.</div>
-                  ) : (
-                    notes.map((note) => (
-                      <div key={note.id} className="card" style={{ margin: 0 }}>
-                        <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                          {note.created_by?.email || "—"} ·{" "}
-                          {new Date(note.created_at).toLocaleString()}
+                <>
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div>
+                      <strong>Status:</strong> {statusLabels[selectedAppointment.status]}
+                    </div>
+                    <div>
+                      <strong>Clinician:</strong>{" "}
+                      {selectedAppointment.clinician || "Unassigned"}
+                    </div>
+                    <div>
+                      <strong>Type:</strong> {selectedAppointment.appointment_type || "—"}
+                    </div>
+                    <div>
+                      <strong>Location type:</strong> {selectedAppointment.location_type}
+                    </div>
+                    <div>
+                      <strong>Location:</strong> {selectedAppointment.location_text || "—"}
+                    </div>
+                  </div>
+
+                  {loadingPatientDetail ? (
+                    <div className="badge">Loading patient alerts…</div>
+                  ) : detailPatient ? (
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack" style={{ gap: 8 }}>
+                        <div>
+                          <strong>Patient alerts</strong>
                         </div>
-                        <div style={{ marginTop: 6 }}>{note.body}</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {!detailPatient.allergies &&
+                            !detailPatient.medical_alerts &&
+                            !detailPatient.safeguarding_notes && (
+                              <span className="badge">None</span>
+                            )}
+                          {detailPatient.allergies && (
+                            <span
+                              className="badge"
+                              style={{ background: "#b13636", color: "white" }}
+                            >
+                              Allergies
+                            </span>
+                          )}
+                          {detailPatient.medical_alerts && (
+                            <span
+                              className="badge"
+                              style={{ background: "#b07b24", color: "white" }}
+                            >
+                              Medical alerts
+                            </span>
+                          )}
+                          {detailPatient.safeguarding_notes && (
+                            <span
+                              className="badge"
+                              style={{ background: "#b07b24", color: "white" }}
+                            >
+                              Safeguarding
+                            </span>
+                          )}
+                        </div>
+                        {detailPatient.allergies && (
+                          <div>
+                            <div className="label">Allergies</div>
+                            <div>{detailPatient.allergies}</div>
+                          </div>
+                        )}
+                        {detailPatient.medical_alerts && (
+                          <div>
+                            <div className="label">Medical alerts</div>
+                            <div>{detailPatient.medical_alerts}</div>
+                          </div>
+                        )}
+                        {detailPatient.safeguarding_notes && (
+                          <div>
+                            <div className="label">Safeguarding</div>
+                            <div>{detailPatient.safeguarding_notes}</div>
+                          </div>
+                        )}
                       </div>
-                    ))
+                    </div>
+                  ) : (
+                    <div className="notice">Unable to load patient alerts.</div>
                   )}
-                </div>
+
+                  {detailPatient?.care_setting && detailPatient.care_setting !== "CLINIC" && (
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack" style={{ gap: 8 }}>
+                        <div>
+                          <strong>Visit summary</strong>
+                        </div>
+                        <div>
+                          <div className="label">Visit address</div>
+                          <div>{detailPatient.visit_address_text || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="label">Access notes</div>
+                          <div>{detailPatient.access_notes || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="label">Primary contact</div>
+                          <div>
+                            {detailPatient.primary_contact_name || "—"}{" "}
+                            {detailPatient.primary_contact_relationship
+                              ? `(${detailPatient.primary_contact_relationship})`
+                              : ""}
+                            {detailPatient.primary_contact_phone
+                              ? ` · ${detailPatient.primary_contact_phone}`
+                              : ""}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="stack" style={{ gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "arrived")}
+                      >
+                        Arrived
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() =>
+                          updateAppointmentStatus(selectedAppointment.id, "in_progress")
+                        }
+                      >
+                        In progress
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "completed")}
+                      >
+                        Completed
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "cancelled")}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "no_show")}
+                      >
+                        No show
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => createEstimateForAppointment(selectedAppointment)}
+                      >
+                        Create estimate
+                      </button>
+                      <Link
+                        className="btn btn-secondary"
+                        href={`/patients/${selectedAppointment.patient.id}`}
+                      >
+                        Patient
+                      </Link>
+                    </div>
+                  </div>
+
+                  <form onSubmit={saveAppointmentDetails} className="stack">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Location type</label>
+                      <select
+                        className="input"
+                        value={detailLocationType}
+                        onChange={(e) => {
+                          const next = e.target.value as AppointmentLocationType;
+                          setDetailLocationType(next);
+                          if (next === "clinic") setDetailLocationText("");
+                        }}
+                      >
+                        <option value="clinic">Clinic</option>
+                        <option value="visit">Visit</option>
+                      </select>
+                    </div>
+                    {detailLocationType === "visit" && (
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="label">Visit address</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          value={detailLocationText}
+                          onChange={(e) => setDetailLocationText(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    <button className="btn btn-secondary" disabled={savingDetail}>
+                      {savingDetail ? "Saving..." : "Save details"}
+                    </button>
+                  </form>
+
+                  <form onSubmit={addAppointmentNote} className="stack">
+                    <label className="label">Quick note</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      value={noteBody}
+                      onChange={(e) => setNoteBody(e.target.value)}
+                      placeholder="Add a brief clinical note"
+                    />
+                    <button className="btn btn-primary" disabled={saving}>
+                      {saving ? "Saving..." : "Add note"}
+                    </button>
+                  </form>
+
+                  {loadingNotes ? (
+                    <div className="badge">Loading notes…</div>
+                  ) : (
+                    <div className="stack">
+                      {notes.length === 0 ? (
+                        <div className="notice">No notes yet.</div>
+                      ) : (
+                        notes.map((note) => (
+                          <div key={note.id} className="card" style={{ margin: 0 }}>
+                            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                              {note.created_by?.email || "—"} ·{" "}
+                              {new Date(note.created_at).toLocaleString()}
+                            </div>
+                            <div style={{ marginTop: 6 }}>{note.body}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
