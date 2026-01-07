@@ -73,6 +73,7 @@ type AppointmentSummary = {
   location?: string | null;
   location_type: "clinic" | "visit";
   location_text?: string | null;
+  cancel_reason?: string | null;
 };
 
 type UserOption = {
@@ -1477,12 +1478,16 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   >
                     <div>
                       <div className="label">Patient home</div>
-                      <div style={{ fontSize: 18, fontWeight: 600 }}>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>
                         {patient.first_name} {patient.last_name}
                       </div>
                       <div style={{ color: "var(--muted)" }}>
                         DOB {patient.date_of_birth || "—"} · Age{" "}
-                        {formatAge(patient.date_of_birth)}
+                        {formatAge(patient.date_of_birth)} · Phone{" "}
+                        {patient.phone || "—"}
+                      </div>
+                      <div style={{ color: "var(--muted)" }}>
+                        Address {buildAddress(patient) || "—"}
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1939,24 +1944,48 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                       );
                                     }}
                                   >
-                                    <div style={{ fontWeight: 600 }}>
-                                      {appointmentStatusIcons[appt.status]}{" "}
-                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
-                                        weekday: "short",
-                                        day: "2-digit",
-                                        month: "short",
-                                      })}{" "}
-                                      ·{" "}
-                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}{" "}
-                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                    <div
+                                      style={{
+                                        display: "grid",
+                                        gap: 6,
+                                        gridTemplateColumns: "200px 1fr 1fr",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 600 }}>
+                                        {appointmentStatusIcons[appt.status]}{" "}
+                                        {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                          weekday: "short",
+                                          day: "2-digit",
+                                          month: "short",
+                                        })}{" "}
+                                        ·{" "}
+                                        {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}{" "}
+                                        ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                      </div>
+                                      <div style={{ color: "var(--muted)" }}>
+                                        {appt.clinician || "Unassigned"} ·{" "}
+                                        {appt.location || appt.location_text || "—"}
+                                      </div>
+                                      <div style={{ color: "var(--muted)" }}>
+                                        {appointmentStatusLabels[appt.status]} ·{" "}
+                                        {appt.appointment_type || "General"}
+                                      </div>
                                     </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {appointmentStatusLabels[appt.status]} ·{" "}
-                                      {appt.appointment_type || "General"}
-                                    </div>
+                                    {appt.status !== "booked" &&
+                                      (appt.status === "cancelled" ||
+                                        appt.status === "no_show") &&
+                                      appt.cancel_reason && (
+                                        <div
+                                          style={{ color: "var(--muted)", marginTop: 6 }}
+                                          title={appt.cancel_reason}
+                                        >
+                                          Reason: {appt.cancel_reason}
+                                        </div>
+                                      )}
                                   </button>
                                 ))
                               )}
@@ -1968,24 +1997,48 @@ export default function PatientDetailClient({ id }: { id: string }) {
                               ) : (
                                 pastAppointments.slice(0, 6).map((appt) => (
                                   <div key={appt.id} className="card" style={{ margin: "8px 0 0" }}>
-                                    <div style={{ fontWeight: 600 }}>
-                                      {appointmentStatusIcons[appt.status]}{" "}
-                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
-                                        weekday: "short",
-                                        day: "2-digit",
-                                        month: "short",
-                                      })}{" "}
-                                      ·{" "}
-                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}{" "}
-                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                    <div
+                                      style={{
+                                        display: "grid",
+                                        gap: 6,
+                                        gridTemplateColumns: "200px 1fr 1fr",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 600 }}>
+                                        {appointmentStatusIcons[appt.status]}{" "}
+                                        {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                          weekday: "short",
+                                          day: "2-digit",
+                                          month: "short",
+                                        })}{" "}
+                                        ·{" "}
+                                        {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}{" "}
+                                        ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                      </div>
+                                      <div style={{ color: "var(--muted)" }}>
+                                        {appt.clinician || "Unassigned"} ·{" "}
+                                        {appt.location || appt.location_text || "—"}
+                                      </div>
+                                      <div style={{ color: "var(--muted)" }}>
+                                        {appointmentStatusLabels[appt.status]} ·{" "}
+                                        {appt.appointment_type || "General"}
+                                      </div>
                                     </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {appointmentStatusLabels[appt.status]} ·{" "}
-                                      {appt.appointment_type || "General"}
-                                    </div>
+                                    {appt.status !== "booked" &&
+                                      (appt.status === "cancelled" ||
+                                        appt.status === "no_show") &&
+                                      appt.cancel_reason && (
+                                        <div
+                                          style={{ color: "var(--muted)", marginTop: 6 }}
+                                          title={appt.cancel_reason}
+                                        >
+                                          Reason: {appt.cancel_reason}
+                                        </div>
+                                      )}
                                   </div>
                                 ))
                               )}

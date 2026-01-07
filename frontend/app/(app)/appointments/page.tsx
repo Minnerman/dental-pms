@@ -53,6 +53,9 @@ type Appointment = {
   updated_by?: Actor | null;
   updated_at: string;
   deleted_at?: string | null;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by_user_id?: number | null;
 };
 
 type CalendarEvent = {
@@ -332,6 +335,18 @@ export default function AppointmentsPage() {
   const [highlightedAppointmentId, setHighlightedAppointmentId] = useState<string | null>(
     null
   );
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    appointment: Appointment;
+  } | null>(null);
+  const [clipboard, setClipboard] = useState<{
+    mode: "cut" | "copy";
+    appointment: Appointment;
+  } | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -356,6 +371,14 @@ export default function AppointmentsPage() {
   const patientLookup = useMemo(() => {
     return new Map(patients.map((patient) => [patient.id, patient]));
   }, [patients]);
+
+  const highlightScrollTime = useMemo(() => {
+    if (!highlightedAppointmentId) return undefined;
+    const appt = appointments.find(
+      (item) => String(item.id) === String(highlightedAppointmentId)
+    );
+    return appt ? new Date(appt.starts_at) : undefined;
+  }, [appointments, highlightedAppointmentId]);
 
   const { minTime, maxTime } = useMemo(() => {
     if (!schedule) return { minTime: undefined, maxTime: undefined };
@@ -444,12 +467,19 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function updateAppointmentStatus(appointmentId: number, status: AppointmentStatus) {
+  async function updateAppointmentStatus(
+    appointmentId: number,
+    status: AppointmentStatus,
+    cancelReasonText?: string
+  ) {
     setError(null);
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status,
+          cancel_reason: cancelReasonText?.trim() || undefined,
+        }),
       });
       if (res.status === 401) {
         clearToken();
@@ -556,6 +586,13 @@ export default function AppointmentsPage() {
     void loadPatients();
     void loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener("click", handleClose);
+    return () => window.removeEventListener("click", handleClose);
+  }, [contextMenu]);
 
   useEffect(() => {
     void loadAppointments();
@@ -746,6 +783,66 @@ export default function AppointmentsPage() {
     }
   }
 
+  async function pasteAppointment(targetStart: Date) {
+    if (!clipboard) return;
+    const appt = clipboard.appointment;
+    const originalStart = new Date(appt.starts_at);
+    const originalEnd = new Date(appt.ends_at);
+    const durationMs = originalEnd.getTime() - originalStart.getTime();
+    const targetEnd = new Date(targetStart.getTime() + durationMs);
+    if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
+      setError("Paste time is outside of working hours.");
+      return;
+    }
+    const actionLabel = clipboard.mode === "cut" ? "Move" : "Copy";
+    if (!window.confirm(`${actionLabel} this appointment to the selected slot?`)) {
+      return;
+    }
+    try {
+      if (clipboard.mode === "cut") {
+        const updated = await updateAppointmentTimes(appt.id, targetStart, targetEnd);
+        if (updated) {
+          setAppointments((prev) =>
+            prev.map((item) => (item.id === updated.id ? updated : item))
+          );
+        }
+      } else {
+        const res = await apiFetch("/api/appointments", {
+          method: "POST",
+          body: JSON.stringify({
+            patient_id: appt.patient.id,
+            clinician_user_id: appt.clinician_user_id ?? undefined,
+            starts_at: targetStart.toISOString(),
+            ends_at: targetEnd.toISOString(),
+            status: "booked",
+            appointment_type: appt.appointment_type ?? undefined,
+            clinician: appt.clinician ?? undefined,
+            location: appt.location ?? undefined,
+            location_type: appt.location_type,
+            location_text: appt.location_text ?? undefined,
+            is_domiciliary: appt.is_domiciliary,
+            visit_address: appt.visit_address ?? undefined,
+          }),
+        });
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || `Failed to copy appointment (HTTP ${res.status})`);
+        }
+      }
+      setNotice(`${actionLabel}d appointment.`);
+      setClipboard(null);
+      await loadAppointments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to paste appointment");
+      await loadAppointments();
+    }
+  }
+
   function updateRange(start: Date, end: Date, view: View, anchor: Date) {
     const normalizedEnd = normalizeRangeEnd(start, end);
     setRange({
@@ -786,6 +883,10 @@ export default function AppointmentsPage() {
       return;
     }
     if (!slotInfo.start || !slotInfo.end) return;
+    if (clipboard) {
+      void pasteAppointment(slotInfo.start);
+      return;
+    }
     if (!isRangeWithinSchedule(slotInfo.start, slotInfo.end, schedule)) {
       setError("Selected time is outside of working hours.");
       return;
@@ -925,7 +1026,14 @@ export default function AppointmentsPage() {
       appt.location || appt.location_text ? `Location: ${appt.location || appt.location_text}` : null,
     ].filter(Boolean);
     return (
-      <div style={{ display: "grid", gap: 4 }}>
+      <div
+        style={{ display: "grid", gap: 4 }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setContextMenu({ x: event.clientX, y: event.clientY, appointment: appt });
+        }}
+      >
         <div style={{ fontWeight: 600, lineHeight: 1.2 }}>
           {timeLabel} {event.title}
         </div>
@@ -1050,9 +1158,58 @@ export default function AppointmentsPage() {
             eventPropGetter={eventStyleGetter}
             dayPropGetter={dayPropGetter}
             slotPropGetter={slotPropGetter}
+            scrollToTime={highlightScrollTime}
             style={{ height: "70vh" }}
           />
         </div>
+        {contextMenu && (
+          <div
+            className="card"
+            style={{
+              position: "fixed",
+              top: contextMenu.y,
+              left: contextMenu.x,
+              zIndex: 50,
+              padding: 8,
+              display: "grid",
+              gap: 6,
+              minWidth: 180,
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setCancelTarget(contextMenu.appointment);
+                setCancelReason("");
+                setShowCancelModal(true);
+                setContextMenu(null);
+              }}
+            >
+              Cancel…
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setClipboard({ mode: "cut", appointment: contextMenu.appointment });
+                setNotice("Cut appointment. Select a slot to paste.");
+                setContextMenu(null);
+              }}
+            >
+              Cut
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setClipboard({ mode: "copy", appointment: contextMenu.appointment });
+                setNotice("Copied appointment. Select a slot to paste.");
+                setContextMenu(null);
+              }}
+            >
+              Copy
+            </button>
+          </div>
+        )}
         {!loading && appointments.length === 0 && (
           <div className="notice">No appointments in this range.</div>
         )}
@@ -1419,6 +1576,59 @@ export default function AppointmentsPage() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {showCancelModal && cancelTarget && (
+          <div className="card" style={{ margin: 0 }}>
+            <div className="stack">
+              <div className="row">
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Cancel appointment</h3>
+                  <p style={{ color: "var(--muted)" }}>
+                    {cancelTarget.patient.first_name} {cancelTarget.patient.last_name} ·{" "}
+                    {new Date(cancelTarget.starts_at).toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setCancelTarget(null);
+                    setCancelReason("");
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!cancelReason.trim()) {
+                    setError("Cancellation reason is required.");
+                    return;
+                  }
+                  void updateAppointmentStatus(
+                    cancelTarget.id,
+                    "cancelled",
+                    cancelReason
+                  );
+                  setShowCancelModal(false);
+                  setCancelTarget(null);
+                  setCancelReason("");
+                }}
+                className="stack"
+              >
+                <label className="label">Reason</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  placeholder="Patient cancelled, clinician unavailable, etc."
+                />
+                <button className="btn btn-primary">Confirm cancel</button>
+              </form>
             </div>
           </div>
         )}
