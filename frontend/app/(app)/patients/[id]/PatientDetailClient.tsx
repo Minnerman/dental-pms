@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
@@ -23,6 +23,8 @@ type AppointmentStatus =
   | "completed"
   | "cancelled"
   | "no_show";
+type LedgerEntryType = "charge" | "payment" | "adjustment";
+type PaymentMethod = "cash" | "card" | "bank_transfer" | "other";
 
 type Patient = {
   id: number;
@@ -181,6 +183,19 @@ type Treatment = {
   is_denplan_included_default: boolean;
 };
 
+type LedgerEntry = {
+  id: number;
+  patient_id: number;
+  entry_type: LedgerEntryType;
+  amount_pence: number;
+  method?: PaymentMethod | null;
+  reference?: string | null;
+  note?: string | null;
+  related_invoice_id?: number | null;
+  created_at: string;
+  created_by: Actor;
+};
+
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
   DOMICILIARY_PRIVATE: "Domiciliary (Private)",
@@ -221,9 +236,9 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [futureAppointments, setFutureAppointments] = useState<AppointmentSummary[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"summary" | "notes" | "invoices" | "estimates">(
-    "summary"
-  );
+  const [tab, setTab] = useState<
+    "summary" | "notes" | "invoices" | "estimates" | "ledger"
+  >("summary");
   const [loading, setLoading] = useState(true);
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -287,6 +302,17 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [recallSaving, setRecallSaving] = useState(false);
   const [recallError, setRecallError] = useState<string | null>(null);
   const [handledBookParam, setHandledBookParam] = useState(false);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [ledgerBalance, setLedgerBalance] = useState<number>(0);
+  const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [ledgerMode, setLedgerMode] = useState<LedgerEntryType>("payment");
+  const [ledgerAmount, setLedgerAmount] = useState("");
+  const [ledgerMethod, setLedgerMethod] = useState<PaymentMethod>("card");
+  const [ledgerReference, setLedgerReference] = useState("");
+  const [ledgerNote, setLedgerNote] = useState("");
+  const [ledgerSaving, setLedgerSaving] = useState(false);
 
   async function loadPatient() {
     setLoading(true);
@@ -376,6 +402,49 @@ export default function PatientDetailClient({ id }: { id: string }) {
       setAppointmentsError(err instanceof Error ? err.message : "Failed to load appointments");
     } finally {
       setLoadingAppointments(false);
+    }
+  }
+
+  async function loadLedger() {
+    setLedgerLoading(true);
+    setLedgerError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/ledger?limit=200`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load ledger (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as LedgerEntry[];
+      setLedgerEntries(data);
+    } catch (err) {
+      setLedgerError(err instanceof Error ? err.message : "Failed to load ledger");
+      setLedgerEntries([]);
+    } finally {
+      setLedgerLoading(false);
+    }
+  }
+
+  async function loadLedgerBalance() {
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/balance`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load balance (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as { balance_pence: number };
+      setLedgerBalance(data.balance_pence ?? 0);
+    } catch {
+      setLedgerBalance(0);
     }
   }
 
@@ -680,6 +749,8 @@ export default function PatientDetailClient({ id }: { id: string }) {
     void loadEstimates();
     void loadAppointments();
     void loadUsers();
+    void loadLedger();
+    void loadLedgerBalance();
   }, [patientId]);
 
   useEffect(() => {
@@ -709,6 +780,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
     patient?.alerts_financial ? { label: "Financial", tone: "warning" } : null,
     patient?.alerts_access ? { label: "Access", tone: "warning" } : null,
   ].filter(Boolean) as { label: string; tone: "danger" | "warning" }[];
+
+  const ledgerWithBalance = useMemo(() => {
+    let running = 0;
+    return ledgerEntries.map((entry) => {
+      running += entry.amount_pence;
+      return { ...entry, running_balance: running };
+    });
+  }, [ledgerEntries]);
 
   function buildAddress(p: Patient | null) {
     if (!p) return "";
@@ -744,6 +823,11 @@ export default function PatientDetailClient({ id }: { id: string }) {
       currency: "GBP",
       minimumFractionDigits: 2,
     }).format(pence / 100);
+  }
+
+  function formatSignedCurrency(pence: number) {
+    const formatted = formatCurrency(Math.abs(pence));
+    return pence < 0 ? `-${formatted}` : formatted;
   }
 
   function formatShortDate(value?: string | null) {
@@ -900,6 +984,60 @@ export default function PatientDetailClient({ id }: { id: string }) {
       setRecallError(err instanceof Error ? err.message : "Failed to update recall");
     } finally {
       setRecallSaving(false);
+    }
+  }
+
+  async function submitLedgerEntry() {
+    if (!patient) return;
+    const parsed = Number(ledgerAmount);
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      setLedgerError("Amount must be greater than 0.");
+      return;
+    }
+    setLedgerSaving(true);
+    setLedgerError(null);
+    try {
+      const endpoint =
+        ledgerMode === "payment"
+          ? `/api/patients/${patient.id}/payments`
+          : `/api/patients/${patient.id}/charges`;
+      const payload =
+        ledgerMode === "payment"
+          ? {
+              amount_pence: Math.round(parsed * 100),
+              method: ledgerMethod,
+              reference: ledgerReference.trim() || undefined,
+              note: ledgerNote.trim() || undefined,
+            }
+          : {
+              amount_pence: Math.round(parsed * 100),
+              entry_type: ledgerMode,
+              reference: ledgerReference.trim() || undefined,
+              note: ledgerNote.trim() || undefined,
+            };
+      const res = await apiFetch(endpoint, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to save entry (HTTP ${res.status})`);
+      }
+      setShowLedgerModal(false);
+      setLedgerAmount("");
+      setLedgerReference("");
+      setLedgerNote("");
+      await loadLedger();
+      await loadLedgerBalance();
+    } catch (err) {
+      setLedgerError(err instanceof Error ? err.message : "Failed to save entry");
+    } finally {
+      setLedgerSaving(false);
     }
   }
 
@@ -1564,6 +1702,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   Invoices ({invoices.length})
                 </button>
                 <button
+                  className={`tab ${tab === "ledger" ? "active" : ""}`}
+                  onClick={() => setTab("ledger")}
+                >
+                  Ledger ({ledgerEntries.length})
+                </button>
+                <button
                   className={`tab ${tab === "estimates" ? "active" : ""}`}
                   onClick={() => setTab("estimates")}
                 >
@@ -1612,12 +1756,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
                           : "not set"}
                       </div>
                       <div className="badge">
-                        Balance:{" "}
-                        {loadingInvoices
-                          ? "Loading"
-                          : formatCurrency(
-                              invoices.reduce((sum, invoice) => sum + invoice.balance_pence, 0)
-                            )}
+                        Balance: {formatCurrency(ledgerBalance)}
                       </div>
                       <button
                         type="button"
@@ -1707,6 +1846,80 @@ export default function PatientDetailClient({ id }: { id: string }) {
                           Not required
                         </button>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack">
+                      <div className="row">
+                        <div>
+                          <h4 style={{ marginTop: 0 }}>Finance</h4>
+                          <div style={{ color: "var(--muted)" }}>
+                            Balance {formatCurrency(ledgerBalance)}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={() => {
+                              setLedgerMode("payment");
+                              setShowLedgerModal(true);
+                            }}
+                          >
+                            Add payment
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => {
+                              setLedgerMode("adjustment");
+                              setShowLedgerModal(true);
+                            }}
+                          >
+                            Add adjustment
+                          </button>
+                        </div>
+                      </div>
+                      {ledgerLoading ? (
+                        <div className="badge">Loading ledger…</div>
+                      ) : ledgerEntries.length === 0 ? (
+                        <div className="notice">No ledger entries yet.</div>
+                      ) : (
+                        <div className="stack" style={{ gap: 6 }}>
+                          {ledgerEntries
+                            .slice(-10)
+                            .reverse()
+                            .map((entry) => (
+                              <div
+                                key={entry.id}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                }}
+                              >
+                                <div>
+                                  <div style={{ fontWeight: 600 }}>
+                                    {entry.entry_type === "payment"
+                                      ? "Payment"
+                                      : entry.entry_type === "charge"
+                                      ? "Charge"
+                                      : "Adjustment"}
+                                  </div>
+                                  <div style={{ color: "var(--muted)" }}>
+                                    {new Date(entry.created_at).toLocaleDateString("en-GB")}
+                                    {entry.reference ? ` · ${entry.reference}` : ""}
+                                    {entry.note ? ` · ${entry.note}` : ""}
+                                  </div>
+                                </div>
+                                <div style={{ fontWeight: 600 }}>
+                                  {formatSignedCurrency(entry.amount_pence)}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2091,206 +2304,145 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   </div>
                   </form>
 
-                  <div className="grid grid-2">
-                    <div className="card" style={{ margin: 0 }}>
-                      <div className="stack">
-                        <div className="row">
-                          <div>
-                            <h4 style={{ marginTop: 0 }}>Finance</h4>
-                            <p style={{ color: "var(--muted)" }}>
-                              Recent invoices and balance snapshot.
-                            </p>
-                          </div>
-                        </div>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <div>
-                            <div className="label">Current balance</div>
-                            <div style={{ fontSize: 20, fontWeight: 600 }}>
-                              {loadingInvoices
-                                ? "Loading..."
-                                : formatCurrency(
-                                    invoices.reduce(
-                                      (sum, invoice) => sum + invoice.balance_pence,
-                                      0
-                                    )
-                                  )}
-                            </div>
-                          </div>
-                          <div className="label">Payments / charges ledger</div>
-                          {invoices.length === 0 ? (
-                            <div className="notice">No ledger entries yet.</div>
-                          ) : (
-                            invoices.slice(0, 6).map((invoice) => (
-                              <div key={invoice.id} className="card" style={{ margin: 0 }}>
-                                <div style={{ fontWeight: 600 }}>
-                                  Charge · {invoice.invoice_number}
-                                </div>
-                                <div style={{ color: "var(--muted)" }}>
-                                  {invoice.issue_date || invoice.created_at.slice(0, 10)} · Total{" "}
-                                  {formatCurrency(invoice.total_pence)} · Paid{" "}
-                                  {formatCurrency(invoice.paid_pence)}
-                                </div>
-                              </div>
-                            ))
-                          )}
-                          {invoices.length === 0 ? (
-                            <div className="notice">No invoices yet.</div>
-                          ) : (
-                            invoices.slice(0, 4).map((invoice) => (
-                              <div key={invoice.id} className="card" style={{ margin: 0 }}>
-                                <div style={{ fontWeight: 600 }}>
-                                  {invoice.invoice_number} ·{" "}
-                                  {invoice.issue_date || invoice.created_at.slice(0, 10)}
-                                </div>
-                                <div style={{ color: "var(--muted)" }}>
-                                  Balance {formatCurrency(invoice.balance_pence)}
-                                </div>
-                              </div>
-                            ))
-                          )}
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack">
+                      <div className="row">
+                        <div>
+                          <h4 style={{ marginTop: 0 }}>Appointments</h4>
+                          <p style={{ color: "var(--muted)" }}>
+                            Upcoming and recent visits for this patient.
+                          </p>
                         </div>
                       </div>
-                    </div>
-                    <div className="card" style={{ margin: 0 }}>
-                      <div className="stack">
-                        <div className="row">
+                      {loadingAppointments ? (
+                        <div className="badge">Loading appointments…</div>
+                      ) : appointmentsError ? (
+                        <div className="notice">{appointmentsError}</div>
+                      ) : (
+                        <div className="stack">
                           <div>
-                            <h4 style={{ marginTop: 0 }}>Appointments</h4>
-                            <p style={{ color: "var(--muted)" }}>
-                              Upcoming and recent visits for this patient.
-                            </p>
-                          </div>
-                        </div>
-                        {loadingAppointments ? (
-                          <div className="badge">Loading appointments…</div>
-                        ) : appointmentsError ? (
-                          <div className="notice">{appointmentsError}</div>
-                        ) : (
-                          <div className="stack">
-                            <div>
-                              <div className="label">Future</div>
-                              {futureAppointments.length === 0 ? (
-                                <div className="notice">No upcoming appointments.</div>
-                              ) : (
-                                futureAppointments.slice(0, 6).map((appt) => (
-                                  <button
-                                    key={appt.id}
-                                    type="button"
-                                    className="card"
+                            <div className="label">Future</div>
+                            {futureAppointments.length === 0 ? (
+                              <div className="notice">No upcoming appointments.</div>
+                            ) : (
+                              futureAppointments.slice(0, 6).map((appt) => (
+                                <button
+                                  key={appt.id}
+                                  type="button"
+                                  className="card"
+                                  style={{
+                                    margin: "8px 0 0",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => {
+                                    const date = appt.starts_at.slice(0, 10);
+                                    router.push(
+                                      `/appointments?date=${date}&appointment=${appt.id}`
+                                    );
+                                  }}
+                                >
+                                  <div
                                     style={{
-                                      margin: "8px 0 0",
-                                      textAlign: "left",
-                                      cursor: "pointer",
-                                    }}
-                                    onClick={() => {
-                                      const date = appt.starts_at.slice(0, 10);
-                                      router.push(
-                                        `/appointments?date=${date}&appointment=${appt.id}`
-                                      );
+                                      display: "grid",
+                                      gap: 6,
+                                      gridTemplateColumns: "200px 1fr 1fr",
+                                      alignItems: "center",
                                     }}
                                   >
-                                    <div
-                                      style={{
-                                        display: "grid",
-                                        gap: 6,
-                                        gridTemplateColumns: "200px 1fr 1fr",
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <div style={{ fontWeight: 600 }}>
-                                        <StatusIcon status={appt.status} />{" "}
-                                        {new Date(appt.starts_at).toLocaleDateString("en-GB", {
-                                          weekday: "short",
-                                          day: "2-digit",
-                                          month: "short",
-                                        })}{" "}
-                                        ·{" "}
-                                        {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })}{" "}
-                                        ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
-                                      </div>
-                                      <div style={{ color: "var(--muted)" }}>
-                                        {appt.clinician || "Unassigned"} ·{" "}
-                                        {appt.location || appt.location_text || "—"}
-                                      </div>
-                                      <div style={{ color: "var(--muted)" }}>
-                                        {appointmentStatusLabels[appt.status]} ·{" "}
-                                        {appt.appointment_type || "General"}
-                                      </div>
+                                    <div style={{ fontWeight: 600 }}>
+                                      <StatusIcon status={appt.status} />{" "}
+                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                        weekday: "short",
+                                        day: "2-digit",
+                                        month: "short",
+                                      })}{" "}
+                                      ·{" "}
+                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}{" "}
+                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
                                     </div>
-                                    {appt.status !== "booked" &&
-                                      (appt.status === "cancelled" ||
-                                        appt.status === "no_show") &&
-                                      appt.cancel_reason && (
-                                        <div
-                                          style={{ color: "var(--muted)", marginTop: 6 }}
-                                          title={appt.cancel_reason}
-                                        >
-                                          Reason: {appt.cancel_reason}
-                                        </div>
-                                      )}
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                            <div>
-                              <div className="label">Past</div>
-                              {pastAppointments.length === 0 ? (
-                                <div className="notice">No past appointments.</div>
-                              ) : (
-                                pastAppointments.slice(0, 6).map((appt) => (
-                                  <div key={appt.id} className="card" style={{ margin: "8px 0 0" }}>
-                                    <div
-                                      style={{
-                                        display: "grid",
-                                        gap: 6,
-                                        gridTemplateColumns: "200px 1fr 1fr",
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <div style={{ fontWeight: 600 }}>
-                                        <StatusIcon status={appt.status} />{" "}
-                                        {new Date(appt.starts_at).toLocaleDateString("en-GB", {
-                                          weekday: "short",
-                                          day: "2-digit",
-                                          month: "short",
-                                        })}{" "}
-                                        ·{" "}
-                                        {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })}{" "}
-                                        ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
-                                      </div>
-                                      <div style={{ color: "var(--muted)" }}>
-                                        {appt.clinician || "Unassigned"} ·{" "}
-                                        {appt.location || appt.location_text || "—"}
-                                      </div>
-                                      <div style={{ color: "var(--muted)" }}>
-                                        {appointmentStatusLabels[appt.status]} ·{" "}
-                                        {appt.appointment_type || "General"}
-                                      </div>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {appt.clinician || "Unassigned"} ·{" "}
+                                      {appt.location || appt.location_text || "—"}
                                     </div>
-                                    {appt.status !== "booked" &&
-                                      (appt.status === "cancelled" ||
-                                        appt.status === "no_show") &&
-                                      appt.cancel_reason && (
-                                        <div
-                                          style={{ color: "var(--muted)", marginTop: 6 }}
-                                          title={appt.cancel_reason}
-                                        >
-                                          Reason: {appt.cancel_reason}
-                                        </div>
-                                      )}
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {appointmentStatusLabels[appt.status]} ·{" "}
+                                      {appt.appointment_type || "General"}
+                                    </div>
                                   </div>
-                                ))
-                              )}
-                            </div>
+                                  {appt.status !== "booked" &&
+                                    (appt.status === "cancelled" ||
+                                      appt.status === "no_show") &&
+                                    appt.cancel_reason && (
+                                      <div
+                                        style={{ color: "var(--muted)", marginTop: 6 }}
+                                        title={appt.cancel_reason}
+                                      >
+                                        Reason: {appt.cancel_reason}
+                                      </div>
+                                    )}
+                                </button>
+                              ))
+                            )}
                           </div>
-                        )}
-                      </div>
+                          <div>
+                            <div className="label">Past</div>
+                            {pastAppointments.length === 0 ? (
+                              <div className="notice">No past appointments.</div>
+                            ) : (
+                              pastAppointments.slice(0, 6).map((appt) => (
+                                <div key={appt.id} className="card" style={{ margin: "8px 0 0" }}>
+                                  <div
+                                    style={{
+                                      display: "grid",
+                                      gap: 6,
+                                      gridTemplateColumns: "200px 1fr 1fr",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 600 }}>
+                                      <StatusIcon status={appt.status} />{" "}
+                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                        weekday: "short",
+                                        day: "2-digit",
+                                        month: "short",
+                                      })}{" "}
+                                      ·{" "}
+                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}{" "}
+                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                    </div>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {appt.clinician || "Unassigned"} ·{" "}
+                                      {appt.location || appt.location_text || "—"}
+                                    </div>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {appointmentStatusLabels[appt.status]} ·{" "}
+                                      {appt.appointment_type || "General"}
+                                    </div>
+                                  </div>
+                                  {appt.status !== "booked" &&
+                                    (appt.status === "cancelled" ||
+                                      appt.status === "no_show") &&
+                                    appt.cancel_reason && (
+                                      <div
+                                        style={{ color: "var(--muted)", marginTop: 6 }}
+                                        title={appt.cancel_reason}
+                                      >
+                                        Reason: {appt.cancel_reason}
+                                      </div>
+                                    )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2347,6 +2499,92 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       ))
                     )}
                   </div>
+                </div>
+              ) : tab === "ledger" ? (
+                <div className="stack">
+                  <div className="row">
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={() => {
+                          setLedgerMode("payment");
+                          setShowLedgerModal(true);
+                        }}
+                      >
+                        Add payment
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => {
+                          setLedgerMode("adjustment");
+                          setShowLedgerModal(true);
+                        }}
+                      >
+                        Add adjustment
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => {
+                          void loadLedger();
+                          void loadLedgerBalance();
+                        }}
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <div className="badge">Balance {formatCurrency(ledgerBalance)}</div>
+                  </div>
+                  {ledgerError && <div className="notice">{ledgerError}</div>}
+                  {ledgerLoading ? (
+                    <div className="badge">Loading ledger…</div>
+                  ) : ledgerEntries.length === 0 ? (
+                    <div className="notice">No ledger entries yet.</div>
+                  ) : (
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Type</th>
+                          <th>Reference</th>
+                          <th>Charge</th>
+                          <th>Payment</th>
+                          <th>Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ledgerWithBalance.map((entry) => (
+                          <tr key={entry.id}>
+                            <td>{new Date(entry.created_at).toLocaleDateString("en-GB")}</td>
+                            <td>
+                              {entry.entry_type === "payment"
+                                ? "Payment"
+                                : entry.entry_type === "charge"
+                                ? "Charge"
+                                : "Adjustment"}
+                            </td>
+                            <td>
+                              {entry.reference || "—"}
+                              {entry.note ? ` · ${entry.note}` : ""}
+                            </td>
+                            <td>
+                              {entry.amount_pence > 0
+                                ? formatCurrency(entry.amount_pence)
+                                : "—"}
+                            </td>
+                            <td>
+                              {entry.amount_pence < 0
+                                ? formatCurrency(Math.abs(entry.amount_pence))
+                                : "—"}
+                            </td>
+                            <td>{formatSignedCurrency(entry.running_balance)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               ) : tab === "estimates" ? (
                 <div className="stack">
@@ -3146,6 +3384,84 @@ export default function PatientDetailClient({ id }: { id: string }) {
                     {bookingSaving ? "Saving..." : "Create appointment"}
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {showLedgerModal && (
+            <div className="card" style={{ margin: 0 }}>
+              <div className="stack">
+                <div className="row">
+                  <div>
+                    <h3 style={{ marginTop: 0 }}>
+                      {ledgerMode === "payment" ? "Add payment" : "Add adjustment"}
+                    </h3>
+                    <p style={{ color: "var(--muted)" }}>
+                      Entry for {patient.first_name} {patient.last_name}.
+                    </p>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowLedgerModal(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+                {ledgerError && <div className="notice">{ledgerError}</div>}
+                <div className="stack">
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Amount (£)</label>
+                    <input
+                      className="input"
+                      value={ledgerAmount}
+                      onChange={(e) => setLedgerAmount(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  {ledgerMode === "payment" && (
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Method</label>
+                      <select
+                        className="input"
+                        value={ledgerMethod}
+                        onChange={(e) => setLedgerMethod(e.target.value as PaymentMethod)}
+                      >
+                        <option value="card">Card</option>
+                        <option value="cash">Cash</option>
+                        <option value="bank_transfer">Bank transfer</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Reference</label>
+                    <input
+                      className="input"
+                      value={ledgerReference}
+                      onChange={(e) => setLedgerReference(e.target.value)}
+                      placeholder="Optional reference"
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Note</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      value={ledgerNote}
+                      onChange={(e) => setLedgerNote(e.target.value)}
+                      placeholder="Optional note"
+                    />
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={submitLedgerEntry}
+                    disabled={ledgerSaving}
+                  >
+                    {ledgerSaving ? "Saving..." : "Save entry"}
+                  </button>
+                </div>
               </div>
             </div>
           )}

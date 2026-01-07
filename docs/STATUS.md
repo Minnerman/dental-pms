@@ -11,6 +11,7 @@
 - Patient timeline + soft-delete (archive/restore) for patients, notes, appointments
 - Archived toggles on patients/appointments and restore actions
 - Patient alerts/flags + recall controls + recall worklist
+- Patient ledger + quick payment/adjustment entry
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -99,3 +100,4 @@
 - 2026-01-07 Day sheet view toggle and patient list refresh (R4 workflow)
 - 2026-01-07 Notes edit endpoint + master-detail lists for notes/treatments
 - 2026-01-07 Patient recall fields + alert flags + recalls worklist UI
+- 2026-01-07 Patient ledger entries + quick payments + ledger tab

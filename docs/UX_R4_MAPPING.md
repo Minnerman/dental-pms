@@ -21,6 +21,10 @@ This doc maps common R4 workflows to the PMS UI.
 - Recall list/worklist: `/recalls` with overdue/30/60/90 filters.
 - Patient recall controls: Recall panel on `/patients/[id]`.
 
+## Finance / Ledger
+- Patient ledger: `/patients/[id]` Ledger tab with charges/payments and running balance.
+- Quick payment: Patient home -> Finance panel -> Add payment.
+
 ## Notes and treatments
 - Notes master-detail: `/notes` left list + right detail.
 - Treatments master-detail: `/treatments` list + detail panel.
