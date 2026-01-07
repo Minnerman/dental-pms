@@ -7,6 +7,7 @@ Create Date: 2026-01-07 21:05:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision = "0014_patient_ledger_entries"
 down_revision = "0013_patient_recall_flags"
@@ -15,13 +16,26 @@ depends_on = None
 
 
 def upgrade() -> None:
-    ledger_entry_type = sa.Enum(
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if inspector.has_table("patient_ledger_entries"):
+        return
+    ledger_entry_type = postgresql.ENUM(
         "charge",
         "payment",
         "adjustment",
         name="ledger_entry_type",
+        create_type=False,
     )
-    ledger_entry_type.create(op.get_bind(), checkfirst=True)
+    ledger_entry_type.create(bind, checkfirst=True)
+    payment_method_enum = postgresql.ENUM(
+        "cash",
+        "card",
+        "bank_transfer",
+        "other",
+        name="payment_method",
+        create_type=False,
+    )
     op.create_table(
         "patient_ledger_entries",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -30,7 +44,7 @@ def upgrade() -> None:
         sa.Column("amount_pence", sa.Integer(), nullable=False),
         sa.Column(
             "method",
-            sa.Enum("cash", "card", "bank_transfer", "other", name="payment_method"),
+            payment_method_enum,
             nullable=True,
         ),
         sa.Column("reference", sa.String(length=120), nullable=True),
@@ -66,10 +80,11 @@ def downgrade() -> None:
     op.drop_index("ix_patient_ledger_entries_related_invoice_id", table_name="patient_ledger_entries")
     op.drop_index("ix_patient_ledger_entries_patient_id", table_name="patient_ledger_entries")
     op.drop_table("patient_ledger_entries")
-    ledger_entry_type = sa.Enum(
+    ledger_entry_type = postgresql.ENUM(
         "charge",
         "payment",
         "adjustment",
         name="ledger_entry_type",
+        create_type=False,
     )
     ledger_entry_type.drop(op.get_bind(), checkfirst=True)

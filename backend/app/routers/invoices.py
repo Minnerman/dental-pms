@@ -80,6 +80,7 @@ def ensure_invoice_ledger_charge(
         entry_type=LedgerEntryType.charge,
         amount_pence=invoice.total_pence,
         related_invoice_id=invoice.id,
+        reference=f"INV:{invoice.id}",
         note=f"Invoice {invoice.invoice_number} issued",
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
@@ -466,13 +467,17 @@ def add_payment(
     )
     db.add(payment)
     db.flush()
+    ledger_reference = f"PAY:{payment.id}"
+    ledger_note = f"Payment for {invoice.invoice_number}"
+    if payload.reference:
+        ledger_note = f"{ledger_note} · Ref {payload.reference}"
     ledger_entry = PatientLedgerEntry(
         patient_id=invoice.patient_id,
         entry_type=LedgerEntryType.payment,
         amount_pence=-abs(payload.amount_pence),
         method=payload.method,
-        reference=payload.reference,
-        note=f"Payment for {invoice.invoice_number}",
+        reference=ledger_reference,
+        note=ledger_note,
         related_invoice_id=invoice.id,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,

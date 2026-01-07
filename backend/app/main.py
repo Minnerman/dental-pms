@@ -17,6 +17,7 @@ from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.patients import router as patients_router
+from app.routers.reports import router as reports_router
 from app.routers.recalls import router as recalls_router
 from app.routers.treatments import router as treatments_router
 from app.routers.estimates import router as estimates_router, patient_router as patient_estimates_router
@@ -81,3 +82,4 @@ app.include_router(patient_estimates_router)
 app.include_router(settings_router)
 app.include_router(audit_router)
 app.include_router(timeline_router)
+app.include_router(reports_router)
