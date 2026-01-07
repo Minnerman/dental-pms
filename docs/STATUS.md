@@ -10,6 +10,7 @@
 - Appointment + note audit UI
 - Patient timeline + soft-delete (archive/restore) for patients, notes, appointments
 - Archived toggles on patients/appointments and restore actions
+- Patient alerts/flags + recall controls + recall worklist
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -17,6 +18,7 @@
 - Home: `http://100.100.149.40:3100`
 - Login: `http://100.100.149.40:3100/login`
 - Patients: `http://100.100.149.40:3100/patients`
+- Recalls: `http://100.100.149.40:3100/recalls`
 - Patient timeline: `http://100.100.149.40:3100/patients/<id>/timeline`
 - Notes: `http://100.100.149.40:3100/notes`
 - Appointments audit: `http://100.100.149.40:3100/appointments/<id>/audit`
@@ -96,3 +98,4 @@
 - 2026-01-07 Appointment cancellation reasons + diary cut/copy/paste context menu (frontend+backend)
 - 2026-01-07 Day sheet view toggle and patient list refresh (R4 workflow)
 - 2026-01-07 Notes edit endpoint + master-detail lists for notes/treatments
+- 2026-01-07 Patient recall fields + alert flags + recalls worklist UI

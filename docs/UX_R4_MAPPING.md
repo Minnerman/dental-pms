@@ -11,10 +11,15 @@ This doc maps common R4 workflows to the PMS UI.
 - R4 patient tabs: in-app tabs at the top of the shell (persisted).
 - Patient home: `/patients/[id]` summary + appointments + finance snapshot.
 - Book appointment: patient home "Book appointment" button.
+- Patient alerts/flags: badges in patient header + Day Sheet icons.
 
 ## Cancellations
 - Cancel with reason: diary context menu -> Cancel… (reason required).
 - Reason shows in patient appointment history.
+
+## Recalls
+- Recall list/worklist: `/recalls` with overdue/30/60/90 filters.
+- Patient recall controls: Recall panel on `/patients/[id]`.
 
 ## Notes and treatments
 - Notes master-detail: `/notes` left list + right detail.
