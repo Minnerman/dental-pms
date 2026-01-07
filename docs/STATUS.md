@@ -5,11 +5,13 @@
 - Patients list/create/edit + notes per patient
 - Appointments list + create
 - Appointments calendar (day/week/month/agenda with drag-and-drop)
+- Appointments day sheet (R4-style list view with cut/copy/paste)
 - Audit trail (created_by/updated_by) + audit log endpoints
 - Appointment + note audit UI
 - Patient timeline + soft-delete (archive/restore) for patients, notes, appointments
 - Archived toggles on patients/appointments and restore actions
 - Theme toggle (light/dark) with neon accents
+- Notes and treatments master-detail layout
 
 ## URLs
 - Home: `http://100.100.149.40:3100`
@@ -92,3 +94,5 @@
 - 2026-01-07 Appointments calendar switched to react-big-calendar (range API `/api/appointments/range`, schedule `/api/settings/schedule`)
 - 2026-01-07 Patient workspace tabs + patient home booking panel wired to appointments day view
 - 2026-01-07 Appointment cancellation reasons + diary cut/copy/paste context menu (frontend+backend)
+- 2026-01-07 Day sheet view toggle and patient list refresh (R4 workflow)
+- 2026-01-07 Notes edit endpoint + master-detail lists for notes/treatments

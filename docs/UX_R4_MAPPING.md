@@ -1,0 +1,21 @@
+# R4 UX Mapping
+
+This doc maps common R4 workflows to the PMS UI.
+
+## Diary / Day Sheet
+- R4 Day Sheet: `/appointments` with the "Day sheet" toggle.
+- Calendar view: same page with the "Calendar" toggle.
+- Actions: right-click appointment for cancel/cut/copy; click slot to paste.
+
+## Patient workspace
+- R4 patient tabs: in-app tabs at the top of the shell (persisted).
+- Patient home: `/patients/[id]` summary + appointments + finance snapshot.
+- Book appointment: patient home "Book appointment" button.
+
+## Cancellations
+- Cancel with reason: diary context menu -> Cancel… (reason required).
+- Reason shows in patient appointment history.
+
+## Notes and treatments
+- Notes master-detail: `/notes` left list + right detail.
+- Treatments master-detail: `/treatments` list + detail panel.

@@ -1,11 +1,11 @@
 # Dental PMS (Practice Build)
 
-This repository is the starter skeleton for a Dental Practice Management System.
+Dental Practice Management System (PMS) with a R4-style workflow: patient tabs, day sheet diary, and patient-led booking.
 
 ## Safety
 This project lives ONLY in `~/dental-pms`. Do not mix it with other server projects.
 
-## Stack (dev)
+## Stack
 - Frontend: Next.js (TypeScript)
 - Backend: FastAPI (Python)
 - Database: Postgres
@@ -22,18 +22,31 @@ From the repo root:
 
 3) Check services:
 - Health: ./ops/health.sh
-- Backend: http://localhost:8000/health
-- Frontend: http://localhost:3000
+- Backend: http://localhost:8100/health
+- Frontend: http://localhost:3100
 
 ## Where it runs
 - http://<server-ip>:3100
 - Tailscale: http://<tailscale-ip>:3100
+
+## Ports
+- Frontend: 3100
+- Backend: 8100
+- Postgres: 5442
+
+## Key features
+- R4-style patient workspace tabs with persistence
+- Patient home summary + booking flow
+- Appointments day sheet + calendar toggle (10-minute slots)
+- Diary actions: cancel with reason, cut/copy/paste
+- Notes and treatments master-detail layout
 
 ## Stop
 docker compose down
 
 ## Operations
 - Common fixes: `docs/OPS_CHECKLIST.md#common-fixes`
+- Dev commands: `docs/DEV.md`
 
 - Access URLs (Tailscale + local): `docs/ACCESS_URLS.md`
 - Quick ops checklist: `docs/OPS_CHECKLIST.md`
@@ -46,9 +59,13 @@ docker compose down
 - Login UI: `/login`
 - `/api/me` returns 401/403 when logged out (normal); UI should show signed-out state without a red error toast.
 
+## R4 mapping
+- UX mapping: `docs/UX_R4_MAPPING.md`
+
 ## Production notes
 - Deploy guide: `docs/DEPLOY.md`
 - First run: `docs/FIRST_RUN.md`
+- Migrations: `docker compose run --rm backend alembic upgrade head`
 
 ## Middleware
 Invalid numeric IDs (e.g. `/patients/INVALID`) are handled in `frontend/middleware.ts`.
