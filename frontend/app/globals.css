@@ -1,7 +1,4 @@
-@import "@fullcalendar/core/index.css";
-@import "@fullcalendar/daygrid/index.css";
-@import "@fullcalendar/timegrid/index.css";
-@import "@fullcalendar/list/index.css";
+@import "./fullcalendar.css";
 
 html[data-theme="light"] {
   color-scheme: light;
