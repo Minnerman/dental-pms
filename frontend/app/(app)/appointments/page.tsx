@@ -13,6 +13,7 @@ import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { enGB } from "date-fns/locale";
 import { apiFetch, clearToken } from "@/lib/auth";
+import StatusIcon from "@/components/ui/StatusIcon";
 
 type Actor = { id: number; email: string; role: string };
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
@@ -213,6 +214,14 @@ function toLocalDateTimeInput(date: Date) {
   )}:${pad(date.getMinutes())}`;
 }
 
+function formatDurationMinutes(start: string, end: string) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "—";
+  const diffMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+  return `${diffMinutes} min`;
+}
+
 function timeToMinutes(value: string) {
   const [hours, minutes = "0"] = value.split(":");
   return Number(hours) * 60 + Number(minutes);
@@ -332,6 +341,7 @@ export default function AppointmentsPage() {
   const [range, setRange] = useState<CalendarRange | null>(null);
   const [calendarView, setCalendarView] = useState<View>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [viewMode, setViewMode] = useState<"day_sheet" | "calendar">("day_sheet");
   const [highlightedAppointmentId, setHighlightedAppointmentId] = useState<string | null>(
     null
   );
@@ -379,6 +389,15 @@ export default function AppointmentsPage() {
     );
     return appt ? new Date(appt.starts_at) : undefined;
   }, [appointments, highlightedAppointmentId]);
+
+  const daySheetAppointments = useMemo(() => {
+    const key = toDateKey(currentDate);
+    return appointments
+      .filter((appt) => toDateKey(new Date(appt.starts_at)) === key)
+      .sort(
+        (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
+      );
+  }, [appointments, currentDate]);
 
   const { minTime, maxTime } = useMemo(() => {
     if (!schedule) return { minTime: undefined, maxTime: undefined };
@@ -1088,6 +1107,20 @@ export default function AppointmentsPage() {
               New appointment
             </button>
             <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className={viewMode === "day_sheet" ? "btn btn-primary" : "btn btn-secondary"}
+                onClick={() => setViewMode("day_sheet")}
+              >
+                Day sheet
+              </button>
+              <button
+                className={viewMode === "calendar" ? "btn btn-primary" : "btn btn-secondary"}
+                onClick={() => setViewMode("calendar")}
+              >
+                Calendar
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
               {([
                 { id: "all", label: "All" },
                 { id: "clinic", label: "Clinic" },
@@ -1128,40 +1161,121 @@ export default function AppointmentsPage() {
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
 
-        <div className="card" style={{ margin: 0, padding: 16 }}>
-          {loading && <div className="badge">Loading appointments…</div>}
-          <DragAndDropCalendar
-            localizer={localizer}
-            events={calendarEvents}
-            startAccessor="start"
-            endAccessor="end"
-            selectable
-            resizable
-            step={10}
-            timeslots={1}
-            onSelectSlot={handleSelectSlot}
-            onSelectEvent={handleEventSelect}
-            onEventDrop={handleEventDrop}
-            onEventResize={handleEventResize}
-            draggableAccessor={() => true}
-            view={calendarView}
-            date={currentDate}
-            onView={setCalendarView}
-            onNavigate={handleNavigate}
-            onRangeChange={handleRangeChange}
-            showNowIndicator
-            min={minTime}
-            max={maxTime}
-            culture="en-GB"
-            views={["day", "week", "month", "agenda"]}
-            components={{ event: AppointmentEvent }}
-            eventPropGetter={eventStyleGetter}
-            dayPropGetter={dayPropGetter}
-            slotPropGetter={slotPropGetter}
-            scrollToTime={highlightScrollTime}
-            style={{ height: "70vh" }}
-          />
-        </div>
+        {viewMode === "calendar" ? (
+          <div className="card" style={{ margin: 0, padding: 16 }}>
+            {loading && <div className="badge">Loading appointments…</div>}
+            <DragAndDropCalendar
+              localizer={localizer}
+              events={calendarEvents}
+              startAccessor="start"
+              endAccessor="end"
+              selectable
+              resizable
+              step={10}
+              timeslots={1}
+              onSelectSlot={handleSelectSlot}
+              onSelectEvent={handleEventSelect}
+              onEventDrop={handleEventDrop}
+              onEventResize={handleEventResize}
+              draggableAccessor={() => true}
+              view={calendarView}
+              date={currentDate}
+              onView={setCalendarView}
+              onNavigate={handleNavigate}
+              onRangeChange={handleRangeChange}
+              showNowIndicator
+              min={minTime}
+              max={maxTime}
+              culture="en-GB"
+              views={["day", "week", "month", "agenda"]}
+              components={{ event: AppointmentEvent }}
+              eventPropGetter={eventStyleGetter}
+              dayPropGetter={dayPropGetter}
+              slotPropGetter={slotPropGetter}
+              scrollToTime={highlightScrollTime}
+              style={{ height: "70vh" }}
+            />
+          </div>
+        ) : (
+          <div className="card" style={{ margin: 0, padding: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <div className="label">Day sheet</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const prev = new Date(currentDate);
+                    prev.setDate(prev.getDate() - 1);
+                    handleNavigate(prev);
+                    updateRange(prev, prev, "day", prev);
+                  }}
+                >
+                  ← Prev
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const next = new Date(currentDate);
+                    next.setDate(next.getDate() + 1);
+                    handleNavigate(next);
+                    updateRange(next, next, "day", next);
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+            {loading ? (
+              <div className="badge">Loading appointments…</div>
+            ) : daySheetAppointments.length === 0 ? (
+              <div className="notice">No appointments for this day.</div>
+            ) : (
+              <table className="table table-compact table-hover table-sticky">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Patient</th>
+                    <th>Phone</th>
+                    <th>Address</th>
+                    <th>Clinician</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {daySheetAppointments.map((appt) => {
+                    const patient = patientLookup.get(appt.patient.id);
+                    const address = buildShortAddress(patient);
+                    return (
+                      <tr key={appt.id}>
+                        <td>
+                          {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}{" "}
+                          ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                        </td>
+                        <td>
+                          {appt.patient.first_name} {appt.patient.last_name}
+                        </td>
+                        <td>{patient?.phone || "—"}</td>
+                        <td>{address || "—"}</td>
+                        <td>{appt.clinician || "Unassigned"}</td>
+                        <td>{appt.location || appt.location_text || "—"}</td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <StatusIcon status={appt.status} />
+                            {statusLabels[appt.status]}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
         {contextMenu && (
           <div
             className="card"
