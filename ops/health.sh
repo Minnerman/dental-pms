@@ -21,7 +21,19 @@ curl -fsS http://localhost:8100/health
 
 echo
 echo "Frontend proxy:"
-curl -fsS http://localhost:3100/api/health
+frontend_ok=0
+for attempt in $(seq 1 10); do
+  if curl -fsS http://localhost:3100/api/health >/dev/null; then
+    frontend_ok=1
+    break
+  fi
+  sleep 1
+done
+if [ "$frontend_ok" -ne 1 ]; then
+  echo "Frontend proxy: failed after retries"
+  exit 1
+fi
+echo "Frontend proxy: ok"
 
 echo
 echo "Auth + data (using ADMIN_EMAIL/ADMIN_PASSWORD from .env):"
