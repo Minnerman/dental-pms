@@ -22,12 +22,26 @@ type PatientSearchResult = {
   phone?: string | null;
 };
 
+type PatientTab = {
+  id: number;
+  label: string;
+};
+
 const baseTabs = [
   { href: "/", label: "Home" },
   { href: "/patients", label: "Patients" },
   { href: "/appointments", label: "Appointments" },
   { href: "/notes", label: "Notes" },
 ];
+
+const patientTabsStorageKey = "dental_pms_patient_tabs";
+const activePatientTabStorageKey = "dental_pms_active_patient_tab";
+
+function formatPatientTabLabel(firstName: string, lastName: string) {
+  const safeLast = lastName.trim().toUpperCase();
+  const safeFirst = firstName.trim();
+  return `${safeLast}, ${safeFirst}`.trim();
+}
 
 function ThemeToggle() {
   const [theme, setTheme] = useState("light");
@@ -62,6 +76,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [searching, setSearching] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [lastQuery, setLastQuery] = useState("");
+  const [patientTabs, setPatientTabs] = useState<PatientTab[]>([]);
+  const [activePatientTabId, setActivePatientTabId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const storedTabs = localStorage.getItem(patientTabsStorageKey);
+    if (storedTabs) {
+      try {
+        const parsed = JSON.parse(storedTabs) as PatientTab[];
+        setPatientTabs(parsed);
+      } catch {
+        setPatientTabs([]);
+      }
+    }
+    const storedActive = localStorage.getItem(activePatientTabStorageKey);
+    if (storedActive) {
+      const parsed = Number(storedActive);
+      setActivePatientTabId(Number.isNaN(parsed) ? null : parsed);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(patientTabsStorageKey, JSON.stringify(patientTabs));
+  }, [patientTabs]);
+
+  useEffect(() => {
+    if (activePatientTabId === null) {
+      localStorage.removeItem(activePatientTabStorageKey);
+    } else {
+      localStorage.setItem(activePatientTabStorageKey, String(activePatientTabId));
+    }
+  }, [activePatientTabId]);
 
   useEffect(() => {
     const token = getToken();
@@ -99,6 +144,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     })();
   }, [router]);
+
+  useEffect(() => {
+    const match = pathname?.match(/^\/patients\/(\d+)/);
+    if (!match) return;
+    const patientId = Number(match[1]);
+    if (Number.isNaN(patientId)) return;
+    setActivePatientTabId(patientId);
+    if (patientTabs.some((tab) => tab.id === patientId)) return;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/patients/${patientId}`);
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) return;
+        const data = (await res.json()) as PatientSearchResult;
+        setPatientTabs((prev) => [
+          ...prev,
+          { id: data.id, label: formatPatientTabLabel(data.first_name, data.last_name) },
+        ]);
+      } catch {
+        // Ignore failed lookup; patient tab can be added via search later.
+      }
+    })();
+  }, [pathname, patientTabs, router]);
 
   const isUsersRoute = pathname?.startsWith("/users");
   const isAdmin = me
@@ -167,6 +239,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  function openPatientTab(patient: PatientSearchResult) {
+    const label = formatPatientTabLabel(patient.first_name, patient.last_name);
+    setPatientTabs((prev) => {
+      if (prev.some((tab) => tab.id === patient.id)) {
+        return prev.map((tab) => (tab.id === patient.id ? { ...tab, label } : tab));
+      }
+      return [...prev, { id: patient.id, label }];
+    });
+    setActivePatientTabId(patient.id);
+    router.push(`/patients/${patient.id}`);
+  }
+
+  function closePatientTab(patientId: number) {
+    setPatientTabs((prev) => {
+      const nextTabs = prev.filter((tab) => tab.id !== patientId);
+      if (activePatientTabId === patientId) {
+        const next = nextTabs[0]?.id ?? null;
+        setActivePatientTabId(next);
+        router.push(next ? `/patients/${next}` : "/");
+      }
+      return nextTabs;
+    });
+  }
+
   const tabs = [
     ...baseTabs,
     ...(isSuperadmin ? [{ href: "/treatments", label: "Treatments" }] : []),
@@ -212,7 +308,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     setSearchQuery("");
                     setSearchResults([]);
                     setActiveIndex(-1);
-                    router.push(`/patients/${next.id}`);
+                    openPatientTab(next);
                   }
                 }
                 if (e.key === "Escape") {
@@ -252,7 +348,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         setSearchQuery("");
                         setSearchResults([]);
                         setActiveIndex(-1);
-                        router.push(`/patients/${patient.id}`);
+                        openPatientTab(patient);
                       }}
                     >
                       <span>
@@ -281,6 +377,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
+        <nav className="tab-list workspace-tabs">
+          <button
+            type="button"
+            className={`tab-link${pathname === "/" ? " active" : ""}`}
+            onClick={() => router.push("/")}
+          >
+            Home
+          </button>
+          {patientTabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={`tab-pill${activePatientTabId === tab.id ? " active" : ""}`}
+            >
+              <button
+                type="button"
+                className="tab-pill-label"
+                onClick={() => router.push(`/patients/${tab.id}`)}
+              >
+                {tab.label}
+              </button>
+              <button
+                type="button"
+                className="tab-close"
+                aria-label={`Close ${tab.label}`}
+                onClick={() => closePatientTab(tab.id)}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </nav>
         <nav className="tab-list">
           {tabs.map((tab) => (
             <Link

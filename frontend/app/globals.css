@@ -21,6 +21,24 @@ html[data-theme="light"] {
   --badge-bg: rgba(0, 0, 0, 0.04);
   --radius: 16px;
   --radius-sm: 10px;
+  --cal-event-booked-bg: #dbe7ff;
+  --cal-event-booked-border: #8aaeff;
+  --cal-event-booked-text: #163b7a;
+  --cal-event-arrived-bg: #d9f5e6;
+  --cal-event-arrived-border: #6bd19f;
+  --cal-event-arrived-text: #0f4d2a;
+  --cal-event-in-progress-bg: #fff0d6;
+  --cal-event-in-progress-border: #f0b45f;
+  --cal-event-in-progress-text: #7a4a00;
+  --cal-event-completed-bg: #e5e7eb;
+  --cal-event-completed-border: #c4c7cf;
+  --cal-event-completed-text: #3b3f47;
+  --cal-event-cancelled-bg: #fde2e2;
+  --cal-event-cancelled-border: #f5a3a3;
+  --cal-event-cancelled-text: #7a1c1c;
+  --cal-event-no-show-bg: #f6d7d7;
+  --cal-event-no-show-border: #e08c8c;
+  --cal-event-no-show-text: #5f1414;
 }
 
 html[data-theme="dark"] {
@@ -45,6 +63,24 @@ html[data-theme="dark"] {
   --badge-bg: rgba(255, 255, 255, 0.08);
   --radius: 16px;
   --radius-sm: 10px;
+  --cal-event-booked-bg: #24324a;
+  --cal-event-booked-border: #4f6fa8;
+  --cal-event-booked-text: #dbe8ff;
+  --cal-event-arrived-bg: #1f3b2c;
+  --cal-event-arrived-border: #4ea97a;
+  --cal-event-arrived-text: #daf5e6;
+  --cal-event-in-progress-bg: #3a2d1b;
+  --cal-event-in-progress-border: #c3892f;
+  --cal-event-in-progress-text: #ffe6bf;
+  --cal-event-completed-bg: #2e3238;
+  --cal-event-completed-border: #5f6772;
+  --cal-event-completed-text: #e3e6ea;
+  --cal-event-cancelled-bg: #3b2222;
+  --cal-event-cancelled-border: #c27373;
+  --cal-event-cancelled-text: #ffd6d6;
+  --cal-event-no-show-bg: #3a1f1f;
+  --cal-event-no-show-border: #a85d5d;
+  --cal-event-no-show-text: #f2c6c6;
 }
 
 * {
@@ -210,16 +246,59 @@ button {
 }
 
 .tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid var(--border);
   font-size: 14px;
+  background: transparent;
 }
 
 .tab-link.active {
   border-color: var(--accent);
   box-shadow: 0 0 12px var(--accent-glow);
   background: var(--tab-active-bg);
+}
+
+.tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: transparent;
+}
+
+.tab-pill.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+  background: var(--tab-active-bg);
+}
+
+.tab-pill-label {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tab-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.tab-close:hover {
+  color: var(--text);
 }
 
 .app-main {
