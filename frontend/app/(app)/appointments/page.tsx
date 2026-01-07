@@ -205,6 +205,55 @@ function normalizeRangeEnd(start: Date, end: Date) {
   return normalized;
 }
 
+function getScheduleDayIndex(date: Date) {
+  return (date.getDay() + 6) % 7;
+}
+
+function isDateWithinRange(date: Date, start: string, end: string) {
+  const key = toDateKey(date);
+  return key >= start && key <= end;
+}
+
+function getWorkingWindowForDate(date: Date, schedule: PracticeSchedule | null) {
+  if (!schedule) return null;
+  const key = toDateKey(date);
+  const override = schedule.overrides.find((item) => item.date === key);
+  if (override) {
+    if (override.is_closed) return null;
+    if (override.start_time && override.end_time) {
+      return {
+        start: timeToMinutes(override.start_time),
+        end: timeToMinutes(override.end_time),
+      };
+    }
+  }
+  const isClosed = schedule.closures.some((closure) =>
+    isDateWithinRange(date, closure.start_date, closure.end_date)
+  );
+  if (isClosed) return null;
+  const dayIndex = getScheduleDayIndex(date);
+  const hour = schedule.hours.find((item) => item.day_of_week === dayIndex);
+  if (!hour || hour.is_closed || !hour.start_time || !hour.end_time) return null;
+  return {
+    start: timeToMinutes(hour.start_time),
+    end: timeToMinutes(hour.end_time),
+  };
+}
+
+function isRangeWithinSchedule(
+  start: Date,
+  end: Date,
+  schedule: PracticeSchedule | null
+) {
+  if (!schedule) return true;
+  if (toDateKey(start) !== toDateKey(end)) return false;
+  const window = getWorkingWindowForDate(start, schedule);
+  if (!window) return false;
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = end.getHours() * 60 + end.getMinutes();
+  return startMinutes >= window.start && endMinutes <= window.end;
+}
+
 export default function AppointmentsPage() {
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -486,6 +535,10 @@ export default function AppointmentsPage() {
       setError("Visit address is required for domiciliary visits.");
       return;
     }
+    if (!isRangeWithinSchedule(new Date(startsAt), new Date(endsAt), schedule)) {
+      setError("Appointment time is outside of working hours.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -672,6 +725,10 @@ export default function AppointmentsPage() {
       return;
     }
     if (!slotInfo.start || !slotInfo.end) return;
+    if (!isRangeWithinSchedule(slotInfo.start, slotInfo.end, schedule)) {
+      setError("Selected time is outside of working hours.");
+      return;
+    }
     setStartsAt(toLocalDateTimeInput(slotInfo.start));
     setEndsAt(toLocalDateTimeInput(slotInfo.end));
     setShowNewModal(true);
@@ -687,6 +744,16 @@ export default function AppointmentsPage() {
     end: Date;
   }) {
     try {
+      if (!isRangeWithinSchedule(start, end, schedule)) {
+        setError("Reschedule is outside of working hours.");
+        await loadAppointments();
+        return;
+      }
+      const confirmed = window.confirm("Reschedule this appointment?");
+      if (!confirmed) {
+        await loadAppointments();
+        return;
+      }
       const updated = await updateAppointmentTimes(event.resource.id, start, end);
       if (updated) {
         setAppointments((prev) =>
@@ -709,6 +776,16 @@ export default function AppointmentsPage() {
     end: Date;
   }) {
     try {
+      if (!isRangeWithinSchedule(start, end, schedule)) {
+        setError("Resize is outside of working hours.");
+        await loadAppointments();
+        return;
+      }
+      const confirmed = window.confirm("Update appointment duration?");
+      if (!confirmed) {
+        await loadAppointments();
+        return;
+      }
       const updated = await updateAppointmentTimes(event.resource.id, start, end);
       if (updated) {
         setAppointments((prev) =>
@@ -750,14 +827,41 @@ export default function AppointmentsPage() {
     };
   }
 
+  function dayPropGetter(date: Date) {
+    if (!schedule) return {};
+    const window = getWorkingWindowForDate(date, schedule);
+    if (window) return {};
+    return { style: { backgroundColor: "rgba(120, 120, 120, 0.12)" } };
+  }
+
+  function slotPropGetter(date: Date) {
+    if (!schedule) return {};
+    const window = getWorkingWindowForDate(date, schedule);
+    if (!window) {
+      return { style: { backgroundColor: "rgba(120, 120, 120, 0.12)" } };
+    }
+    const minutes = date.getHours() * 60 + date.getMinutes();
+    if (minutes < window.start || minutes >= window.end) {
+      return { style: { backgroundColor: "rgba(120, 120, 120, 0.12)" } };
+    }
+    return {};
+  }
+
   function AppointmentEvent({ event }: { event: CalendarEvent }) {
     const appt = event.resource;
     const timeLabel = `${format(event.start, "HH:mm")}-${format(event.end, "HH:mm")}`;
+    const secondaryParts = [
+      appt.clinician ? `Clinician: ${appt.clinician}` : null,
+      appt.location || appt.location_text ? `Location: ${appt.location || appt.location_text}` : null,
+    ].filter(Boolean);
     return (
       <div style={{ display: "grid", gap: 4 }}>
         <div style={{ fontWeight: 600, lineHeight: 1.2 }}>
           {timeLabel} {event.title}
         </div>
+        {secondaryParts.length > 0 && (
+          <div style={{ fontSize: 12, opacity: 0.9 }}>{secondaryParts.join(" · ")}</div>
+        )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <span
             className="badge"
@@ -865,9 +969,14 @@ export default function AppointmentsPage() {
             views={["day", "week", "month", "agenda"]}
             components={{ event: AppointmentEvent }}
             eventPropGetter={eventStyleGetter}
+            dayPropGetter={dayPropGetter}
+            slotPropGetter={slotPropGetter}
             style={{ height: "70vh" }}
           />
         </div>
+        {!loading && appointments.length === 0 && (
+          <div className="notice">No appointments in this range.</div>
+        )}
 
         {showNewModal && (
           <div className="card" style={{ margin: 0 }}>
@@ -1144,6 +1253,12 @@ export default function AppointmentsPage() {
                     onClick={() => updateAppointmentStatus(selectedAppointment.id, "cancelled")}
                   >
                     Cancel
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => updateAppointmentStatus(selectedAppointment.id, "no_show")}
+                  >
+                    No show
                   </button>
                   <button
                     className="btn btn-secondary"
