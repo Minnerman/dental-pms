@@ -4,6 +4,7 @@
 - Auth + RBAC with admin-only `/users`
 - Patients list/create/edit + notes per patient
 - Appointments list + create
+- Appointments calendar (day/week/month/agenda with drag-and-drop)
 - Audit trail (created_by/updated_by) + audit log endpoints
 - Appointment + note audit UI
 - Patient timeline + soft-delete (archive/restore) for patients, notes, appointments
@@ -88,3 +89,4 @@
 - 2026-01-06 Added appointments day view + domiciliary patient fields + appointment↔estimate linkages (health OK)
 
 - 2026-01-06 Added appointments week view + range API + domiciliary run sheet PDF
+- 2026-01-07 Appointments calendar switched to react-big-calendar (range API `/api/appointments/range`, schedule `/api/settings/schedule`)
