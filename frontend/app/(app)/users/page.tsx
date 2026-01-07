@@ -33,6 +33,7 @@ export default function UsersPage() {
   const [showForm, setShowForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [resetUser, setResetUser] = useState<User | null>(null);
+  const [resetResult, setResetResult] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
   const [resetLoading, setResetLoading] = useState(false);

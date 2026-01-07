@@ -1,4 +1,7 @@
 
+@import "react-big-calendar/lib/css/react-big-calendar.css";
+@import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
+
 html[data-theme="light"] {
   color-scheme: light;
   --bg: #f5f2ed;
@@ -313,8 +316,3 @@ button {
   border-radius: 10px;
   padding: 2px;
 }
-@import "@fullcalendar/common/main.css";
-@import "@fullcalendar/core/main.css";
-@import "@fullcalendar/daygrid/main.css";
-@import "@fullcalendar/timegrid/main.css";
-@import "@fullcalendar/list/main.css";

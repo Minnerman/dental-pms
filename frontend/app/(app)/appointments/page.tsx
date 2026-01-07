@@ -1,20 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import FullCalendar from "@fullcalendar/react";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import listPlugin from "@fullcalendar/list";
-import type {
-  DateSelectArg,
-  DatesSetArg,
-  EventClickArg,
-  EventDropArg,
-  EventResizeDoneArg,
-} from "@fullcalendar/core";
+import {
+  Calendar,
+  dateFnsLocalizer,
+  type SlotInfo,
+  type View,
+} from "react-big-calendar";
+import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
+import { format, parse, startOfWeek, getDay } from "date-fns";
+import { enGB } from "date-fns/locale";
 import { apiFetch, clearToken } from "@/lib/auth";
 
 type Actor = { id: number; email: string; role: string };
@@ -56,6 +53,14 @@ type Appointment = {
   updated_by?: Actor | null;
   updated_at: string;
   deleted_at?: string | null;
+};
+
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  resource: Appointment;
 };
 
 type Patient = {
@@ -130,15 +135,19 @@ type LocationFilter = "all" | "clinic" | "visit";
 type CalendarRange = {
   start: string;
   end: string;
-  view: string;
+  view: View;
   anchor: string;
 };
 
-const categoryLabels: Record<PatientCategory, string> = {
-  CLINIC_PRIVATE: "Clinic (Private)",
-  DOMICILIARY_PRIVATE: "Domiciliary (Private)",
-  DENPLAN: "Denplan",
-};
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek,
+  getDay,
+  locales: { "en-GB": enGB },
+});
+
+const DragAndDropCalendar = withDragAndDrop<CalendarEvent>(Calendar);
 
 const statusLabels: Record<AppointmentStatus, string> = {
   booked: "Booked",
@@ -162,12 +171,6 @@ function toDateKey(value: Date) {
   return value.toLocaleDateString("en-CA");
 }
 
-function addDays(dateStr: string, days: number) {
-  const base = new Date(`${dateStr}T00:00:00`);
-  base.setDate(base.getDate() + days);
-  return toDateKey(base);
-}
-
 function toLocalDateTimeInput(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
@@ -175,9 +178,35 @@ function toLocalDateTimeInput(date: Date) {
   )}:${pad(date.getMinutes())}`;
 }
 
+function timeToMinutes(value: string) {
+  const [hours, minutes = "0"] = value.split(":");
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function dateWithMinutes(minutes: number) {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  const next = new Date(base);
+  next.setMinutes(minutes);
+  return next;
+}
+
+function normalizeRangeEnd(start: Date, end: Date) {
+  const normalized = new Date(end);
+  if (
+    normalized.getHours() === 0 &&
+    normalized.getMinutes() === 0 &&
+    normalized.getSeconds() === 0 &&
+    normalized.getMilliseconds() === 0 &&
+    normalized > start
+  ) {
+    normalized.setDate(normalized.getDate() - 1);
+  }
+  return normalized;
+}
+
 export default function AppointmentsPage() {
   const router = useRouter();
-  const calendarRef = useRef<FullCalendar | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -208,6 +237,8 @@ export default function AppointmentsPage() {
   const [detailLocationText, setDetailLocationText] = useState("");
   const [savingDetail, setSavingDetail] = useState(false);
   const [range, setRange] = useState<CalendarRange | null>(null);
+  const [calendarView, setCalendarView] = useState<View>("week");
+  const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -217,81 +248,30 @@ export default function AppointmentsPage() {
     );
   }, [patientQuery, patients]);
 
-  const calendarEvents = useMemo(() => {
-    const appointmentEvents = appointments.map((appt) => ({
-      id: String(appt.id),
-      title: `${appt.patient.first_name} ${appt.patient.last_name}`,
-      start: appt.starts_at,
-      end: appt.ends_at,
-      extendedProps: { appointment: appt },
-    }));
+  const calendarEvents = useMemo<CalendarEvent[]>(
+    () =>
+      appointments.map((appt) => ({
+        id: String(appt.id),
+        title: `${appt.patient.first_name} ${appt.patient.last_name}`,
+        start: new Date(appt.starts_at),
+        end: new Date(appt.ends_at),
+        resource: appt,
+      })),
+    [appointments]
+  );
 
-    if (!schedule) return appointmentEvents;
-
-    const backgroundEvents: {
-      id: string;
-      start: string;
-      end?: string;
-      display: "background";
-      backgroundColor: string;
-      editable: boolean;
-    }[] = [];
-
-    schedule.closures.forEach((closure, index) => {
-      backgroundEvents.push({
-        id: `closure-${index}`,
-        start: closure.start_date,
-        end: addDays(closure.end_date, 1),
-        display: "background",
-        backgroundColor: "rgba(120, 120, 120, 0.2)",
-        editable: false,
-      });
-    });
-
-    schedule.overrides.forEach((override, index) => {
-      if (override.is_closed) {
-        backgroundEvents.push({
-          id: `override-closed-${index}`,
-          start: override.date,
-          end: addDays(override.date, 1),
-          display: "background",
-          backgroundColor: "rgba(220, 38, 38, 0.18)",
-          editable: false,
-        });
-      } else if (override.start_time && override.end_time) {
-        const start = `${override.date}T${override.start_time}`;
-        const end = `${override.date}T${override.end_time}`;
-        backgroundEvents.push({
-          id: `override-pre-${index}`,
-          start: `${override.date}T00:00:00`,
-          end: start,
-          display: "background",
-          backgroundColor: "rgba(120, 120, 120, 0.16)",
-          editable: false,
-        });
-        backgroundEvents.push({
-          id: `override-post-${index}`,
-          start: end,
-          end: `${override.date}T23:59:59`,
-          display: "background",
-          backgroundColor: "rgba(120, 120, 120, 0.16)",
-          editable: false,
-        });
-      }
-    });
-
-    return [...appointmentEvents, ...backgroundEvents];
-  }, [appointments, schedule]);
-
-  const businessHours = useMemo(() => {
-    if (!schedule) return [];
-    return schedule.hours
-      .filter((hour) => !hour.is_closed && hour.start_time && hour.end_time)
-      .map((hour) => ({
-        daysOfWeek: [(hour.day_of_week + 1) % 7],
-        startTime: hour.start_time?.slice(0, 5) ?? "",
-        endTime: hour.end_time?.slice(0, 5) ?? "",
-      }));
+  const { minTime, maxTime } = useMemo(() => {
+    if (!schedule) return { minTime: undefined, maxTime: undefined };
+    const hours = schedule.hours.filter(
+      (hour) => !hour.is_closed && hour.start_time && hour.end_time
+    );
+    if (hours.length === 0) return { minTime: undefined, maxTime: undefined };
+    const minMinutes = Math.min(...hours.map((hour) => timeToMinutes(hour.start_time!)));
+    const maxMinutes = Math.max(...hours.map((hour) => timeToMinutes(hour.end_time!)));
+    return {
+      minTime: dateWithMinutes(minMinutes),
+      maxTime: dateWithMinutes(maxMinutes),
+    };
   }, [schedule]);
 
   function openAppointment(appt: Appointment) {
@@ -459,7 +439,10 @@ export default function AppointmentsPage() {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const label = range.view.includes("Week") ? `week-of-${range.start}` : range.start;
+      const label =
+        range.view === "week" || range.view === "agenda"
+          ? `week-of-${range.start}`
+          : range.start;
       link.href = url;
       link.download = `Run_Sheet_${label}.pdf`;
       document.body.appendChild(link);
@@ -662,72 +645,143 @@ export default function AppointmentsPage() {
     }
   }
 
-  function handleDatesSet(arg: DatesSetArg) {
-    const end = new Date(arg.end);
-    end.setDate(end.getDate() - 1);
+  function updateRange(start: Date, end: Date, view: View, anchor: Date) {
+    const normalizedEnd = normalizeRangeEnd(start, end);
     setRange({
-      start: toDateKey(arg.start),
-      end: toDateKey(end),
-      view: arg.view.type,
-      anchor: toDateKey(arg.view.currentStart),
+      start: toDateKey(start),
+      end: toDateKey(normalizedEnd),
+      view,
+      anchor: toDateKey(anchor),
     });
   }
 
-  function handleSelect(selection: DateSelectArg) {
-    if (selection.allDay) {
+  function handleRangeChange(nextRange: Date[] | { start: Date; end: Date }, view?: View) {
+    const nextView = view ?? calendarView;
+    if (Array.isArray(nextRange)) {
+      const start = nextRange[0];
+      const end = nextRange[nextRange.length - 1];
+      updateRange(start, end, nextView, currentDate);
+      return;
+    }
+    updateRange(nextRange.start, nextRange.end, nextView, currentDate);
+  }
+
+  function handleSelectSlot(slotInfo: SlotInfo) {
+    if (calendarView === "month" || calendarView === "agenda") {
       setError("Select a time slot in day/week view to create an appointment.");
       return;
     }
-    setStartsAt(toLocalDateTimeInput(selection.start));
-    setEndsAt(toLocalDateTimeInput(selection.end));
+    if (!slotInfo.start || !slotInfo.end) return;
+    setStartsAt(toLocalDateTimeInput(slotInfo.start));
+    setEndsAt(toLocalDateTimeInput(slotInfo.end));
     setShowNewModal(true);
   }
 
-  async function handleEventDrop(info: EventDropArg) {
-    const appt = info.event.extendedProps.appointment as Appointment | undefined;
-    if (!appt || !info.event.start || !info.event.end) return;
+  async function handleEventDrop({
+    event,
+    start,
+    end,
+  }: {
+    event: CalendarEvent;
+    start: Date;
+    end: Date;
+  }) {
     try {
-      const updated = await updateAppointmentTimes(
-        appt.id,
-        info.event.start,
-        info.event.end
-      );
+      const updated = await updateAppointmentTimes(event.resource.id, start, end);
       if (updated) {
-        setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        setAppointments((prev) =>
+          prev.map((item) => (item.id === updated.id ? updated : item))
+        );
       }
     } catch (err) {
-      info.revert();
       setError(err instanceof Error ? err.message : "Failed to reschedule appointment");
+      await loadAppointments();
     }
   }
 
-  async function handleEventResize(info: EventResizeDoneArg) {
-    const appt = info.event.extendedProps.appointment as Appointment | undefined;
-    if (!appt || !info.event.start || !info.event.end) return;
+  async function handleEventResize({
+    event,
+    start,
+    end,
+  }: {
+    event: CalendarEvent;
+    start: Date;
+    end: Date;
+  }) {
     try {
-      const updated = await updateAppointmentTimes(
-        appt.id,
-        info.event.start,
-        info.event.end
-      );
+      const updated = await updateAppointmentTimes(event.resource.id, start, end);
       if (updated) {
-        setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        setAppointments((prev) =>
+          prev.map((item) => (item.id === updated.id ? updated : item))
+        );
       }
     } catch (err) {
-      info.revert();
       setError(err instanceof Error ? err.message : "Failed to resize appointment");
+      await loadAppointments();
     }
   }
 
-  function handleEventClick(info: EventClickArg) {
-    const appt = info.event.extendedProps.appointment as Appointment | undefined;
-    if (appt) openAppointment(appt);
+  function handleEventSelect(event: CalendarEvent) {
+    openAppointment(event.resource);
   }
 
   function jumpToDate(value: string) {
-    const api = calendarRef.current?.getApi();
-    if (!api) return;
-    api.gotoDate(value);
+    if (!value) return;
+    setCurrentDate(new Date(`${value}T00:00:00`));
+  }
+
+  function handleNavigate(date: Date) {
+    setCurrentDate(date);
+    setRange((prev) => (prev ? { ...prev, anchor: toDateKey(date) } : prev));
+  }
+
+  function eventStyleGetter(event: CalendarEvent) {
+    const color = statusColors[event.resource.status];
+    return {
+      style: {
+        backgroundColor: color,
+        borderColor: color,
+        color: "white",
+        boxShadow:
+          event.resource.location_type === "visit"
+            ? "0 0 0 2px rgba(255,255,255,0.5) inset"
+            : undefined,
+      },
+    };
+  }
+
+  function AppointmentEvent({ event }: { event: CalendarEvent }) {
+    const appt = event.resource;
+    const timeLabel = `${format(event.start, "HH:mm")}-${format(event.end, "HH:mm")}`;
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={{ fontWeight: 600, lineHeight: 1.2 }}>
+          {timeLabel} {event.title}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span
+            className="badge"
+            style={{
+              color: "white",
+              borderColor: "transparent",
+              background: "rgba(255, 255, 255, 0.2)",
+            }}
+          >
+            {statusLabels[appt.status]}
+          </span>
+          <span
+            className="badge"
+            style={{
+              color: "white",
+              borderColor: "transparent",
+              background: "rgba(255, 255, 255, 0.2)",
+            }}
+          >
+            {appt.location_type === "visit" ? "Visit" : "Clinic"}
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -763,7 +817,7 @@ export default function AppointmentsPage() {
             </div>
             {locationFilter === "visit" &&
               range &&
-              ["timeGridDay", "timeGridWeek", "listWeek"].includes(range.view) && (
+              ["day", "week", "agenda"].includes(range.view) && (
                 <button className="btn btn-secondary" onClick={downloadRunSheet}>
                   Download run sheet
                 </button>
@@ -787,72 +841,31 @@ export default function AppointmentsPage() {
 
         <div className="card" style={{ margin: 0, padding: 16 }}>
           {loading && <div className="badge">Loading appointments…</div>}
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, listPlugin]}
-            initialView="timeGridWeek"
-            height="auto"
-            editable
-            selectable
-            selectMirror
-            eventResizableFromStart
-            businessHours={businessHours}
+          <DragAndDropCalendar
+            localizer={localizer}
             events={calendarEvents}
-            nowIndicator
-            headerToolbar={{
-              left: "prev,next today",
-              center: "title",
-              right: "timeGridDay,timeGridWeek,dayGridMonth,listWeek",
-            }}
-            eventClick={handleEventClick}
-            eventDrop={handleEventDrop}
-            eventResize={handleEventResize}
-            select={handleSelect}
-            datesSet={handleDatesSet}
-            eventConstraint={businessHours.length ? "businessHours" : undefined}
-            selectConstraint={businessHours.length ? "businessHours" : undefined}
-            eventDidMount={(info) => {
-              const appt = info.event.extendedProps.appointment as Appointment | undefined;
-              if (!appt) return;
-              info.el.style.backgroundColor = statusColors[appt.status];
-              info.el.style.borderColor = statusColors[appt.status];
-              if (appt.location_type === "visit") {
-                info.el.style.boxShadow = "0 0 0 2px rgba(255,255,255,0.5) inset";
-              }
-            }}
-            eventContent={(arg) => {
-              const appt = arg.event.extendedProps.appointment as Appointment | undefined;
-              if (!appt) return null;
-              return (
-                <div style={{ display: "grid", gap: 4 }}>
-                  <div style={{ fontWeight: 600 }}>
-                    {arg.timeText} {appt.patient.first_name} {appt.patient.last_name}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <span
-                      className="badge"
-                      style={{
-                        color: "white",
-                        borderColor: "transparent",
-                        background: "rgba(255, 255, 255, 0.2)",
-                      }}
-                    >
-                      {statusLabels[appt.status]}
-                    </span>
-                    <span
-                      className="badge"
-                      style={{
-                        color: "white",
-                        borderColor: "transparent",
-                        background: "rgba(255, 255, 255, 0.2)",
-                      }}
-                    >
-                      {appt.location_type === "visit" ? "Visit" : "Clinic"}
-                    </span>
-                  </div>
-                </div>
-              );
-            }}
+            startAccessor="start"
+            endAccessor="end"
+            selectable
+            resizable
+            onSelectSlot={handleSelectSlot}
+            onSelectEvent={handleEventSelect}
+            onEventDrop={handleEventDrop}
+            onEventResize={handleEventResize}
+            draggableAccessor={() => true}
+            view={calendarView}
+            date={currentDate}
+            onView={setCalendarView}
+            onNavigate={handleNavigate}
+            onRangeChange={handleRangeChange}
+            showNowIndicator
+            min={minTime}
+            max={maxTime}
+            culture="en-GB"
+            views={["day", "week", "month", "agenda"]}
+            components={{ event: AppointmentEvent }}
+            eventPropGetter={eventStyleGetter}
+            style={{ height: "70vh" }}
           />
         </div>
 
