@@ -1,6 +1,6 @@
 """appointment cancellation fields
 
-Revision ID: 0012_appointment_cancellation_fields
+Revision ID: 0012_appt_cancel_fields
 Revises: 0011_practice_schedule_settings
 Create Date: 2026-01-07 18:25:00.000000
 """
@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy import inspect
 import sqlalchemy as sa
 
-revision = "0012_appointment_cancellation_fields"
+revision = "0012_appt_cancel_fields"
 down_revision = "0011_practice_schedule_settings"
 branch_labels = None
 depends_on = None
