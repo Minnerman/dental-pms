@@ -90,3 +90,4 @@
 
 - 2026-01-06 Added appointments week view + range API + domiciliary run sheet PDF
 - 2026-01-07 Appointments calendar switched to react-big-calendar (range API `/api/appointments/range`, schedule `/api/settings/schedule`)
+- 2026-01-07 Patient workspace tabs + patient home booking panel wired to appointments day view

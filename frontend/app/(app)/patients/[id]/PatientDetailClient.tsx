@@ -14,6 +14,13 @@ type Actor = {
 
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
 type CareSetting = "CLINIC" | "HOME" | "CARE_HOME" | "HOSPITAL";
+type AppointmentStatus =
+  | "booked"
+  | "arrived"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+  | "no_show";
 
 type Patient = {
   id: number;
@@ -54,6 +61,26 @@ type Note = {
   created_at: string;
   created_by: Actor;
   deleted_at?: string | null;
+};
+
+type AppointmentSummary = {
+  id: number;
+  starts_at: string;
+  ends_at: string;
+  status: AppointmentStatus;
+  appointment_type?: string | null;
+  clinician?: string | null;
+  location?: string | null;
+  location_type: "clinic" | "visit";
+  location_text?: string | null;
+};
+
+type UserOption = {
+  id: number;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
 };
 
 type InvoiceSummary = {
@@ -158,11 +185,33 @@ const careSettingLabels: Record<CareSetting, string> = {
   HOSPITAL: "Hospital",
 };
 
+const appointmentStatusLabels: Record<AppointmentStatus, string> = {
+  booked: "Booked",
+  arrived: "Arrived",
+  in_progress: "In progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  no_show: "No show",
+};
+
+const appointmentStatusIcons: Record<AppointmentStatus, string> = {
+  booked: "📅",
+  arrived: "✅",
+  in_progress: "⏱️",
+  completed: "✔️",
+  cancelled: "✖️",
+  no_show: "⚠️",
+};
+
 export default function PatientDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const patientId = id;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [pastAppointments, setPastAppointments] = useState<AppointmentSummary[]>([]);
+  const [futureAppointments, setFutureAppointments] = useState<AppointmentSummary[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [tab, setTab] = useState<"summary" | "notes" | "invoices" | "estimates">(
     "summary"
   );
@@ -209,6 +258,19 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [estimateItemMinAmount, setEstimateItemMinAmount] = useState("");
   const [estimateItemMaxAmount, setEstimateItemMaxAmount] = useState("");
   const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingDate, setBookingDate] = useState("");
+  const [bookingTime, setBookingTime] = useState("");
+  const [bookingDuration, setBookingDuration] = useState("30");
+  const [bookingClinicianUserId, setBookingClinicianUserId] = useState("");
+  const [bookingAppointmentType, setBookingAppointmentType] = useState("");
+  const [bookingLocation, setBookingLocation] = useState("");
+  const [bookingLocationType, setBookingLocationType] = useState<
+    "clinic" | "visit"
+  >("clinic");
+  const [bookingLocationText, setBookingLocationText] = useState("");
+  const [bookingSaving, setBookingSaving] = useState(false);
 
   async function loadPatient() {
     setLoading(true);
@@ -248,6 +310,73 @@ export default function PatientDetailClient({ id }: { id: string }) {
       }
     } catch {
       setNotes([]);
+    }
+  }
+
+  async function loadAppointments() {
+    setLoadingAppointments(true);
+    setAppointmentsError(null);
+    try {
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const pastStart = new Date(now);
+      pastStart.setFullYear(pastStart.getFullYear() - 1);
+      const futureEnd = new Date(now);
+      futureEnd.setFullYear(futureEnd.getFullYear() + 1);
+      const pastParams = new URLSearchParams();
+      pastParams.set("patient_id", patientId);
+      pastParams.set("from", pastStart.toISOString());
+      pastParams.set("to", nowIso);
+      const futureParams = new URLSearchParams();
+      futureParams.set("patient_id", patientId);
+      futureParams.set("from", nowIso);
+      futureParams.set("to", futureEnd.toISOString());
+
+      const [pastRes, futureRes] = await Promise.all([
+        apiFetch(`/api/appointments?${pastParams.toString()}`),
+        apiFetch(`/api/appointments?${futureParams.toString()}`),
+      ]);
+      if (pastRes.status === 401 || futureRes.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!pastRes.ok || !futureRes.ok) {
+        throw new Error("Failed to load appointments");
+      }
+      const pastData = (await pastRes.json()) as AppointmentSummary[];
+      const futureData = (await futureRes.json()) as AppointmentSummary[];
+      setPastAppointments(
+        pastData.sort(
+          (a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()
+        )
+      );
+      setFutureAppointments(
+        futureData.sort(
+          (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
+        )
+      );
+    } catch (err) {
+      setAppointmentsError(err instanceof Error ? err.message : "Failed to load appointments");
+    } finally {
+      setLoadingAppointments(false);
+    }
+  }
+
+  async function loadUsers() {
+    try {
+      const res = await apiFetch("/api/users");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.ok) {
+        const data = (await res.json()) as UserOption[];
+        setUsers(data.filter((user) => user.is_active));
+      }
+    } catch {
+      setUsers([]);
     }
   }
 
@@ -533,6 +662,8 @@ export default function PatientDetailClient({ id }: { id: string }) {
     void loadInvoices();
     void loadTreatments();
     void loadEstimates();
+    void loadAppointments();
+    void loadUsers();
   }, [patientId]);
 
   const alerts = [
@@ -546,6 +677,44 @@ export default function PatientDetailClient({ id }: { id: string }) {
     return [p.address_line1, p.address_line2, p.city, p.postcode]
       .filter(Boolean)
       .join(", ");
+  }
+
+  function formatAge(dateOfBirth?: string | null) {
+    if (!dateOfBirth) return "—";
+    const dob = new Date(dateOfBirth);
+    if (Number.isNaN(dob.getTime())) return "—";
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    const monthDiff = now.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+      age -= 1;
+    }
+    return `${age}`;
+  }
+
+  function formatDurationMinutes(start: string, end: string) {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "—";
+    const diffMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+    return `${diffMinutes} min`;
+  }
+
+  function formatCurrency(pence: number) {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      minimumFractionDigits: 2,
+    }).format(pence / 100);
+  }
+
+  function getDefaultBookingSlot() {
+    const next = new Date();
+    const minutes = Math.ceil(next.getMinutes() / 10) * 10;
+    next.setMinutes(minutes, 0, 0);
+    const date = next.toLocaleDateString("en-CA");
+    const time = next.toTimeString().slice(0, 5);
+    return { date, time };
   }
 
   async function copyAddress() {
@@ -1047,6 +1216,75 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  function openBookingModal() {
+    const slot = getDefaultBookingSlot();
+    setBookingDate(slot.date);
+    setBookingTime(slot.time);
+    setBookingDuration("30");
+    setBookingClinicianUserId("");
+    setBookingAppointmentType("");
+    setBookingLocation("");
+    if (patient?.care_setting && patient.care_setting !== "CLINIC") {
+      setBookingLocationType("visit");
+      setBookingLocationText(patient.visit_address_text || "");
+    } else {
+      setBookingLocationType("clinic");
+      setBookingLocationText("");
+    }
+    setShowBookingModal(true);
+  }
+
+  async function createBooking(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bookingDate || !bookingTime) return;
+    const start = new Date(`${bookingDate}T${bookingTime}`);
+    if (Number.isNaN(start.getTime())) return;
+    const duration = Number(bookingDuration || "30");
+    const end = new Date(start);
+    end.setMinutes(end.getMinutes() + duration);
+    if (bookingLocationType === "visit" && !bookingLocationText.trim()) {
+      setError("Visit address is required for domiciliary visits.");
+      return;
+    }
+    setBookingSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch("/api/appointments", {
+        method: "POST",
+        body: JSON.stringify({
+          patient_id: Number(patientId),
+          clinician_user_id: bookingClinicianUserId
+            ? Number(bookingClinicianUserId)
+            : undefined,
+          starts_at: start.toISOString(),
+          ends_at: end.toISOString(),
+          status: "booked",
+          appointment_type: bookingAppointmentType.trim() || undefined,
+          location: bookingLocation.trim() || undefined,
+          location_type: bookingLocationType,
+          location_text: bookingLocationText.trim() || undefined,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to create appointment (HTTP ${res.status})`);
+      }
+      const created = (await res.json()) as AppointmentSummary;
+      setShowBookingModal(false);
+      await loadAppointments();
+      router.push(`/appointments?date=${bookingDate}&appointment=${created.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create appointment");
+    } finally {
+      setBookingSaving(false);
+    }
+  }
+
   return (
     <div className="app-grid">
       <div>
@@ -1227,7 +1465,47 @@ export default function PatientDetailClient({ id }: { id: string }) {
               </div>
 
               {tab === "summary" ? (
-                <form onSubmit={savePatient} className="stack">
+                <div className="stack">
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div className="label">Patient home</div>
+                      <div style={{ fontSize: 18, fontWeight: 600 }}>
+                        {patient.first_name} {patient.last_name}
+                      </div>
+                      <div style={{ color: "var(--muted)" }}>
+                        DOB {patient.date_of_birth || "—"} · Age{" "}
+                        {formatAge(patient.date_of_birth)}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div className="badge">Recall due: —</div>
+                      <div className="badge">
+                        Balance:{" "}
+                        {loadingInvoices
+                          ? "Loading"
+                          : formatCurrency(
+                              invoices.reduce((sum, invoice) => sum + invoice.balance_pence, 0)
+                            )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={openBookingModal}
+                      >
+                        Book appointment
+                      </button>
+                    </div>
+                  </div>
+
+                  <form onSubmit={savePatient} className="stack">
                   <div className="grid grid-2">
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">First name</label>
@@ -1578,7 +1856,146 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       </button>
                     )}
                   </div>
-                </form>
+                  </form>
+
+                  <div className="grid grid-2">
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack">
+                        <div className="row">
+                          <div>
+                            <h4 style={{ marginTop: 0 }}>Finance</h4>
+                            <p style={{ color: "var(--muted)" }}>
+                              Recent invoices and balance snapshot.
+                            </p>
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <div>
+                            <div className="label">Current balance</div>
+                            <div style={{ fontSize: 20, fontWeight: 600 }}>
+                              {loadingInvoices
+                                ? "Loading..."
+                                : formatCurrency(
+                                    invoices.reduce(
+                                      (sum, invoice) => sum + invoice.balance_pence,
+                                      0
+                                    )
+                                  )}
+                            </div>
+                          </div>
+                          {invoices.length === 0 ? (
+                            <div className="notice">No invoices yet.</div>
+                          ) : (
+                            invoices.slice(0, 4).map((invoice) => (
+                              <div key={invoice.id} className="card" style={{ margin: 0 }}>
+                                <div style={{ fontWeight: 600 }}>
+                                  {invoice.invoice_number} ·{" "}
+                                  {invoice.issue_date || invoice.created_at.slice(0, 10)}
+                                </div>
+                                <div style={{ color: "var(--muted)" }}>
+                                  Balance {formatCurrency(invoice.balance_pence)}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack">
+                        <div className="row">
+                          <div>
+                            <h4 style={{ marginTop: 0 }}>Appointments</h4>
+                            <p style={{ color: "var(--muted)" }}>
+                              Upcoming and recent visits for this patient.
+                            </p>
+                          </div>
+                        </div>
+                        {loadingAppointments ? (
+                          <div className="badge">Loading appointments…</div>
+                        ) : appointmentsError ? (
+                          <div className="notice">{appointmentsError}</div>
+                        ) : (
+                          <div className="stack">
+                            <div>
+                              <div className="label">Future</div>
+                              {futureAppointments.length === 0 ? (
+                                <div className="notice">No upcoming appointments.</div>
+                              ) : (
+                                futureAppointments.slice(0, 6).map((appt) => (
+                                  <button
+                                    key={appt.id}
+                                    type="button"
+                                    className="card"
+                                    style={{
+                                      margin: "8px 0 0",
+                                      textAlign: "left",
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={() => {
+                                      const date = appt.starts_at.slice(0, 10);
+                                      router.push(
+                                        `/appointments?date=${date}&appointment=${appt.id}`
+                                      );
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 600 }}>
+                                      {appointmentStatusIcons[appt.status]}{" "}
+                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                        weekday: "short",
+                                        day: "2-digit",
+                                        month: "short",
+                                      })}{" "}
+                                      ·{" "}
+                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}{" "}
+                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                    </div>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {appointmentStatusLabels[appt.status]} ·{" "}
+                                      {appt.appointment_type || "General"}
+                                    </div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                            <div>
+                              <div className="label">Past</div>
+                              {pastAppointments.length === 0 ? (
+                                <div className="notice">No past appointments.</div>
+                              ) : (
+                                pastAppointments.slice(0, 6).map((appt) => (
+                                  <div key={appt.id} className="card" style={{ margin: "8px 0 0" }}>
+                                    <div style={{ fontWeight: 600 }}>
+                                      {appointmentStatusIcons[appt.status]}{" "}
+                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                        weekday: "short",
+                                        day: "2-digit",
+                                        month: "short",
+                                      })}{" "}
+                                      ·{" "}
+                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}{" "}
+                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                    </div>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {appointmentStatusLabels[appt.status]} ·{" "}
+                                      {appt.appointment_type || "General"}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ) : tab === "notes" ? (
                 <div className="stack">
                   <div className="row">
@@ -2302,6 +2719,130 @@ export default function PatientDetailClient({ id }: { id: string }) {
               )}
             </div>
           </div>
+
+          {showBookingModal && (
+            <div className="card" style={{ margin: 0 }}>
+              <div className="stack">
+                <div className="row">
+                  <div>
+                    <h3 style={{ marginTop: 0 }}>Book appointment</h3>
+                    <p style={{ color: "var(--muted)" }}>
+                      Appointment for {patient.first_name} {patient.last_name}.
+                    </p>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowBookingModal(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+                <form onSubmit={createBooking} className="stack">
+                  <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Date</label>
+                      <input
+                        className="input"
+                        type="date"
+                        value={bookingDate}
+                        onChange={(e) => setBookingDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Start time</label>
+                      <input
+                        className="input"
+                        type="time"
+                        value={bookingTime}
+                        onChange={(e) => setBookingTime(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Duration</label>
+                    <select
+                      className="input"
+                      value={bookingDuration}
+                      onChange={(e) => setBookingDuration(e.target.value)}
+                    >
+                      {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map(
+                        (minutes) => (
+                          <option key={minutes} value={String(minutes)}>
+                            {minutes} minutes
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Treatment type</label>
+                    <input
+                      className="input"
+                      value={bookingAppointmentType}
+                      onChange={(e) => setBookingAppointmentType(e.target.value)}
+                      placeholder="Exam, cleaning, emergency"
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Clinician (optional)</label>
+                    <select
+                      className="input"
+                      value={bookingClinicianUserId}
+                      onChange={(e) => setBookingClinicianUserId(e.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.full_name || user.email} ({user.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Location / room</label>
+                    <input
+                      className="input"
+                      value={bookingLocation}
+                      onChange={(e) => setBookingLocation(e.target.value)}
+                      placeholder="Room 1"
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Location type</label>
+                    <select
+                      className="input"
+                      value={bookingLocationType}
+                      onChange={(e) => {
+                        const next = e.target.value as "clinic" | "visit";
+                        setBookingLocationType(next);
+                        if (next === "clinic") setBookingLocationText("");
+                      }}
+                    >
+                      <option value="clinic">Clinic</option>
+                      <option value="visit">Visit</option>
+                    </select>
+                  </div>
+                  {bookingLocationType === "visit" && (
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Visit address</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={bookingLocationText}
+                        onChange={(e) => setBookingLocationText(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <button className="btn btn-primary" disabled={bookingSaving}>
+                    {bookingSaving ? "Saving..." : "Create appointment"}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
 
           <div className="card">
             <Timeline items={timeline} title="Recent activity" />
