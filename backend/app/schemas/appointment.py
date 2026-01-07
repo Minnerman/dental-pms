@@ -37,6 +37,7 @@ class AppointmentUpdate(BaseModel):
     location_text: Optional[str] = None
     is_domiciliary: Optional[bool] = None
     visit_address: Optional[str] = None
+    cancel_reason: Optional[str] = None
 
 
 class AppointmentOut(BaseModel):
@@ -56,6 +57,9 @@ class AppointmentOut(BaseModel):
     location_text: Optional[str] = None
     is_domiciliary: bool
     visit_address: Optional[str] = None
+    cancel_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    cancelled_by_user_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     created_by: ActorOut

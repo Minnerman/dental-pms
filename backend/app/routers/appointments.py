@@ -210,6 +210,17 @@ def update_appointment(
         appt.ends_at = payload.ends_at
     if payload.status is not None:
         appt.status = payload.status
+        if appt.status in (AppointmentStatus.cancelled, AppointmentStatus.no_show):
+            if payload.cancel_reason is not None:
+                appt.cancel_reason = payload.cancel_reason
+            if not appt.cancelled_at:
+                appt.cancelled_at = datetime.now(timezone.utc)
+            appt.cancelled_by_user_id = user.id
+        else:
+            if payload.cancel_reason is not None:
+                appt.cancel_reason = None
+            appt.cancelled_at = None
+            appt.cancelled_by_user_id = None
     if payload.clinician is not None:
         appt.clinician = payload.clinician
     if payload.clinician_user_id is not None:
@@ -226,6 +237,8 @@ def update_appointment(
         appt.is_domiciliary = payload.is_domiciliary
     if payload.visit_address is not None:
         appt.visit_address = payload.visit_address
+    if payload.cancel_reason is not None and payload.status is None:
+        appt.cancel_reason = payload.cancel_reason
     if payload.location_type is None and payload.is_domiciliary is not None:
         appt.location_type = (
             AppointmentLocationType.visit

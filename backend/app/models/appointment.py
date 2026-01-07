@@ -49,6 +49,11 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
     location_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_domiciliary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     visit_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
 
     patient = relationship("Patient", back_populates="appointments", lazy="joined")
     invoices = relationship("Invoice", back_populates="appointment")
