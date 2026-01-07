@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
+import StatusIcon from "@/components/ui/StatusIcon";
 
 type Actor = {
   id: number;
@@ -195,14 +196,6 @@ const appointmentStatusLabels: Record<AppointmentStatus, string> = {
   no_show: "No show",
 };
 
-const appointmentStatusIcons: Record<AppointmentStatus, string> = {
-  booked: "📅",
-  arrived: "✅",
-  in_progress: "⏱️",
-  completed: "✔️",
-  cancelled: "✖️",
-  no_show: "⚠️",
-};
 
 export default function PatientDetailClient({ id }: { id: string }) {
   const router = useRouter();
@@ -1953,7 +1946,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                       }}
                                     >
                                       <div style={{ fontWeight: 600 }}>
-                                        {appointmentStatusIcons[appt.status]}{" "}
+                                        <StatusIcon status={appt.status} />{" "}
                                         {new Date(appt.starts_at).toLocaleDateString("en-GB", {
                                           weekday: "short",
                                           day: "2-digit",
@@ -2006,7 +1999,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                       }}
                                     >
                                       <div style={{ fontWeight: 600 }}>
-                                        {appointmentStatusIcons[appt.status]}{" "}
+                                        <StatusIcon status={appt.status} />{" "}
                                         {new Date(appt.starts_at).toLocaleDateString("en-GB", {
                                           weekday: "short",
                                           day: "2-digit",

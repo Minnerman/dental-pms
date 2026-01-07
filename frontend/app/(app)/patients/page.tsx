@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
+import HeaderBar from "@/components/ui/HeaderBar";
+import Panel from "@/components/ui/Panel";
+import Table from "@/components/ui/Table";
 
 type Actor = {
   id: number;
@@ -42,6 +45,8 @@ export default function PatientsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openFirst, setOpenFirst] = useState(false);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   async function loadPatients(filters?: {
     query?: string;
@@ -49,6 +54,7 @@ export default function PatientsPage() {
     dob?: string;
     category?: PatientCategory | "";
     includeDeleted?: boolean;
+    openFirst?: boolean;
   }) {
     setLoading(true);
     setError(null);
@@ -70,6 +76,9 @@ export default function PatientsPage() {
       }
       const data = (await res.json()) as Patient[];
       setPatients(data);
+      if (filters?.openFirst && data.length > 0) {
+        router.push(`/patients/${data[0].id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load patients");
     } finally {
@@ -81,23 +90,26 @@ export default function PatientsPage() {
     void loadPatients();
   }, []);
 
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
   return (
     <div className="app-grid">
-      <section className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <h2 style={{ marginTop: 0 }}>Patients</h2>
-            <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-              Search, create, and view patient records.
-            </p>
-          </div>
-          <Link className="btn btn-primary" href="/patients/new">
-            New patient
-          </Link>
-        </div>
+      <Panel>
+        <HeaderBar
+          title="Patients"
+          subtitle="Search, create, and view patient records."
+          actions={
+            <Link className="btn btn-primary" href="/patients/new">
+              New patient
+            </Link>
+          }
+        />
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <input
+            ref={searchRef}
             className="input"
             placeholder="Search name, email, phone"
             value={query}
@@ -109,6 +121,7 @@ export default function PatientsPage() {
                   email: emailFilter,
                   dob: dobFilter,
                   category: categoryFilter,
+                  openFirst: true,
                 });
               }
             }}
@@ -184,20 +197,27 @@ export default function PatientsPage() {
           {loading ? (
             <div className="badge">Loading patients…</div>
           ) : (
-            <table className="table">
+            <Table className="table-compact table-hover table-sticky">
               <thead>
                 <tr>
                   <th>Name</th>
                   <th>DOB</th>
                   <th>Phone</th>
                   <th>Category</th>
+                  <th>Balance</th>
+                  <th>Recall</th>
+                  <th>Last visit</th>
                   <th>Last edited</th>
                   <th>Last edited by</th>
                 </tr>
               </thead>
               <tbody>
                 {patients.map((patient) => (
-                  <tr key={patient.id}>
+                  <tr
+                    key={patient.id}
+                    onDoubleClick={() => router.push(`/patients/${patient.id}`)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td>
                       <Link href={`/patients/${patient.id}`}>
                         {patient.first_name} {patient.last_name}
@@ -213,15 +233,24 @@ export default function PatientsPage() {
                     <td>
                       <span className="badge">{categoryLabels[patient.patient_category]}</span>
                     </td>
+                    <td>
+                      <span className="badge">£—</span>
+                    </td>
+                    <td>
+                      <span className="badge">—</span>
+                    </td>
+                    <td>
+                      <span className="badge">—</span>
+                    </td>
                     <td>{new Date(patient.updated_at).toLocaleString()}</td>
                     <td>{patient.updated_by?.email || patient.created_by?.email || "—"}</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           )}
         </div>
-      </section>
+      </Panel>
     </div>
   );
 }
