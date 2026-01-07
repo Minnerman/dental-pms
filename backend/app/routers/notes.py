@@ -11,7 +11,7 @@ from app.models.note import Note
 from app.models.patient import Patient
 from app.models.appointment import Appointment
 from app.models.user import User
-from app.schemas.note import NoteCreate, NoteOut
+from app.schemas.note import NoteCreate, NoteOut, NoteUpdate
 from app.schemas.audit_log import AuditLogOut
 from app.services.audit import log_event, snapshot_model
 
@@ -213,6 +213,42 @@ def create_note_global(
         entity_type="note",
         entity_id=str(note.id),
         before_obj=None,
+        after_obj=note,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@router.patch("/{note_id}", response_model=NoteOut)
+def update_note(
+    note_id: int,
+    payload: NoteUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    note = db.get(Note, note_id)
+    if not note or note.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+
+    before_data = snapshot_model(note)
+    if payload.body is not None:
+        note.body = payload.body
+    if payload.note_type is not None:
+        note.note_type = payload.note_type
+    note.updated_by_user_id = user.id
+    db.add(note)
+    log_event(
+        db,
+        actor=user,
+        action="note.updated",
+        entity_type="note",
+        entity_id=str(note.id),
+        before_data=before_data,
         after_obj=note,
         request_id=request_id,
         ip_address=request.client.host if request else None,

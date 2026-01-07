@@ -14,6 +14,11 @@ class NoteCreate(BaseModel):
     appointment_id: Optional[int] = None
 
 
+class NoteUpdate(BaseModel):
+    body: Optional[str] = None
+    note_type: Optional[NoteType] = None
+
+
 class NoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
