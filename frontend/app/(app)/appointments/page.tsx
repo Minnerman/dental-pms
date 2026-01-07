@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Calendar,
   dateFnsLocalizer,
@@ -69,6 +69,11 @@ type Patient = {
   last_name: string;
   care_setting: CareSetting;
   visit_address_text?: string | null;
+  phone?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  postcode?: string | null;
 };
 type PatientDetail = {
   id: number;
@@ -158,13 +163,40 @@ const statusLabels: Record<AppointmentStatus, string> = {
   no_show: "No show",
 };
 
-const statusColors: Record<AppointmentStatus, string> = {
-  booked: "#2f6fed",
-  arrived: "#2da44e",
-  in_progress: "#d97706",
-  completed: "#6b7280",
-  cancelled: "#dc2626",
-  no_show: "#7f1d1d",
+const statusThemeTokens: Record<
+  AppointmentStatus,
+  { bg: string; border: string; text: string }
+> = {
+  booked: {
+    bg: "var(--cal-event-booked-bg)",
+    border: "var(--cal-event-booked-border)",
+    text: "var(--cal-event-booked-text)",
+  },
+  arrived: {
+    bg: "var(--cal-event-arrived-bg)",
+    border: "var(--cal-event-arrived-border)",
+    text: "var(--cal-event-arrived-text)",
+  },
+  in_progress: {
+    bg: "var(--cal-event-in-progress-bg)",
+    border: "var(--cal-event-in-progress-border)",
+    text: "var(--cal-event-in-progress-text)",
+  },
+  completed: {
+    bg: "var(--cal-event-completed-bg)",
+    border: "var(--cal-event-completed-border)",
+    text: "var(--cal-event-completed-text)",
+  },
+  cancelled: {
+    bg: "var(--cal-event-cancelled-bg)",
+    border: "var(--cal-event-cancelled-border)",
+    text: "var(--cal-event-cancelled-text)",
+  },
+  no_show: {
+    bg: "var(--cal-event-no-show-bg)",
+    border: "var(--cal-event-no-show-border)",
+    text: "var(--cal-event-no-show-text)",
+  },
 };
 
 function toDateKey(value: Date) {
@@ -203,6 +235,14 @@ function normalizeRangeEnd(start: Date, end: Date) {
     normalized.setDate(normalized.getDate() - 1);
   }
   return normalized;
+}
+
+function buildShortAddress(patient?: Patient) {
+  if (!patient) return "";
+  if (patient.visit_address_text) return patient.visit_address_text;
+  return [patient.address_line1, patient.address_line2, patient.city, patient.postcode]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function getScheduleDayIndex(date: Date) {
@@ -256,6 +296,7 @@ function isRangeWithinSchedule(
 
 export default function AppointmentsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -288,6 +329,9 @@ export default function AppointmentsPage() {
   const [range, setRange] = useState<CalendarRange | null>(null);
   const [calendarView, setCalendarView] = useState<View>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [highlightedAppointmentId, setHighlightedAppointmentId] = useState<string | null>(
+    null
+  );
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -308,6 +352,10 @@ export default function AppointmentsPage() {
       })),
     [appointments]
   );
+
+  const patientLookup = useMemo(() => {
+    return new Map(patients.map((patient) => [patient.id, patient]));
+  }, [patients]);
 
   const { minTime, maxTime } = useMemo(() => {
     if (!schedule) return { minTime: undefined, maxTime: undefined };
@@ -708,6 +756,19 @@ export default function AppointmentsPage() {
     });
   }
 
+  useEffect(() => {
+    if (!searchParams) return;
+    const targetDate = searchParams.get("date");
+    const appointmentParam = searchParams.get("appointment");
+    setHighlightedAppointmentId(appointmentParam);
+    if (!targetDate) return;
+    const parsed = new Date(`${targetDate}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return;
+    setCalendarView("day");
+    setCurrentDate(parsed);
+    updateRange(parsed, parsed, "day", parsed);
+  }, [searchParams]);
+
   function handleRangeChange(nextRange: Date[] | { start: Date; end: Date }, view?: View) {
     const nextView = view ?? calendarView;
     if (Array.isArray(nextRange)) {
@@ -813,12 +874,18 @@ export default function AppointmentsPage() {
   }
 
   function eventStyleGetter(event: CalendarEvent) {
-    const color = statusColors[event.resource.status];
+    const theme = statusThemeTokens[event.resource.status];
+    const isHighlighted =
+      highlightedAppointmentId && String(event.resource.id) === highlightedAppointmentId;
     return {
       style: {
-        backgroundColor: color,
-        borderColor: color,
-        color: "white",
+        backgroundColor: theme.bg,
+        borderColor: theme.border,
+        color: theme.text,
+        borderStyle: "solid",
+        borderWidth: isHighlighted ? 2 : 1,
+        outline: isHighlighted ? "2px solid var(--accent)" : undefined,
+        outlineOffset: isHighlighted ? 1 : undefined,
         boxShadow:
           event.resource.location_type === "visit"
             ? "0 0 0 2px rgba(255,255,255,0.5) inset"
@@ -849,6 +916,9 @@ export default function AppointmentsPage() {
 
   function AppointmentEvent({ event }: { event: CalendarEvent }) {
     const appt = event.resource;
+    const patientDetail = patientLookup.get(appt.patient.id);
+    const phone = patientDetail?.phone || "";
+    const address = buildShortAddress(patientDetail);
     const timeLabel = `${format(event.start, "HH:mm")}-${format(event.end, "HH:mm")}`;
     const secondaryParts = [
       appt.clinician ? `Clinician: ${appt.clinician}` : null,
@@ -859,6 +929,13 @@ export default function AppointmentsPage() {
         <div style={{ fontWeight: 600, lineHeight: 1.2 }}>
           {timeLabel} {event.title}
         </div>
+        {calendarView === "day" && (phone || address) && (
+          <div style={{ fontSize: 12, opacity: 0.9 }}>
+            {[phone ? `Phone: ${phone}` : null, address ? `Address: ${address}` : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+        )}
         {secondaryParts.length > 0 && (
           <div style={{ fontSize: 12, opacity: 0.9 }}>{secondaryParts.join(" · ")}</div>
         )}
@@ -952,6 +1029,8 @@ export default function AppointmentsPage() {
             endAccessor="end"
             selectable
             resizable
+            step={10}
+            timeslots={1}
             onSelectSlot={handleSelectSlot}
             onSelectEvent={handleEventSelect}
             onEventDrop={handleEventDrop}
