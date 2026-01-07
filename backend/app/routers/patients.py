@@ -2,12 +2,13 @@ from calendar import monthrange
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.audit_log import AuditLog
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.services.audit import log_event, snapshot_model
 from app.schemas.audit_log import AuditLogOut
@@ -18,6 +19,7 @@ from app.schemas.patient import (
     PatientUpdate,
     RecallUpdate,
 )
+from app.schemas.ledger import LedgerChargeCreate, LedgerEntryOut, LedgerPaymentCreate
 from app.models.user import User
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -349,3 +351,133 @@ def patient_audit(
         .offset(offset)
     )
     return list(db.scalars(stmt))
+
+
+@router.get("/{patient_id}/ledger", response_model=list[LedgerEntryOut])
+def list_patient_ledger(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    stmt = (
+        select(PatientLedgerEntry)
+        .where(PatientLedgerEntry.patient_id == patient_id)
+        .order_by(PatientLedgerEntry.created_at.asc(), PatientLedgerEntry.id.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(db.scalars(stmt))
+
+
+@router.get("/{patient_id}/balance")
+def get_patient_balance(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    balance = (
+        db.scalar(
+            select(func.coalesce(func.sum(PatientLedgerEntry.amount_pence), 0)).where(
+                PatientLedgerEntry.patient_id == patient_id
+            )
+        )
+        or 0
+    )
+    return {"balance_pence": balance}
+
+
+@router.post("/{patient_id}/payments", response_model=LedgerEntryOut)
+def add_patient_payment(
+    patient_id: int,
+    payload: LedgerPaymentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    if payload.amount_pence <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be positive")
+
+    entry = PatientLedgerEntry(
+        patient_id=patient_id,
+        entry_type=LedgerEntryType.payment,
+        amount_pence=-abs(payload.amount_pence),
+        method=payload.method,
+        reference=payload.reference,
+        note=payload.note,
+        related_invoice_id=payload.related_invoice_id,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(entry)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="ledger.payment_recorded",
+        entity_type="patient",
+        entity_id=str(patient_id),
+        before_obj=None,
+        after_obj=entry,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.post("/{patient_id}/charges", response_model=LedgerEntryOut)
+def add_patient_charge(
+    patient_id: int,
+    payload: LedgerChargeCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    if payload.amount_pence <= 0:
+        raise HTTPException(status_code=400, detail="Charge amount must be positive")
+    if payload.entry_type not in (LedgerEntryType.charge, LedgerEntryType.adjustment):
+        raise HTTPException(status_code=400, detail="Invalid ledger entry type")
+
+    entry = PatientLedgerEntry(
+        patient_id=patient_id,
+        entry_type=payload.entry_type,
+        amount_pence=abs(payload.amount_pence),
+        reference=payload.reference,
+        note=payload.note,
+        related_invoice_id=payload.related_invoice_id,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(entry)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="ledger.charge_recorded",
+        entity_type="patient",
+        entity_id=str(patient_id),
+        before_obj=None,
+        after_obj=entry,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(entry)
+    return entry

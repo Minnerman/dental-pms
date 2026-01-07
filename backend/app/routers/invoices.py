@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.appointment import Appointment
 from app.models.invoice import Invoice, InvoiceLine, InvoiceStatus, Payment
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.invoice import (
@@ -56,6 +57,46 @@ def update_status_from_payments(invoice: Invoice) -> None:
         invoice.status = InvoiceStatus.part_paid
     else:
         invoice.status = InvoiceStatus.paid
+
+
+def ensure_invoice_ledger_charge(
+    db: Session,
+    invoice: Invoice,
+    user: User,
+    request: Request,
+    request_id: str | None,
+):
+    if invoice.total_pence <= 0:
+        return
+    existing = db.scalar(
+        select(PatientLedgerEntry)
+        .where(PatientLedgerEntry.related_invoice_id == invoice.id)
+        .where(PatientLedgerEntry.entry_type == LedgerEntryType.charge)
+    )
+    if existing:
+        return
+    entry = PatientLedgerEntry(
+        patient_id=invoice.patient_id,
+        entry_type=LedgerEntryType.charge,
+        amount_pence=invoice.total_pence,
+        related_invoice_id=invoice.id,
+        note=f"Invoice {invoice.invoice_number} issued",
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(entry)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="ledger.invoice_charge_recorded",
+        entity_type="invoice",
+        entity_id=str(invoice.id),
+        before_obj=None,
+        after_obj=entry,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
 
 
 @router.post("", response_model=InvoiceOut, status_code=status.HTTP_201_CREATED)
@@ -346,6 +387,7 @@ def issue_invoice(
         invoice.issue_date = date.today()
     invoice.status = InvoiceStatus.issued
     invoice.updated_by_user_id = user.id
+    ensure_invoice_ledger_charge(db, invoice, user, request, request_id)
     log_event(
         db,
         actor=user,
@@ -423,6 +465,19 @@ def add_payment(
         received_by_user_id=user.id,
     )
     db.add(payment)
+    db.flush()
+    ledger_entry = PatientLedgerEntry(
+        patient_id=invoice.patient_id,
+        entry_type=LedgerEntryType.payment,
+        amount_pence=-abs(payload.amount_pence),
+        method=payload.method,
+        reference=payload.reference,
+        note=f"Payment for {invoice.invoice_number}",
+        related_invoice_id=invoice.id,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(ledger_entry)
     db.flush()
 
     before_status = invoice.status

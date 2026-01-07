@@ -5,6 +5,7 @@ from app.models.patient import CareSetting, Patient, PatientCategory, RecallStat
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.note import Note, NoteType
 from app.models.invoice import Invoice, InvoiceLine, InvoiceStatus, Payment, PaymentMethod
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.treatment import Treatment, TreatmentFee, FeeType
 from app.models.estimate import Estimate, EstimateItem, EstimateStatus, EstimateFeeType
 from app.models.practice_schedule import PracticeHour, PracticeClosure, PracticeOverride
@@ -28,6 +29,8 @@ __all__ = [
     "InvoiceStatus",
     "Payment",
     "PaymentMethod",
+    "PatientLedgerEntry",
+    "LedgerEntryType",
     "Treatment",
     "TreatmentFee",
     "FeeType",
