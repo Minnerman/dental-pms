@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
+import HeaderBar from "@/components/ui/HeaderBar";
+import Panel from "@/components/ui/Panel";
+import Table from "@/components/ui/Table";
 
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
 
@@ -278,126 +281,63 @@ export default function TreatmentsPage() {
 
   return (
     <div className="app-grid">
-      <section className="card" style={{ display: "grid", gap: 12 }}>
-        <div>
-          <h2 style={{ marginTop: 0 }}>Treatments</h2>
-          <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-            Maintain the treatment catalogue and category-specific fee schedules.
-          </p>
-        </div>
+      <Panel>
+        <HeaderBar
+          title="Treatments"
+          subtitle="Maintain the treatment catalogue and category-specific fee schedules."
+          actions={
+            <button className="btn btn-secondary" onClick={loadTreatments}>
+              Refresh
+            </button>
+          }
+        />
 
         {error && <div className="notice">{error}</div>}
-        {loading ? (
-          <div className="badge">Loading treatments…</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Active</th>
-                <th>Denplan default</th>
-                <th>Duration</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {treatments.map((treatment) => (
-                <tr key={treatment.id}>
-                  <td>{treatment.name}</td>
-                  <td>{treatment.is_active ? "Yes" : "No"}</td>
-                  <td>{treatment.is_denplan_included_default ? "Included" : "Excluded"}</td>
-                  <td>{treatment.default_duration_minutes ?? "-"}</td>
-                  <td>
-                    <button
-                      className="btn btn-secondary"
+
+        <div className="grid grid-2">
+          <div className="card" style={{ margin: 0 }}>
+            {loading ? (
+              <div className="badge">Loading treatments…</div>
+            ) : (
+              <Table className="table-compact table-hover table-sticky">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Treatment</th>
+                    <th>Active</th>
+                    <th>Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {treatments.map((treatment) => (
+                    <tr
+                      key={treatment.id}
                       onClick={() => setSelected(treatment)}
+                      style={{ cursor: "pointer" }}
                     >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+                      <td>{treatment.code || "—"}</td>
+                      <td>{treatment.name}</td>
+                      <td>{treatment.is_active ? "Yes" : "No"}</td>
+                      <td>{treatment.default_duration_minutes ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </div>
 
-      <section className="card" style={{ display: "grid", gap: 16 }}>
-        <div>
-          <h3 style={{ marginTop: 0 }}>New treatment</h3>
-        </div>
-        <div className="grid grid-2">
-          <div className="stack" style={{ gap: 8 }}>
-            <label className="label">Name</label>
-            <input
-              className="input"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
-          </div>
-          <div className="stack" style={{ gap: 8 }}>
-            <label className="label">Code</label>
-            <input
-              className="input"
-              value={newCode}
-              onChange={(e) => setNewCode(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="stack" style={{ gap: 8 }}>
-          <label className="label">Description</label>
-          <textarea
-            className="input"
-            rows={3}
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-          />
-        </div>
-        <div className="grid grid-2">
-          <div className="stack" style={{ gap: 8 }}>
-            <label className="label">Default duration (minutes)</label>
-            <input
-              className="input"
-              value={newDuration}
-              onChange={(e) => setNewDuration(e.target.value)}
-            />
-          </div>
-          <div className="stack" style={{ gap: 8 }}>
-            <label className="label">Active</label>
-            <select
-              className="input"
-              value={newActive ? "yes" : "no"}
-              onChange={(e) => setNewActive(e.target.value === "yes")}
-            >
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </div>
-        </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={newDenplanIncluded}
-            onChange={(e) => setNewDenplanIncluded(e.target.checked)}
-          />
-          Denplan included by default
-        </label>
-        <button className="btn btn-primary" onClick={createTreatment} disabled={saving}>
-          {saving ? "Saving..." : "Create treatment"}
-        </button>
-      </section>
-
-      <section className="card" style={{ display: "grid", gap: 16 }}>
-        <div>
-          <h3 style={{ marginTop: 0 }}>Edit treatment</h3>
-          {!hasSelection && (
-            <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-              Select a treatment to edit details and fees.
-            </p>
-          )}
-        </div>
-        {selected && (
           <div className="stack">
+            <div className="card">
+              <div>
+                <h3 style={{ marginTop: 0 }}>Edit treatment</h3>
+                {!hasSelection && (
+                  <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                    Select a treatment to edit details and fees.
+                  </p>
+                )}
+              </div>
+              {selected && (
+                <div className="stack" style={{ marginTop: 16 }}>
             <div className="grid grid-2">
               <div className="stack" style={{ gap: 8 }}>
                 <label className="label">Name</label>
@@ -586,9 +526,77 @@ export default function TreatmentsPage() {
                 </button>
               </div>
             </div>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div>
+                <h3 style={{ marginTop: 0 }}>New treatment</h3>
+              </div>
+              <div className="grid grid-2">
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Name</label>
+                  <input
+                    className="input"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Code</label>
+                  <input
+                    className="input"
+                    value={newCode}
+                    onChange={(e) => setNewCode(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Description</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-2">
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Default duration (minutes)</label>
+                  <input
+                    className="input"
+                    value={newDuration}
+                    onChange={(e) => setNewDuration(e.target.value)}
+                  />
+                </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Active</label>
+                  <select
+                    className="input"
+                    value={newActive ? "yes" : "no"}
+                    onChange={(e) => setNewActive(e.target.value === "yes")}
+                  >
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={newDenplanIncluded}
+                  onChange={(e) => setNewDenplanIncluded(e.target.checked)}
+                />
+                Denplan included by default
+              </label>
+              <button className="btn btn-primary" onClick={createTreatment} disabled={saving}>
+                {saving ? "Saving..." : "Create treatment"}
+              </button>
+            </div>
           </div>
-        )}
-      </section>
+        </div>
+      </Panel>
     </div>
   );
 }

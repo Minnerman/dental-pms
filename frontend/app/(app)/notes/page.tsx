@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
+import HeaderBar from "@/components/ui/HeaderBar";
+import Panel from "@/components/ui/Panel";
+import Table from "@/components/ui/Table";
 
 type Actor = { id: number; email: string; role: string };
 
@@ -30,6 +33,10 @@ export default function NotesPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [query, setQuery] = useState("");
+  const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [editType, setEditType] = useState("clinical");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const patientMap = useMemo(() => {
     return new Map(patients.map((p) => [p.id, p]));
@@ -95,6 +102,20 @@ export default function NotesPage() {
     void loadPatients();
   }, []);
 
+  useEffect(() => {
+    if (!selectedNoteId && notes.length > 0) {
+      setSelectedNoteId(notes[0].id);
+    }
+  }, [notes, selectedNoteId]);
+
+  useEffect(() => {
+    if (!selectedNoteId) return;
+    const selected = notes.find((note) => note.id === selectedNoteId);
+    if (!selected) return;
+    setEditBody(selected.body);
+    setEditType(selected.note_type);
+  }, [selectedNoteId, notes]);
+
   async function toggleArchive(note: Note) {
     const action = note.deleted_at ? "restore" : "archive";
     if (!confirm(`${note.deleted_at ? "Restore" : "Archive"} this note?`)) return;
@@ -118,34 +139,62 @@ export default function NotesPage() {
     }
   }
 
+  async function saveNoteEdit() {
+    if (!selectedNoteId) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/notes/${selectedNoteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          body: editBody.trim(),
+          note_type: editType,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update note (HTTP ${res.status})`);
+      }
+      await loadNotes();
+      setNotice("Note updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update note");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <div className="app-grid">
-      <section className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <h2 style={{ marginTop: 0 }}>Notes</h2>
-            <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-              Review and manage clinical notes across patients.
-            </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  setShowArchived(next);
-                  void loadNotes(next);
-                }}
-              />
-              Show archived
-            </label>
-            <button className="btn btn-secondary" onClick={() => loadNotes()}>
-              Refresh
-            </button>
-          </div>
-        </div>
+      <Panel>
+        <HeaderBar
+          title="Notes"
+          subtitle="Review and manage clinical notes across patients."
+          actions={
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setShowArchived(next);
+                    void loadNotes(next);
+                  }}
+                />
+                Show archived
+              </label>
+              <button className="btn btn-secondary" onClick={() => loadNotes()}>
+                Refresh
+              </button>
+            </>
+          }
+        />
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <input
@@ -159,74 +208,108 @@ export default function NotesPage() {
         {notice && <div className="notice">{notice}</div>}
         {error && <div className="notice">{error}</div>}
 
-        <div className="card" style={{ margin: 0 }}>
-          {loading ? (
-            <div className="badge">Loading notes…</div>
-          ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Note</th>
-                  <th>Patient</th>
-                  <th>Created</th>
-                  <th>Updated</th>
-                  <th>Status</th>
-                  <th>Audit</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredNotes.map((note) => {
-                  const patient = patientMap.get(note.patient_id);
-                  return (
-                    <tr key={note.id}>
-                      <td>{note.body.length > 80 ? `${note.body.slice(0, 80)}…` : note.body}</td>
-                      <td>
-                        {patient ? (
-                          <Link href={`/patients/${note.patient_id}`}>
-                            {patient.first_name} {patient.last_name}
-                          </Link>
-                        ) : (
-                          <span>Patient #{note.patient_id}</span>
-                        )}
-                      </td>
-                      <td>
-                        <div>{note.created_by.email}</div>
-                        <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                          {new Date(note.created_at).toLocaleString()}
-                        </div>
-                      </td>
-                      <td>
-                        <div>{note.updated_by?.email || note.created_by.email}</div>
-                        <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                          {new Date(note.updated_at).toLocaleString()}
-                        </div>
-                      </td>
-                      <td>
-                        {note.deleted_at ? (
-                          <span className="badge">Archived</span>
-                        ) : (
-                          <span className="badge">Active</span>
-                        )}
-                      </td>
-                      <td>
-                        <Link className="btn btn-secondary" href={`/notes/${note.id}/audit`}>
-                          View audit
-                        </Link>
-                      </td>
-                      <td>
-                        <button className="btn btn-secondary" onClick={() => toggleArchive(note)}>
-                          {note.deleted_at ? "Restore" : "Archive"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1.2fr" }}>
+          <div className="card" style={{ margin: 0 }}>
+            {loading ? (
+              <div className="badge">Loading notes…</div>
+            ) : (
+              <Table className="table-compact table-hover table-sticky">
+                <thead>
+                  <tr>
+                    <th>Note</th>
+                    <th>Patient</th>
+                    <th>Updated</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredNotes.map((note) => {
+                    const patient = patientMap.get(note.patient_id);
+                    return (
+                      <tr
+                        key={note.id}
+                        onClick={() => setSelectedNoteId(note.id)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <td>{note.body.length > 60 ? `${note.body.slice(0, 60)}…` : note.body}</td>
+                        <td>
+                          {patient ? (
+                            <Link href={`/patients/${note.patient_id}`}>
+                              {patient.first_name} {patient.last_name}
+                            </Link>
+                          ) : (
+                            <span>Patient #{note.patient_id}</span>
+                          )}
+                        </td>
+                        <td>{new Date(note.updated_at).toLocaleDateString()}</td>
+                        <td>{note.deleted_at ? "Archived" : "Active"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            )}
+          </div>
+          <div className="card" style={{ margin: 0 }}>
+            {selectedNoteId ? (
+              <div className="stack">
+                <div className="row">
+                  <div>
+                    <h3 style={{ marginTop: 0 }}>Note detail</h3>
+                    <p style={{ color: "var(--muted)" }}>
+                      Edit note content and metadata.
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <Link
+                      className="btn btn-secondary"
+                      href={`/notes/${selectedNoteId}/audit`}
+                    >
+                      View audit
+                    </Link>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        const note = notes.find((item) => item.id === selectedNoteId);
+                        if (note) void toggleArchive(note);
+                      }}
+                    >
+                      {notes.find((item) => item.id === selectedNoteId)?.deleted_at
+                        ? "Restore"
+                        : "Archive"}
+                    </button>
+                  </div>
+                </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Note type</label>
+                  <select
+                    className="input"
+                    value={editType}
+                    onChange={(e) => setEditType(e.target.value)}
+                  >
+                    <option value="clinical">Clinical</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Note body</label>
+                  <textarea
+                    className="input"
+                    rows={8}
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                  />
+                </div>
+                <button className="btn btn-primary" onClick={saveNoteEdit} disabled={savingEdit}>
+                  {savingEdit ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            ) : (
+              <div className="notice">Select a note to view details.</div>
+            )}
+          </div>
         </div>
-      </section>
+      </Panel>
     </div>
   );
 }
