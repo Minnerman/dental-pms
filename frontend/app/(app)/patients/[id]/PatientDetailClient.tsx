@@ -1881,6 +1881,23 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                   )}
                             </div>
                           </div>
+                          <div className="label">Payments / charges ledger</div>
+                          {invoices.length === 0 ? (
+                            <div className="notice">No ledger entries yet.</div>
+                          ) : (
+                            invoices.slice(0, 6).map((invoice) => (
+                              <div key={invoice.id} className="card" style={{ margin: 0 }}>
+                                <div style={{ fontWeight: 600 }}>
+                                  Charge · {invoice.invoice_number}
+                                </div>
+                                <div style={{ color: "var(--muted)" }}>
+                                  {invoice.issue_date || invoice.created_at.slice(0, 10)} · Total{" "}
+                                  {formatCurrency(invoice.total_pence)} · Paid{" "}
+                                  {formatCurrency(invoice.paid_pence)}
+                                </div>
+                              </div>
+                            ))
+                          )}
                           {invoices.length === 0 ? (
                             <div className="notice">No invoices yet.</div>
                           ) : (
