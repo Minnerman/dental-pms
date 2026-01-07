@@ -32,6 +32,7 @@ const baseTabs = [
   { href: "/patients", label: "Patients" },
   { href: "/appointments", label: "Appointments" },
   { href: "/recalls", label: "Recalls" },
+  { href: "/cashup", label: "Cash-up" },
   { href: "/notes", label: "Notes" },
 ];
 
