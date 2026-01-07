@@ -571,7 +571,15 @@ button {
   background: var(--r4-status-booked);
 }
 
+.status-icon[data-status="proposed"] {
+  background: var(--r4-status-booked);
+}
+
 .status-icon[data-status="arrived"] {
+  background: var(--r4-status-arrived);
+}
+
+.status-icon[data-status="accepted"] {
   background: var(--r4-status-arrived);
 }
 
@@ -584,6 +592,10 @@ button {
 }
 
 .status-icon[data-status="cancelled"] {
+  background: var(--r4-status-cancelled);
+}
+
+.status-icon[data-status="declined"] {
   background: var(--r4-status-cancelled);
 }
 

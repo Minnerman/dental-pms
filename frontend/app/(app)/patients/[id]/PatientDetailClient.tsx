@@ -6,6 +6,8 @@ import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
 import StatusIcon from "@/components/ui/StatusIcon";
+import Panel from "@/components/ui/Panel";
+import Table from "@/components/ui/Table";
 
 type Actor = {
   id: number;
@@ -196,6 +198,66 @@ type LedgerEntry = {
   created_by: Actor;
 };
 
+type ClinicalToothNote = {
+  id: number;
+  patient_id: number;
+  tooth: string;
+  surface?: string | null;
+  note: string;
+  created_at: string;
+  created_by: Actor;
+};
+
+type ProcedureStatus = "completed";
+
+type Procedure = {
+  id: number;
+  patient_id: number;
+  appointment_id?: number | null;
+  tooth?: string | null;
+  surface?: string | null;
+  procedure_code: string;
+  description: string;
+  fee_pence?: number | null;
+  status: ProcedureStatus;
+  performed_at: string;
+  created_by: Actor;
+};
+
+type TreatmentPlanStatus =
+  | "proposed"
+  | "accepted"
+  | "declined"
+  | "completed"
+  | "cancelled";
+
+type TreatmentPlanItem = {
+  id: number;
+  patient_id: number;
+  appointment_id?: number | null;
+  tooth?: string | null;
+  surface?: string | null;
+  procedure_code: string;
+  description: string;
+  fee_pence?: number | null;
+  status: TreatmentPlanStatus;
+  created_at: string;
+  updated_at: string;
+  created_by: Actor;
+  updated_by?: Actor | null;
+};
+
+type ClinicalSummary = {
+  recent_tooth_notes: ClinicalToothNote[];
+  recent_procedures: Procedure[];
+  treatment_plan_items: TreatmentPlanItem[];
+};
+
+type ToothHistory = {
+  notes: ClinicalToothNote[];
+  procedures: Procedure[];
+};
+
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
   DOMICILIARY_PRIVATE: "Domiciliary (Private)",
@@ -225,6 +287,64 @@ const recallStatusLabels: Record<RecallStatus, string> = {
   not_required: "Not required",
 };
 
+const treatmentStatusLabels: Record<TreatmentPlanStatus, string> = {
+  proposed: "Proposed",
+  accepted: "Accepted",
+  declined: "Declined",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+const procedureCatalog = [
+  { code: "EXAM", label: "Examination" },
+  { code: "SCAL", label: "Scale & polish" },
+  { code: "FILL", label: "Filling" },
+  { code: "EXTR", label: "Extraction" },
+  { code: "RCT", label: "Root canal" },
+  { code: "CROWN", label: "Crown" },
+  { code: "XRAY", label: "X-ray" },
+];
+
+const upperTeeth = [
+  "UR8",
+  "UR7",
+  "UR6",
+  "UR5",
+  "UR4",
+  "UR3",
+  "UR2",
+  "UR1",
+  "UL1",
+  "UL2",
+  "UL3",
+  "UL4",
+  "UL5",
+  "UL6",
+  "UL7",
+  "UL8",
+];
+
+const lowerTeeth = [
+  "LR8",
+  "LR7",
+  "LR6",
+  "LR5",
+  "LR4",
+  "LR3",
+  "LR2",
+  "LR1",
+  "LL1",
+  "LL2",
+  "LL3",
+  "LL4",
+  "LL5",
+  "LL6",
+  "LL7",
+  "LL8",
+];
+
+const allTeeth = [...upperTeeth, ...lowerTeeth];
+
 
 export default function PatientDetailClient({ id }: { id: string }) {
   const router = useRouter();
@@ -237,8 +357,11 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [tab, setTab] = useState<
-    "summary" | "notes" | "invoices" | "estimates" | "ledger"
+    "summary" | "clinical" | "notes" | "invoices" | "estimates" | "ledger"
   >("summary");
+  const [clinicalTab, setClinicalTab] = useState<"chart" | "treatment" | "notes">(
+    "chart"
+  );
   const [loading, setLoading] = useState(true);
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -313,6 +436,35 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [ledgerReference, setLedgerReference] = useState("");
   const [ledgerNote, setLedgerNote] = useState("");
   const [ledgerSaving, setLedgerSaving] = useState(false);
+  const [clinicalNotes, setClinicalNotes] = useState<ClinicalToothNote[]>([]);
+  const [clinicalProcedures, setClinicalProcedures] = useState<Procedure[]>([]);
+  const [treatmentPlanItems, setTreatmentPlanItems] = useState<TreatmentPlanItem[]>([]);
+  const [clinicalLoading, setClinicalLoading] = useState(false);
+  const [clinicalError, setClinicalError] = useState<string | null>(null);
+  const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
+  const [toothHistory, setToothHistory] = useState<ToothHistory>({
+    notes: [],
+    procedures: [],
+  });
+  const [toothHistoryLoading, setToothHistoryLoading] = useState(false);
+  const [chartNoteSurface, setChartNoteSurface] = useState("");
+  const [chartNoteBody, setChartNoteBody] = useState("");
+  const [procedureCode, setProcedureCode] = useState("");
+  const [procedureDescription, setProcedureDescription] = useState("");
+  const [procedureFee, setProcedureFee] = useState("");
+  const [savingProcedure, setSavingProcedure] = useState(false);
+  const [savingToothNote, setSavingToothNote] = useState(false);
+  const [notesTooth, setNotesTooth] = useState("");
+  const [notesSurface, setNotesSurface] = useState("");
+  const [notesBody, setNotesBody] = useState("");
+  const [savingClinicalNote, setSavingClinicalNote] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [planTooth, setPlanTooth] = useState("");
+  const [planSurface, setPlanSurface] = useState("");
+  const [planCode, setPlanCode] = useState("");
+  const [planDescription, setPlanDescription] = useState("");
+  const [planFee, setPlanFee] = useState("");
+  const [planSaving, setPlanSaving] = useState(false);
 
   async function loadPatient() {
     setLoading(true);
@@ -740,6 +892,242 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function loadClinicalSummary() {
+    setClinicalLoading(true);
+    setClinicalError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/clinical/summary`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load clinical summary (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as ClinicalSummary;
+      setClinicalNotes(data.recent_tooth_notes ?? []);
+      setClinicalProcedures(data.recent_procedures ?? []);
+      setTreatmentPlanItems(data.treatment_plan_items ?? []);
+    } catch (err) {
+      setClinicalError(err instanceof Error ? err.message : "Failed to load clinical summary");
+    } finally {
+      setClinicalLoading(false);
+    }
+  }
+
+  async function loadToothHistory(tooth: string) {
+    setToothHistoryLoading(true);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/tooth-history?tooth=${encodeURIComponent(tooth)}`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load tooth history (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as ToothHistory;
+      setToothHistory({
+        notes: data.notes ?? [],
+        procedures: data.procedures ?? [],
+      });
+    } catch {
+      setToothHistory({ notes: [], procedures: [] });
+    } finally {
+      setToothHistoryLoading(false);
+    }
+  }
+
+  async function submitChartNote() {
+    if (!selectedTooth || !chartNoteBody.trim()) return;
+    setSavingToothNote(true);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tooth: selectedTooth,
+          surface: chartNoteSurface || null,
+          note: chartNoteBody.trim(),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to save note (HTTP ${res.status})`);
+      }
+      setChartNoteBody("");
+      setChartNoteSurface("");
+      await loadClinicalSummary();
+      await loadToothHistory(selectedTooth);
+    } catch (err) {
+      setClinicalError(err instanceof Error ? err.message : "Failed to save note");
+    } finally {
+      setSavingToothNote(false);
+    }
+  }
+
+  async function submitProcedure() {
+    if (!selectedTooth || !procedureCode || !procedureDescription.trim()) return;
+    setSavingProcedure(true);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/procedures`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tooth: selectedTooth,
+          surface: chartNoteSurface || null,
+          procedure_code: procedureCode,
+          description: procedureDescription.trim(),
+          fee_pence: parseCurrencyToPence(procedureFee),
+          performed_at: new Date().toISOString(),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to save procedure (HTTP ${res.status})`);
+      }
+      setProcedureCode("");
+      setProcedureDescription("");
+      setProcedureFee("");
+      await loadClinicalSummary();
+      await loadToothHistory(selectedTooth);
+    } catch (err) {
+      setClinicalError(err instanceof Error ? err.message : "Failed to save procedure");
+    } finally {
+      setSavingProcedure(false);
+    }
+  }
+
+  async function submitClinicalNote() {
+    if (!notesTooth.trim() || !notesBody.trim()) return;
+    setSavingClinicalNote(true);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tooth: notesTooth.trim(),
+          surface: notesSurface || null,
+          note: notesBody.trim(),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to save clinical note (HTTP ${res.status})`);
+      }
+      setNotesBody("");
+      setNotesSurface("");
+      await loadClinicalSummary();
+    } catch (err) {
+      setClinicalError(err instanceof Error ? err.message : "Failed to save clinical note");
+    } finally {
+      setSavingClinicalNote(false);
+    }
+  }
+
+  async function submitTreatmentPlanItem() {
+    if (!planCode.trim() || !planDescription.trim()) return;
+    setPlanSaving(true);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/treatment-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tooth: planTooth.trim() || null,
+          surface: planSurface || null,
+          procedure_code: planCode.trim(),
+          description: planDescription.trim(),
+          fee_pence: parseCurrencyToPence(planFee),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to save treatment plan item (HTTP ${res.status})`);
+      }
+      setShowPlanModal(false);
+      setPlanTooth("");
+      setPlanSurface("");
+      setPlanCode("");
+      setPlanDescription("");
+      setPlanFee("");
+      await loadClinicalSummary();
+    } catch (err) {
+      setClinicalError(err instanceof Error ? err.message : "Failed to save treatment plan item");
+    } finally {
+      setPlanSaving(false);
+    }
+  }
+
+  async function updateTreatmentPlanStatus(item: TreatmentPlanItem, status: TreatmentPlanStatus) {
+    try {
+      const res = await apiFetch(`/api/treatment-plan/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to update treatment plan (HTTP ${res.status})`);
+      }
+      if (status === "completed") {
+        const shouldCreate = window.confirm(
+          "Create a completed procedure record for this item?"
+        );
+        if (shouldCreate) {
+          await apiFetch(`/api/patients/${patientId}/procedures`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tooth: item.tooth,
+              surface: item.surface,
+              procedure_code: item.procedure_code,
+              description: item.description,
+              fee_pence: item.fee_pence ?? null,
+              performed_at: new Date().toISOString(),
+              appointment_id: item.appointment_id ?? null,
+            }),
+          });
+        }
+      }
+      await loadClinicalSummary();
+    } catch (err) {
+      setClinicalError(
+        err instanceof Error ? err.message : "Failed to update treatment plan"
+      );
+    }
+  }
+
+  function parseCurrencyToPence(value: string) {
+    if (!value) return null;
+    const parsed = Number.parseFloat(value);
+    if (Number.isNaN(parsed)) return null;
+    return Math.round(parsed * 100);
+  }
+
   useEffect(() => {
     void loadPatient();
     void loadNotes();
@@ -752,6 +1140,20 @@ export default function PatientDetailClient({ id }: { id: string }) {
     void loadLedger();
     void loadLedgerBalance();
   }, [patientId]);
+
+  useEffect(() => {
+    if (tab !== "clinical") return;
+    void loadClinicalSummary();
+    if (!selectedTooth) {
+      setSelectedTooth(upperTeeth[0]);
+      setNotesTooth(upperTeeth[0]);
+    }
+  }, [tab, patientId]);
+
+  useEffect(() => {
+    if (tab !== "clinical" || !selectedTooth) return;
+    void loadToothHistory(selectedTooth);
+  }, [tab, selectedTooth, patientId]);
 
   useEffect(() => {
     if (!patient) return;
@@ -788,6 +1190,28 @@ export default function PatientDetailClient({ id }: { id: string }) {
       return { ...entry, running_balance: running };
     });
   }, [ledgerEntries]);
+
+  const toothHistoryEntries = useMemo(() => {
+    const entries = [
+      ...toothHistory.notes.map((note) => ({
+        type: "note" as const,
+        date: note.created_at,
+        label: note.surface ? `${note.tooth} · ${note.surface}` : note.tooth,
+        detail: note.note,
+        actor: note.created_by?.email,
+      })),
+      ...toothHistory.procedures.map((procedure) => ({
+        type: "procedure" as const,
+        date: procedure.performed_at,
+        label: procedure.procedure_code,
+        detail: procedure.description,
+        actor: procedure.created_by?.email,
+      })),
+    ];
+    return entries.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }, [toothHistory]);
 
   function buildAddress(p: Patient | null) {
     if (!p) return "";
@@ -1690,6 +2114,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
                   Summary
                 </button>
                 <button
+                  className={`tab ${tab === "clinical" ? "active" : ""}`}
+                  onClick={() => setTab("clinical")}
+                >
+                  Clinical
+                </button>
+                <button
                   className={`tab ${tab === "notes" ? "active" : ""}`}
                   onClick={() => setTab("notes")}
                 >
@@ -2445,6 +2875,482 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       )}
                     </div>
                   </div>
+                </div>
+              ) : tab === "clinical" ? (
+                <div className="stack">
+                  <div className="tabs">
+                    <button
+                      className={`tab ${clinicalTab === "chart" ? "active" : ""}`}
+                      onClick={() => setClinicalTab("chart")}
+                    >
+                      Chart
+                    </button>
+                    <button
+                      className={`tab ${clinicalTab === "treatment" ? "active" : ""}`}
+                      onClick={() => setClinicalTab("treatment")}
+                    >
+                      Treatment plan ({treatmentPlanItems.length})
+                    </button>
+                    <button
+                      className={`tab ${clinicalTab === "notes" ? "active" : ""}`}
+                      onClick={() => setClinicalTab("notes")}
+                    >
+                      Notes ({clinicalNotes.length})
+                    </button>
+                  </div>
+
+                  {clinicalError && <div className="notice">{clinicalError}</div>}
+                  {clinicalLoading ? (
+                    <div className="badge">Loading clinical…</div>
+                  ) : clinicalTab === "chart" ? (
+                    <div className="stack">
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 16,
+                          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+                        }}
+                      >
+                        <Panel title="Odontogram">
+                          <div className="stack" style={{ gap: 16 }}>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <div className="label">Upper</div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gap: 6,
+                                  gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                }}
+                              >
+                                {upperTeeth.map((tooth) => {
+                                  const isActive = selectedTooth === tooth;
+                                  return (
+                                    <button
+                                      key={tooth}
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedTooth(tooth);
+                                        setNotesTooth(tooth);
+                                      }}
+                                      style={{
+                                        padding: "6px 0",
+                                        fontWeight: 600,
+                                        background: isActive
+                                          ? "rgba(51, 255, 180, 0.18)"
+                                          : undefined,
+                                        borderColor: isActive ? "var(--accent)" : undefined,
+                                      }}
+                                    >
+                                      {tooth}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <div className="label">Lower</div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gap: 6,
+                                  gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                }}
+                              >
+                                {lowerTeeth.map((tooth) => {
+                                  const isActive = selectedTooth === tooth;
+                                  return (
+                                    <button
+                                      key={tooth}
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedTooth(tooth);
+                                        setNotesTooth(tooth);
+                                      }}
+                                      style={{
+                                        padding: "6px 0",
+                                        fontWeight: 600,
+                                        background: isActive
+                                          ? "rgba(51, 255, 180, 0.18)"
+                                          : undefined,
+                                        borderColor: isActive ? "var(--accent)" : undefined,
+                                      }}
+                                    >
+                                      {tooth}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </Panel>
+
+                        <Panel title={selectedTooth ? `Tooth ${selectedTooth}` : "Select a tooth"}>
+                          {!selectedTooth ? (
+                            <div className="notice">Select a tooth to add notes and procedures.</div>
+                          ) : (
+                            <div className="stack" style={{ gap: 16 }}>
+                              <div className="stack" style={{ gap: 10 }}>
+                                <div className="label">Add tooth note</div>
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gap: 10,
+                                    gridTemplateColumns: "1fr 1fr",
+                                  }}
+                                >
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <label className="label">Surface (optional)</label>
+                                    <input
+                                      className="input"
+                                      value={chartNoteSurface}
+                                      onChange={(e) => setChartNoteSurface(e.target.value)}
+                                      placeholder="O / M / D / B / L"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Note</label>
+                                  <textarea
+                                    className="input"
+                                    rows={3}
+                                    value={chartNoteBody}
+                                    onChange={(e) => setChartNoteBody(e.target.value)}
+                                    placeholder="Clinical observation or note"
+                                  />
+                                </div>
+                                <button
+                                  className="btn btn-primary"
+                                  type="button"
+                                  onClick={submitChartNote}
+                                  disabled={savingToothNote || !chartNoteBody.trim()}
+                                >
+                                  {savingToothNote ? "Saving..." : "Add note"}
+                                </button>
+                              </div>
+
+                              <div className="stack" style={{ gap: 10 }}>
+                                <div className="label">Quick add procedure</div>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Procedure code</label>
+                                  <select
+                                    className="input"
+                                    value={procedureCode}
+                                    onChange={(e) => {
+                                      const code = e.target.value;
+                                      setProcedureCode(code);
+                                      const match = procedureCatalog.find(
+                                        (item) => item.code === code
+                                      );
+                                      setProcedureDescription(match ? match.label : "");
+                                    }}
+                                  >
+                                    <option value="">Select code</option>
+                                    {procedureCatalog.map((item) => (
+                                      <option key={item.code} value={item.code}>
+                                        {item.code} · {item.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Description</label>
+                                  <input
+                                    className="input"
+                                    value={procedureDescription}
+                                    onChange={(e) => setProcedureDescription(e.target.value)}
+                                    placeholder="Procedure description"
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Fee (optional)</label>
+                                  <input
+                                    className="input"
+                                    value={procedureFee}
+                                    onChange={(e) => setProcedureFee(e.target.value)}
+                                    placeholder="0.00"
+                                  />
+                                </div>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={submitProcedure}
+                                  disabled={
+                                    savingProcedure ||
+                                    !procedureCode ||
+                                    !procedureDescription.trim()
+                                  }
+                                >
+                                  {savingProcedure ? "Saving..." : "Add procedure"}
+                                </button>
+                              </div>
+
+                              <div className="stack" style={{ gap: 10 }}>
+                                <div className="label">Tooth history</div>
+                                {toothHistoryLoading ? (
+                                  <div className="badge">Loading history…</div>
+                                ) : toothHistoryEntries.length === 0 ? (
+                                  <div className="notice">No history yet.</div>
+                                ) : (
+                                  <div className="stack">
+                                    {toothHistoryEntries.map((entry, index) => (
+                                      <div className="card" style={{ margin: 0 }} key={index}>
+                                        <div className="row">
+                                          <div>
+                                            <strong>
+                                              {entry.type === "note" ? "Note" : "Procedure"}
+                                            </strong>
+                                            <div style={{ color: "var(--muted)" }}>
+                                              {formatShortDate(entry.date)} ·{" "}
+                                              {entry.actor || "—"}
+                                            </div>
+                                          </div>
+                                          <span className="badge">{entry.label}</span>
+                                        </div>
+                                        <div title={entry.detail}>{entry.detail}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </Panel>
+                      </div>
+                    </div>
+                  ) : clinicalTab === "treatment" ? (
+                    <div className="stack">
+                      <div className="row">
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={() => setShowPlanModal(true)}
+                          >
+                            Add item
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={loadClinicalSummary}
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                      </div>
+
+                      {treatmentPlanItems.length === 0 ? (
+                        <div className="notice">No treatment plan items yet.</div>
+                      ) : (
+                        <Table>
+                          <thead>
+                            <tr>
+                              <th>Status</th>
+                              <th>Tooth</th>
+                              <th>Code</th>
+                              <th>Description</th>
+                              <th>Fee</th>
+                              <th>Created</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {treatmentPlanItems.map((item) => {
+                              const isFinal = ["completed", "declined", "cancelled"].includes(
+                                item.status
+                              );
+                              return (
+                                <tr key={item.id}>
+                                  <td>
+                                    <div
+                                      style={{
+                                        display: "inline-flex",
+                                        gap: 6,
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <span
+                                        className="status-icon"
+                                        data-status={item.status}
+                                        aria-hidden="true"
+                                      />
+                                      {treatmentStatusLabels[item.status]}
+                                    </div>
+                                  </td>
+                                  <td>{item.tooth || "—"}</td>
+                                  <td>{item.procedure_code}</td>
+                                  <td title={item.description}>
+                                    <span
+                                      style={{
+                                        display: "inline-block",
+                                        maxWidth: 220,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {item.description}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {item.fee_pence != null
+                                      ? formatCurrency(item.fee_pence)
+                                      : "—"}
+                                  </td>
+                                  <td>{formatShortDate(item.created_at)}</td>
+                                  <td>
+                                    <div className="table-actions">
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => updateTreatmentPlanStatus(item, "accepted")}
+                                        disabled={isFinal || item.status !== "proposed"}
+                                      >
+                                        Accept
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => updateTreatmentPlanStatus(item, "declined")}
+                                        disabled={isFinal || item.status !== "proposed"}
+                                      >
+                                        Decline
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => updateTreatmentPlanStatus(item, "completed")}
+                                        disabled={isFinal || item.status === "declined"}
+                                      >
+                                        Complete
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => updateTreatmentPlanStatus(item, "cancelled")}
+                                        disabled={isFinal}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </Table>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="stack">
+                      <Panel title="Add clinical note">
+                        <div className="stack" style={{ gap: 10 }}>
+                          <div
+                            style={{
+                              display: "grid",
+                              gap: 10,
+                              gridTemplateColumns: "1fr 1fr",
+                            }}
+                          >
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Tooth</label>
+                              <select
+                                className="input"
+                                value={notesTooth}
+                                onChange={(e) => setNotesTooth(e.target.value)}
+                              >
+                                <option value="">Select tooth</option>
+                                {allTeeth.map((tooth) => (
+                                  <option key={tooth} value={tooth}>
+                                    {tooth}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Surface</label>
+                              <input
+                                className="input"
+                                value={notesSurface}
+                                onChange={(e) => setNotesSurface(e.target.value)}
+                                placeholder="O / M / D / B / L"
+                              />
+                            </div>
+                          </div>
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Note</label>
+                            <textarea
+                              className="input"
+                              rows={3}
+                              value={notesBody}
+                              onChange={(e) => setNotesBody(e.target.value)}
+                              placeholder="Date-stamped clinical note"
+                            />
+                          </div>
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={submitClinicalNote}
+                            disabled={savingClinicalNote || !notesTooth || !notesBody.trim()}
+                          >
+                            {savingClinicalNote ? "Saving..." : "Add note"}
+                          </button>
+                        </div>
+                      </Panel>
+
+                      {clinicalNotes.length === 0 ? (
+                        <div className="notice">No clinical notes yet.</div>
+                      ) : (
+                        <div className="stack">
+                          {clinicalNotes.map((note) => (
+                            <div className="card" key={note.id}>
+                              <div className="row">
+                                <div>
+                                  <strong>
+                                    {note.tooth}
+                                    {note.surface ? ` · ${note.surface}` : ""}
+                                  </strong>
+                                  <div style={{ color: "var(--muted)" }}>
+                                    {new Date(note.created_at).toLocaleString()} ·{" "}
+                                    {note.created_by.email}
+                                  </div>
+                                </div>
+                                <span className="badge">Tooth note</span>
+                              </div>
+                              <p style={{ marginBottom: 0 }} title={note.note}>
+                                {note.note}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <Panel title="Recent procedures">
+                        {clinicalProcedures.length === 0 ? (
+                          <div className="notice">No procedures recorded yet.</div>
+                        ) : (
+                          <div className="stack">
+                            {clinicalProcedures.map((procedure) => (
+                              <div className="card" style={{ margin: 0 }} key={procedure.id}>
+                                <div className="row">
+                                  <div>
+                                    <strong>{procedure.procedure_code}</strong>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      {formatShortDate(procedure.performed_at)} ·{" "}
+                                      {procedure.created_by.email}
+                                    </div>
+                                  </div>
+                                  <span className="badge">{procedure.tooth || "—"}</span>
+                                </div>
+                                <div title={procedure.description}>{procedure.description}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </Panel>
+                    </div>
+                  )}
                 </div>
               ) : tab === "notes" ? (
                 <div className="stack">
@@ -3255,6 +4161,112 @@ export default function PatientDetailClient({ id }: { id: string }) {
               )}
             </div>
           </div>
+
+          {showPlanModal && (
+            <div className="card" style={{ margin: 0 }}>
+              <div className="stack">
+                <div className="row">
+                  <div>
+                    <h3 style={{ marginTop: 0 }}>Add treatment plan item</h3>
+                    <p style={{ color: "var(--muted)" }}>
+                      Proposed treatment for {patient.first_name} {patient.last_name}.
+                    </p>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowPlanModal(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="stack" style={{ gap: 10 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 10,
+                      gridTemplateColumns: "1fr 1fr",
+                    }}
+                  >
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Tooth (optional)</label>
+                      <select
+                        className="input"
+                        value={planTooth}
+                        onChange={(e) => setPlanTooth(e.target.value)}
+                      >
+                        <option value="">Select tooth</option>
+                        {allTeeth.map((tooth) => (
+                          <option key={tooth} value={tooth}>
+                            {tooth}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Surface</label>
+                      <input
+                        className="input"
+                        value={planSurface}
+                        onChange={(e) => setPlanSurface(e.target.value)}
+                        placeholder="O / M / D / B / L"
+                      />
+                    </div>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Procedure code</label>
+                    <input
+                      className="input"
+                      list="procedure-codes"
+                      value={planCode}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setPlanCode(code);
+                        const match = procedureCatalog.find((item) => item.code === code);
+                        if (match && !planDescription) {
+                          setPlanDescription(match.label);
+                        }
+                      }}
+                      placeholder="Code"
+                    />
+                    <datalist id="procedure-codes">
+                      {procedureCatalog.map((item) => (
+                        <option key={item.code} value={item.code}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Description</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      value={planDescription}
+                      onChange={(e) => setPlanDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Fee (optional)</label>
+                    <input
+                      className="input"
+                      value={planFee}
+                      onChange={(e) => setPlanFee(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={submitTreatmentPlanItem}
+                    disabled={planSaving || !planCode.trim() || !planDescription.trim()}
+                  >
+                    {planSaving ? "Saving..." : "Add item"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showBookingModal && (
             <div className="card" style={{ margin: 0 }}>
