@@ -385,6 +385,52 @@ button {
   z-index: 1;
 }
 
+.day-sheet-table thead th:first-child,
+.day-sheet-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.day-sheet-table th {
+  font-size: 11px;
+}
+
+.day-sheet-table td {
+  font-size: 13px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.day-sheet-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  width: 140px;
+}
+
+.day-sheet-patient {
+  font-weight: 600;
+}
+
+.day-sheet-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.day-sheet-status-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.row-muted {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
 .table th {
   color: var(--muted);
   font-size: 12px;

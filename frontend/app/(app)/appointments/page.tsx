@@ -214,6 +214,43 @@ function toLocalDateTimeInput(date: Date) {
   )}:${pad(date.getMinutes())}`;
 }
 
+function formatTimeRange(start: string, end: string) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "—";
+  const startLabel = startDate.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const endLabel = endDate.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${startLabel}–${endLabel}`;
+}
+
+function toAppointmentCode(raw: string | null | undefined) {
+  if (!raw) return "GEN";
+  const normalized = raw.toLowerCase();
+  const mapping = [
+    { match: ["exam", "examination"], code: "EX" },
+    { match: ["emergency", "emg"], code: "EM" },
+    { match: ["filling", "fill"], code: "FIL" },
+    { match: ["root canal", "rct"], code: "RCT" },
+    { match: ["extraction", "extract"], code: "EXT" },
+    { match: ["hygiene", "scale", "polish"], code: "HY" },
+    { match: ["implant consult", "implant"], code: "IC" },
+    { match: ["ortho", "orthodontic"], code: "OR" },
+    { match: ["denture impression", "denture"], code: "DI" },
+    { match: ["fit", "fitting"], code: "FIT" },
+    { match: ["review"], code: "RV" },
+  ];
+  const found = mapping.find((item) =>
+    item.match.some((term) => normalized.includes(term))
+  );
+  return found ? found.code : raw.trim().slice(0, 3).toUpperCase();
+}
+
 function formatDurationMinutes(start: string, end: string) {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -357,6 +394,10 @@ export default function AppointmentsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(
+    null
+  );
+  const [lastSelectedSlot, setLastSelectedSlot] = useState<Date | null>(null);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -398,6 +439,75 @@ export default function AppointmentsPage() {
         (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
       );
   }, [appointments, currentDate]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("dental_pms_appointments_view");
+    if (stored === "calendar" || stored === "day_sheet") {
+      setViewMode(stored);
+    } else {
+      setViewMode("day_sheet");
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dental_pms_appointments_view", viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!highlightedAppointmentId) return;
+    const timeout = window.setTimeout(() => {
+      setHighlightedAppointmentId(null);
+    }, 3000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAppointmentId]);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === "Delete" && selectedAppointmentId) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          setCancelTarget(appt);
+          setCancelReason("");
+          setShowCancelModal(true);
+        }
+        return;
+      }
+      const isCmd = event.metaKey || event.ctrlKey;
+      if (!isCmd) return;
+      if (event.key.toLowerCase() === "c" && selectedAppointmentId) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          setClipboard({ mode: "copy", appointment: appt });
+          setNotice("Copied appointment. Select a slot to paste.");
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === "x" && selectedAppointmentId) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          setClipboard({ mode: "cut", appointment: appt });
+          setNotice("Cut appointment. Select a slot to paste.");
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === "v" && clipboard) {
+        if (lastSelectedSlot) {
+          void pasteAppointment(lastSelectedSlot);
+        } else {
+          setError("Select a slot before pasting.");
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [appointments, clipboard, lastSelectedSlot, selectedAppointmentId]);
 
   const { minTime, maxTime } = useMemo(() => {
     if (!schedule) return { minTime: undefined, maxTime: undefined };
@@ -882,6 +992,7 @@ export default function AppointmentsPage() {
     if (Number.isNaN(parsed.getTime())) return;
     setCalendarView("day");
     setCurrentDate(parsed);
+    setViewMode("day_sheet");
     updateRange(parsed, parsed, "day", parsed);
   }, [searchParams]);
 
@@ -902,6 +1013,7 @@ export default function AppointmentsPage() {
       return;
     }
     if (!slotInfo.start || !slotInfo.end) return;
+    setLastSelectedSlot(slotInfo.start);
     if (clipboard) {
       void pasteAppointment(slotInfo.start);
       return;
@@ -1045,14 +1157,15 @@ export default function AppointmentsPage() {
       appt.location || appt.location_text ? `Location: ${appt.location || appt.location_text}` : null,
     ].filter(Boolean);
     return (
-      <div
-        style={{ display: "grid", gap: 4 }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setContextMenu({ x: event.clientX, y: event.clientY, appointment: appt });
-        }}
-      >
+        <div
+          style={{ display: "grid", gap: 4 }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSelectedAppointmentId(appt.id);
+            setContextMenu({ x: event.clientX, y: event.clientY, appointment: appt });
+          }}
+        >
         <div style={{ fontWeight: 600, lineHeight: 1.2 }}>
           {timeLabel} {event.title}
         </div>
@@ -1230,15 +1343,14 @@ export default function AppointmentsPage() {
             ) : daySheetAppointments.length === 0 ? (
               <div className="notice">No appointments for this day.</div>
             ) : (
-              <table className="table table-compact table-hover table-sticky">
+              <table className="table table-compact table-hover table-sticky day-sheet-table">
                 <thead>
                   <tr>
                     <th>Time</th>
                     <th>Patient</th>
+                    <th>Code</th>
                     <th>Phone</th>
                     <th>Address</th>
-                    <th>Clinician</th>
-                    <th>Location</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -1246,26 +1358,44 @@ export default function AppointmentsPage() {
                   {daySheetAppointments.map((appt) => {
                     const patient = patientLookup.get(appt.patient.id);
                     const address = buildShortAddress(patient);
+                    const isCancelled =
+                      appt.status === "cancelled" || appt.status === "no_show";
                     return (
-                      <tr key={appt.id}>
-                        <td>
-                          {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}{" "}
-                          ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                      <tr
+                        key={appt.id}
+                        className={isCancelled ? "row-muted" : undefined}
+                        onClick={() => setSelectedAppointmentId(appt.id)}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setSelectedAppointmentId(appt.id);
+                          setContextMenu({
+                            x: event.clientX,
+                            y: event.clientY,
+                            appointment: appt,
+                          });
+                        }}
+                      >
+                        <td className="day-sheet-time">{formatTimeRange(appt.starts_at, appt.ends_at)}</td>
+                        <td className="day-sheet-patient">
+                          {appt.patient.last_name.toUpperCase()}, {appt.patient.first_name}
                         </td>
-                        <td>
-                          {appt.patient.first_name} {appt.patient.last_name}
-                        </td>
+                        <td>{toAppointmentCode(appt.appointment_type)}</td>
                         <td>{patient?.phone || "—"}</td>
                         <td>{address || "—"}</td>
-                        <td>{appt.clinician || "Unassigned"}</td>
-                        <td>{appt.location || appt.location_text || "—"}</td>
                         <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div className="day-sheet-status">
                             <StatusIcon status={appt.status} />
-                            {statusLabels[appt.status]}
+                            <span
+                              className="day-sheet-status-pill"
+                              style={{
+                                background: statusThemeTokens[appt.status].bg,
+                                color: statusThemeTokens[appt.status].text,
+                                borderColor: statusThemeTokens[appt.status].border,
+                              }}
+                            >
+                              {statusLabels[appt.status]}
+                            </span>
                           </div>
                         </td>
                       </tr>
@@ -1301,6 +1431,42 @@ export default function AppointmentsPage() {
               }}
             >
               Cancel…
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                void updateAppointmentStatus(contextMenu.appointment.id, "arrived");
+                setContextMenu(null);
+              }}
+            >
+              Mark Arrived
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                void updateAppointmentStatus(contextMenu.appointment.id, "in_progress");
+                setContextMenu(null);
+              }}
+            >
+              Mark In Progress
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                void updateAppointmentStatus(contextMenu.appointment.id, "completed");
+                setContextMenu(null);
+              }}
+            >
+              Mark Complete
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                void updateAppointmentStatus(contextMenu.appointment.id, "no_show");
+                setContextMenu(null);
+              }}
+            >
+              Mark No Show
             </button>
             <button
               className="btn btn-secondary"
