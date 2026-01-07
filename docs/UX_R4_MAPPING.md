@@ -26,6 +26,11 @@ This doc maps common R4 workflows to the PMS UI.
 - Quick payment: Patient home -> Finance panel -> Add payment.
 - Cash-up: `/cashup` daily totals by payment method.
 
+## Clinical chart
+- Odontogram + tooth history: `/patients/[id]` Clinical tab -> Chart.
+- Treatment plan: `/patients/[id]` Clinical tab -> Treatment plan.
+- Clinical notes: `/patients/[id]` Clinical tab -> Notes.
+
 ## Notes and treatments
 - Notes master-detail: `/notes` left list + right detail.
 - Treatments master-detail: `/treatments` list + detail panel.

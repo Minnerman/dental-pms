@@ -13,6 +13,7 @@
 - Patient alerts/flags + recall controls + recall worklist
 - Patient ledger + quick payment/adjustment entry
 - Cash-up report (daily totals by payment method)
+- Clinical chart (odontogram + tooth history) + treatment plan + clinical notes
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -60,12 +61,13 @@
 - 2026-01-06: Invoice + receipt PDFs (ReportLab) with download buttons
 - 2026-01-06: Updated invoice/receipt PDF headers to Clinic for Implant & Orthodontic Dentistry; 7 Chapel Road, Worthing, West Sussex BN11 1EG; Tel: 01903 821822; dental-worthing.co.uk
 - 2026-01-06: Added admin reset script, removed login debug banner, and documented env recreation guidance
+- 2026-01-08: Clinical chart module (odontogram, tooth history, treatment plan, clinical notes)
 
 ## Known issues
 - None known.
 
 ## Next up
-- Document templates (prescriptions/letters) OR global invoices list page + basic cash-up summary
+- Document templates (prescriptions/letters), referrals, and file attachments (Stage 9)
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev
