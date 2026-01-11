@@ -17,6 +17,7 @@
 - Patient referrals (source + contact + notes)
 - Document templates (prescriptions/letters)
 - Patient attachments (uploaded files)
+- Patient documents generated from templates (text)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -70,7 +71,7 @@
 - None known.
 
 ## Next up
-- Stage 10 planning (TBD)
+- Stage 10 follow-ons: merge fields PDF + permissions polish
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

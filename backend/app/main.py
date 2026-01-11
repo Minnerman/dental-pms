@@ -30,6 +30,10 @@ from app.routers.attachments import (
     router as patient_attachments_router,
     attachments_router as attachments_router,
 )
+from app.routers.patient_documents import (
+    router as patient_documents_router,
+    documents_router as documents_router,
+)
 from app.services.users import seed_initial_admin
 
 app = FastAPI(title="Dental PMS API", version="0.1.0")
@@ -91,6 +95,8 @@ app.include_router(settings_router)
 app.include_router(document_templates_router)
 app.include_router(patient_attachments_router)
 app.include_router(attachments_router)
+app.include_router(patient_documents_router)
+app.include_router(documents_router)
 app.include_router(audit_router)
 app.include_router(timeline_router)
 app.include_router(reports_router)

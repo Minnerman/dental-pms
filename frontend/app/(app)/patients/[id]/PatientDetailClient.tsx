@@ -356,6 +356,10 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const patientId = id;
+  const patientIdNum = Number(patientId);
+  if (!Number.isFinite(patientIdNum)) {
+    return <div className="notice">Invalid patient ID.</div>;
+  }
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [pastAppointments, setPastAppointments] = useState<AppointmentSummary[]>([]);
@@ -2386,8 +2390,8 @@ export default function PatientDetailClient({ id }: { id: string }) {
                     </div>
                   </div>
 
-                  <PatientDocuments />
-                  <PatientAttachments patientId={patientId} />
+                  <PatientDocuments patientId={patientId} />
+                  <PatientAttachments patientId={patientIdNum} />
 
                   <form onSubmit={savePatient} className="stack">
                   <div className="grid grid-2">

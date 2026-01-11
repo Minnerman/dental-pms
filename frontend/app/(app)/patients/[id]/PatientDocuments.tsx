@@ -13,6 +13,14 @@ type DocumentTemplate = {
   is_active: boolean;
 };
 
+type PatientDocument = {
+  id: number;
+  template_id?: number | null;
+  title: string;
+  rendered_content: string;
+  created_at: string;
+};
+
 const kindLabels: Record<DocumentTemplateKind, string> = {
   letter: "Letter",
   prescription: "Prescription",
@@ -24,12 +32,19 @@ function filenameFromHeader(header: string | null) {
   return match?.[1] ?? null;
 }
 
-export default function PatientDocuments() {
+export default function PatientDocuments({ patientId }: { patientId: string }) {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
+  const [documents, setDocuments] = useState<PatientDocument[]>([]);
   const [kindFilter, setKindFilter] = useState<"all" | DocumentTemplateKind>("all");
   const [loading, setLoading] = useState(false);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [title, setTitle] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
 
   async function loadTemplates() {
     setLoading(true);
@@ -56,6 +71,28 @@ export default function PatientDocuments() {
       setError(err instanceof Error ? err.message : "Failed to load templates");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadDocuments() {
+    setLoadingDocs(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/documents`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load documents (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as PatientDocument[];
+      setDocuments(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load documents");
+    } finally {
+      setLoadingDocs(false);
     }
   }
 
@@ -89,9 +126,132 @@ export default function PatientDocuments() {
     }
   }
 
+  async function previewDocument() {
+    if (!selectedTemplateId) {
+      setError("Select a template to preview.");
+      return;
+    }
+    setPreviewing(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/documents/preview`, {
+        method: "POST",
+        body: JSON.stringify({
+          template_id: selectedTemplateId,
+          title: title || null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to preview document (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as { title: string; rendered_content: string };
+      setPreview(data.rendered_content);
+      if (!title) {
+        setTitle(data.title);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to preview document");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function saveDocument() {
+    if (!selectedTemplateId) {
+      setError("Select a template to save.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/documents`, {
+        method: "POST",
+        body: JSON.stringify({
+          template_id: selectedTemplateId,
+          title: title || null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to save document (HTTP ${res.status})`);
+      }
+      setPreview(null);
+      setTitle("");
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save document");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function downloadDocument(doc: PatientDocument) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}/download`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download document (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filename =
+        filenameFromHeader(res.headers.get("Content-Disposition")) || `${doc.title}.txt`;
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download document");
+    }
+  }
+
+  async function deleteDocument(doc: PatientDocument) {
+    if (!confirm(`Delete "${doc.title}"?`)) return;
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}`, { method: "DELETE" });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to delete document (HTTP ${res.status})`);
+      }
+      setDocuments((prev) => prev.filter((item) => item.id !== doc.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete document");
+    }
+  }
+
   useEffect(() => {
     void loadTemplates();
   }, [kindFilter]);
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [patientId]);
 
   return (
     <div className="card" style={{ margin: 0 }}>
@@ -116,6 +276,98 @@ export default function PatientDocuments() {
 
         {loading && <div className="badge">Loading templates…</div>}
         {error && <div className="notice">{error}</div>}
+
+        <div className="card" style={{ margin: 0 }}>
+          <div className="stack">
+            <h4 style={{ marginTop: 0 }}>Generate document</h4>
+            <div className="grid grid-2">
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Template</label>
+                <select
+                  className="input"
+                  value={selectedTemplateId ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value ? Number(e.target.value) : null;
+                    setSelectedTemplateId(value);
+                    setPreview(null);
+                  }}
+                >
+                  <option value="">Select a template</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} ({kindLabels[template.kind]})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Title (optional)</label>
+                <input
+                  className="input"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="row">
+              <button className="btn btn-secondary" type="button" onClick={previewDocument}>
+                {previewing ? "Rendering..." : "Preview"}
+              </button>
+              <button className="btn btn-primary" type="button" onClick={saveDocument}>
+                {saving ? "Saving..." : "Save document"}
+              </button>
+            </div>
+            {preview && (
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Preview</label>
+                <textarea className="input" rows={8} value={preview} readOnly />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card" style={{ margin: 0 }}>
+          <div className="stack">
+            <h4 style={{ marginTop: 0 }}>Generated documents</h4>
+            {loadingDocs && <div className="badge">Loading documents…</div>}
+            {documents.length === 0 && !loadingDocs ? (
+              <div className="notice">No documents generated yet.</div>
+            ) : (
+              <div className="stack" style={{ gap: 8 }}>
+                {documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="card"
+                    style={{ margin: 0, display: "flex", justifyContent: "space-between", gap: 12 }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{doc.title}</div>
+                      <div style={{ color: "var(--muted)" }}>
+                        {new Date(doc.created_at).toLocaleDateString("en-GB")}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => downloadDocument(doc)}
+                      >
+                        Download
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => deleteDocument(doc)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {templates.length === 0 ? (
           <div className="notice">No active templates available.</div>
