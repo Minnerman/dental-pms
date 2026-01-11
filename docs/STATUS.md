@@ -38,6 +38,7 @@
 - Header nav cleanup (dedupe Home + patient tabs grouped)
 - Header nav cleanup: remove patient chips from global header
 - Patient booking: restore modal + appointments scroll anchor
+- Patient page UX polish (booking scroll + two-column summary layout)
 
 ## URLs
 - Home: `http://100.100.149.40:3100`
@@ -72,6 +73,7 @@
 - App layout refactored to server wrapper + client shell
 - Middleware added to return 404 for invalid numeric IDs
 - Middleware now rewrites invalid ID routes to /__notfound__ for standard 404 UI + 404 status
+- Document templates list 500 resolved (audit actor email validation relaxed)
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)

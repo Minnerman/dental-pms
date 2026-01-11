@@ -365,6 +365,18 @@ button {
   gap: 10px;
 }
 
+.summary-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .summary-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+}
+
 .panel {
   border: 1px solid var(--border);
   border-radius: var(--radius);
