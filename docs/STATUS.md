@@ -22,6 +22,7 @@
 - Patient document PDF downloads + attachment save
 - Practice profile / letterhead settings for PDFs
 - RBAC + audit coverage for templates, patient documents, attachments
+- RBAC-aware UI for templates/docs/attachments
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -75,10 +76,9 @@
 - None known.
 
 ## Next up
-- Stage 14 RBAC + audit matrix:
-  - Templates: list/read/download (all), create/update/delete (superadmin)
-  - Patient documents: list/read/download (all), create (all), delete (superadmin)
-  - Attachments: list/download/upload (all), delete (superadmin)
+- Stage 15 UI gating:
+  - Hide delete/edit controls for non-superadmins
+  - Friendly permission notices on forbidden actions
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

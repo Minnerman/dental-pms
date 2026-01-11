@@ -63,6 +63,7 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
 
   const [newName, setNewName] = useState("");
   const [newKind, setNewKind] = useState<DocumentTemplateKind>("letter");
@@ -77,6 +78,24 @@ export default function TemplatesPage() {
   const [editField, setEditField] = useState(mergeFields[0].value);
 
   const selected = templates.find((item) => item.id === selectedId) || null;
+
+  async function loadMe() {
+    try {
+      const res = await apiFetch("/api/me");
+      if (res.status === 401 || res.status === 403) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        return;
+      }
+      const data = (await res.json()) as { role: string };
+      setIsSuperadmin(data.role === "superadmin");
+    } catch {
+      setIsSuperadmin(false);
+    }
+  }
 
   async function loadTemplates() {
     setLoading(true);
@@ -145,6 +164,10 @@ export default function TemplatesPage() {
         router.replace("/login");
         return;
       }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
+        return;
+      }
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || `Failed to create template (HTTP ${res.status})`);
@@ -183,6 +206,10 @@ export default function TemplatesPage() {
         router.replace("/login");
         return;
       }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
+        return;
+      }
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || `Failed to update template (HTTP ${res.status})`);
@@ -206,6 +233,10 @@ export default function TemplatesPage() {
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
         return;
       }
       if (!res.ok) {
@@ -256,6 +287,10 @@ export default function TemplatesPage() {
   useEffect(() => {
     void loadTemplates();
   }, [kindFilter]);
+
+  useEffect(() => {
+    void loadMe();
+  }, []);
 
   return (
     <div className="app-grid">
@@ -315,13 +350,15 @@ export default function TemplatesPage() {
                         >
                           Download
                         </button>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => deleteTemplate(template)}
-                        >
-                          Delete
-                        </button>
+                        {isSuperadmin && (
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => deleteTemplate(template)}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -333,72 +370,78 @@ export default function TemplatesPage() {
           <div className="card" style={{ margin: 0 }}>
             <div className="stack">
               <h4 style={{ marginTop: 0 }}>Create template</h4>
-              <div className="grid grid-2">
-                <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Name</label>
-                  <input
-                    className="input"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                  />
-                </div>
-                <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Kind</label>
-                  <select
-                    className="input"
-                    value={newKind}
-                    onChange={(e) => setNewKind(e.target.value as DocumentTemplateKind)}
-                  >
-                    <option value="letter">Letter</option>
-                    <option value="prescription">Prescription</option>
-                  </select>
-                </div>
-              </div>
-              <div className="stack" style={{ gap: 8 }}>
-                <label className="label">Content</label>
-                <textarea
-                  className="input"
-                  rows={8}
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                />
-              </div>
-              <div className="row" style={{ alignItems: "flex-end" }}>
-                <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Insert field</label>
-                  <select
-                    className="input"
-                    value={newField}
-                    onChange={(e) => setNewField(e.target.value)}
-                  >
-                    {mergeFields.map((field) => (
-                      <option key={field.value} value={field.value}>
-                        {field.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() =>
-                    setNewContent((prev) => (prev ? `${prev} ${newField}` : newField))
-                  }
-                >
-                  Insert
-                </button>
-              </div>
-              <label className="row" style={{ gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={newActive}
-                  onChange={(e) => setNewActive(e.target.checked)}
-                />
-                <span>Active</span>
-              </label>
-              <button className="btn btn-primary" disabled={saving} onClick={createTemplate}>
-                {saving ? "Saving..." : "Create template"}
-              </button>
+              {!isSuperadmin ? (
+                <div className="notice">Only superadmins can create templates.</div>
+              ) : (
+                <>
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Name</label>
+                      <input
+                        className="input"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Kind</label>
+                      <select
+                        className="input"
+                        value={newKind}
+                        onChange={(e) => setNewKind(e.target.value as DocumentTemplateKind)}
+                      >
+                        <option value="letter">Letter</option>
+                        <option value="prescription">Prescription</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Content</label>
+                    <textarea
+                      className="input"
+                      rows={8}
+                      value={newContent}
+                      onChange={(e) => setNewContent(e.target.value)}
+                    />
+                  </div>
+                  <div className="row" style={{ alignItems: "flex-end" }}>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Insert field</label>
+                      <select
+                        className="input"
+                        value={newField}
+                        onChange={(e) => setNewField(e.target.value)}
+                      >
+                        {mergeFields.map((field) => (
+                          <option key={field.value} value={field.value}>
+                            {field.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={() =>
+                        setNewContent((prev) => (prev ? `${prev} ${newField}` : newField))
+                      }
+                    >
+                      Insert
+                    </button>
+                  </div>
+                  <label className="row" style={{ gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={newActive}
+                      onChange={(e) => setNewActive(e.target.checked)}
+                    />
+                    <span>Active</span>
+                  </label>
+                  <button className="btn btn-primary" disabled={saving} onClick={createTemplate}>
+                    {saving ? "Saving..." : "Create template"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -412,6 +455,8 @@ export default function TemplatesPage() {
           />
           {!selected ? (
             <div className="notice">Choose a template from the list to edit.</div>
+          ) : !isSuperadmin ? (
+            <div className="notice">Only superadmins can edit templates.</div>
           ) : (
             <div className="stack">
               <div className="grid grid-2">

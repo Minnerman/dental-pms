@@ -69,12 +69,29 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
+
+  async function loadMe() {
+    try {
+      const res = await apiFetch("/api/me");
+      if (res.status === 401 || res.status === 403) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) return;
+      const data = (await res.json()) as { role: string };
+      setIsSuperadmin(data.role === "superadmin");
+    } catch {
+      setIsSuperadmin(false);
+    }
+  }
 
   async function loadTemplates() {
     setLoading(true);
@@ -217,6 +234,10 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
         router.replace("/login");
         return;
       }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
+        return;
+      }
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || `Failed to save document (HTTP ${res.status})`);
@@ -322,6 +343,10 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
         router.replace("/login");
         return;
       }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
+        return;
+      }
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || `Failed to delete document (HTTP ${res.status})`);
@@ -335,6 +360,10 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
   useEffect(() => {
     void loadTemplates();
   }, [kindFilter]);
+
+  useEffect(() => {
+    void loadMe();
+  }, []);
 
   useEffect(() => {
     void loadDocuments();
@@ -487,13 +516,15 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
                       >
                         Save PDF to attachments
                       </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        onClick={() => deleteDocument(doc)}
-                      >
-                        Delete
-                      </button>
+                      {isSuperadmin && (
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => deleteDocument(doc)}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

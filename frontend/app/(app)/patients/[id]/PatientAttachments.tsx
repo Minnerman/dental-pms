@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearToken, getToken } from "@/lib/auth";
+import { apiFetch, clearToken, getToken } from "@/lib/auth";
 
 type Attachment = {
   id: number;
@@ -43,6 +43,7 @@ export default function PatientAttachments({ patientId }: { patientId: number })
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
 
   async function authFetch(path: string, init: RequestInit = {}) {
     const token = getToken();
@@ -70,6 +71,22 @@ export default function PatientAttachments({ patientId }: { patientId: number })
       setError(err instanceof Error ? err.message : "Failed to load attachments");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMe() {
+    try {
+      const res = await apiFetch("/api/me");
+      if (res.status === 401 || res.status === 403) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) return;
+      const data = (await res.json()) as { role: string };
+      setIsSuperadmin(data.role === "superadmin");
+    } catch {
+      setIsSuperadmin(false);
     }
   }
 
@@ -140,6 +157,10 @@ export default function PatientAttachments({ patientId }: { patientId: number })
         router.replace("/login");
         return;
       }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
+        return;
+      }
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || `Failed to delete attachment (HTTP ${res.status})`);
@@ -153,6 +174,10 @@ export default function PatientAttachments({ patientId }: { patientId: number })
   useEffect(() => {
     void loadAttachments();
   }, [patientId]);
+
+  useEffect(() => {
+    void loadMe();
+  }, []);
 
   return (
     <div className="card" style={{ margin: 0 }}>
@@ -209,13 +234,15 @@ export default function PatientAttachments({ patientId }: { patientId: number })
                   >
                     Download
                   </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={() => deleteAttachment(attachment)}
-                  >
-                    Delete
-                  </button>
+                  {isSuperadmin && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={() => deleteAttachment(attachment)}
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
