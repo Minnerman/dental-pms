@@ -355,7 +355,23 @@ const allTeeth = [...upperTeeth, ...lowerTeeth];
 const bpeSextants = ["UR", "UA", "UL", "LL", "LA", "LR"];
 
 
-export default function PatientDetailClient({ id }: { id: string }) {
+type PatientTab =
+  | "summary"
+  | "clinical"
+  | "notes"
+  | "invoices"
+  | "estimates"
+  | "ledger"
+  | "documents"
+  | "attachments";
+
+export default function PatientDetailClient({
+  id,
+  initialTab,
+}: {
+  id: string;
+  initialTab?: PatientTab;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const patientId = id;
@@ -369,9 +385,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [futureAppointments, setFutureAppointments] = useState<AppointmentSummary[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
-  const [tab, setTab] = useState<
-    "summary" | "clinical" | "notes" | "invoices" | "estimates" | "ledger"
-  >("summary");
+  const [tab, setTab] = useState<PatientTab>(initialTab ?? "summary");
   const [clinicalTab, setClinicalTab] = useState<"chart" | "treatment" | "notes">(
     "chart"
   );
@@ -1205,6 +1219,11 @@ export default function PatientDetailClient({ id }: { id: string }) {
     void loadLedger();
     void loadLedgerBalance();
   }, [patientId]);
+
+  useEffect(() => {
+    if (!initialTab) return;
+    setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (tab !== "clinical") return;
@@ -2211,12 +2230,24 @@ export default function PatientDetailClient({ id }: { id: string }) {
                 >
                   Summary
                 </button>
-                <button
+                <Link
                   className={`tab ${tab === "clinical" ? "active" : ""}`}
-                  onClick={() => setTab("clinical")}
+                  href={`/patients/${patientId}/clinical`}
                 >
                   Clinical
-                </button>
+                </Link>
+                <Link
+                  className={`tab ${tab === "documents" ? "active" : ""}`}
+                  href={`/patients/${patientId}/documents`}
+                >
+                  Documents
+                </Link>
+                <Link
+                  className={`tab ${tab === "attachments" ? "active" : ""}`}
+                  href={`/patients/${patientId}/attachments`}
+                >
+                  Attachments
+                </Link>
                 <button
                   className={`tab ${tab === "notes" ? "active" : ""}`}
                   onClick={() => setTab("notes")}
@@ -3570,6 +3601,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       </Panel>
                     </div>
                   )}
+                </div>
+              ) : tab === "documents" ? (
+                <div className="stack">
+                  <PatientDocuments patientId={patientId} />
+                </div>
+              ) : tab === "attachments" ? (
+                <div className="stack">
+                  <PatientAttachments patientId={patientIdNum} />
                 </div>
               ) : tab === "notes" ? (
                 <div className="stack">

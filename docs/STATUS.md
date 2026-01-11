@@ -32,6 +32,7 @@
 - Role management UI polish (roles, resets, disable)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
+- Patient sub-pages for clinical/documents/attachments
 
 ## URLs
 - Home: `http://100.100.149.40:3100`
