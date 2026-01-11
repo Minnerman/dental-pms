@@ -347,10 +347,10 @@ def finance_trends(
 
 @router.get("/finance/month-pack")
 def finance_month_pack(
+    request: Request,
     year: int = Query(ge=2000, le=2100),
     month: int = Query(ge=1, le=12),
     format: str = Query(default="pdf"),
-    request: Request | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     request_id: str | None = Header(default=None),
