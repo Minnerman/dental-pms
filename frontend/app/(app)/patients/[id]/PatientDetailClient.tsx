@@ -2430,6 +2430,13 @@ export default function PatientDetailClient({
                       <button
                         type="button"
                         className="btn btn-primary"
+                        onClick={openBookingModal}
+                      >
+                        Book appointment
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
                         onClick={() => {
                           setTab("summary");
                           requestAnimationFrame(() => {
@@ -2439,16 +2446,12 @@ export default function PatientDetailClient({
                           });
                         }}
                       >
-                        Book appointment
+                        Jump to appointments
                       </button>
                     </div>
                   </div>
 
-                  <div
-                    className="card"
-                    id="patient-appointments"
-                    style={{ margin: 0, scrollMarginTop: 96 }}
-                  >
+                  <div className="card" style={{ margin: 0 }}>
                     <div className="stack">
                       <div className="row">
                         <div>
@@ -3042,7 +3045,11 @@ export default function PatientDetailClient({
                   </div>
                   </form>
 
-                  <div className="card" style={{ margin: 0 }}>
+                  <div
+                    className="card"
+                    id="patient-appointments"
+                    style={{ margin: 0, scrollMarginTop: 96 }}
+                  >
                     <div className="stack">
                       <div className="row">
                         <div>
