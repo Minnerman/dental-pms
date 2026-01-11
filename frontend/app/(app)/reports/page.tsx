@@ -37,6 +37,8 @@ export default function ReportsPage() {
   const [trends, setTrends] = useState<FinanceTrends | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  const [year, setYear] = useState(() => new Date().getFullYear());
 
   function formatCurrency(pence: number) {
     return new Intl.NumberFormat("en-GB", {
@@ -105,6 +107,39 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function downloadMonthPack(format: "pdf" | "zip") {
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        year: String(year),
+        month: String(month),
+        format,
+      });
+      const res = await apiFetch(`/api/reports/finance/month-pack?${params.toString()}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download month pack (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filename = res.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/\"/g, "");
+      link.href = url;
+      link.download = filename || `finance_pack_${year}_${String(month).padStart(2, "0")}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download month pack");
+    }
+  }
+
   useEffect(() => {
     void loadReports(rangePreset);
   }, [rangePreset]);
@@ -136,6 +171,66 @@ export default function ReportsPage() {
 
           {loading && <div className="badge">Loading reports…</div>}
           {error && <div className="notice">{error}</div>}
+
+          <div className="card" style={{ margin: 0 }}>
+            <div className="stack">
+              <h4 style={{ margin: 0 }}>Monthly export pack</h4>
+              <div style={{ color: "var(--muted)" }}>
+                PDF summary plus CSV bundle (cash-up daily, method totals, top debtors).
+              </div>
+              <div className="row">
+                <select
+                  className="input"
+                  value={month}
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                >
+                  {[
+                    "January",
+                    "February",
+                    "March",
+                    "April",
+                    "May",
+                    "June",
+                    "July",
+                    "August",
+                    "September",
+                    "October",
+                    "November",
+                    "December",
+                  ].map((label, idx) => (
+                    <option key={label} value={idx + 1}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="input"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                >
+                  {[year, year - 1, year - 2].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => void downloadMonthPack("pdf")}
+                >
+                  Download PDF
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => void downloadMonthPack("zip")}
+                >
+                  Download ZIP
+                </button>
+              </div>
+            </div>
+          </div>
 
           {cashup && (
             <div className="card" style={{ margin: 0 }}>

@@ -27,6 +27,7 @@
 - Recall template pack + defaults for recall letters
 - Recall KPI endpoint + recalls dashboard panel
 - Financial reporting pack (cash-up, outstanding, trends)
+- Monthly export pack (PDF summary + CSV bundle)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -85,8 +86,12 @@
 - Attachments: list/download/upload (all), delete (superadmin)
 
 ## Next up
-- Stage 20 follow-up:
-  - Exports (PDF/CSV packs) or role management UI polish
+- Stage 21 follow-up:
+  - Role management UI polish or clinical module enhancements
+
+## Monthly pack definitions
+- PDF summary includes cash-up totals, method totals, and outstanding snapshot as of month end.
+- ZIP bundle includes `cashup_daily.csv`, `cashup_by_method.csv`, and `top_debtors.csv`.
 
 ## Financial reporting definitions
 - Cash-up summary uses ledger payment entries within the selected date range (totals by day and method).
