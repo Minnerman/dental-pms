@@ -47,6 +47,9 @@ type PatientDocument = {
   unknown_fields?: string[] | null;
 };
 
+const RECALL_TEMPLATE_ROUTINE = "Recall Letter – Routine Examination";
+const RECALL_TEMPLATE_OVERDUE = "Recall Letter – Overdue Reminder";
+
 const mergeFields = [
   { label: "Patient first name", value: "{{patient.first_name}}" },
   { label: "Patient last name", value: "{{patient.last_name}}" },
@@ -82,6 +85,14 @@ function filenameFromHeader(header: string | null) {
   if (!header) return null;
   const match = /filename="([^"]+)"/.exec(header);
   return match?.[1] ?? null;
+}
+
+function isOverdueRecall(recall: RecallRow) {
+  if (!recall.recall_due_date) return false;
+  const parsed = new Date(recall.recall_due_date);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const today = new Date();
+  return parsed < new Date(today.getFullYear(), today.getMonth(), today.getDate());
 }
 
 export default function RecallsPage() {
@@ -413,6 +424,16 @@ export default function RecallsPage() {
     setTitle("");
     setSelectedTemplateId(null);
   }, [selectedRecallId]);
+
+  useEffect(() => {
+    if (!selectedRecall || selectedTemplateId || templates.length === 0) return;
+    const overdue = isOverdueRecall(selectedRecall);
+    const preferredName = overdue ? RECALL_TEMPLATE_OVERDUE : RECALL_TEMPLATE_ROUTINE;
+    const match = templates.find((template) => template.name === preferredName);
+    if (match) {
+      setSelectedTemplateId(match.id);
+    }
+  }, [selectedRecall, selectedTemplateId, templates]);
 
   return (
     <div className="app-grid">

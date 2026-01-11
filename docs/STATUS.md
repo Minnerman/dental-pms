@@ -24,6 +24,7 @@
 - RBAC + audit coverage for templates, patient documents, attachments
 - RBAC-aware UI for templates/docs/attachments
 - Recalls workflow + recall letters (documents/PDF)
+- Recall template pack + defaults for recall letters
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -82,8 +83,8 @@
 - Attachments: list/download/upload (all), delete (superadmin)
 
 ## Next up
-- Stage 16 follow-up:
-  - Recall timeline entries (status changes + letter generation)
+- Stage 18 follow-up:
+  - Recall KPIs/reporting (due/overdue, contacted/booked rates)
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

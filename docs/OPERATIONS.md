@@ -4,6 +4,10 @@
 - Apply latest migrations:
   - `docker compose run --rm backend alembic upgrade head`
 
+## Default templates
+- Recall letter templates are auto-seeded on backend startup if missing.
+- Templates remain editable in the Templates page.
+
 ## Health checks
 - `./ops/health.sh`
 - Backend: `http://localhost:8100/health`

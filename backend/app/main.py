@@ -35,6 +35,9 @@ from app.routers.patient_documents import (
     documents_router as documents_router,
 )
 from app.services.users import seed_initial_admin
+from app.services.document_templates import ensure_default_templates
+from app.models.user import User
+from sqlalchemy import select
 
 app = FastAPI(title="Dental PMS API", version="0.1.0")
 logger = logging.getLogger("dental_pms.startup")
@@ -64,6 +67,11 @@ def startup():
             logger.info("Initial admin created for %s (must change password on first login).", admin_email)
         else:
             logger.info("Initial admin not created (users already exist).")
+        actor = db.scalar(select(User).order_by(User.id.asc()).limit(1))
+        if actor:
+            created_templates = ensure_default_templates(db, actor=actor)
+            if created_templates:
+                logger.info("Default document templates ensured (%s added).", created_templates)
     finally:
         db.close()
 
