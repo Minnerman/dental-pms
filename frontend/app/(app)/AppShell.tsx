@@ -384,48 +384,50 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
-        <nav className="tab-list workspace-tabs">
-          <button
-            type="button"
-            className={`tab-link${pathname === "/" ? " active" : ""}`}
-            onClick={() => router.push("/")}
-          >
-            Home
-          </button>
-          {patientTabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`tab-pill${activePatientTabId === tab.id ? " active" : ""}`}
-            >
-              <button
-                type="button"
-                className="tab-pill-label"
-                onClick={() => router.push(`/patients/${tab.id}`)}
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <nav className="tab-list">
+            {tabs.map((tab) => (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`tab-link${isActive(tab.href) ? " active" : ""}`}
               >
                 {tab.label}
-              </button>
-              <button
-                type="button"
-                className="tab-close"
-                aria-label={`Close ${tab.label}`}
-                onClick={() => closePatientTab(tab.id)}
-              >
-                ×
-              </button>
+              </Link>
+            ))}
+          </nav>
+          {patientTabs.length > 0 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span className="label" style={{ marginBottom: 0 }}>
+                Patients
+              </span>
+              <nav className="tab-list workspace-tabs">
+                {patientTabs.map((tab) => (
+                  <div
+                    key={tab.id}
+                    className={`tab-pill${activePatientTabId === tab.id ? " active" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="tab-pill-label"
+                      onClick={() => router.push(`/patients/${tab.id}`)}
+                    >
+                      {tab.label}
+                    </button>
+                    <button
+                      type="button"
+                      className="tab-close"
+                      aria-label={`Close ${tab.label}`}
+                      onClick={() => closePatientTab(tab.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </nav>
             </div>
-          ))}
-        </nav>
-        <nav className="tab-list">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`tab-link${isActive(tab.href) ? " active" : ""}`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+          )}
+        </div>
         {error && <div className="notice">{error}</div>}
       </div>
 

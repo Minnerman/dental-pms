@@ -35,6 +35,7 @@
 - Patient sub-pages for clinical/documents/attachments
 - Patient navigation polish (tabs + header quick links)
 - Clinical chart view mode toggle + tooth badges (planned/history)
+- Header nav cleanup (dedupe Home + patient tabs grouped)
 
 ## URLs
 - Home: `http://100.100.149.40:3100`
