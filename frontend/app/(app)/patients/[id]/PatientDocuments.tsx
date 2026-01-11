@@ -21,6 +21,33 @@ type PatientDocument = {
   created_at: string;
 };
 
+const mergeFields = [
+  { label: "Patient first name", value: "{{patient.first_name}}" },
+  { label: "Patient last name", value: "{{patient.last_name}}" },
+  { label: "Patient full name", value: "{{patient.full_name}}" },
+  { label: "Patient DOB", value: "{{patient.dob}}" },
+  { label: "Patient email", value: "{{patient.email}}" },
+  { label: "Patient phone", value: "{{patient.phone}}" },
+  { label: "Patient address", value: "{{patient.address}}" },
+  { label: "Patient address line 1", value: "{{patient.address_line1}}" },
+  { label: "Patient address line 2", value: "{{patient.address_line2}}" },
+  { label: "Patient city", value: "{{patient.city}}" },
+  { label: "Patient postcode", value: "{{patient.postcode}}" },
+  { label: "Patient NHS number", value: "{{patient.nhs_number}}" },
+  { label: "Patient category", value: "{{patient.category}}" },
+  { label: "Patient care setting", value: "{{patient.care_setting}}" },
+  { label: "Patient Denplan member", value: "{{patient.denplan_member_no}}" },
+  { label: "Patient Denplan plan", value: "{{patient.denplan_plan_name}}" },
+  { label: "Recall due date", value: "{{patient.recall_due_date}}" },
+  { label: "Recall status", value: "{{patient.recall_status}}" },
+  { label: "Practice name", value: "{{practice.name}}" },
+  { label: "Practice address", value: "{{practice.address}}" },
+  { label: "Practice address line 1", value: "{{practice.address_line1}}" },
+  { label: "Practice website", value: "{{practice.website}}" },
+  { label: "Practice phone", value: "{{practice.phone}}" },
+  { label: "Today", value: "{{today}}" },
+];
+
 const kindLabels: Record<DocumentTemplateKind, string> = {
   letter: "Letter",
   prescription: "Prescription",
@@ -45,6 +72,8 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
+  const [selectedField, setSelectedField] = useState(mergeFields[0].value);
+  const [unknownFields, setUnknownFields] = useState<string[]>([]);
 
   async function loadTemplates() {
     setLoading(true);
@@ -150,8 +179,13 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
         const msg = await res.text();
         throw new Error(msg || `Failed to preview document (HTTP ${res.status})`);
       }
-      const data = (await res.json()) as { title: string; rendered_content: string };
+      const data = (await res.json()) as {
+        title: string;
+        rendered_content: string;
+        unknown_fields?: string[];
+      };
       setPreview(data.rendered_content);
+      setUnknownFields(data.unknown_fields ?? []);
       if (!title) {
         setTitle(data.title);
       }
@@ -187,6 +221,7 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
         throw new Error(msg || `Failed to save document (HTTP ${res.status})`);
       }
       setPreview(null);
+      setUnknownFields([]);
       setTitle("");
       await loadDocuments();
     } catch (err) {
@@ -290,6 +325,7 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
                     const value = e.target.value ? Number(e.target.value) : null;
                     setSelectedTemplateId(value);
                     setPreview(null);
+                    setUnknownFields([]);
                   }}
                 >
                   <option value="">Select a template</option>
@@ -309,6 +345,31 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
                 />
               </div>
             </div>
+            <div className="row" style={{ alignItems: "flex-end" }}>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Insert field</label>
+                <select
+                  className="input"
+                  value={selectedField}
+                  onChange={(e) => setSelectedField(e.target.value)}
+                >
+                  {mergeFields.map((field) => (
+                    <option key={field.value} value={field.value}>
+                      {field.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => {
+                  setTitle((prev) => (prev ? `${prev} ${selectedField}` : selectedField));
+                }}
+              >
+                Insert
+              </button>
+            </div>
             <div className="row">
               <button className="btn btn-secondary" type="button" onClick={previewDocument}>
                 {previewing ? "Rendering..." : "Preview"}
@@ -317,6 +378,11 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
                 {saving ? "Saving..." : "Save document"}
               </button>
             </div>
+            {unknownFields.length > 0 && (
+              <div className="notice">
+                Unknown fields: {unknownFields.join(", ")}.
+              </div>
+            )}
             {preview && (
               <div className="stack" style={{ gap: 8 }}>
                 <label className="label">Preview</label>

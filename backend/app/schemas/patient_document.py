@@ -18,8 +18,10 @@ class PatientDocumentOut(BaseModel):
     title: str
     rendered_content: str
     created_at: datetime
+    unknown_fields: list[str] | None = None
 
 
 class PatientDocumentPreview(BaseModel):
     title: str
     rendered_content: str
+    unknown_fields: list[str]

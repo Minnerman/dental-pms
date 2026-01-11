@@ -18,7 +18,7 @@ from app.schemas.patient_document import (
     PatientDocumentOut,
     PatientDocumentPreview,
 )
-from app.services.document_render import render_template
+from app.services.document_render import render_template, render_template_with_warnings
 
 router = APIRouter(prefix="/patients/{patient_id}/documents", tags=["patient-documents"])
 documents_router = APIRouter(prefix="/patient-documents", tags=["patient-documents"])
@@ -74,9 +74,15 @@ def preview_patient_document(
 ):
     patient = get_patient_or_404(db, patient_id)
     template = get_template_or_404(db, payload.template_id)
-    rendered = render_template(template.content, patient)
-    title = payload.title or template.name
-    return PatientDocumentPreview(title=title, rendered_content=rendered)
+    title_input = payload.title or template.name
+    rendered_title, title_unknown = render_template_with_warnings(title_input, patient)
+    rendered, content_unknown = render_template_with_warnings(template.content, patient)
+    unknown_fields = sorted({*title_unknown, *content_unknown})
+    return PatientDocumentPreview(
+        title=rendered_title,
+        rendered_content=rendered,
+        unknown_fields=unknown_fields,
+    )
 
 
 @router.post("", response_model=PatientDocumentOut, status_code=status.HTTP_201_CREATED)
@@ -88,19 +94,22 @@ def create_patient_document(
 ):
     patient = get_patient_or_404(db, patient_id)
     template = get_template_or_404(db, payload.template_id)
-    rendered = render_template(template.content, patient)
-    title = payload.title or template.name
+    title_input = payload.title or template.name
+    rendered_title, title_unknown = render_template_with_warnings(title_input, patient)
+    rendered, content_unknown = render_template_with_warnings(template.content, patient)
+    unknown_fields = sorted({*title_unknown, *content_unknown})
     document = PatientDocument(
         patient_id=patient_id,
         template_id=template.id,
-        title=title,
+        title=rendered_title,
         rendered_content=rendered,
         created_by_user_id=user.id,
     )
     db.add(document)
     db.commit()
     db.refresh(document)
-    return document
+    output = PatientDocumentOut.model_validate(document)
+    return output.model_copy(update={"unknown_fields": unknown_fields})
 
 
 @documents_router.get("/{document_id}", response_model=PatientDocumentOut)

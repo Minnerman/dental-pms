@@ -18,6 +18,7 @@
 - Document templates (prescriptions/letters)
 - Patient attachments (uploaded files)
 - Patient documents generated from templates (text)
+- Template merge fields + preview warnings
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
