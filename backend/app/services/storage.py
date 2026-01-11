@@ -44,6 +44,15 @@ def save_upload(upload_file: UploadFile, max_bytes: int) -> tuple[str, int]:
     return storage_key, total
 
 
+def save_bytes(content: bytes) -> tuple[str, int]:
+    _ensure_dir()
+    storage_key = uuid.uuid4().hex
+    path = _resolve_path(storage_key)
+    with path.open("wb") as handle:
+        handle.write(content)
+    return storage_key, len(content)
+
+
 def open_file(storage_key: str):
     path = _resolve_path(storage_key)
     return path.open("rb")

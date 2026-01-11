@@ -15,6 +15,7 @@ class PatientDocumentOut(BaseModel):
     id: int
     patient_id: int
     template_id: Optional[int] = None
+    attachment_id: Optional[int] = None
     title: str
     rendered_content: str
     created_at: datetime

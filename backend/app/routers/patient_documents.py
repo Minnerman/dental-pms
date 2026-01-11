@@ -2,23 +2,28 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import get_current_user
+from app.models.attachment import Attachment
 from app.models.document_template import DocumentTemplate
 from app.models.patient import Patient
 from app.models.patient_document import PatientDocument
 from app.models.user import User
+from app.schemas.attachment import AttachmentOut
 from app.schemas.patient_document import (
     PatientDocumentCreate,
     PatientDocumentOut,
     PatientDocumentPreview,
 )
 from app.services.document_render import render_template, render_template_with_warnings
+from app.services.pdf_documents import generate_patient_document_pdf
+from app.services import storage
+from datetime import date
 
 router = APIRouter(prefix="/patients/{patient_id}/documents", tags=["patient-documents"])
 documents_router = APIRouter(prefix="/patient-documents", tags=["patient-documents"])
@@ -126,15 +131,27 @@ def download_patient_document(
     document_id: int,
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
+    format: str = Query(default="text"),
 ):
     document = get_document_or_404(db, document_id)
-    filename = sanitize_filename(document.title)
-    headers = {"Content-Disposition": f'attachment; filename="{filename}.txt"'}
-    return Response(
-        content=document.rendered_content,
-        media_type="text/plain",
-        headers=headers,
-    )
+    patient = db.get(Patient, document.patient_id)
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    safe_title = sanitize_filename(document.title)
+    date_suffix = date.today().isoformat()
+    if format == "pdf":
+        filename = f"{safe_title}_{patient.last_name}_{date_suffix}.pdf"
+        pdf_bytes = generate_patient_document_pdf(patient, document.title, document.rendered_content)
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+    if format != "text":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="format must be text or pdf",
+        )
+    filename = f"{safe_title}_{patient.last_name}_{date_suffix}.txt"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=document.rendered_content, media_type="text/plain", headers=headers)
 
 
 @documents_router.delete("/{document_id}", response_model=PatientDocumentOut)
@@ -147,3 +164,34 @@ def delete_patient_document(
     db.delete(document)
     db.commit()
     return document
+
+
+@documents_router.post("/{document_id}/attach-pdf", response_model=AttachmentOut)
+def attach_patient_document_pdf(
+    document_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    document = get_document_or_404(db, document_id)
+    patient = db.get(Patient, document.patient_id)
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    pdf_bytes = generate_patient_document_pdf(patient, document.title, document.rendered_content)
+    storage_key, byte_size = storage.save_bytes(pdf_bytes)
+    safe_title = sanitize_filename(document.title)
+    filename = f"{safe_title}.pdf"
+    attachment = Attachment(
+        patient_id=document.patient_id,
+        original_filename=filename,
+        content_type="application/pdf",
+        byte_size=byte_size,
+        storage_key=storage_key,
+        created_by_user_id=user.id,
+    )
+    db.add(attachment)
+    db.flush()
+    document.attachment_id = attachment.id
+    db.add(document)
+    db.commit()
+    db.refresh(attachment)
+    return attachment

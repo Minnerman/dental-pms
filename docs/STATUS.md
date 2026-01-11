@@ -19,6 +19,7 @@
 - Patient attachments (uploaded files)
 - Patient documents generated from templates (text)
 - Template merge fields + preview warnings
+- Patient document PDF downloads + attachment save
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 

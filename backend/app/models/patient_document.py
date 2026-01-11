@@ -16,6 +16,9 @@ class PatientDocument(Base):
     template_id: Mapped[int | None] = mapped_column(
         ForeignKey("document_templates.id"), nullable=True
     )
+    attachment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("attachments.id"), nullable=True
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     rendered_content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

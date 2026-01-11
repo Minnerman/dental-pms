@@ -74,6 +74,7 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
+  const [attachNotice, setAttachNotice] = useState<string | null>(null);
 
   async function loadTemplates() {
     setLoading(true);
@@ -260,6 +261,57 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
     }
   }
 
+  async function downloadDocumentPdf(doc: PatientDocument) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}/download?format=pdf`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filename =
+        filenameFromHeader(res.headers.get("Content-Disposition")) || `${doc.title}.pdf`;
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download PDF");
+    }
+  }
+
+  async function attachDocumentPdf(doc: PatientDocument) {
+    setError(null);
+    setAttachNotice(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}/attach-pdf`, {
+        method: "POST",
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to attach PDF (HTTP ${res.status})`);
+      }
+      setAttachNotice("PDF saved to attachments.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to attach PDF");
+    }
+  }
+
   async function deleteDocument(doc: PatientDocument) {
     if (!confirm(`Delete "${doc.title}"?`)) return;
     setError(null);
@@ -311,6 +363,7 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
 
         {loading && <div className="badge">Loading templates…</div>}
         {error && <div className="notice">{error}</div>}
+        {attachNotice && <div className="badge">{attachNotice}</div>}
 
         <div className="card" style={{ margin: 0 }}>
           <div className="stack">
@@ -418,7 +471,21 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
                         type="button"
                         onClick={() => downloadDocument(doc)}
                       >
-                        Download
+                        Download text
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => downloadDocumentPdf(doc)}
+                      >
+                        Download PDF
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => attachDocumentPdf(doc)}
+                      >
+                        Save PDF to attachments
                       </button>
                       <button
                         className="btn btn-secondary"
