@@ -33,6 +33,7 @@
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 - Patient sub-pages for clinical/documents/attachments
+- Patient navigation polish (tabs + header quick links)
 
 ## URLs
 - Home: `http://100.100.149.40:3100`

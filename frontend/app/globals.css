@@ -267,6 +267,29 @@ button {
   gap: 8px;
 }
 
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: transparent;
+}
+
+.tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  background: var(--tab-active-bg);
+}
+
 .tab-link {
   display: inline-flex;
   align-items: center;

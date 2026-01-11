@@ -2189,6 +2189,38 @@ export default function PatientDetailClient({
                 </button>
                 {copyNotice && <span className="badge">{copyNotice}</span>}
               </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="label">Quick links</div>
+                <div className="tabs">
+                  <Link
+                    className={`tab ${tab === "summary" ? "active" : ""}`}
+                    href={`/patients/${patientId}`}
+                  >
+                    Summary
+                  </Link>
+                  <Link
+                    className={`tab ${tab === "clinical" ? "active" : ""}`}
+                    href={`/patients/${patientId}/clinical`}
+                  >
+                    Clinical
+                  </Link>
+                  <Link
+                    className={`tab ${tab === "documents" ? "active" : ""}`}
+                    href={`/patients/${patientId}/documents`}
+                  >
+                    Documents
+                  </Link>
+                  <Link
+                    className={`tab ${tab === "attachments" ? "active" : ""}`}
+                    href={`/patients/${patientId}/attachments`}
+                  >
+                    Attachments
+                  </Link>
+                  <Link className="tab" href={`/patients/${patientId}/timeline`}>
+                    Timeline
+                  </Link>
+                </div>
+              </div>
 
               {(patient.allergies ||
                 patient.medical_alerts ||
