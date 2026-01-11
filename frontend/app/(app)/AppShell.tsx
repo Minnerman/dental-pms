@@ -396,37 +396,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
-          {patientTabs.length > 0 && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <span className="label" style={{ marginBottom: 0 }}>
-                Patients
-              </span>
-              <nav className="tab-list workspace-tabs">
-                {patientTabs.map((tab) => (
-                  <div
-                    key={tab.id}
-                    className={`tab-pill${activePatientTabId === tab.id ? " active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="tab-pill-label"
-                      onClick={() => router.push(`/patients/${tab.id}`)}
-                    >
-                      {tab.label}
-                    </button>
-                    <button
-                      type="button"
-                      className="tab-close"
-                      aria-label={`Close ${tab.label}`}
-                      onClick={() => closePatientTab(tab.id)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </nav>
-            </div>
-          )}
         </div>
         {error && <div className="notice">{error}</div>}
       </div>

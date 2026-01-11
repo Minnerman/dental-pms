@@ -36,6 +36,7 @@
 - Patient navigation polish (tabs + header quick links)
 - Clinical chart view mode toggle + tooth badges (planned/history)
 - Header nav cleanup (dedupe Home + patient tabs grouped)
+- Header nav cleanup: remove patient chips from global header
 
 ## URLs
 - Home: `http://100.100.149.40:3100`
