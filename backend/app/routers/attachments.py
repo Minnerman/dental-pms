@@ -59,8 +59,8 @@ def list_attachments(
 @router.post("", response_model=AttachmentOut, status_code=status.HTTP_201_CREATED)
 def upload_attachment(
     patient_id: int,
-    file: UploadFile = File(...),
     request: Request,
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     request_id: str | None = Header(default=None),
