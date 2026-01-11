@@ -315,6 +315,14 @@ def set_patient_recall(
         )
     if payload.status is not None:
         patient.recall_status = payload.status
+    if payload.recall_type is not None:
+        patient.recall_type = payload.recall_type
+    if payload.notes is not None:
+        patient.recall_notes = payload.notes
+    if payload.last_contacted_at is not None:
+        patient.recall_last_contacted_at = payload.last_contacted_at
+    elif payload.status == RecallStatus.contacted and not patient.recall_last_contacted_at:
+        patient.recall_last_contacted_at = datetime.now(timezone.utc)
     elif patient.recall_due_date and not patient.recall_status:
         patient.recall_status = RecallStatus.due
 

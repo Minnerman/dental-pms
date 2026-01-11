@@ -76,6 +76,11 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     recall_status: Mapped[RecallStatus | None] = mapped_column(
         Enum(RecallStatus, name="recall_status"), nullable=True
     )
+    recall_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    recall_last_contacted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    recall_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     recall_last_set_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -15,18 +15,74 @@ type RecallRow = {
   recall_interval_months?: number | null;
   recall_due_date?: string | null;
   recall_status?: RecallStatus | null;
+  recall_type?: string | null;
+  recall_last_contacted_at?: string | null;
+  recall_notes?: string | null;
   recall_last_set_at?: string | null;
   balance_pence?: number | null;
 };
 
 const statusLabels: Record<RecallStatus, string> = {
-  due: "Due",
+  due: "Pending",
   contacted: "Contacted",
   booked: "Booked",
-  not_required: "Not required",
+  not_required: "Declined",
 };
 
 type RangeFilter = "overdue" | "30" | "60" | "90" | "all";
+
+type DocumentTemplateKind = "letter" | "prescription";
+
+type DocumentTemplate = {
+  id: number;
+  name: string;
+  kind: DocumentTemplateKind;
+  is_active: boolean;
+};
+
+type PatientDocument = {
+  id: number;
+  title: string;
+  rendered_content: string;
+  unknown_fields?: string[] | null;
+};
+
+const mergeFields = [
+  { label: "Patient first name", value: "{{patient.first_name}}" },
+  { label: "Patient last name", value: "{{patient.last_name}}" },
+  { label: "Patient full name", value: "{{patient.full_name}}" },
+  { label: "Patient DOB", value: "{{patient.dob}}" },
+  { label: "Patient email", value: "{{patient.email}}" },
+  { label: "Patient phone", value: "{{patient.phone}}" },
+  { label: "Patient address", value: "{{patient.address}}" },
+  { label: "Patient address line 1", value: "{{patient.address_line1}}" },
+  { label: "Patient address line 2", value: "{{patient.address_line2}}" },
+  { label: "Patient city", value: "{{patient.city}}" },
+  { label: "Patient postcode", value: "{{patient.postcode}}" },
+  { label: "Patient NHS number", value: "{{patient.nhs_number}}" },
+  { label: "Patient category", value: "{{patient.category}}" },
+  { label: "Patient care setting", value: "{{patient.care_setting}}" },
+  { label: "Patient Denplan member", value: "{{patient.denplan_member_no}}" },
+  { label: "Patient Denplan plan", value: "{{patient.denplan_plan_name}}" },
+  { label: "Recall due date", value: "{{patient.recall_due_date}}" },
+  { label: "Recall status", value: "{{patient.recall_status}}" },
+  { label: "Recall type", value: "{{patient.recall_type}}" },
+  { label: "Recall due date (recall.*)", value: "{{recall.due_date}}" },
+  { label: "Recall status (recall.*)", value: "{{recall.status}}" },
+  { label: "Recall type (recall.*)", value: "{{recall.type}}" },
+  { label: "Practice name", value: "{{practice.name}}" },
+  { label: "Practice address", value: "{{practice.address}}" },
+  { label: "Practice address line 1", value: "{{practice.address_line1}}" },
+  { label: "Practice website", value: "{{practice.website}}" },
+  { label: "Practice phone", value: "{{practice.phone}}" },
+  { label: "Today", value: "{{today}}" },
+];
+
+function filenameFromHeader(header: string | null) {
+  if (!header) return null;
+  const match = /filename="([^"]+)"/.exec(header);
+  return match?.[1] ?? null;
+}
 
 export default function RecallsPage() {
   const router = useRouter();
@@ -36,6 +92,25 @@ export default function RecallsPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<RecallStatus | "all">("all");
   const [rangeFilter, setRangeFilter] = useState<RangeFilter>("overdue");
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [selectedRecallId, setSelectedRecallId] = useState<number | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [selectedField, setSelectedField] = useState(mergeFields[0].value);
+  const [title, setTitle] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [unknownFields, setUnknownFields] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [generatedDoc, setGeneratedDoc] = useState<PatientDocument | null>(null);
+  const [recallType, setRecallType] = useState("");
+  const [recallNotes, setRecallNotes] = useState("");
+  const [recallDueDate, setRecallDueDate] = useState("");
+  const [recallStatus, setRecallStatus] = useState<RecallStatus>("due");
+  const [savingRecall, setSavingRecall] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const selectedRecall = rows.find((row) => row.id === selectedRecallId) || null;
 
   function formatDate(value?: string | null) {
     if (!value) return "—";
@@ -67,6 +142,29 @@ export default function RecallsPage() {
     };
   }
 
+  async function loadTemplates() {
+    setTemplatesLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch("/api/document-templates?kind=letter");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load templates (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as DocumentTemplate[];
+      setTemplates(data.filter((item) => item.is_active));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load templates");
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }
+
   async function loadRecalls() {
     setLoading(true);
     setError(null);
@@ -96,11 +194,55 @@ export default function RecallsPage() {
     }
   }
 
-  async function updateRecallStatus(patientId: number, status: RecallStatus) {
+  async function updateRecall(patientId: number, payload: Partial<{
+    status: RecallStatus;
+    due_date: string | null;
+    recall_type: string | null;
+    notes: string | null;
+  }>) {
+    setSavingRecall(true);
+    setError(null);
     try {
-      const res = await apiFetch(`/api/patients/${patientId}/recall`, {
+      const res = await apiFetch(`/api/recalls/${patientId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setError("You don't have permission to do that. Please ask an administrator.");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+      }
+      await loadRecalls();
+      setNotice("Recall updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update recall");
+    } finally {
+      setSavingRecall(false);
+    }
+  }
+
+  async function previewRecallDocument() {
+    if (!selectedRecall || !selectedTemplateId) {
+      setError("Select a recall and template to preview.");
+      return;
+    }
+    setPreviewing(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${selectedRecall.id}/documents/preview`, {
         method: "POST",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          template_id: selectedTemplateId,
+          title: title || null,
+        }),
       });
       if (res.status === 401) {
         clearToken();
@@ -109,11 +251,138 @@ export default function RecallsPage() {
       }
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+        throw new Error(msg || `Failed to preview recall letter (HTTP ${res.status})`);
       }
-      await loadRecalls();
+      const data = (await res.json()) as {
+        title: string;
+        rendered_content: string;
+        unknown_fields?: string[];
+      };
+      setPreview(data.rendered_content);
+      setUnknownFields(data.unknown_fields ?? []);
+      if (!title) {
+        setTitle(data.title);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update recall");
+      setError(err instanceof Error ? err.message : "Failed to preview recall letter");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function generateRecallDocument() {
+    if (!selectedRecall || !selectedTemplateId) {
+      setError("Select a recall and template to generate.");
+      return;
+    }
+    setGenerating(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await apiFetch(`/api/recalls/${selectedRecall.id}/generate-document`, {
+        method: "POST",
+        body: JSON.stringify({
+          template_id: selectedTemplateId,
+          title: title || null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to generate recall letter (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as PatientDocument;
+      setGeneratedDoc(data);
+      setUnknownFields(data.unknown_fields ?? []);
+      setNotice("Recall letter saved to patient documents.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate recall letter");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function downloadDocument(doc: PatientDocument) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}/download`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download document (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filename =
+        filenameFromHeader(res.headers.get("Content-Disposition")) || `${doc.title}.txt`;
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download document");
+    }
+  }
+
+  async function downloadDocumentPdf(doc: PatientDocument) {
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}/download?format=pdf`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filename =
+        filenameFromHeader(res.headers.get("Content-Disposition")) || `${doc.title}.pdf`;
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download PDF");
+    }
+  }
+
+  async function attachDocumentPdf(doc: PatientDocument) {
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await apiFetch(`/api/patient-documents/${doc.id}/attach-pdf`, {
+        method: "POST",
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to attach PDF (HTTP ${res.status})`);
+      }
+      setNotice("PDF saved to attachments.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to attach PDF");
     }
   }
 
@@ -127,6 +396,23 @@ export default function RecallsPage() {
     }, 300);
     return () => clearTimeout(handle);
   }, [query]);
+
+  useEffect(() => {
+    void loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRecall) return;
+    setRecallType(selectedRecall.recall_type ?? "");
+    setRecallNotes(selectedRecall.recall_notes ?? "");
+    setRecallDueDate(selectedRecall.recall_due_date ?? "");
+    setRecallStatus(selectedRecall.recall_status ?? "due");
+    setPreview(null);
+    setUnknownFields([]);
+    setGeneratedDoc(null);
+    setTitle("");
+    setSelectedTemplateId(null);
+  }, [selectedRecallId]);
 
   return (
     <div className="app-grid">
@@ -177,6 +463,7 @@ export default function RecallsPage() {
             />
             {loading && <span className="badge">Loading…</span>}
             {error && <span className="badge">{error}</span>}
+            {notice && <span className="badge">{notice}</span>}
           </div>
           {rows.length === 0 && !loading ? (
             <div className="notice">No recalls found.</div>
@@ -187,9 +474,11 @@ export default function RecallsPage() {
                   <th>Patient</th>
                   <th>Phone</th>
                   <th>Postcode</th>
+                  <th>Type</th>
                   <th>Recall due</th>
                   <th>Status</th>
                   <th>Last set</th>
+                  <th>Last contacted</th>
                   <th>Balance</th>
                   <th>Actions</th>
                 </tr>
@@ -202,6 +491,7 @@ export default function RecallsPage() {
                     </td>
                     <td>{row.phone || "—"}</td>
                     <td>{row.postcode || "—"}</td>
+                    <td>{row.recall_type || "—"}</td>
                     <td>{formatDate(row.recall_due_date)}</td>
                     <td>
                       <span className="badge">
@@ -209,6 +499,7 @@ export default function RecallsPage() {
                       </span>
                     </td>
                     <td>{formatDate(row.recall_last_set_at)}</td>
+                    <td>{formatDate(row.recall_last_contacted_at)}</td>
                     <td>{formatCurrency(row.balance_pence)}</td>
                     <td>
                       <div className="table-actions">
@@ -220,15 +511,33 @@ export default function RecallsPage() {
                         </button>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => void updateRecallStatus(row.id, "contacted")}
+                          onClick={() =>
+                            void updateRecall(row.id, {
+                              status: "contacted",
+                            })
+                          }
                         >
                           Contacted
                         </button>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => void updateRecallStatus(row.id, "not_required")}
+                          onClick={() =>
+                            void updateRecall(row.id, {
+                              status: "booked",
+                            })
+                          }
                         >
-                          Not required
+                          Booked
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() =>
+                            void updateRecall(row.id, {
+                              status: "not_required",
+                            })
+                          }
+                        >
+                          Declined
                         </button>
                         <button
                           className="btn btn-secondary"
@@ -236,12 +545,225 @@ export default function RecallsPage() {
                         >
                           Book recall
                         </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => setSelectedRecallId(row.id)}
+                        >
+                          Generate letter
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+
+          {selectedRecall && (
+            <div className="card" style={{ margin: 0 }}>
+              <div className="stack">
+                <div className="row">
+                  <div>
+                    <h4 style={{ marginTop: 0 }}>
+                      Recall letter for {selectedRecall.last_name.toUpperCase()},{" "}
+                      {selectedRecall.first_name}
+                    </h4>
+                    <div style={{ color: "var(--muted)" }}>
+                      Generate a recall letter and store it as a patient document.
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setSelectedRecallId(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="grid grid-3">
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Recall type</label>
+                    <input
+                      className="input"
+                      value={recallType}
+                      onChange={(e) => setRecallType(e.target.value)}
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Recall due</label>
+                    <input
+                      className="input"
+                      type="date"
+                      value={recallDueDate}
+                      onChange={(e) => setRecallDueDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Status</label>
+                    <select
+                      className="input"
+                      value={recallStatus}
+                      onChange={(e) => setRecallStatus(e.target.value as RecallStatus)}
+                    >
+                      <option value="due">Pending</option>
+                      <option value="contacted">Contacted</option>
+                      <option value="booked">Booked</option>
+                      <option value="not_required">Declined</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Recall notes</label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    value={recallNotes}
+                    onChange={(e) => setRecallNotes(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={savingRecall}
+                  onClick={() =>
+                    void updateRecall(selectedRecall.id, {
+                      status: recallStatus,
+                      due_date: recallDueDate || null,
+                      recall_type: recallType || null,
+                      notes: recallNotes || null,
+                    })
+                  }
+                >
+                  {savingRecall ? "Saving..." : "Save recall details"}
+                </button>
+
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="stack">
+                    <h4 style={{ marginTop: 0 }}>Generate letter</h4>
+                    {templatesLoading && <div className="badge">Loading templates…</div>}
+                    {templates.length === 0 && !templatesLoading ? (
+                      <div className="notice">No active letter templates found.</div>
+                    ) : (
+                      <>
+                        <div className="grid grid-2">
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Template</label>
+                            <select
+                              className="input"
+                              value={selectedTemplateId ?? ""}
+                              onChange={(e) => {
+                                const value = e.target.value ? Number(e.target.value) : null;
+                                setSelectedTemplateId(value);
+                                setPreview(null);
+                                setUnknownFields([]);
+                                setGeneratedDoc(null);
+                              }}
+                            >
+                              <option value="">Select a template</option>
+                              {templates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Title (optional)</label>
+                            <input
+                              className="input"
+                              value={title}
+                              onChange={(e) => setTitle(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="row" style={{ alignItems: "flex-end" }}>
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Insert field</label>
+                            <select
+                              className="input"
+                              value={selectedField}
+                              onChange={(e) => setSelectedField(e.target.value)}
+                            >
+                              {mergeFields.map((field) => (
+                                <option key={field.value} value={field.value}>
+                                  {field.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => {
+                              setTitle((prev) =>
+                                prev ? `${prev} ${selectedField}` : selectedField
+                              );
+                            }}
+                          >
+                            Insert
+                          </button>
+                        </div>
+                        <div className="row">
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={previewRecallDocument}
+                          >
+                            {previewing ? "Rendering..." : "Preview"}
+                          </button>
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={generateRecallDocument}
+                          >
+                            {generating ? "Saving..." : "Save letter"}
+                          </button>
+                        </div>
+                        {unknownFields.length > 0 && (
+                          <div className="notice">
+                            Unknown fields: {unknownFields.join(", ")}.
+                          </div>
+                        )}
+                        {preview && (
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Preview</label>
+                            <textarea className="input" rows={8} value={preview} readOnly />
+                          </div>
+                        )}
+                        {generatedDoc && (
+                          <div className="row">
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={() => downloadDocument(generatedDoc)}
+                            >
+                              Download text
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={() => downloadDocumentPdf(generatedDoc)}
+                            >
+                              Download PDF
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={() => attachDocumentPdf(generatedDoc)}
+                            >
+                              Save PDF to attachments
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

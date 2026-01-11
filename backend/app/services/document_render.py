@@ -59,6 +59,12 @@ def _build_field_map(patient: Patient) -> dict[str, str]:
         if patient.recall_due_date
         else "",
         "patient.recall_status": _enum_value(patient.recall_status),
+        "patient.recall_type": patient.recall_type or "",
+        "recall.due_date": patient.recall_due_date.isoformat()
+        if patient.recall_due_date
+        else "",
+        "recall.status": _enum_value(patient.recall_status),
+        "recall.type": patient.recall_type or "",
         "practice.name": CLINIC_NAME,
         "practice.address": _build_practice_address(),
         "practice.address_line1": _practice_line(0),

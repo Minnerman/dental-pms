@@ -41,6 +41,9 @@ class PatientBase(BaseModel):
     recall_interval_months: Optional[int] = 6
     recall_due_date: Optional[date] = None
     recall_status: Optional[RecallStatus] = None
+    recall_type: Optional[str] = None
+    recall_last_contacted_at: Optional[datetime] = None
+    recall_notes: Optional[str] = None
 
 
 class PatientCreate(PatientBase):
@@ -81,6 +84,9 @@ class PatientUpdate(BaseModel):
     recall_interval_months: Optional[int] = None
     recall_due_date: Optional[date] = None
     recall_status: Optional[RecallStatus] = None
+    recall_type: Optional[str] = None
+    recall_last_contacted_at: Optional[datetime] = None
+    recall_notes: Optional[str] = None
 
 
 class PatientOut(PatientBase):
@@ -127,6 +133,9 @@ class RecallUpdate(BaseModel):
     interval_months: Optional[int] = None
     due_date: Optional[date] = None
     status: Optional[RecallStatus] = None
+    recall_type: Optional[str] = None
+    last_contacted_at: Optional[datetime] = None
+    notes: Optional[str] = None
 
 
 class PatientRecallOut(BaseModel):
@@ -140,5 +149,8 @@ class PatientRecallOut(BaseModel):
     recall_interval_months: Optional[int] = None
     recall_due_date: Optional[date] = None
     recall_status: Optional[RecallStatus] = None
+    recall_type: Optional[str] = None
+    recall_last_contacted_at: Optional[datetime] = None
+    recall_notes: Optional[str] = None
     recall_last_set_at: Optional[datetime] = None
     balance_pence: Optional[int] = None
