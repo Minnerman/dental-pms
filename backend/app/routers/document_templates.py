@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.schemas.document_template import (
     DocumentTemplateOut,
     DocumentTemplateUpdate,
 )
+from app.services.audit import log_event
 
 router = APIRouter(prefix="/document-templates", tags=["document-templates"])
 
@@ -37,6 +38,14 @@ def get_template_or_404(
     return template
 
 
+def template_audit_payload(template: DocumentTemplate) -> dict:
+    return {
+        "name": template.name,
+        "kind": template.kind.value if template.kind else None,
+        "is_active": template.is_active,
+    }
+
+
 @router.get("", response_model=list[DocumentTemplateOut])
 def list_document_templates(
     db: Session = Depends(get_db),
@@ -56,8 +65,10 @@ def list_document_templates(
 @router.post("", response_model=DocumentTemplateOut, status_code=status.HTTP_201_CREATED)
 def create_document_template(
     payload: DocumentTemplateCreate,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("superadmin")),
+    request_id: str | None = Header(default=None),
 ):
     template = DocumentTemplate(
         name=payload.name,
@@ -68,6 +79,17 @@ def create_document_template(
         updated_by_user_id=user.id,
     )
     db.add(template)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="document_template.created",
+        entity_type="document_template",
+        entity_id=str(template.id),
+        after_data=template_audit_payload(template),
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     db.refresh(template)
     return template
@@ -86,14 +108,28 @@ def get_document_template(
 def update_document_template(
     template_id: int,
     payload: DocumentTemplateUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("superadmin")),
+    request_id: str | None = Header(default=None),
 ):
     template = get_template_or_404(db, template_id)
+    before_data = template_audit_payload(template)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(template, field, value)
     template.updated_by_user_id = user.id
     db.add(template)
+    log_event(
+        db,
+        actor=user,
+        action="document_template.updated",
+        entity_type="document_template",
+        entity_id=str(template.id),
+        before_data=before_data,
+        after_data=template_audit_payload(template),
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     db.refresh(template)
     return template
@@ -102,16 +138,30 @@ def update_document_template(
 @router.delete("/{template_id}", response_model=DocumentTemplateOut)
 def delete_document_template(
     template_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("superadmin")),
+    request_id: str | None = Header(default=None),
 ):
     template = get_template_or_404(db, template_id, include_deleted=True)
     if template.deleted_at is not None:
         return template
+    before_data = template_audit_payload(template)
     template.deleted_at = datetime.now(timezone.utc)
     template.deleted_by_user_id = user.id
     template.updated_by_user_id = user.id
     db.add(template)
+    log_event(
+        db,
+        actor=user,
+        action="document_template.deleted",
+        entity_type="document_template",
+        entity_id=str(template.id),
+        before_data=before_data,
+        after_data=template_audit_payload(template),
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     db.refresh(template)
     return template
@@ -120,11 +170,24 @@ def delete_document_template(
 @router.get("/{template_id}/download")
 def download_document_template(
     template_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
 ):
     template = get_template_or_404(db, template_id)
     safe_name = sanitize_filename(template.name)
     filename = f"{safe_name}-{template.kind.value}.txt"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    log_event(
+        db,
+        actor=user,
+        action="document_template.downloaded",
+        entity_type="document_template",
+        entity_id=str(template.id),
+        after_data={"filename": filename},
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
     return Response(content=template.content, media_type="text/plain", headers=headers)

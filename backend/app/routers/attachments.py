@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.attachment import Attachment
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.attachment import AttachmentOut
 from app.services import storage
+from app.services.audit import log_event
 
 router = APIRouter(prefix="/patients/{patient_id}/attachments", tags=["attachments"])
 attachments_router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -59,8 +60,10 @@ def list_attachments(
 def upload_attachment(
     patient_id: int,
     file: UploadFile = File(...),
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
 ):
     get_patient_or_404(db, patient_id)
     if not file.filename:
@@ -85,6 +88,22 @@ def upload_attachment(
         created_by_user_id=user.id,
     )
     db.add(attachment)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="attachment.uploaded",
+        entity_type="attachment",
+        entity_id=str(attachment.id),
+        after_data={
+            "patient_id": attachment.patient_id,
+            "original_filename": attachment.original_filename,
+            "content_type": attachment.content_type,
+            "byte_size": attachment.byte_size,
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     db.refresh(attachment)
     return attachment
@@ -93,8 +112,10 @@ def upload_attachment(
 @attachments_router.get("/{attachment_id}/download")
 def download_attachment(
     attachment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
 ):
     attachment = get_attachment_or_404(db, attachment_id)
     filename = sanitize_filename(attachment.original_filename)
@@ -106,6 +127,20 @@ def download_attachment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Attachment file missing",
         )
+    log_event(
+        db,
+        actor=user,
+        action="attachment.downloaded",
+        entity_type="attachment",
+        entity_id=str(attachment.id),
+        after_data={
+            "patient_id": attachment.patient_id,
+            "filename": filename,
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
     return StreamingResponse(
         handle,
         media_type=attachment.content_type,
@@ -116,11 +151,29 @@ def download_attachment(
 @attachments_router.delete("/{attachment_id}", response_model=AttachmentOut)
 def delete_attachment(
     attachment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("superadmin")),
+    request_id: str | None = Header(default=None),
 ):
     attachment = get_attachment_or_404(db, attachment_id)
+    before_data = {
+        "patient_id": attachment.patient_id,
+        "original_filename": attachment.original_filename,
+        "content_type": attachment.content_type,
+        "byte_size": attachment.byte_size,
+    }
     storage.delete_file(attachment.storage_key)
     db.delete(attachment)
+    log_event(
+        db,
+        actor=user,
+        action="attachment.deleted",
+        entity_type="attachment",
+        entity_id=str(attachment.id),
+        before_data=before_data,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     return attachment

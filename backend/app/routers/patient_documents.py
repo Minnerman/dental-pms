@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.attachment import Attachment
 from app.models.document_template import DocumentTemplate
 from app.models.patient import Patient
@@ -24,6 +24,7 @@ from app.services.document_render import render_template, render_template_with_w
 from app.services.pdf_documents import generate_patient_document_pdf
 from app.services import storage
 from app.services.practice_profile import load_profile
+from app.services.audit import log_event
 from datetime import date
 
 router = APIRouter(prefix="/patients/{patient_id}/documents", tags=["patient-documents"])
@@ -95,8 +96,10 @@ def preview_patient_document(
 def create_patient_document(
     patient_id: int,
     payload: PatientDocumentCreate,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
 ):
     patient = get_patient_or_404(db, patient_id)
     template = get_template_or_404(db, payload.template_id)
@@ -112,6 +115,21 @@ def create_patient_document(
         created_by_user_id=user.id,
     )
     db.add(document)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="patient_document.created",
+        entity_type="patient_document",
+        entity_id=str(document.id),
+        after_data={
+            "patient_id": document.patient_id,
+            "template_id": document.template_id,
+            "title": document.title,
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     db.refresh(document)
     output = PatientDocumentOut.model_validate(document)
@@ -130,8 +148,10 @@ def get_patient_document(
 @documents_router.get("/{document_id}/download")
 def download_patient_document(
     document_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
     format: str = Query(default="text"),
 ):
     document = get_document_or_404(db, document_id)
@@ -147,6 +167,20 @@ def download_patient_document(
             patient, document.title, document.rendered_content, profile
         )
         headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        log_event(
+            db,
+            actor=user,
+            action="patient_document.downloaded_pdf",
+            entity_type="patient_document",
+            entity_id=str(document.id),
+            after_data={
+                "patient_id": document.patient_id,
+                "filename": filename,
+            },
+            request_id=request_id,
+            ip_address=request.client.host if request else None,
+        )
+        db.commit()
         return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
     if format != "text":
         raise HTTPException(
@@ -155,17 +189,48 @@ def download_patient_document(
         )
     filename = f"{safe_title}_{patient.last_name}_{date_suffix}.txt"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    log_event(
+        db,
+        actor=user,
+        action="patient_document.downloaded",
+        entity_type="patient_document",
+        entity_id=str(document.id),
+        after_data={
+            "patient_id": document.patient_id,
+            "filename": filename,
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
     return Response(content=document.rendered_content, media_type="text/plain", headers=headers)
 
 
 @documents_router.delete("/{document_id}", response_model=PatientDocumentOut)
 def delete_patient_document(
     document_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("superadmin")),
+    request_id: str | None = Header(default=None),
 ):
     document = get_document_or_404(db, document_id)
+    before_data = {
+        "patient_id": document.patient_id,
+        "template_id": document.template_id,
+        "title": document.title,
+    }
     db.delete(document)
+    log_event(
+        db,
+        actor=user,
+        action="patient_document.deleted",
+        entity_type="patient_document",
+        entity_id=str(document.id),
+        before_data=before_data,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     return document
 
@@ -173,8 +238,10 @@ def delete_patient_document(
 @documents_router.post("/{document_id}/attach-pdf", response_model=AttachmentOut)
 def attach_patient_document_pdf(
     document_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
 ):
     document = get_document_or_404(db, document_id)
     patient = db.get(Patient, document.patient_id)
@@ -199,6 +266,22 @@ def attach_patient_document_pdf(
     db.flush()
     document.attachment_id = attachment.id
     db.add(document)
+    log_event(
+        db,
+        actor=user,
+        action="attachment.uploaded",
+        entity_type="attachment",
+        entity_id=str(attachment.id),
+        after_data={
+            "patient_id": attachment.patient_id,
+            "patient_document_id": document.id,
+            "original_filename": attachment.original_filename,
+            "content_type": attachment.content_type,
+            "byte_size": attachment.byte_size,
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     db.refresh(attachment)
     return attachment
