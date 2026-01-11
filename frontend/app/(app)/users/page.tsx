@@ -12,6 +12,11 @@ type User = {
   is_active: boolean;
 };
 
+type Me = {
+  id: number;
+  role: string;
+};
+
 const fallbackRoles = [
   "superadmin",
   "dentist",
@@ -38,6 +43,7 @@ export default function UsersPage() {
   const [resetConfirm, setResetConfirm] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [statusTarget, setStatusTarget] = useState<User | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -45,6 +51,18 @@ export default function UsersPage() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [role, setRole] = useState("receptionist");
   const [isActive, setIsActive] = useState(true);
+
+  const isAdmin = me
+    ? [
+        "superadmin",
+        "senior_admin",
+        "dentist",
+        "nurse",
+        "receptionist",
+        "reception",
+      ].includes(me.role)
+    : false;
+  const isSuperadmin = me?.role === "superadmin";
 
   const createRoles = useMemo(() => {
     const allowed = roles.filter((r) => ["dentist", "nurse", "receptionist"].includes(r));
@@ -85,6 +103,22 @@ export default function UsersPage() {
     }
   }
 
+  async function loadMe() {
+    try {
+      const res = await apiFetch("/api/me");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) return;
+      const data = (await res.json()) as Me;
+      setMe({ id: data.id, role: data.role });
+    } catch {
+      setMe(null);
+    }
+  }
+
   async function loadRoles() {
     try {
       const res = await apiFetch("/api/users/roles");
@@ -102,6 +136,7 @@ export default function UsersPage() {
   useEffect(() => {
     void loadUsers();
     void loadRoles();
+    void loadMe();
   }, []);
 
   async function onCreateUser(e: React.FormEvent) {
@@ -284,6 +319,57 @@ export default function UsersPage() {
     setStatusTarget(null);
   }
 
+  function roleBadge(roleValue: string) {
+    if (roleValue === "superadmin") return "Superadmin";
+    if (
+      [
+        "senior_admin",
+        "dentist",
+        "nurse",
+        "receptionist",
+        "reception",
+      ].includes(roleValue)
+    ) {
+      return "Admin";
+    }
+    return "Staff";
+  }
+
+  async function updateUserRole(userId: number, nextRole: string, currentRole: string) {
+    if (nextRole === currentRole) return;
+    const isSuperRoleChange = nextRole === "superadmin" || currentRole === "superadmin";
+    if (isSuperRoleChange && !confirm("Confirm superadmin role change?")) {
+      return;
+    }
+    if (me?.id === userId && !confirm("You are changing your own role. Continue?")) {
+      return;
+    }
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: nextRole }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setError("Not authorized to update roles.");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update role (HTTP ${res.status})`);
+      }
+      setNotice("Role updated.");
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update role");
+    }
+  }
+
   return (
     <div className="app-grid">
       <section className="card" style={{ display: "grid", gap: 12 }}>
@@ -298,9 +384,11 @@ export default function UsersPage() {
             <button className="btn btn-secondary" onClick={loadUsers}>
               Refresh
             </button>
-            <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
-              {showForm ? "Close" : "Create user"}
-            </button>
+            {isAdmin && (
+              <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
+                {showForm ? "Close" : "Create user"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -412,7 +500,7 @@ export default function UsersPage() {
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                 >
-                  {createRoles.map((r) => (
+                  {(isSuperadmin ? roles : createRoles).map((r) => (
                     <option key={r} value={r}>
                       {r}
                     </option>
@@ -544,9 +632,36 @@ export default function UsersPage() {
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id}>
-                    <td>{user.full_name || "—"}</td>
+                    <td>
+                      {user.full_name || "—"}
+                      {me?.id === user.id ? (
+                        <span className="badge" style={{ marginLeft: 8 }}>
+                          You
+                        </span>
+                      ) : null}
+                    </td>
                     <td>{user.email}</td>
-                    <td>{user.role}</td>
+                    <td>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <span className="badge">{roleBadge(user.role)}</span>
+                        <span style={{ color: "var(--muted)" }}>{user.role}</span>
+                        {isSuperadmin && (
+                          <select
+                            className="input"
+                            value={user.role}
+                            onChange={(e) =>
+                              void updateUserRole(user.id, e.target.value, user.role)
+                            }
+                          >
+                            {roles.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <span className="badge">
                         {user.is_active ? "Active" : "Disabled"}
@@ -554,31 +669,37 @@ export default function UsersPage() {
                     </td>
                     <td>
                       <div className="table-actions">
-                        {user.is_active ? (
+                        {isSuperadmin && user.id !== me?.id && (
+                          <>
+                            {user.is_active ? (
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => setStatusTarget(user)}
+                              >
+                                Disable
+                              </button>
+                            ) : (
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => enableUser(user.id)}
+                              >
+                                Enable
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {isAdmin && (
                           <button
                             className="btn btn-secondary"
-                            onClick={() => setStatusTarget(user)}
+                            onClick={() => {
+                              setResetUser(user);
+                              setResetResult(null);
+                              setResetPassword("");
+                            }}
                           >
-                            Disable
-                          </button>
-                        ) : (
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => enableUser(user.id)}
-                          >
-                            Enable
+                            Reset password
                           </button>
                         )}
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => {
-                            setResetUser(user);
-                            setResetResult(null);
-                            setResetPassword("");
-                          }}
-                        >
-                          Reset password
-                        </button>
                       </div>
                     </td>
                   </tr>

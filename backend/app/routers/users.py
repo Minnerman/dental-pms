@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -74,9 +74,34 @@ def patch_user(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
+    if (payload.role is not None or payload.is_active is not None) and admin.role != Role.superadmin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if payload.is_active is False and user.id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot disable your own account",
+        )
+    if payload.role and user.role == Role.superadmin and payload.role != Role.superadmin:
+        superadmin_count = db.scalar(
+            select(func.count(User.id)).where(User.role == Role.superadmin)
+        )
+        if (superadmin_count or 0) <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one superadmin is required",
+            )
+    if payload.is_active is False and user.role == Role.superadmin:
+        superadmin_count = db.scalar(
+            select(func.count(User.id)).where(User.role == Role.superadmin, User.is_active.is_(True))
+        )
+        if (superadmin_count or 0) <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one active superadmin is required",
+            )
     previous_role = user.role
     previous_active = user.is_active
     updated = update_user(

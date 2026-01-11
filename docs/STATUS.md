@@ -28,6 +28,7 @@
 - Recall KPI endpoint + recalls dashboard panel
 - Financial reporting pack (cash-up, outstanding, trends)
 - Monthly export pack (PDF summary + CSV bundle)
+- Role management UI polish (roles, resets, disable)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -86,8 +87,12 @@
 - Attachments: list/download/upload (all), delete (superadmin)
 
 ## Next up
-- Stage 21 follow-up:
-  - Role management UI polish or clinical module enhancements
+- Stage 22 follow-up:
+  - Clinical module enhancements or batch recall exports
+
+## Role management access
+- Superadmin: change roles, enable/disable users, grant/revoke superadmin.
+- Admin: create users, reset passwords.
 
 ## Monthly pack definitions
 - PDF summary includes cash-up totals, method totals, and outstanding snapshot as of month end.
