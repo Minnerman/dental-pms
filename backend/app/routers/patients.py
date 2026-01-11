@@ -33,6 +33,86 @@ def add_months(base_date: date, months: int) -> date:
     return date(year, month, day)
 
 
+def _stringify(value: object | None) -> str:
+    if value is None:
+        return "none"
+    if isinstance(value, str) and not value.strip():
+        return "none"
+    if hasattr(value, "value"):
+        return value.value
+    return str(value)
+
+
+def _log_recall_timeline(
+    db: Session,
+    *,
+    actor: User,
+    patient: Patient,
+    before_data: dict,
+    request_id: str | None,
+    ip_address: str | None,
+) -> None:
+    old_status = _stringify(before_data.get("recall_status"))
+    new_status = _stringify(patient.recall_status)
+    if old_status != new_status:
+        log_event(
+            db,
+            actor=actor,
+            action=f"recall.status: {old_status} -> {new_status}",
+            entity_type="patient",
+            entity_id=str(patient.id),
+            after_data={"recall_status": new_status},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
+
+    old_type = _stringify(before_data.get("recall_type"))
+    new_type = _stringify(patient.recall_type)
+    if old_type != new_type:
+        log_event(
+            db,
+            actor=actor,
+            action=f"recall.type: {old_type} -> {new_type}",
+            entity_type="patient",
+            entity_id=str(patient.id),
+            after_data={"recall_type": new_type},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
+
+    old_notes = (before_data.get("recall_notes") or "").strip()
+    new_notes = (patient.recall_notes or "").strip()
+    if old_notes != new_notes:
+        log_event(
+            db,
+            actor=actor,
+            action="recall.notes_updated",
+            entity_type="patient",
+            entity_id=str(patient.id),
+            after_data={"recall_notes": bool(new_notes)},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
+
+    old_contacted = before_data.get("recall_last_contacted_at")
+    new_contacted = (
+        patient.recall_last_contacted_at.isoformat()
+        if patient.recall_last_contacted_at
+        else None
+    )
+    if not old_contacted and new_contacted:
+        log_event(
+            db,
+            actor=actor,
+            action="recall.contacted",
+            entity_type="patient",
+            entity_id=str(patient.id),
+            after_data={"recall_last_contacted_at": new_contacted},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
+
+
 @router.get("", response_model=list[PatientOut])
 def list_patients(
     db: Session = Depends(get_db),
@@ -331,14 +411,11 @@ def set_patient_recall(
     patient.updated_by_user_id = user.id
     patient.updated_at = datetime.now(timezone.utc)
     db.add(patient)
-    log_event(
+    _log_recall_timeline(
         db,
         actor=user,
-        action="patient.recall.updated",
-        entity_type="patient",
-        entity_id=str(patient.id),
-        before_data=before_data,
-        after_obj=patient,
+        patient=patient,
+        before_data=before_data or {},
         request_id=request_id,
         ip_address=request.client.host if request else None,
     )
