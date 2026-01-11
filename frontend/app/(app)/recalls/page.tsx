@@ -47,6 +47,21 @@ type PatientDocument = {
   unknown_fields?: string[] | null;
 };
 
+type RecallKpis = {
+  range: { from_date: string; to_date: string };
+  counts: {
+    due: number;
+    overdue: number;
+    contacted: number;
+    booked: number;
+    declined: number;
+  };
+  rates: {
+    contacted_rate: number;
+    booked_rate: number;
+  };
+};
+
 const RECALL_TEMPLATE_ROUTINE = "Recall Letter – Routine Examination";
 const RECALL_TEMPLATE_OVERDUE = "Recall Letter – Overdue Reminder";
 
@@ -120,6 +135,10 @@ export default function RecallsPage() {
   const [recallStatus, setRecallStatus] = useState<RecallStatus>("due");
   const [savingRecall, setSavingRecall] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [kpis, setKpis] = useState<RecallKpis | null>(null);
+  const [kpisLoading, setKpisLoading] = useState(false);
+  const [kpisError, setKpisError] = useState<string | null>(null);
+  const [kpiRangeDays, setKpiRangeDays] = useState(30);
 
   const selectedRecall = rows.find((row) => row.id === selectedRecallId) || null;
 
@@ -136,6 +155,21 @@ export default function RecallsPage() {
       style: "currency",
       currency: "GBP",
     }).format(pence / 100);
+  }
+
+  function formatPercent(value: number) {
+    return `${Math.round(value * 100)}%`;
+  }
+
+  function buildKpiRange(days: number) {
+    const today = new Date();
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const start = new Date(end);
+    start.setDate(start.getDate() - days);
+    return {
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    };
   }
 
   function buildRangeParams(filter: RangeFilter) {
@@ -202,6 +236,33 @@ export default function RecallsPage() {
       setError(err instanceof Error ? err.message : "Failed to load recalls");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadKpis() {
+    setKpisLoading(true);
+    setKpisError(null);
+    try {
+      const range = buildKpiRange(kpiRangeDays);
+      const params = new URLSearchParams();
+      params.set("start", range.start);
+      params.set("end", range.end);
+      const res = await apiFetch(`/api/recalls/kpis?${params.toString()}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load KPIs (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as RecallKpis;
+      setKpis(data);
+    } catch (err) {
+      setKpisError(err instanceof Error ? err.message : "Failed to load KPIs");
+    } finally {
+      setKpisLoading(false);
     }
   }
 
@@ -402,6 +463,10 @@ export default function RecallsPage() {
   }, [rangeFilter, statusFilter]);
 
   useEffect(() => {
+    void loadKpis();
+  }, [kpiRangeDays]);
+
+  useEffect(() => {
     const handle = setTimeout(() => {
       void loadRecalls();
     }, 300);
@@ -485,6 +550,72 @@ export default function RecallsPage() {
             {loading && <span className="badge">Loading…</span>}
             {error && <span className="badge">{error}</span>}
             {notice && <span className="badge">{notice}</span>}
+          </div>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="stack">
+              <div className="row" style={{ alignItems: "center" }}>
+                <h4 style={{ margin: 0 }}>Recall KPIs</h4>
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setKpiRangeDays(7)}
+                  >
+                    7d
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setKpiRangeDays(30)}
+                  >
+                    30d
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setKpiRangeDays(90)}
+                  >
+                    90d
+                  </button>
+                </div>
+              </div>
+              {kpisLoading && <div className="badge">Loading KPIs…</div>}
+              {kpisError && <div className="notice">{kpisError}</div>}
+              {kpis && (
+                <div className="grid grid-3">
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack" style={{ gap: 6 }}>
+                      <div className="label">Due</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.counts.due}</div>
+                      <div className="label">Overdue</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.counts.overdue}</div>
+                    </div>
+                  </div>
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack" style={{ gap: 6 }}>
+                      <div className="label">Contacted</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.counts.contacted}</div>
+                      <div className="label">Booked</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.counts.booked}</div>
+                    </div>
+                  </div>
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack" style={{ gap: 6 }}>
+                      <div className="label">Declined</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{kpis.counts.declined}</div>
+                      <div className="label">Contacted rate</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>
+                        {formatPercent(kpis.rates.contacted_rate)}
+                      </div>
+                      <div className="label">Booked rate</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>
+                        {formatPercent(kpis.rates.booked_rate)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           {rows.length === 0 && !loading ? (
             <div className="notice">No recalls found.</div>

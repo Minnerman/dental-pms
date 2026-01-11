@@ -25,6 +25,7 @@
 - RBAC-aware UI for templates/docs/attachments
 - Recalls workflow + recall letters (documents/PDF)
 - Recall template pack + defaults for recall letters
+- Recall KPI endpoint + recalls dashboard panel
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -83,8 +84,15 @@
 - Attachments: list/download/upload (all), delete (superadmin)
 
 ## Next up
-- Stage 18 follow-up:
-  - Recall KPIs/reporting (due/overdue, contacted/booked rates)
+- Stage 19 follow-up:
+  - Financial reporting (cash-up summaries + outstanding balances)
+
+## Recall KPI definitions
+- Due/overdue/booked/declined are counted by current status filtered to recall due dates within the KPI date range.
+- Overdue is a due recall with due date before today.
+- Contacted uses `recall_last_contacted_at` within the KPI date range.
+- Contacted rate = contacted / (due + overdue).
+- Booked rate = booked / (contacted + booked).
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

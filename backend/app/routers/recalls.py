@@ -1,7 +1,7 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -11,6 +11,7 @@ from app.models.patient import Patient, RecallStatus
 from app.models.user import User
 from app.schemas.patient import PatientRecallOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
+from app.schemas.recalls import RecallKpiOut
 from app.models.document_template import DocumentTemplate
 from app.models.patient_document import PatientDocument
 from app.services.audit import log_event, snapshot_model
@@ -183,6 +184,105 @@ def list_recalls(
             )
         )
     return output
+
+
+@router.get("/kpis", response_model=RecallKpiOut)
+def recall_kpis(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+):
+    today = date.today()
+    range_end = end or today
+    range_start = start or (range_end - timedelta(days=30))
+
+    base_filters = [
+        Patient.deleted_at.is_(None),
+        Patient.recall_due_date.is_not(None),
+        Patient.recall_due_date >= range_start,
+        Patient.recall_due_date <= range_end,
+    ]
+
+    counts_stmt = select(
+        func.coalesce(
+            func.sum(
+                case(
+                    (Patient.recall_status == RecallStatus.due, 1),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("due"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        (Patient.recall_status == RecallStatus.due)
+                        & (Patient.recall_due_date < today),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("overdue"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        (Patient.recall_status == RecallStatus.contacted)
+                        & (Patient.recall_last_contacted_at.is_not(None))
+                        & (func.date(Patient.recall_last_contacted_at) >= range_start)
+                        & (func.date(Patient.recall_last_contacted_at) <= range_end),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("contacted"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (Patient.recall_status == RecallStatus.booked, 1),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("booked"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (Patient.recall_status == RecallStatus.not_required, 1),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("declined"),
+    ).where(*base_filters)
+
+    due, overdue, contacted, booked, declined = db.execute(counts_stmt).one()
+
+    denominator = max(due + overdue, 0)
+    contacted_rate = (contacted / denominator) if denominator else 0.0
+    booked_denominator = contacted + booked
+    booked_rate = (booked / booked_denominator) if booked_denominator else 0.0
+
+    return RecallKpiOut(
+        range={"from_date": range_start, "to_date": range_end},
+        counts={
+            "due": due,
+            "overdue": overdue,
+            "contacted": contacted,
+            "booked": booked,
+            "declined": declined,
+        },
+        rates={
+            "contacted_rate": contacted_rate,
+            "booked_rate": booked_rate,
+        },
+    )
 
 
 @router.patch("/{patient_id}", response_model=PatientRecallOut)
