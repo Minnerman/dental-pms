@@ -34,6 +34,7 @@
 - Notes and treatments master-detail layout
 - Patient sub-pages for clinical/documents/attachments
 - Patient navigation polish (tabs + header quick links)
+- Clinical chart view mode toggle + tooth badges (planned/history)
 
 ## URLs
 - Home: `http://100.100.149.40:3100`

@@ -2,6 +2,8 @@ FROM node:18-slim
 
 WORKDIR /app
 ENV NODE_ENV=development
+ARG BUILD_SHA=dev
+ENV NEXT_PUBLIC_BUILD_SHA=$BUILD_SHA
 
 COPY package.json package-lock.json ./
 RUN npm ci

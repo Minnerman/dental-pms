@@ -53,6 +53,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        BUILD_SHA: ${BUILD_SHA:-dev}
     container_name: dental_pms_frontend
     restart: unless-stopped
     working_dir: /app

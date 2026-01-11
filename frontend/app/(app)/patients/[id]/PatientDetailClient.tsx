@@ -498,6 +498,9 @@ export default function PatientDetailClient({
   const [bpeRecordedAt, setBpeRecordedAt] = useState<string | null>(null);
   const [bpeSaving, setBpeSaving] = useState(false);
   const [bpeNotice, setBpeNotice] = useState<string | null>(null);
+  const [clinicalViewMode, setClinicalViewMode] = useState<
+    "current" | "planned" | "history"
+  >("current");
 
   async function loadPatient() {
     setLoading(true);
@@ -1267,6 +1270,40 @@ export default function PatientDetailClient({
     patient?.alerts_access ? { label: "Access", tone: "warning" } : null,
   ].filter(Boolean) as { label: string; tone: "danger" | "warning" }[];
 
+  const plannedTeeth = useMemo(() => {
+    const activeStatuses = new Set(["proposed", "accepted"]);
+    return new Set(
+      treatmentPlanItems
+        .filter((item) => item.tooth && activeStatuses.has(item.status))
+        .map((item) => item.tooth as string)
+    );
+  }, [treatmentPlanItems]);
+
+  const historyTeeth = useMemo(() => {
+    return new Set(
+      clinicalProcedures
+        .filter((procedure) => procedure.tooth)
+        .map((procedure) => procedure.tooth as string)
+    );
+  }, [clinicalProcedures]);
+
+  const plannedItemsForTooth = useMemo(() => {
+    if (!selectedTooth) return [];
+    return treatmentPlanItems.filter((item) => item.tooth === selectedTooth);
+  }, [selectedTooth, treatmentPlanItems]);
+
+  function getToothBadges(tooth: string) {
+    const badges: { label: string; title: string }[] = [];
+    if (clinicalViewMode !== "history" && plannedTeeth.has(tooth)) {
+      badges.push({ label: "P", title: "Planned treatment" });
+    }
+    if (clinicalViewMode !== "planned" && historyTeeth.has(tooth)) {
+      badges.push({ label: "H", title: "History" });
+    }
+    // TODO: add missing/extracted/deciduous/gap-closed tooth badges once stored.
+    return badges;
+  }
+
   const ledgerWithBalance = useMemo(() => {
     let running = 0;
     return ledgerEntries.map((entry) => {
@@ -1350,6 +1387,30 @@ export default function PatientDetailClient({
     const filled = [...entries, "", "", "", "", "", ""].slice(0, 6);
     return filled.map((value) => value || "");
   }
+
+  function tabStyle(active: boolean, compact = false) {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      padding: compact ? "4px 8px" : "6px 12px",
+      borderRadius: 999,
+      border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+      background: active ? "var(--tab-active-bg)" : "transparent",
+      fontSize: compact ? 12 : 14,
+      fontWeight: active ? 600 : 500,
+      color: "inherit",
+      cursor: "pointer",
+      textDecoration: "none",
+    } as const;
+  }
+
+  const tabRowStyle = {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  } as const;
 
   function getDefaultBookingSlot() {
     const next = new Date();
@@ -2191,32 +2252,36 @@ export default function PatientDetailClient({
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <div className="label">Quick links</div>
-                <div className="tabs">
+                <div style={tabRowStyle}>
                   <Link
-                    className={`tab ${tab === "summary" ? "active" : ""}`}
+                    style={tabStyle(tab === "summary", true)}
                     href={`/patients/${patientId}`}
+                    aria-current={tab === "summary" ? "page" : undefined}
                   >
                     Summary
                   </Link>
                   <Link
-                    className={`tab ${tab === "clinical" ? "active" : ""}`}
+                    style={tabStyle(tab === "clinical", true)}
                     href={`/patients/${patientId}/clinical`}
+                    aria-current={tab === "clinical" ? "page" : undefined}
                   >
                     Clinical
                   </Link>
                   <Link
-                    className={`tab ${tab === "documents" ? "active" : ""}`}
+                    style={tabStyle(tab === "documents", true)}
                     href={`/patients/${patientId}/documents`}
+                    aria-current={tab === "documents" ? "page" : undefined}
                   >
                     Documents
                   </Link>
                   <Link
-                    className={`tab ${tab === "attachments" ? "active" : ""}`}
+                    style={tabStyle(tab === "attachments", true)}
                     href={`/patients/${patientId}/attachments`}
+                    aria-current={tab === "attachments" ? "page" : undefined}
                   >
                     Attachments
                   </Link>
-                  <Link className="tab" href={`/patients/${patientId}/timeline`}>
+                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
                     Timeline
                   </Link>
                 </div>
@@ -2255,59 +2320,72 @@ export default function PatientDetailClient({
 
           <div className="card">
             <div className="stack">
-              <div className="tabs">
+              <div style={tabRowStyle}>
                 <button
-                  className={`tab ${tab === "summary" ? "active" : ""}`}
+                  style={tabStyle(tab === "summary")}
                   onClick={() => setTab("summary")}
+                  type="button"
+                  aria-current={tab === "summary" ? "page" : undefined}
                 >
                   Summary
                 </button>
                 <Link
-                  className={`tab ${tab === "clinical" ? "active" : ""}`}
+                  style={tabStyle(tab === "clinical")}
                   href={`/patients/${patientId}/clinical`}
+                  aria-current={tab === "clinical" ? "page" : undefined}
                 >
                   Clinical
                 </Link>
                 <Link
-                  className={`tab ${tab === "documents" ? "active" : ""}`}
+                  style={tabStyle(tab === "documents")}
                   href={`/patients/${patientId}/documents`}
+                  aria-current={tab === "documents" ? "page" : undefined}
                 >
                   Documents
                 </Link>
                 <Link
-                  className={`tab ${tab === "attachments" ? "active" : ""}`}
+                  style={tabStyle(tab === "attachments")}
                   href={`/patients/${patientId}/attachments`}
+                  aria-current={tab === "attachments" ? "page" : undefined}
                 >
                   Attachments
                 </Link>
                 <button
-                  className={`tab ${tab === "notes" ? "active" : ""}`}
+                  style={tabStyle(tab === "notes")}
                   onClick={() => setTab("notes")}
+                  type="button"
+                  aria-current={tab === "notes" ? "page" : undefined}
                 >
                   Notes ({notes.length})
                 </button>
                 <button
-                  className={`tab ${tab === "invoices" ? "active" : ""}`}
+                  style={tabStyle(tab === "invoices")}
                   onClick={() => setTab("invoices")}
+                  type="button"
+                  aria-current={tab === "invoices" ? "page" : undefined}
                 >
                   Invoices ({invoices.length})
                 </button>
                 <button
-                  className={`tab ${tab === "ledger" ? "active" : ""}`}
+                  style={tabStyle(tab === "ledger")}
                   onClick={() => setTab("ledger")}
+                  type="button"
+                  aria-current={tab === "ledger" ? "page" : undefined}
                 >
                   Ledger ({ledgerEntries.length})
                 </button>
                 <button
-                  className={`tab ${tab === "estimates" ? "active" : ""}`}
+                  style={tabStyle(tab === "estimates")}
                   onClick={() => setTab("estimates")}
+                  type="button"
+                  aria-current={tab === "estimates" ? "page" : undefined}
                 >
                   Estimates ({estimates.length})
                 </button>
-                <Link className="tab" href={`/patients/${patientId}/timeline`}>
+                <Link style={tabStyle(false)} href={`/patients/${patientId}/timeline`}>
                   Timeline
                 </Link>
-                <Link className="tab" href={`/patients/${patientId}/audit`}>
+                <Link style={tabStyle(false)} href={`/patients/${patientId}/audit`}>
                   Audit
                 </Link>
               </div>
@@ -3122,10 +3200,44 @@ export default function PatientDetailClient({
                   {clinicalLoading ? (
                     <div className="badge">Loading clinical…</div>
                   ) : clinicalTab === "chart" ? (
-                    <div className="stack">
-                      <div
-                        style={{
-                          display: "grid",
+                <div className="stack">
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <div className="label">View mode</div>
+                    <div style={tabRowStyle}>
+                      <button
+                        type="button"
+                        style={tabStyle(clinicalViewMode === "current", true)}
+                        onClick={() => setClinicalViewMode("current")}
+                      >
+                        Current
+                      </button>
+                      <button
+                        type="button"
+                        style={tabStyle(clinicalViewMode === "planned", true)}
+                        onClick={() => setClinicalViewMode("planned")}
+                      >
+                        Planned
+                      </button>
+                      <button
+                        type="button"
+                        style={tabStyle(clinicalViewMode === "history", true)}
+                        onClick={() => setClinicalViewMode("history")}
+                      >
+                        History
+                      </button>
+                    </div>
+                  </div>
+                  <div style={tabRowStyle}>
+                    <span className="badge">P Planned</span>
+                    <span className="badge">H History</span>
+                    <span className="badge">M Missing</span>
+                    <span className="badge">X Extracted</span>
+                    <span className="badge">D Deciduous</span>
+                    <span className="badge">GC Gap closed</span>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
                           gap: 16,
                           gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
                         }}
@@ -3161,11 +3273,41 @@ export default function PatientDetailClient({
                                             : undefined,
                                           borderColor: isActive ? "var(--accent)" : undefined,
                                         }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "center",
+                                          gap: 2,
+                                        }}
                                       >
-                                        {tooth}
-                                      </button>
-                                    );
-                                  })}
+                                        <span>{tooth}</span>
+                                        {getToothBadges(tooth).length > 0 && (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: 4,
+                                              fontSize: 10,
+                                              lineHeight: 1,
+                                              flexWrap: "wrap",
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            {getToothBadges(tooth).map((badge) => (
+                                              <span
+                                                key={`${tooth}-${badge.label}`}
+                                                title={badge.title}
+                                              >
+                                                {badge.label}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
                                 </div>
                               </div>
                               <div className="stack" style={{ gap: 8 }}>
@@ -3196,11 +3338,41 @@ export default function PatientDetailClient({
                                             : undefined,
                                           borderColor: isActive ? "var(--accent)" : undefined,
                                         }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "center",
+                                          gap: 2,
+                                        }}
                                       >
-                                        {tooth}
-                                      </button>
-                                    );
-                                  })}
+                                        <span>{tooth}</span>
+                                        {getToothBadges(tooth).length > 0 && (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: 4,
+                                              fontSize: 10,
+                                              lineHeight: 1,
+                                              flexWrap: "wrap",
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            {getToothBadges(tooth).map((badge) => (
+                                              <span
+                                                key={`${tooth}-${badge.label}`}
+                                                title={badge.title}
+                                              >
+                                                {badge.label}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
                                 </div>
                               </div>
                             </div>
@@ -3363,30 +3535,61 @@ export default function PatientDetailClient({
                               </div>
 
                               <div className="stack" style={{ gap: 10 }}>
-                                <div className="label">Tooth history</div>
-                                {toothHistoryLoading ? (
-                                  <div className="badge">Loading history…</div>
-                                ) : toothHistoryEntries.length === 0 ? (
-                                  <div className="notice">No history yet.</div>
-                                ) : (
-                                  <div className="stack">
-                                    {toothHistoryEntries.map((entry, index) => (
-                                      <div className="card" style={{ margin: 0 }} key={index}>
-                                        <div className="row">
-                                          <div>
-                                            <strong>
-                                              {entry.type === "note" ? "Note" : "Procedure"}
-                                            </strong>
-                                            <div style={{ color: "var(--muted)" }}>
-                                              {formatShortDate(entry.date)} ·{" "}
-                                              {entry.actor || "—"}
+                                <div className="label">Tooth timeline</div>
+                                {clinicalViewMode !== "planned" && (
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <div className="label">History</div>
+                                    {toothHistoryLoading ? (
+                                      <div className="badge">Loading history…</div>
+                                    ) : toothHistoryEntries.length === 0 ? (
+                                      <div className="notice">No history yet.</div>
+                                    ) : (
+                                      <div className="stack">
+                                        {toothHistoryEntries.map((entry, index) => (
+                                          <div className="card" style={{ margin: 0 }} key={index}>
+                                            <div className="row">
+                                              <div>
+                                                <strong>
+                                                  {entry.type === "note" ? "Note" : "Procedure"}
+                                                </strong>
+                                                <div style={{ color: "var(--muted)" }}>
+                                                  {formatShortDate(entry.date)} ·{" "}
+                                                  {entry.actor || "—"}
+                                                </div>
+                                              </div>
+                                              <span className="badge">{entry.label}</span>
+                                            </div>
+                                            <div title={entry.detail}>{entry.detail}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                {clinicalViewMode !== "history" && (
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <div className="label">Planned</div>
+                                    {plannedItemsForTooth.length === 0 ? (
+                                      <div className="notice">No planned items yet.</div>
+                                    ) : (
+                                      <div className="stack">
+                                        {plannedItemsForTooth.map((item) => (
+                                          <div className="card" style={{ margin: 0 }} key={item.id}>
+                                            <div className="row">
+                                              <div>
+                                                <strong>{item.procedure_code}</strong>
+                                                <div style={{ color: "var(--muted)" }}>
+                                                  {item.description}
+                                                </div>
+                                              </div>
+                                              <span className="badge">
+                                                {treatmentStatusLabels[item.status]}
+                                              </span>
                                             </div>
                                           </div>
-                                          <span className="badge">{entry.label}</span>
-                                        </div>
-                                        <div title={entry.detail}>{entry.detail}</div>
+                                        ))}
                                       </div>
-                                    ))}
+                                    )}
                                   </div>
                                 )}
                               </div>

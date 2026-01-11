@@ -71,6 +71,7 @@ function ThemeToggle() {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const buildSha = (process.env.NEXT_PUBLIC_BUILD_SHA || "dev").slice(0, 7);
   const [checking, setChecking] = useState(true);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -370,6 +371,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <div className="badge">{me ? `${me.email} · ${me.role}` : "Signed in"}</div>
+            <div className="badge">build: {buildSha}</div>
             <ThemeToggle />
             <button
               className="btn btn-secondary"
