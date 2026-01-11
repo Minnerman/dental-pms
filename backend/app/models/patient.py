@@ -87,6 +87,10 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     recall_last_set_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
+    bpe_scores: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    bpe_recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     appointments = relationship("Appointment", back_populates="patient")
     notes_list = relationship("Note", back_populates="patient")

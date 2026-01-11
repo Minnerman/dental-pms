@@ -86,6 +86,16 @@ class TreatmentPlanItemOut(BaseModel):
     updated_by: Optional[ActorOut] = None
 
 
+class BpeUpdate(BaseModel):
+    scores: list[str]
+    recorded_at: Optional[datetime] = None
+
+
+class BpeOut(BaseModel):
+    bpe_scores: Optional[list[str]] = None
+    bpe_recorded_at: Optional[datetime] = None
+
+
 class ToothHistoryOut(BaseModel):
     notes: list[ToothNoteOut]
     procedures: list[ProcedureOut]
@@ -95,3 +105,5 @@ class ClinicalSummaryOut(BaseModel):
     recent_tooth_notes: list[ToothNoteOut]
     recent_procedures: list[ProcedureOut]
     treatment_plan_items: list[TreatmentPlanItemOut]
+    bpe_scores: Optional[list[str]] = None
+    bpe_recorded_at: Optional[datetime] = None

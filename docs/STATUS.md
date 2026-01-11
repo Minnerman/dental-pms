@@ -14,6 +14,7 @@
 - Patient ledger + quick payment/adjustment entry
 - Cash-up report (daily totals by payment method)
 - Clinical chart (odontogram + tooth history) + treatment plan + clinical notes
+- Clinical UX upgrades: quick-add to treatment plan, BPE recording, clinical timeline events
 - Patient referrals (source + contact + notes)
 - Document templates (prescriptions/letters)
 - Patient attachments (uploaded files)
@@ -87,8 +88,8 @@
 - Attachments: list/download/upload (all), delete (superadmin)
 
 ## Next up
-- Stage 22 follow-up:
-  - Clinical module enhancements or batch recall exports
+- Stage 23 follow-up:
+  - Clinical reporting polish or batch recall exports
 
 ## Role management access
 - Superadmin: change roles, enable/disable users, grant/revoke superadmin.

@@ -257,6 +257,8 @@ type ClinicalSummary = {
   recent_tooth_notes: ClinicalToothNote[];
   recent_procedures: Procedure[];
   treatment_plan_items: TreatmentPlanItem[];
+  bpe_scores?: string[] | null;
+  bpe_recorded_at?: string | null;
 };
 
 type ToothHistory = {
@@ -350,6 +352,7 @@ const lowerTeeth = [
 ];
 
 const allTeeth = [...upperTeeth, ...lowerTeeth];
+const bpeSextants = ["UR", "UA", "UL", "LL", "LA", "LR"];
 
 
 export default function PatientDetailClient({ id }: { id: string }) {
@@ -464,10 +467,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [procedureFee, setProcedureFee] = useState("");
   const [savingProcedure, setSavingProcedure] = useState(false);
   const [savingToothNote, setSavingToothNote] = useState(false);
+  const [chartNoteNotice, setChartNoteNotice] = useState<string | null>(null);
   const [notesTooth, setNotesTooth] = useState("");
   const [notesSurface, setNotesSurface] = useState("");
   const [notesBody, setNotesBody] = useState("");
   const [savingClinicalNote, setSavingClinicalNote] = useState(false);
+  const [clinicalNoteNotice, setClinicalNoteNotice] = useState<string | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [planTooth, setPlanTooth] = useState("");
   const [planSurface, setPlanSurface] = useState("");
@@ -475,6 +480,10 @@ export default function PatientDetailClient({ id }: { id: string }) {
   const [planDescription, setPlanDescription] = useState("");
   const [planFee, setPlanFee] = useState("");
   const [planSaving, setPlanSaving] = useState(false);
+  const [bpeScores, setBpeScores] = useState<string[]>(Array(6).fill(""));
+  const [bpeRecordedAt, setBpeRecordedAt] = useState<string | null>(null);
+  const [bpeSaving, setBpeSaving] = useState(false);
+  const [bpeNotice, setBpeNotice] = useState<string | null>(null);
 
   async function loadPatient() {
     setLoading(true);
@@ -919,6 +928,8 @@ export default function PatientDetailClient({ id }: { id: string }) {
       setClinicalNotes(data.recent_tooth_notes ?? []);
       setClinicalProcedures(data.recent_procedures ?? []);
       setTreatmentPlanItems(data.treatment_plan_items ?? []);
+      setBpeScores(normalizeBpeScores(data.bpe_scores));
+      setBpeRecordedAt(data.bpe_recorded_at ?? null);
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to load clinical summary");
     } finally {
@@ -975,6 +986,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
       }
       setChartNoteBody("");
       setChartNoteSurface("");
+      setChartNoteNotice("Note saved.");
       await loadClinicalSummary();
       await loadToothHistory(selectedTooth);
     } catch (err) {
@@ -1020,6 +1032,48 @@ export default function PatientDetailClient({ id }: { id: string }) {
     }
   }
 
+  function openPlanFromChart() {
+    if (!selectedTooth || !procedureCode || !procedureDescription.trim()) return;
+    setPlanTooth(selectedTooth);
+    setPlanSurface(chartNoteSurface);
+    setPlanCode(procedureCode);
+    setPlanDescription(procedureDescription.trim());
+    setPlanFee(procedureFee);
+    setShowPlanModal(true);
+  }
+
+  async function submitBpe() {
+    setBpeSaving(true);
+    setBpeNotice(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/clinical/bpe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scores: bpeScores }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to save BPE (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as {
+        bpe_scores?: string[] | null;
+        bpe_recorded_at?: string | null;
+      };
+      setBpeScores(normalizeBpeScores(data.bpe_scores));
+      setBpeRecordedAt(data.bpe_recorded_at ?? null);
+      setBpeNotice(data.bpe_scores ? "BPE saved." : "BPE cleared.");
+      await loadClinicalSummary();
+    } catch (err) {
+      setClinicalError(err instanceof Error ? err.message : "Failed to save BPE");
+    } finally {
+      setBpeSaving(false);
+    }
+  }
+
   async function submitClinicalNote() {
     if (!notesTooth.trim() || !notesBody.trim()) return;
     setSavingClinicalNote(true);
@@ -1043,6 +1097,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
       }
       setNotesBody("");
       setNotesSurface("");
+      setClinicalNoteNotice("Note saved.");
       await loadClinicalSummary();
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save clinical note");
@@ -1269,6 +1324,12 @@ export default function PatientDetailClient({ id }: { id: string }) {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return "—";
     return parsed.toLocaleDateString("en-GB");
+  }
+
+  function normalizeBpeScores(scores?: string[] | null) {
+    const entries = Array.isArray(scores) ? scores : [];
+    const filled = [...entries, "", "", "", "", "", ""].slice(0, 6);
+    return filled.map((value) => value || "");
   }
 
   function getDefaultBookingSlot() {
@@ -3006,80 +3067,125 @@ export default function PatientDetailClient({ id }: { id: string }) {
                           gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
                         }}
                       >
-                        <Panel title="Odontogram">
-                          <div className="stack" style={{ gap: 16 }}>
-                            <div className="stack" style={{ gap: 8 }}>
-                              <div className="label">Upper</div>
+                        <div className="stack" style={{ gap: 16 }}>
+                          <Panel title="Odontogram">
+                            <div className="stack" style={{ gap: 16 }}>
+                              <div className="stack" style={{ gap: 8 }}>
+                                <div className="label">Upper</div>
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gap: 6,
+                                    gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                  }}
+                                >
+                                  {upperTeeth.map((tooth) => {
+                                    const isActive = selectedTooth === tooth;
+                                    return (
+                                      <button
+                                        key={tooth}
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedTooth(tooth);
+                                          setNotesTooth(tooth);
+                                        }}
+                                        style={{
+                                          padding: "6px 0",
+                                          fontWeight: 600,
+                                          background: isActive
+                                            ? "rgba(51, 255, 180, 0.18)"
+                                            : undefined,
+                                          borderColor: isActive ? "var(--accent)" : undefined,
+                                        }}
+                                      >
+                                        {tooth}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className="stack" style={{ gap: 8 }}>
+                                <div className="label">Lower</div>
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gap: 6,
+                                    gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                  }}
+                                >
+                                  {lowerTeeth.map((tooth) => {
+                                    const isActive = selectedTooth === tooth;
+                                    return (
+                                      <button
+                                        key={tooth}
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedTooth(tooth);
+                                          setNotesTooth(tooth);
+                                        }}
+                                        style={{
+                                          padding: "6px 0",
+                                          fontWeight: 600,
+                                          background: isActive
+                                            ? "rgba(51, 255, 180, 0.18)"
+                                            : undefined,
+                                          borderColor: isActive ? "var(--accent)" : undefined,
+                                        }}
+                                      >
+                                        {tooth}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </Panel>
+
+                          <Panel title="BPE">
+                            <div className="stack" style={{ gap: 12 }}>
                               <div
                                 style={{
                                   display: "grid",
-                                  gap: 6,
-                                  gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                  gap: 8,
+                                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                                 }}
                               >
-                                {upperTeeth.map((tooth) => {
-                                  const isActive = selectedTooth === tooth;
-                                  return (
-                                    <button
-                                      key={tooth}
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedTooth(tooth);
-                                        setNotesTooth(tooth);
+                                {bpeSextants.map((label, index) => (
+                                  <div className="stack" style={{ gap: 6 }} key={label}>
+                                    <label className="label">{label}</label>
+                                    <input
+                                      className="input"
+                                      value={bpeScores[index] ?? ""}
+                                      onChange={(e) => {
+                                        const next = [...bpeScores];
+                                        next[index] = e.target.value;
+                                        setBpeScores(next);
+                                        setBpeNotice(null);
                                       }}
-                                      style={{
-                                        padding: "6px 0",
-                                        fontWeight: 600,
-                                        background: isActive
-                                          ? "rgba(51, 255, 180, 0.18)"
-                                          : undefined,
-                                        borderColor: isActive ? "var(--accent)" : undefined,
-                                      }}
-                                    >
-                                      {tooth}
-                                    </button>
-                                  );
-                                })}
+                                      placeholder="0-4 / *"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                Last recorded: {formatShortDate(bpeRecordedAt)}
+                              </div>
+                              <div className="row">
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={submitBpe}
+                                  disabled={bpeSaving}
+                                >
+                                  {bpeSaving ? "Saving..." : "Save BPE"}
+                                </button>
+                                {bpeNotice && <span className="badge">{bpeNotice}</span>}
                               </div>
                             </div>
-                            <div className="stack" style={{ gap: 8 }}>
-                              <div className="label">Lower</div>
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gap: 6,
-                                  gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
-                                }}
-                              >
-                                {lowerTeeth.map((tooth) => {
-                                  const isActive = selectedTooth === tooth;
-                                  return (
-                                    <button
-                                      key={tooth}
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedTooth(tooth);
-                                        setNotesTooth(tooth);
-                                      }}
-                                      style={{
-                                        padding: "6px 0",
-                                        fontWeight: 600,
-                                        background: isActive
-                                          ? "rgba(51, 255, 180, 0.18)"
-                                          : undefined,
-                                        borderColor: isActive ? "var(--accent)" : undefined,
-                                      }}
-                                    >
-                                      {tooth}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </Panel>
+                          </Panel>
+                        </div>
 
                         <Panel title={selectedTooth ? `Tooth ${selectedTooth}` : "Select a tooth"}>
                           {!selectedTooth ? (
@@ -3111,7 +3217,10 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                     className="input"
                                     rows={3}
                                     value={chartNoteBody}
-                                    onChange={(e) => setChartNoteBody(e.target.value)}
+                                    onChange={(e) => {
+                                      setChartNoteBody(e.target.value);
+                                      setChartNoteNotice(null);
+                                    }}
                                     placeholder="Clinical observation or note"
                                   />
                                 </div>
@@ -3123,6 +3232,7 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                 >
                                   {savingToothNote ? "Saving..." : "Add note"}
                                 </button>
+                                {chartNoteNotice && <span className="badge">{chartNoteNotice}</span>}
                               </div>
 
                               <div className="stack" style={{ gap: 10 }}>
@@ -3178,6 +3288,14 @@ export default function PatientDetailClient({ id }: { id: string }) {
                                   }
                                 >
                                   {savingProcedure ? "Saving..." : "Add procedure"}
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={openPlanFromChart}
+                                  disabled={!procedureCode || !procedureDescription.trim()}
+                                >
+                                  Add to plan
                                 </button>
                               </div>
 
@@ -3379,7 +3497,10 @@ export default function PatientDetailClient({ id }: { id: string }) {
                               className="input"
                               rows={3}
                               value={notesBody}
-                              onChange={(e) => setNotesBody(e.target.value)}
+                              onChange={(e) => {
+                                setNotesBody(e.target.value);
+                                setClinicalNoteNotice(null);
+                              }}
                               placeholder="Date-stamped clinical note"
                             />
                           </div>
@@ -3391,6 +3512,9 @@ export default function PatientDetailClient({ id }: { id: string }) {
                           >
                             {savingClinicalNote ? "Saving..." : "Add note"}
                           </button>
+                          {clinicalNoteNotice && (
+                            <span className="badge">{clinicalNoteNotice}</span>
+                          )}
                         </div>
                       </Panel>
 
