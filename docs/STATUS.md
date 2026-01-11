@@ -26,6 +26,7 @@
 - Recalls workflow + recall letters (documents/PDF)
 - Recall template pack + defaults for recall letters
 - Recall KPI endpoint + recalls dashboard panel
+- Financial reporting pack (cash-up, outstanding, trends)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -84,8 +85,13 @@
 - Attachments: list/download/upload (all), delete (superadmin)
 
 ## Next up
-- Stage 19 follow-up:
-  - Financial reporting (cash-up summaries + outstanding balances)
+- Stage 20 follow-up:
+  - Exports (PDF/CSV packs) or role management UI polish
+
+## Financial reporting definitions
+- Cash-up summary uses ledger payment entries within the selected date range (totals by day and method).
+- Outstanding balances sum ledger entries up to the selected `as_of` date; top debtors are the highest positive balances.
+- Trends are daily sums from ledger entries: payments (absolute), charges (charges + adjustments), net (sum of all).
 
 ## Recall KPI definitions
 - Due/overdue/booked/declined are counted by current status filtered to recall due dates within the KPI date range.
