@@ -15,6 +15,7 @@
 - Cash-up report (daily totals by payment method)
 - Clinical chart (odontogram + tooth history) + treatment plan + clinical notes
 - Patient referrals (source + contact + notes)
+- Document templates (prescriptions/letters)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -68,7 +69,7 @@
 - None known.
 
 ## Next up
-- Document templates (prescriptions/letters), referrals, and file attachments (Stage 9)
+- File attachments (Stage 9)
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

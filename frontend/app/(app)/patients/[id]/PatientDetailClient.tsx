@@ -8,6 +8,7 @@ import { apiFetch, clearToken } from "@/lib/auth";
 import StatusIcon from "@/components/ui/StatusIcon";
 import Panel from "@/components/ui/Panel";
 import Table from "@/components/ui/Table";
+import PatientDocuments from "./PatientDocuments";
 
 type Actor = {
   id: number;
@@ -2383,6 +2384,8 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       )}
                     </div>
                   </div>
+
+                  <PatientDocuments />
 
                   <form onSubmit={savePatient} className="stack">
                   <div className="grid grid-2">

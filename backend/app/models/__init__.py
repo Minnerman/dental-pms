@@ -16,6 +16,7 @@ from app.models.clinical import (
     TreatmentPlanItem,
     TreatmentPlanStatus,
 )
+from app.models.document_template import DocumentTemplate, DocumentTemplateKind
 
 __all__ = [
     "Base",
@@ -53,4 +54,6 @@ __all__ = [
     "ToothNote",
     "TreatmentPlanItem",
     "TreatmentPlanStatus",
+    "DocumentTemplate",
+    "DocumentTemplateKind",
 ]
