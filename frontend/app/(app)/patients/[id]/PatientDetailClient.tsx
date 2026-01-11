@@ -48,6 +48,10 @@ type Patient = {
   primary_contact_name?: string | null;
   primary_contact_phone?: string | null;
   primary_contact_relationship?: string | null;
+  referral_source?: string | null;
+  referral_contact_name?: string | null;
+  referral_contact_phone?: string | null;
+  referral_notes?: string | null;
   notes?: string | null;
   allergies?: string | null;
   medical_alerts?: string | null;
@@ -1354,6 +1358,10 @@ export default function PatientDetailClient({ id }: { id: string }) {
             patient.care_setting === "CLINIC" ? null : patient.primary_contact_phone,
           primary_contact_relationship:
             patient.care_setting === "CLINIC" ? null : patient.primary_contact_relationship,
+          referral_source: patient.referral_source,
+          referral_contact_name: patient.referral_contact_name,
+          referral_contact_phone: patient.referral_contact_phone,
+          referral_notes: patient.referral_notes,
           allergies: patient.allergies,
           medical_alerts: patient.medical_alerts,
           safeguarding_notes: patient.safeguarding_notes,
@@ -2066,6 +2074,29 @@ export default function PatientDetailClient({ id }: { id: string }) {
                 </div>
               )}
 
+              {(patient.referral_source ||
+                patient.referral_contact_name ||
+                patient.referral_contact_phone ||
+                patient.referral_notes) && (
+                <div className="card" style={{ margin: 0 }}>
+                  <div className="stack" style={{ gap: 6 }}>
+                    <div className="label">Referral</div>
+                    <div>
+                      <strong>Source:</strong> {patient.referral_source || "—"}
+                    </div>
+                    <div>
+                      <strong>Contact:</strong> {patient.referral_contact_name || "—"}
+                      {patient.referral_contact_phone
+                        ? ` · ${patient.referral_contact_phone}`
+                        : ""}
+                    </div>
+                    <div>
+                      <strong>Notes:</strong> {patient.referral_notes || "—"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button className="btn btn-secondary" type="button" onClick={copyAddress}>
                   Copy address
@@ -2581,6 +2612,61 @@ export default function PatientDetailClient({ id }: { id: string }) {
                       </div>
                     </div>
                   )}
+
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Referral source</label>
+                      <input
+                        className="input"
+                        value={patient.referral_source ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, referral_source: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Referral contact</label>
+                      <input
+                        className="input"
+                        value={patient.referral_contact_name ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, referral_contact_name: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-2">
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Referral phone</label>
+                      <input
+                        className="input"
+                        value={patient.referral_contact_phone ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, referral_contact_phone: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <label className="label">Referral notes</label>
+                      <textarea
+                        className="input"
+                        rows={2}
+                        value={patient.referral_notes ?? ""}
+                        onChange={(e) =>
+                          setPatient((prev) =>
+                            prev ? { ...prev, referral_notes: e.target.value } : prev
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
 
                   <div className="grid grid-2">
                     <div className="stack" style={{ gap: 8 }}>

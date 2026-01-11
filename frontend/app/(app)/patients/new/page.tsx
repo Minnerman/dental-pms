@@ -24,6 +24,10 @@ export default function NewPatientPage() {
   const [primaryContactName, setPrimaryContactName] = useState("");
   const [primaryContactPhone, setPrimaryContactPhone] = useState("");
   const [primaryContactRelationship, setPrimaryContactRelationship] = useState("");
+  const [referralSource, setReferralSource] = useState("");
+  const [referralContactName, setReferralContactName] = useState("");
+  const [referralContactPhone, setReferralContactPhone] = useState("");
+  const [referralNotes, setReferralNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +53,10 @@ export default function NewPatientPage() {
           primary_contact_name: primaryContactName || null,
           primary_contact_phone: primaryContactPhone || null,
           primary_contact_relationship: primaryContactRelationship || null,
+          referral_source: referralSource || null,
+          referral_contact_name: referralContactName || null,
+          referral_contact_phone: referralContactPhone || null,
+          referral_notes: referralNotes || null,
         }),
       });
       if (res.status === 401) {
@@ -221,6 +229,43 @@ export default function NewPatientPage() {
             </div>
           </div>
         )}
+        <div className="grid grid-2">
+          <div className="stack" style={{ gap: 8 }}>
+            <label className="label">Referral source</label>
+            <input
+              className="input"
+              value={referralSource}
+              onChange={(e) => setReferralSource(e.target.value)}
+            />
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            <label className="label">Referral contact</label>
+            <input
+              className="input"
+              value={referralContactName}
+              onChange={(e) => setReferralContactName(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="grid grid-2">
+          <div className="stack" style={{ gap: 8 }}>
+            <label className="label">Referral phone</label>
+            <input
+              className="input"
+              value={referralContactPhone}
+              onChange={(e) => setReferralContactPhone(e.target.value)}
+            />
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            <label className="label">Referral notes</label>
+            <textarea
+              className="input"
+              rows={2}
+              value={referralNotes}
+              onChange={(e) => setReferralNotes(e.target.value)}
+            />
+          </div>
+        </div>
         <button className="btn btn-primary" disabled={saving}>
           {saving ? "Saving..." : "Save patient"}
         </button>

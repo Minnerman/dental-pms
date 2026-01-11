@@ -28,6 +28,10 @@ class PatientBase(BaseModel):
     primary_contact_name: Optional[str] = None
     primary_contact_phone: Optional[str] = None
     primary_contact_relationship: Optional[str] = None
+    referral_source: Optional[str] = None
+    referral_contact_name: Optional[str] = None
+    referral_contact_phone: Optional[str] = None
+    referral_notes: Optional[str] = None
     notes: Optional[str] = None
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None
@@ -64,6 +68,10 @@ class PatientUpdate(BaseModel):
     primary_contact_name: Optional[str] = None
     primary_contact_phone: Optional[str] = None
     primary_contact_relationship: Optional[str] = None
+    referral_source: Optional[str] = None
+    referral_contact_name: Optional[str] = None
+    referral_contact_phone: Optional[str] = None
+    referral_notes: Optional[str] = None
     notes: Optional[str] = None
     allergies: Optional[str] = None
     medical_alerts: Optional[str] = None

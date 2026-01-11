@@ -14,6 +14,7 @@
 - Patient ledger + quick payment/adjustment entry
 - Cash-up report (daily totals by payment method)
 - Clinical chart (odontogram + tooth history) + treatment plan + clinical notes
+- Patient referrals (source + contact + notes)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
