@@ -18,12 +18,15 @@ From the repo root:
    cp .env.example .env
 
 2) Start:
-   docker compose up -d
+   docker compose up -d --build
 
-3) Check services:
-- Health: ./ops/health.sh
-- Backend: http://localhost:8100/health
-- Frontend: http://localhost:3100
+3) Apply migrations:
+   docker compose run --rm backend alembic upgrade head
+
+4) Check services:
+   - Health: ./ops/health.sh
+   - Backend: http://localhost:8100/health
+   - Frontend: http://localhost:3100
 
 ## Where it runs
 - http://<server-ip>:3100
@@ -33,6 +36,14 @@ From the repo root:
 - Frontend: 3100
 - Backend: 8100
 - Postgres: 5442
+
+## Major modules
+- Patients, appointments, recalls
+- Notes + clinical chart
+- Document templates + patient documents + attachments
+- Invoices, payments, cash-up
+
+Status details: `docs/STATUS.md`
 
 ## Key features
 - R4-style patient workspace tabs with persistence
@@ -51,6 +62,8 @@ docker compose down
 - Access URLs (Tailscale + local): `docs/ACCESS_URLS.md`
 - Quick ops checklist: `docs/OPS_CHECKLIST.md`
 - Audit trail notes: `docs/AUDIT_TRAIL.md`
+- Architecture overview: `docs/ARCHITECTURE.md`
+- Operations quick guide: `docs/OPERATIONS.md`
 - Migration guide: `docs/SERVER_MIGRATION.md`
 - Stop point status: `docs/STATUS.md`
 

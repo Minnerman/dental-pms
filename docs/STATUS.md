@@ -76,11 +76,14 @@
 ## Known issues
 - None known.
 
+## RBAC matrix
+- Templates: list/read/download (all), create/update/delete (superadmin)
+- Patient documents: list/read/download (all), create (all), delete (superadmin)
+- Attachments: list/download/upload (all), delete (superadmin)
+
 ## Next up
-- Stage 16 recalls workflow:
-  - Worklist filters and status actions
-  - Generate recall letters as patient documents
-  - Optional PDF attachment from generated letters
+- Stage 16 follow-up:
+  - Recall timeline entries (status changes + letter generation)
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev
