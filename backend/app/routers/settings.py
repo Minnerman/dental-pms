@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.practice_schedule import PracticeClosure, PracticeHour, PracticeOverride
+from app.models.practice_profile import PracticeProfile
 from app.models.user import Role, User
+from app.schemas.practice_profile import PracticeProfileOut, PracticeProfileUpdate
 from app.schemas.practice_schedule import (
     PracticeClosureIn,
     PracticeHourIn,
@@ -16,6 +18,7 @@ from app.schemas.practice_schedule import (
     PracticeScheduleUpdate,
 )
 from app.services.schedule import load_schedule
+from app.services.practice_profile import default_profile
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -27,6 +30,18 @@ def get_schedule(
 ):
     hours, closures, overrides = load_schedule(db)
     return {"hours": hours, "closures": closures, "overrides": overrides}
+
+
+@router.get("/profile", response_model=PracticeProfileOut)
+def get_practice_profile(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    profile = db.query(PracticeProfile).first()
+    if profile:
+        return profile
+    defaults = default_profile()
+    return PracticeProfileOut(id=None, **defaults)
 
 
 def _validate_hours(entries: list[PracticeHourIn]) -> None:
@@ -103,3 +118,24 @@ def update_schedule(
 
     hours, closures, overrides = load_schedule(db)
     return {"hours": hours, "closures": closures, "overrides": overrides}
+
+
+@router.put("/profile", response_model=PracticeProfileOut)
+def update_practice_profile(
+    payload: PracticeProfileUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role != Role.superadmin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    profile = db.query(PracticeProfile).first()
+    if not profile:
+        profile = PracticeProfile()
+        db.add(profile)
+    for field, value in payload.model_dump().items():
+        setattr(profile, field, value)
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile

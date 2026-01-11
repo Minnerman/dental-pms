@@ -19,6 +19,7 @@ from app.models.clinical import (
 from app.models.document_template import DocumentTemplate, DocumentTemplateKind
 from app.models.attachment import Attachment
 from app.models.patient_document import PatientDocument
+from app.models.practice_profile import PracticeProfile
 
 __all__ = [
     "Base",
@@ -60,4 +61,5 @@ __all__ = [
     "DocumentTemplateKind",
     "Attachment",
     "PatientDocument",
+    "PracticeProfile",
 ]

@@ -269,6 +269,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     ...baseTabs,
     ...(isSuperadmin ? [{ href: "/treatments", label: "Treatments" }] : []),
     ...(isSuperadmin ? [{ href: "/templates", label: "Templates" }] : []),
+    ...(isSuperadmin ? [{ href: "/settings/profile", label: "Practice profile" }] : []),
     ...(isSuperadmin ? [{ href: "/settings/schedule", label: "Schedule" }] : []),
     ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
   ];

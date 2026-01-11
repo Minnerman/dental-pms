@@ -23,6 +23,7 @@ from app.schemas.patient_document import (
 from app.services.document_render import render_template, render_template_with_warnings
 from app.services.pdf_documents import generate_patient_document_pdf
 from app.services import storage
+from app.services.practice_profile import load_profile
 from datetime import date
 
 router = APIRouter(prefix="/patients/{patient_id}/documents", tags=["patient-documents"])
@@ -141,7 +142,10 @@ def download_patient_document(
     date_suffix = date.today().isoformat()
     if format == "pdf":
         filename = f"{safe_title}_{patient.last_name}_{date_suffix}.pdf"
-        pdf_bytes = generate_patient_document_pdf(patient, document.title, document.rendered_content)
+        profile = load_profile(db)
+        pdf_bytes = generate_patient_document_pdf(
+            patient, document.title, document.rendered_content, profile
+        )
         headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
         return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
     if format != "text":
@@ -176,7 +180,10 @@ def attach_patient_document_pdf(
     patient = db.get(Patient, document.patient_id)
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
-    pdf_bytes = generate_patient_document_pdf(patient, document.title, document.rendered_content)
+    profile = load_profile(db)
+    pdf_bytes = generate_patient_document_pdf(
+        patient, document.title, document.rendered_content, profile
+    )
     storage_key, byte_size = storage.save_bytes(pdf_bytes)
     safe_title = sanitize_filename(document.title)
     filename = f"{safe_title}.pdf"

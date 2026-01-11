@@ -20,6 +20,7 @@
 - Patient documents generated from templates (text)
 - Template merge fields + preview warnings
 - Patient document PDF downloads + attachment save
+- Practice profile / letterhead settings for PDFs
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -73,7 +74,10 @@
 - None known.
 
 ## Next up
-- Stage 10 follow-ons: merge fields PDF + permissions polish
+- Stage 13 checklist:
+  1) Update practice profile settings
+  2) Generate a patient document PDF
+  3) Confirm header reflects new settings
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

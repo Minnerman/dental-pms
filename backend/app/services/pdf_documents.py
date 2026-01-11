@@ -16,7 +16,34 @@ def generate_patient_document_pdf(
     patient: Patient,
     title: str,
     rendered_text: str,
+    profile: dict[str, str | None] | None = None,
 ) -> bytes:
+    data = profile or {}
+    name = data.get("name") or CLINIC_NAME
+    address_line1 = data.get("address_line1") or (
+        CLINIC_ADDRESS_LINES[0] if CLINIC_ADDRESS_LINES else ""
+    )
+    address_line2 = data.get("address_line2") or (
+        CLINIC_ADDRESS_LINES[1] if len(CLINIC_ADDRESS_LINES) > 1 else ""
+    )
+    city = data.get("city") or ""
+    postcode = data.get("postcode") or ""
+    phone = data.get("phone") or CLINIC_PHONE.replace("Tel: ", "")
+    website = data.get("website") or (
+        CLINIC_ADDRESS_LINES[1] if len(CLINIC_ADDRESS_LINES) > 1 else ""
+    )
+    email = data.get("email") or ""
+    lines = []
+    for entry in [address_line1, address_line2]:
+        if entry and entry not in lines:
+            lines.append(entry)
+    city_line = " ".join(part for part in [city, postcode] if part)
+    if city_line and city_line not in lines:
+        lines.append(city_line)
+    if website and website not in lines:
+        lines.append(website)
+    if email and email not in lines:
+        lines.append(email)
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -26,13 +53,13 @@ def generate_patient_document_pdf(
     y = top
 
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(left, y, CLINIC_NAME)
+    pdf.drawString(left, y, name)
     pdf.setFont("Helvetica", 10)
     y -= 6 * mm
-    for line in CLINIC_ADDRESS_LINES:
+    for line in lines:
         pdf.drawString(left, y, line)
         y -= 4 * mm
-    pdf.drawString(left, y, CLINIC_PHONE)
+    pdf.drawString(left, y, f"Tel: {phone}" if phone else CLINIC_PHONE)
     y -= 8 * mm
 
     pdf.setFont("Helvetica-Bold", 14)
