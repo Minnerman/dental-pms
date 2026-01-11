@@ -16,6 +16,7 @@
 - Clinical chart (odontogram + tooth history) + treatment plan + clinical notes
 - Patient referrals (source + contact + notes)
 - Document templates (prescriptions/letters)
+- Patient attachments (uploaded files)
 - Theme toggle (light/dark) with neon accents
 - Notes and treatments master-detail layout
 
@@ -69,7 +70,7 @@
 - None known.
 
 ## Next up
-- File attachments (Stage 9)
+- Stage 10 planning (TBD)
 
 ## Verification
 - 404 enforcement (auth): backend login returns bearer token (no cookie set); invalid routes render Next 404 UI but HTTP status is 200 in dev

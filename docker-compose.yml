@@ -39,6 +39,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     ports:
       - "${BACKEND_PORT}:8000"
+    volumes:
+      - dental_pms_attachments:/data
     depends_on:
       db:
         condition: service_healthy
@@ -65,3 +67,4 @@ services:
 
 volumes:
   dental_pms_db_data:
+  dental_pms_attachments:
