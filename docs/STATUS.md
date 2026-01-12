@@ -83,6 +83,8 @@
 - 2026-01-11: Stage29 on master (3af2950) verified: booking widget scroll + templates load
 - 2026-01-12: Stage30 merged + deployed (ops verify scripts, prod 404 guard, patient UX hardening).
 - 2026-01-12: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- 2026-01-12: Stage31 merged + deployed (appointments deep link booking, refresh-after-create, routing from patients).
+- 2026-01-12: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)
