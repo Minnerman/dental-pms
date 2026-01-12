@@ -233,6 +233,41 @@ function toLocalDateTimeInput(date: Date) {
   )}:${pad(date.getMinutes())}`;
 }
 
+function parseLocalDateTime(value: string) {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match;
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second || 0)
+  );
+  if (
+    parsed.getFullYear() !== Number(year) ||
+    parsed.getMonth() !== Number(month) - 1 ||
+    parsed.getDate() !== Number(day) ||
+    parsed.getHours() !== Number(hour) ||
+    parsed.getMinutes() !== Number(minute) ||
+    parsed.getSeconds() !== Number(second || 0)
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function parseStartParam(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(trimmed);
+  const parsed = hasTimezone ? new Date(trimmed) : parseLocalDateTime(trimmed);
+  if (!parsed || Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 function formatTimeRange(start: string, end: string) {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -509,6 +544,21 @@ export default function AppointmentsPage() {
     if (didAutoOpen.current) return;
     if (!searchParams || searchParams.get("book") !== "1") return;
     didAutoOpen.current = true;
+    const startParam = searchParams.get("start");
+    if (startParam) {
+      const parsedStart = parseStartParam(startParam);
+      if (parsedStart) {
+        setStartsAt(toLocalDateTimeInput(parsedStart));
+        const durationParam = searchParams.get("duration");
+        const durationMinutes = durationParam ? Number(durationParam) : Number.NaN;
+        if (Number.isFinite(durationMinutes) && durationMinutes > 0) {
+          const cappedMinutes = Math.min(durationMinutes, 24 * 60);
+          const endDate = new Date(parsedStart);
+          endDate.setMinutes(endDate.getMinutes() + cappedMinutes);
+          setEndsAt(toLocalDateTimeInput(endDate));
+        }
+      }
+    }
     setShowNewModal(true);
     const patientIdParam = searchParams.get("patientId");
     if (patientIdParam && /^\d+$/.test(patientIdParam)) {
