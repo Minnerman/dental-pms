@@ -6,6 +6,10 @@ Run these checks after patient UX changes or infra updates.
 - docker compose ps
 - ./ops/health.sh
 
+## Full verification scripts
+- bash ops/verify.sh
+- bash ops/verify_prod_404.sh
+
 ## Route checks (expect HTTP 200)
 - curl -fsS http://localhost:3100/patients/5 >/dev/null
 - curl -fsS http://localhost:3100/patients/5/clinical >/dev/null
@@ -15,6 +19,7 @@ Run these checks after patient UX changes or infra updates.
 ## Not found checks (expect HTTP 404)
 - curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:3100/patients/99999999
 - curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:3100/patients/99999999/clinical
+- Production Next server enforces 404 via server-side guard; verify with ops/verify_prod_404.sh.
 
 ## UI smoke (manual)
 - Patient summary loads without layout overflow (desktop + mobile width).
