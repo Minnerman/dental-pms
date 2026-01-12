@@ -10,7 +10,7 @@ import {
   type View,
 } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
-import { format, parse, startOfWeek, getDay } from "date-fns";
+import { endOfMonth, endOfWeek, format, parse, startOfMonth, startOfWeek, getDay } from "date-fns";
 import { enGB } from "date-fns/locale";
 import { apiFetch, clearToken } from "@/lib/auth";
 import StatusIcon from "@/components/ui/StatusIcon";
@@ -268,6 +268,33 @@ function parseStartParam(value: string) {
   return parsed;
 }
 
+function parseDateParam(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  if (
+    parsed.getFullYear() !== Number(year) ||
+    parsed.getMonth() !== Number(month) - 1 ||
+    parsed.getDate() !== Number(day)
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function getRangeForView(date: Date, view: View) {
+  if (view === "week") {
+    const start = startOfWeek(date, { locale: enGB });
+    const end = endOfWeek(date, { locale: enGB });
+    return { start, end };
+  }
+  if (view === "month") {
+    return { start: startOfMonth(date), end: endOfMonth(date) };
+  }
+  return { start: date, end: date };
+}
+
 function formatTimeRange(start: string, end: string) {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -485,6 +512,7 @@ export default function AppointmentsPage() {
   const [editCancelReason, setEditCancelReason] = useState("");
   const [editNoteBody, setEditNoteBody] = useState("");
   const didAutoOpen = useRef(false);
+  const didApplyDate = useRef<string | null>(null);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -563,6 +591,10 @@ export default function AppointmentsPage() {
     const patientIdParam = searchParams.get("patientId");
     if (patientIdParam && /^\d+$/.test(patientIdParam)) {
       setSelectedPatientId(patientIdParam);
+    }
+    const clinicianIdParam = searchParams.get("clinicianId");
+    if (clinicianIdParam && /^\d+$/.test(clinicianIdParam)) {
+      setClinicianUserId(clinicianIdParam);
     }
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("book");
@@ -1295,17 +1327,37 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (!searchParams) return;
-    const targetDate = searchParams.get("date");
     const appointmentParam = searchParams.get("appointment");
     setHighlightedAppointmentId(appointmentParam);
+    const targetDate = searchParams.get("date");
     if (!targetDate) return;
-    const parsed = new Date(`${targetDate}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return;
-    setCalendarView("day");
+    const parsed = parseDateParam(targetDate);
+    if (!parsed) return;
+    const viewParam = searchParams.get("view");
+    const allowedViews = ["day", "week", "month"];
+    const nextView =
+      viewParam && allowedViews.includes(viewParam)
+        ? (viewParam as View)
+        : calendarView;
+    const applyKey = `${targetDate}|${viewParam ?? ""}`;
+    if (didApplyDate.current === applyKey) return;
+    didApplyDate.current = applyKey;
+    if (viewParam && allowedViews.includes(viewParam)) {
+      setCalendarView(nextView);
+    }
+    const storedViewMode = localStorage.getItem("dental_pms_appointments_view");
+    const resolvedViewMode =
+      storedViewMode === "calendar" || storedViewMode === "day_sheet"
+        ? storedViewMode
+        : viewMode;
     setCurrentDate(parsed);
-    setViewMode("day_sheet");
-    updateRange(parsed, parsed, "day", parsed);
-  }, [searchParams]);
+    if (resolvedViewMode === "calendar") {
+      const { start, end } = getRangeForView(parsed, nextView);
+      updateRange(start, end, nextView, parsed);
+    } else {
+      updateRange(parsed, parsed, "day", parsed);
+    }
+  }, [searchParams, calendarView, viewMode]);
 
   function handleRangeChange(nextRange: Date[] | { start: Date; end: Date }, view?: View) {
     const nextView = view ?? calendarView;

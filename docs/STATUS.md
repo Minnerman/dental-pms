@@ -146,6 +146,21 @@
 - Risks/notes:
   - End time prefill uses `duration` only for the booking form; it does not enforce scheduling rules.
 
+## PR draft (stage33-appointments-date-deeplink -> master)
+- Summary:
+  - `/appointments?date=YYYY-MM-DD` jumps the calendar to a target date
+  - Optional `view=day|week|month` sets calendar view when provided
+  - Optional `clinicianId=` preselects clinician in booking flow
+  - Smoke tests updated for appointment deep links
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - `/appointments?date=2026-01-14` jumps calendar to date
+  - `/appointments?date=2026-01-14&view=week` preserves week view
+  - `/appointments?date=2026-01-14&book=1` still opens booking
+  - `/appointments?book=1&clinicianId=2` preselects clinician
+- Risks/notes:
+  - Date deep link does not remove `date` or `view` params after navigation.
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
