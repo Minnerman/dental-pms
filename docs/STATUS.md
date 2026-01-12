@@ -38,6 +38,7 @@
 - Header nav cleanup (dedupe Home + patient tabs grouped)
 - Header nav cleanup: remove patient chips from global header
 - Patient booking: restore modal + appointments scroll anchor
+- Patient page UX polish (booking scroll + two-column summary layout)
 
 ## URLs
 - Home: `http://100.100.149.40:3100`
@@ -72,6 +73,14 @@
 - App layout refactored to server wrapper + client shell
 - Middleware added to return 404 for invalid numeric IDs
 - Middleware now rewrites invalid ID routes to /__notfound__ for standard 404 UI + 404 status
+- Document templates list 500 resolved (audit actor email validation relaxed)
+- Ops verify script added (./ops/verify.sh) for build + health checks
+- Patient subpages: clearer empty states and not-found redirect for missing patients
+- Book appointment action now waits for the booking panel before scrolling
+- Manual smoke checklist added for patient flows (docs/SMOKE_TESTS.md)
+- Server guard added to return HTTP 404 for non-existent patients in production
+- Prod middleware now checks patient existence when auth cookie present to return true 404
+- 2026-01-11: Stage29 on master (3af2950) verified: booking widget scroll + templates load
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)
@@ -87,6 +96,15 @@
 
 ## Known issues
 - None known.
+
+## PR draft (stage30-hardening-and-polish -> master)
+- Summary:
+  - Ops verify scripts (dev build/health + prod 404 check)
+  - Production 404 for missing patient IDs
+  - Patient UX hardening (empty states, booking action reliability)
+  - Docs updates (smoke checklist + notes)
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Risks/notes: prod 404 relies on auth cookie; dev still UI-driven for missing patients.
 
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)

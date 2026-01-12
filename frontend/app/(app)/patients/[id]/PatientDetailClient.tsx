@@ -452,6 +452,7 @@ export default function PatientDetailClient({
   const [recallSaving, setRecallSaving] = useState(false);
   const [recallError, setRecallError] = useState<string | null>(null);
   const [handledBookParam, setHandledBookParam] = useState(false);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
@@ -510,6 +511,10 @@ export default function PatientDetailClient({
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
+        return;
+      }
+      if (res.status === 404) {
+        router.replace("/__notfound__");
         return;
       }
       if (!res.ok) {
@@ -1257,10 +1262,20 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (!patient || handledBookParam) return;
     if (searchParams?.get("book") === "1") {
+      setTab("summary");
       openBookingModal();
+      setPendingScrollTarget("patient-book-appointment");
       setHandledBookParam(true);
     }
   }, [patient, handledBookParam, searchParams]);
+
+  useEffect(() => {
+    if (!pendingScrollTarget) return;
+    if (tab !== "summary") return;
+    if (pendingScrollTarget === "patient-book-appointment" && !showBookingModal) return;
+    scrollToAnchor(pendingScrollTarget);
+    setPendingScrollTarget(null);
+  }, [pendingScrollTarget, tab, showBookingModal]);
 
   const alerts = [
     patient?.allergies ? { label: "Allergies", tone: "danger" } : null,
@@ -1411,6 +1426,20 @@ export default function PatientDetailClient({
     gap: 8,
     alignItems: "center",
   } as const;
+
+  function scrollToAnchor(id: string, attempts = 8) {
+    const target = document.getElementById(id);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      const focusable = target.querySelector("input, select, textarea") as
+        | HTMLElement
+        | null;
+      focusable?.focus();
+      return;
+    }
+    if (attempts <= 0) return;
+    requestAnimationFrame(() => scrollToAnchor(id, attempts - 1));
+  }
 
   function getDefaultBookingSlot() {
     const next = new Date();
@@ -2085,11 +2114,12 @@ export default function PatientDetailClient({
 
   return (
     <div className="app-grid">
-      <div>
-        <Link className="btn btn-secondary" href="/patients">
-          ← Back to patients
-        </Link>
-      </div>
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+        <div>
+          <Link className="btn btn-secondary" href="/patients">
+            ← Back to patients
+          </Link>
+        </div>
 
       {loading ? (
         <div className="badge">Loading patient…</div>
@@ -2430,7 +2460,11 @@ export default function PatientDetailClient({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={openBookingModal}
+                        onClick={() => {
+                          setTab("summary");
+                          openBookingModal();
+                          setPendingScrollTarget("patient-book-appointment");
+                        }}
                       >
                         Book appointment
                       </button>
@@ -2439,11 +2473,7 @@ export default function PatientDetailClient({
                         className="btn btn-secondary"
                         onClick={() => {
                           setTab("summary");
-                          requestAnimationFrame(() => {
-                            document
-                              .getElementById("patient-appointments")
-                              ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                          });
+                          setPendingScrollTarget("patient-appointments");
                         }}
                       >
                         Jump to appointments
@@ -2451,165 +2481,343 @@ export default function PatientDetailClient({
                     </div>
                   </div>
 
-                  <div className="card" style={{ margin: 0 }}>
+                  <div className="summary-grid">
                     <div className="stack">
-                      <div className="row">
-                        <div>
-                          <h4 style={{ marginTop: 0 }}>Recall</h4>
-                          <div style={{ color: "var(--muted)" }}>
-                            Due {formatShortDate(patient.recall_due_date)} ·{" "}
-                            {recallStatusLabels[patient.recall_status || "due"]}
+                      <div className="card" style={{ margin: 0 }}>
+                        <div className="stack">
+                          <div className="row">
+                            <div>
+                              <h4 style={{ marginTop: 0 }}>Recall</h4>
+                              <div style={{ color: "var(--muted)" }}>
+                                Due {formatShortDate(patient.recall_due_date)} ·{" "}
+                                {recallStatusLabels[patient.recall_status || "due"]}
+                              </div>
+                            </div>
+                            {recallError && <span className="badge">{recallError}</span>}
+                          </div>
+                          <div className="grid grid-3">
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Interval (months)</label>
+                              <input
+                                className="input"
+                                value={recallInterval}
+                                onChange={(e) => setRecallInterval(e.target.value)}
+                              />
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Due date</label>
+                              <input
+                                className="input"
+                                type="date"
+                                value={recallDueDate}
+                                onChange={(e) => setRecallDueDate(e.target.value)}
+                              />
+                            </div>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Status</label>
+                              <select
+                                className="input"
+                                value={recallStatus}
+                                onChange={(e) =>
+                                  setRecallStatus(e.target.value as RecallStatus)
+                                }
+                              >
+                                <option value="due">Due</option>
+                                <option value="contacted">Contacted</option>
+                                <option value="booked">Booked</option>
+                                <option value="not_required">Not required</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="row">
+                            <button
+                              className="btn btn-primary"
+                              type="button"
+                              disabled={recallSaving}
+                              onClick={() => {
+                                const parsed = Number(recallInterval);
+                                const interval = Number.isNaN(parsed) ? null : parsed;
+                                void updateRecall({
+                                  interval_months: interval,
+                                  due_date: recallDueDate || null,
+                                  status: recallStatus || null,
+                                });
+                              }}
+                            >
+                              {recallSaving ? "Saving..." : "Save recall"}
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={() => void updateRecall({ status: "contacted" })}
+                            >
+                              Mark contacted
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={() => void updateRecall({ status: "not_required" })}
+                            >
+                              Not required
+                            </button>
                           </div>
                         </div>
-                        {recallError && <span className="badge">{recallError}</span>}
                       </div>
-                      <div className="grid grid-3">
-                        <div className="stack" style={{ gap: 8 }}>
-                          <label className="label">Interval (months)</label>
-                          <input
-                            className="input"
-                            value={recallInterval}
-                            onChange={(e) => setRecallInterval(e.target.value)}
-                          />
-                        </div>
-                        <div className="stack" style={{ gap: 8 }}>
-                          <label className="label">Due date</label>
-                          <input
-                            className="input"
-                            type="date"
-                            value={recallDueDate}
-                            onChange={(e) => setRecallDueDate(e.target.value)}
-                          />
-                        </div>
-                        <div className="stack" style={{ gap: 8 }}>
-                          <label className="label">Status</label>
-                          <select
-                            className="input"
-                            value={recallStatus}
-                            onChange={(e) =>
-                              setRecallStatus(e.target.value as RecallStatus)
-                            }
-                          >
-                            <option value="due">Due</option>
-                            <option value="contacted">Contacted</option>
-                            <option value="booked">Booked</option>
-                            <option value="not_required">Not required</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="row">
-                        <button
-                          className="btn btn-primary"
-                          type="button"
-                          disabled={recallSaving}
-                          onClick={() => {
-                            const parsed = Number(recallInterval);
-                            const interval = Number.isNaN(parsed) ? null : parsed;
-                            void updateRecall({
-                              interval_months: interval,
-                              due_date: recallDueDate || null,
-                              status: recallStatus || null,
-                            });
-                          }}
-                        >
-                          {recallSaving ? "Saving..." : "Save recall"}
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => void updateRecall({ status: "contacted" })}
-                        >
-                          Mark contacted
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => void updateRecall({ status: "not_required" })}
-                        >
-                          Not required
-                        </button>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="card" style={{ margin: 0 }}>
-                    <div className="stack">
-                      <div className="row">
-                        <div>
-                          <h4 style={{ marginTop: 0 }}>Finance</h4>
-                          <div style={{ color: "var(--muted)" }}>
-                            Balance {formatCurrency(ledgerBalance)}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button
-                            className="btn btn-primary"
-                            type="button"
-                            onClick={() => {
-                              setLedgerMode("payment");
-                              setShowLedgerModal(true);
-                            }}
-                          >
-                            Add payment
-                          </button>
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            onClick={() => {
-                              setLedgerMode("adjustment");
-                              setShowLedgerModal(true);
-                            }}
-                          >
-                            Add adjustment
-                          </button>
-                        </div>
-                      </div>
-                      {ledgerLoading ? (
-                        <div className="badge">Loading ledger…</div>
-                      ) : ledgerEntries.length === 0 ? (
-                        <div className="notice">No ledger entries yet.</div>
-                      ) : (
-                        <div className="stack" style={{ gap: 6 }}>
-                          {ledgerEntries
-                            .slice(-10)
-                            .reverse()
-                            .map((entry) => (
-                              <div
-                                key={entry.id}
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: 12,
+                      <div className="card" style={{ margin: 0 }}>
+                        <div className="stack">
+                          <div className="row">
+                            <div>
+                              <h4 style={{ marginTop: 0 }}>Finance</h4>
+                              <div style={{ color: "var(--muted)" }}>
+                                Balance {formatCurrency(ledgerBalance)}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button
+                                className="btn btn-primary"
+                                type="button"
+                                onClick={() => {
+                                  setLedgerMode("payment");
+                                  setShowLedgerModal(true);
                                 }}
                               >
-                                <div>
-                                  <div style={{ fontWeight: 600 }}>
-                                    {entry.entry_type === "payment"
-                                      ? "Payment"
-                                      : entry.entry_type === "charge"
-                                      ? "Charge"
-                                      : "Adjustment"}
+                                Add payment
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                onClick={() => {
+                                  setLedgerMode("adjustment");
+                                  setShowLedgerModal(true);
+                                }}
+                              >
+                                Add adjustment
+                              </button>
+                            </div>
+                          </div>
+                          {ledgerLoading ? (
+                            <div className="badge">Loading ledger…</div>
+                          ) : ledgerEntries.length === 0 ? (
+                            <div className="notice">No ledger entries yet.</div>
+                          ) : (
+                            <div className="stack" style={{ gap: 6 }}>
+                              {ledgerEntries
+                                .slice(-10)
+                                .reverse()
+                                .map((entry) => (
+                                  <div
+                                    key={entry.id}
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      gap: 12,
+                                    }}
+                                  >
+                                    <div>
+                                      <div style={{ fontWeight: 600 }}>
+                                        {entry.entry_type === "payment"
+                                          ? "Payment"
+                                          : entry.entry_type === "charge"
+                                          ? "Charge"
+                                          : "Adjustment"}
+                                      </div>
+                                      <div style={{ color: "var(--muted)" }}>
+                                        {new Date(entry.created_at).toLocaleDateString("en-GB")}
+                                        {entry.reference ? ` · ${entry.reference}` : ""}
+                                        {entry.note ? ` · ${entry.note}` : ""}
+                                      </div>
+                                    </div>
+                                    <div style={{ fontWeight: 600 }}>
+                                      {formatSignedCurrency(entry.amount_pence)}
+                                    </div>
                                   </div>
-                                  <div style={{ color: "var(--muted)" }}>
-                                    {new Date(entry.created_at).toLocaleDateString("en-GB")}
-                                    {entry.reference ? ` · ${entry.reference}` : ""}
-                                    {entry.note ? ` · ${entry.note}` : ""}
-                                  </div>
-                                </div>
-                                <div style={{ fontWeight: 600 }}>
-                                  {formatSignedCurrency(entry.amount_pence)}
-                                </div>
-                              </div>
-                            ))}
+                                ))}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    </div>
+
+                    <div className="stack">
+                      <div
+                        className="card"
+                        id="patient-appointments"
+                        style={{ margin: 0, scrollMarginTop: 96 }}
+                      >
+                        <div className="stack">
+                          <div className="row">
+                            <div>
+                              <h4 style={{ marginTop: 0 }}>Appointments</h4>
+                              <p style={{ color: "var(--muted)" }}>
+                                Upcoming and recent visits for this patient.
+                              </p>
+                            </div>
+                          </div>
+                          {loadingAppointments ? (
+                            <div className="badge">Loading appointments…</div>
+                          ) : appointmentsError ? (
+                            <div className="notice">{appointmentsError}</div>
+                          ) : (
+                            <div className="stack">
+                              <div>
+                                <div className="label">Future</div>
+                                {futureAppointments.length === 0 ? (
+                                  <div className="notice">No upcoming appointments.</div>
+                                ) : (
+                                  futureAppointments.slice(0, 6).map((appt) => (
+                                    <button
+                                      key={appt.id}
+                                      type="button"
+                                      className="card"
+                                      style={{
+                                        margin: "8px 0 0",
+                                        textAlign: "left",
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() => {
+                                        const date = appt.starts_at.slice(0, 10);
+                                        router.push(
+                                          `/appointments?date=${date}&appointment=${appt.id}`
+                                        );
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "grid",
+                                          gap: 6,
+                                          gridTemplateColumns: "200px 1fr 1fr",
+                                          alignItems: "center",
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: 600 }}>
+                                          <StatusIcon status={appt.status} />{" "}
+                                          {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                            weekday: "short",
+                                            day: "2-digit",
+                                            month: "short",
+                                          })}{" "}
+                                          ·{" "}
+                                          {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })}{" "}
+                                          ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                        </div>
+                                        <div style={{ color: "var(--muted)" }}>
+                                          {appt.clinician || "Unassigned"} ·{" "}
+                                          {appt.location || appt.location_text || "—"}
+                                        </div>
+                                        <div style={{ color: "var(--muted)" }}>
+                                          {appointmentStatusLabels[appt.status]} ·{" "}
+                                          {appt.appointment_type || "General"}
+                                        </div>
+                                      </div>
+                                      {appt.status !== "booked" &&
+                                        (appt.status === "cancelled" ||
+                                          appt.status === "no_show") &&
+                                        appt.cancel_reason && (
+                                          <div
+                                            style={{
+                                              color: "var(--muted)",
+                                              fontSize: 12,
+                                              marginTop: 8,
+                                            }}
+                                            title={appt.cancel_reason}
+                                          >
+                                            Reason: {appt.cancel_reason}
+                                          </div>
+                                        )}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                              <div>
+                                <div className="label">Past</div>
+                                {pastAppointments.length === 0 ? (
+                                  <div className="notice">No past appointments.</div>
+                                ) : (
+                                  pastAppointments.slice(0, 6).map((appt) => (
+                                    <button
+                                      key={appt.id}
+                                      type="button"
+                                      className="card"
+                                      style={{
+                                        margin: "8px 0 0",
+                                        textAlign: "left",
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() => {
+                                        const date = appt.starts_at.slice(0, 10);
+                                        router.push(
+                                          `/appointments?date=${date}&appointment=${appt.id}`
+                                        );
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "grid",
+                                          gap: 6,
+                                          gridTemplateColumns: "200px 1fr 1fr",
+                                          alignItems: "center",
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: 600 }}>
+                                          <StatusIcon status={appt.status} />{" "}
+                                          {new Date(appt.starts_at).toLocaleDateString("en-GB", {
+                                            weekday: "short",
+                                            day: "2-digit",
+                                            month: "short",
+                                          })}{" "}
+                                          ·{" "}
+                                          {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })}{" "}
+                                          ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
+                                        </div>
+                                        <div style={{ color: "var(--muted)" }}>
+                                          {appt.clinician || "Unassigned"} ·{" "}
+                                          {appt.location || appt.location_text || "—"}
+                                        </div>
+                                        <div style={{ color: "var(--muted)" }}>
+                                          {appointmentStatusLabels[appt.status]} ·{" "}
+                                          {appt.appointment_type || "General"}
+                                        </div>
+                                      </div>
+                                      {appt.status !== "booked" &&
+                                        (appt.status === "cancelled" ||
+                                          appt.status === "no_show") &&
+                                        appt.cancel_reason && (
+                                          <div
+                                            style={{
+                                              color: "var(--muted)",
+                                              fontSize: 12,
+                                              marginTop: 8,
+                                            }}
+                                            title={appt.cancel_reason}
+                                          >
+                                            Reason: {appt.cancel_reason}
+                                          </div>
+                                        )}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <PatientDocuments patientId={patientId} />
+                      <PatientAttachments patientId={patientIdNum} />
                     </div>
                   </div>
 
-                  <PatientDocuments patientId={patientId} />
-                  <PatientAttachments patientId={patientIdNum} />
-
-                  <form onSubmit={savePatient} className="stack">
+                  <details className="card" style={{ margin: 0 }}>
+                    <summary className="label">Patient details</summary>
+                    <div className="stack" style={{ marginTop: 12 }}>
+                      <form onSubmit={savePatient} className="stack">
                   <div className="grid grid-2">
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">First name</label>
@@ -3044,152 +3252,8 @@ export default function PatientDetailClient({
                     )}
                   </div>
                   </form>
-
-                  <div
-                    className="card"
-                    id="patient-appointments"
-                    style={{ margin: 0, scrollMarginTop: 96 }}
-                  >
-                    <div className="stack">
-                      <div className="row">
-                        <div>
-                          <h4 style={{ marginTop: 0 }}>Appointments</h4>
-                          <p style={{ color: "var(--muted)" }}>
-                            Upcoming and recent visits for this patient.
-                          </p>
-                        </div>
-                      </div>
-                      {loadingAppointments ? (
-                        <div className="badge">Loading appointments…</div>
-                      ) : appointmentsError ? (
-                        <div className="notice">{appointmentsError}</div>
-                      ) : (
-                        <div className="stack">
-                          <div>
-                            <div className="label">Future</div>
-                            {futureAppointments.length === 0 ? (
-                              <div className="notice">No upcoming appointments.</div>
-                            ) : (
-                              futureAppointments.slice(0, 6).map((appt) => (
-                                <button
-                                  key={appt.id}
-                                  type="button"
-                                  className="card"
-                                  style={{
-                                    margin: "8px 0 0",
-                                    textAlign: "left",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => {
-                                    const date = appt.starts_at.slice(0, 10);
-                                    router.push(
-                                      `/appointments?date=${date}&appointment=${appt.id}`
-                                    );
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      display: "grid",
-                                      gap: 6,
-                                      gridTemplateColumns: "200px 1fr 1fr",
-                                      alignItems: "center",
-                                    }}
-                                  >
-                                    <div style={{ fontWeight: 600 }}>
-                                      <StatusIcon status={appt.status} />{" "}
-                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
-                                        weekday: "short",
-                                        day: "2-digit",
-                                        month: "short",
-                                      })}{" "}
-                                      ·{" "}
-                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}{" "}
-                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
-                                    </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {appt.clinician || "Unassigned"} ·{" "}
-                                      {appt.location || appt.location_text || "—"}
-                                    </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {appointmentStatusLabels[appt.status]} ·{" "}
-                                      {appt.appointment_type || "General"}
-                                    </div>
-                                  </div>
-                                  {appt.status !== "booked" &&
-                                    (appt.status === "cancelled" ||
-                                      appt.status === "no_show") &&
-                                    appt.cancel_reason && (
-                                      <div
-                                        style={{ color: "var(--muted)", marginTop: 6 }}
-                                        title={appt.cancel_reason}
-                                      >
-                                        Reason: {appt.cancel_reason}
-                                      </div>
-                                    )}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                          <div>
-                            <div className="label">Past</div>
-                            {pastAppointments.length === 0 ? (
-                              <div className="notice">No past appointments.</div>
-                            ) : (
-                              pastAppointments.slice(0, 6).map((appt) => (
-                                <div key={appt.id} className="card" style={{ margin: "8px 0 0" }}>
-                                  <div
-                                    style={{
-                                      display: "grid",
-                                      gap: 6,
-                                      gridTemplateColumns: "200px 1fr 1fr",
-                                      alignItems: "center",
-                                    }}
-                                  >
-                                    <div style={{ fontWeight: 600 }}>
-                                      <StatusIcon status={appt.status} />{" "}
-                                      {new Date(appt.starts_at).toLocaleDateString("en-GB", {
-                                        weekday: "short",
-                                        day: "2-digit",
-                                        month: "short",
-                                      })}{" "}
-                                      ·{" "}
-                                      {new Date(appt.starts_at).toLocaleTimeString("en-GB", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}{" "}
-                                      ({formatDurationMinutes(appt.starts_at, appt.ends_at)})
-                                    </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {appt.clinician || "Unassigned"} ·{" "}
-                                      {appt.location || appt.location_text || "—"}
-                                    </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {appointmentStatusLabels[appt.status]} ·{" "}
-                                      {appt.appointment_type || "General"}
-                                    </div>
-                                  </div>
-                                  {appt.status !== "booked" &&
-                                    (appt.status === "cancelled" ||
-                                      appt.status === "no_show") &&
-                                    appt.cancel_reason && (
-                                      <div
-                                        style={{ color: "var(--muted)", marginTop: 6 }}
-                                        title={appt.cancel_reason}
-                                      >
-                                        Reason: {appt.cancel_reason}
-                                      </div>
-                                    )}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                </div>
+              </details>
                 </div>
               ) : tab === "clinical" ? (
                 <div className="stack">
@@ -3638,7 +3702,9 @@ export default function PatientDetailClient({
                       </div>
 
                       {treatmentPlanItems.length === 0 ? (
-                        <div className="notice">No treatment plan items yet.</div>
+                        <div className="notice">
+                          No treatment plan items yet. Add an item to start planning.
+                        </div>
                       ) : (
                         <Table>
                           <thead>
@@ -3803,7 +3869,9 @@ export default function PatientDetailClient({
                       </Panel>
 
                       {clinicalNotes.length === 0 ? (
-                        <div className="notice">No clinical notes yet.</div>
+                        <div className="notice">
+                          No clinical notes yet. Add a note above to start the record.
+                        </div>
                       ) : (
                         <div className="stack">
                           {clinicalNotes.map((note) => (
@@ -3831,7 +3899,9 @@ export default function PatientDetailClient({
 
                       <Panel title="Recent procedures">
                         {clinicalProcedures.length === 0 ? (
-                          <div className="notice">No procedures recorded yet.</div>
+                          <div className="notice">
+                            No procedures recorded yet. Add from the chart or treatment plan.
+                          </div>
                         ) : (
                           <div className="stack">
                             {clinicalProcedures.map((procedure) => (
@@ -4780,7 +4850,11 @@ export default function PatientDetailClient({
           )}
 
           {showBookingModal && (
-            <div className="card" style={{ margin: 0 }}>
+            <div
+              className="card"
+              id="patient-book-appointment"
+              style={{ margin: 0, scrollMarginTop: 96 }}
+            >
               <div className="stack">
                 <div className="row">
                   <div>
@@ -4996,6 +5070,7 @@ export default function PatientDetailClient({
       ) : (
         <div className="notice">Patient not found.</div>
       )}
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ From the repo root:
 
 4) Check services:
    - Health: ./ops/health.sh
+   - Verify (build + health): ./ops/verify.sh
    - Backend: http://localhost:8100/health
    - Frontend: http://localhost:3100
 
