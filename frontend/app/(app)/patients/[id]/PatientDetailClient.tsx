@@ -2461,9 +2461,7 @@ export default function PatientDetailClient({
                         type="button"
                         className="btn btn-primary"
                         onClick={() => {
-                          setTab("summary");
-                          openBookingModal();
-                          setPendingScrollTarget("patient-book-appointment");
+                          router.push(`/appointments?book=1&patientId=${patientId}`);
                         }}
                       >
                         Book appointment
