@@ -97,6 +97,10 @@
 ## Known issues
 - None known.
 
+## PR draft (stage30-hardening-and-polish -> master)
+- Summary: enforce production 404s for missing patients and add deterministic prod 404 verification.
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
