@@ -126,8 +126,22 @@
   - Missing patient/invalid time shows friendly error
   - Patient page Book appointment routes and back button works
 - Risks/notes:
-  - No `start=` param support yet (future improvement)
   - Deep link relies on appointments page patient list being loaded
+
+## PR draft (stage32-appointments-start-prefill -> master)
+- Summary:
+  - Deep link booking now supports `start=` prefill (local or ISO with timezone)
+  - Optional `duration=` prefills the end time when `start` is valid
+  - Smoke tests updated for deep link start/duration scenarios
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - `/appointments?book=1&start=2026-01-14T13:30` prefills start time
+  - `/appointments?book=1&patientId=5&start=2026-01-14T13:30` prefills both
+  - `/appointments?book=1&start=2026-01-14T13:30:00Z` converts to local time
+  - Invalid `start` is ignored safely
+  - Optional `duration=30` prefills the end time when `start` is valid
+- Risks/notes:
+  - End time prefill uses `duration` only for the booking form; it does not enforce scheduling rules.
 
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
