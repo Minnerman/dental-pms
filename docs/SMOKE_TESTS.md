@@ -33,6 +33,11 @@ Run these checks after patient UX changes or infra updates.
 - Booking opens reliably after refresh, tab switches, and back/forward navigation.
 - Deep link `/appointments?book=1` opens the booking UI once and cleans the URL.
 - Optional deep link `/appointments?book=1&patientId=5` preselects the patient.
+- Deep link `/appointments?book=1&start=2026-01-14T13:30` prefills the start time.
+- Deep link `/appointments?book=1&patientId=5&start=2026-01-14T13:30` prefills both.
+- Deep link `/appointments?book=1&start=2026-01-14T13:30:00Z` converts to local time.
+- Invalid `start` is ignored safely.
+- Optional `duration=30` prefills the end time when `start` is valid.
 - Patient “Book appointment” routes to `/appointments?book=1&patientId=<id>`.
 - Required fields enforced (date/time, duration, patient, clinician/resource if applicable).
 - After creating an appointment, it appears immediately on the calendar/day sheet.
