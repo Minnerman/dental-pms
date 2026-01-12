@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -449,6 +449,7 @@ export default function AppointmentsPage() {
   const [editStatus, setEditStatus] = useState<AppointmentStatus>("booked");
   const [editCancelReason, setEditCancelReason] = useState("");
   const [editNoteBody, setEditNoteBody] = useState("");
+  const didAutoOpen = useRef(false);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -503,6 +504,23 @@ export default function AppointmentsPage() {
   useEffect(() => {
     localStorage.setItem("dental_pms_appointments_view", viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    if (didAutoOpen.current) return;
+    if (!searchParams || searchParams.get("book") !== "1") return;
+    didAutoOpen.current = true;
+    setShowNewModal(true);
+    const patientIdParam = searchParams.get("patientId");
+    if (patientIdParam && /^\d+$/.test(patientIdParam)) {
+      setSelectedPatientId(patientIdParam);
+    }
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("book");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `/appointments?${nextQuery}` : "/appointments", {
+      scroll: false,
+    });
+  }, [router, searchParams]);
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;

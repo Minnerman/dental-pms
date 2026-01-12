@@ -31,6 +31,8 @@ Run these checks after patient UX changes or infra updates.
 ## Stage 31 appointments workflow acceptance checks
 - Booking can be initiated from patient page, appointments page, and deep link (`/appointments?book=1`, optional `patientId=`).
 - Booking opens reliably after refresh, tab switches, and back/forward navigation.
+- Deep link `/appointments?book=1` opens the booking UI once and cleans the URL.
+- Optional deep link `/appointments?book=1&patientId=5` preselects the patient.
 - Required fields enforced (date/time, duration, patient, clinician/resource if applicable).
 - Successful create appears immediately on calendar and persists after refresh.
 - Backend errors surface as clear user messages.
