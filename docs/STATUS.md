@@ -81,6 +81,8 @@
 - Server guard added to return HTTP 404 for non-existent patients in production
 - Prod middleware now checks patient existence when auth cookie present to return true 404
 - 2026-01-11: Stage29 on master (3af2950) verified: booking widget scroll + templates load
+- 2026-01-12: Stage30 merged + deployed (ops verify scripts, prod 404 guard, patient UX hardening).
+- 2026-01-12: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)
@@ -114,6 +116,12 @@
 ## Next up
 - Stage 23 follow-up:
   - Clinical reporting polish or batch recall exports
+
+## Stage 31 backlog
+- Appointments: deep link behavior (e.g. `?book=1`) in smoke tests.
+- Appointments: booking modal reliability across refresh/tab changes.
+- Appointments: calendar interactions and range loading edge cases.
+- Appointments: confirm creation flow when switching clinicians/locations.
 
 ## Role management access
 - Superadmin: change roles, enable/disable users, grant/revoke superadmin.
