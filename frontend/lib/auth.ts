@@ -1,5 +1,15 @@
 export const TOKEN_KEY = "dental_pms_token";
 
+function setTokenCookie(token: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+}
+
+function clearTokenCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${TOKEN_KEY}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(TOKEN_KEY);
@@ -7,10 +17,12 @@ export function getToken(): string | null {
 
 export function setToken(token: string) {
   window.localStorage.setItem(TOKEN_KEY, token);
+  setTokenCookie(token);
 }
 
 export function clearToken() {
   window.localStorage.removeItem(TOKEN_KEY);
+  clearTokenCookie();
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
