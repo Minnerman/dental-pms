@@ -77,6 +77,7 @@
 - Ops verify script added (./ops/verify.sh) for build + health checks
 - Patient subpages: clearer empty states and not-found redirect for missing patients
 - Book appointment action now waits for the booking panel before scrolling
+- Manual smoke checklist added for patient flows (docs/SMOKE_TESTS.md)
 - 2026-01-11: Stage29 on master (3af2950) verified: booking widget scroll + templates load
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
