@@ -98,8 +98,13 @@
 - None known.
 
 ## PR draft (stage30-hardening-and-polish -> master)
-- Summary: enforce production 404s for missing patients and add deterministic prod 404 verification.
+- Summary:
+  - Ops verify scripts (dev build/health + prod 404 check)
+  - Production 404 for missing patient IDs
+  - Patient UX hardening (empty states, booking action reliability)
+  - Docs updates (smoke checklist + notes)
 - Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Risks/notes: prod 404 relies on auth cookie; dev still UI-driven for missing patients.
 
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
