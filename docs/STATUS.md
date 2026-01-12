@@ -74,6 +74,7 @@
 - Middleware added to return 404 for invalid numeric IDs
 - Middleware now rewrites invalid ID routes to /__notfound__ for standard 404 UI + 404 status
 - Document templates list 500 resolved (audit actor email validation relaxed)
+- 2026-01-11: Stage29 on master (3af2950) verified: booking widget scroll + templates load
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)
