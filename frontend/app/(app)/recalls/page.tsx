@@ -693,7 +693,9 @@ export default function RecallsPage() {
                         </button>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => router.push(`/patients/${row.id}?book=1`)}
+                          onClick={() =>
+                            router.push(`/appointments?book=1&patientId=${row.id}`)
+                          }
                         >
                           Book recall
                         </button>

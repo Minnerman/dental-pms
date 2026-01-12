@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -449,6 +449,7 @@ export default function AppointmentsPage() {
   const [editStatus, setEditStatus] = useState<AppointmentStatus>("booked");
   const [editCancelReason, setEditCancelReason] = useState("");
   const [editNoteBody, setEditNoteBody] = useState("");
+  const didAutoOpen = useRef(false);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -503,6 +504,23 @@ export default function AppointmentsPage() {
   useEffect(() => {
     localStorage.setItem("dental_pms_appointments_view", viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    if (didAutoOpen.current) return;
+    if (!searchParams || searchParams.get("book") !== "1") return;
+    didAutoOpen.current = true;
+    setShowNewModal(true);
+    const patientIdParam = searchParams.get("patientId");
+    if (patientIdParam && /^\d+$/.test(patientIdParam)) {
+      setSelectedPatientId(patientIdParam);
+    }
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("book");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `/appointments?${nextQuery}` : "/appointments", {
+      scroll: false,
+    });
+  }, [router, searchParams]);
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;
@@ -856,12 +874,29 @@ export default function AppointmentsPage() {
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedPatientId || !startsAt || !endsAt) return;
+    if (!selectedPatientId) {
+      setError("Select a patient before booking.");
+      return;
+    }
+    if (!startsAt || !endsAt) {
+      setError("Select a start and end time.");
+      return;
+    }
+    const startDate = new Date(startsAt);
+    const endDate = new Date(endsAt);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      setError("Select a valid start and end time.");
+      return;
+    }
+    if (endDate <= startDate) {
+      setError("End time must be after the start time.");
+      return;
+    }
     if (locationType === "visit" && !locationText.trim()) {
       setError("Visit address is required for domiciliary visits.");
       return;
     }
-    if (!isRangeWithinSchedule(new Date(startsAt), new Date(endsAt), schedule)) {
+    if (!isRangeWithinSchedule(startDate, endDate, schedule)) {
       setError("Appointment time is outside of working hours.");
       return;
     }
@@ -873,8 +908,8 @@ export default function AppointmentsPage() {
         body: JSON.stringify({
           patient_id: Number(selectedPatientId),
           clinician_user_id: clinicianUserId ? Number(clinicianUserId) : undefined,
-          starts_at: new Date(startsAt).toISOString(),
-          ends_at: new Date(endsAt).toISOString(),
+          starts_at: startDate.toISOString(),
+          ends_at: endDate.toISOString(),
           status: "booked",
           appointment_type: appointmentType.trim() || undefined,
           location: location.trim() || undefined,
@@ -888,9 +923,19 @@ export default function AppointmentsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to create appointment (HTTP ${res.status})`);
+        const raw = await res.text();
+        let message = `Failed to create appointment (HTTP ${res.status})`;
+        if (raw) {
+          try {
+            const data = JSON.parse(raw) as { detail?: string; message?: string };
+            message = data.detail || data.message || message;
+          } catch {
+            message = raw;
+          }
+        }
+        throw new Error(message);
       }
+      const created = (await res.json()) as Appointment;
       setSelectedPatientId("");
       setClinicianUserId("");
       setAppointmentType("");
@@ -901,6 +946,10 @@ export default function AppointmentsPage() {
       setEndsAt("");
       setShowNewModal(false);
       setNotice("Appointment created.");
+      if (created?.id) {
+        setAppointments((prev) => [created, ...prev.filter((appt) => appt.id !== created.id)]);
+        setHighlightedAppointmentId(String(created.id));
+      }
       await loadAppointments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create appointment");

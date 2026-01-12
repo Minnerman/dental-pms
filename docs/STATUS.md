@@ -108,6 +108,25 @@
 - Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
 - Risks/notes: prod 404 relies on auth cookie; dev still UI-driven for missing patients.
 
+## PR draft (stage31-appointments-workflow -> master)
+### Stage31 appointments workflow
+- Summary:
+  - Deep link booking: `/appointments?book=1` (+ optional `patientId`)
+  - Calendar updates immediately after create + canonical refetch
+  - Improved validation + friendly errors
+  - Patient “Book appointment” routes to appointments deep link
+  - Smoke tests updated
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - `/appointments?book=1` opens booking once and cleans URL
+  - `/appointments?book=1&patientId=5` preselects patient
+  - Create appointment appears immediately; persists after refresh
+  - Missing patient/invalid time shows friendly error
+  - Patient page Book appointment routes and back button works
+- Risks/notes:
+  - No `start=` param support yet (future improvement)
+  - Deep link relies on appointments page patient list being loaded
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
