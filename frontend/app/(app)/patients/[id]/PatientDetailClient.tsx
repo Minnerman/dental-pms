@@ -452,6 +452,7 @@ export default function PatientDetailClient({
   const [recallSaving, setRecallSaving] = useState(false);
   const [recallError, setRecallError] = useState<string | null>(null);
   const [handledBookParam, setHandledBookParam] = useState(false);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
@@ -1261,10 +1262,20 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (!patient || handledBookParam) return;
     if (searchParams?.get("book") === "1") {
+      setTab("summary");
       openBookingModal();
+      setPendingScrollTarget("patient-book-appointment");
       setHandledBookParam(true);
     }
   }, [patient, handledBookParam, searchParams]);
+
+  useEffect(() => {
+    if (!pendingScrollTarget) return;
+    if (tab !== "summary") return;
+    if (pendingScrollTarget === "patient-book-appointment" && !showBookingModal) return;
+    scrollToAnchor(pendingScrollTarget);
+    setPendingScrollTarget(null);
+  }, [pendingScrollTarget, tab, showBookingModal]);
 
   const alerts = [
     patient?.allergies ? { label: "Allergies", tone: "danger" } : null,
@@ -2452,7 +2463,7 @@ export default function PatientDetailClient({
                         onClick={() => {
                           setTab("summary");
                           openBookingModal();
-                          scrollToAnchor("patient-book-appointment");
+                          setPendingScrollTarget("patient-book-appointment");
                         }}
                       >
                         Book appointment
@@ -2462,7 +2473,7 @@ export default function PatientDetailClient({
                         className="btn btn-secondary"
                         onClick={() => {
                           setTab("summary");
-                          scrollToAnchor("patient-appointments");
+                          setPendingScrollTarget("patient-appointments");
                         }}
                       >
                         Jump to appointments
