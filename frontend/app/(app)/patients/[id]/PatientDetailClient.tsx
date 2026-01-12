@@ -512,6 +512,10 @@ export default function PatientDetailClient({
         router.replace("/login");
         return;
       }
+      if (res.status === 404) {
+        router.replace("/__notfound__");
+        return;
+      }
       if (!res.ok) {
         throw new Error(`Failed to load patient (HTTP ${res.status})`);
       }
@@ -3687,7 +3691,9 @@ export default function PatientDetailClient({
                       </div>
 
                       {treatmentPlanItems.length === 0 ? (
-                        <div className="notice">No treatment plan items yet.</div>
+                        <div className="notice">
+                          No treatment plan items yet. Add an item to start planning.
+                        </div>
                       ) : (
                         <Table>
                           <thead>
@@ -3852,7 +3858,9 @@ export default function PatientDetailClient({
                       </Panel>
 
                       {clinicalNotes.length === 0 ? (
-                        <div className="notice">No clinical notes yet.</div>
+                        <div className="notice">
+                          No clinical notes yet. Add a note above to start the record.
+                        </div>
                       ) : (
                         <div className="stack">
                           {clinicalNotes.map((note) => (
@@ -3880,7 +3888,9 @@ export default function PatientDetailClient({
 
                       <Panel title="Recent procedures">
                         {clinicalProcedures.length === 0 ? (
-                          <div className="notice">No procedures recorded yet.</div>
+                          <div className="notice">
+                            No procedures recorded yet. Add from the chart or treatment plan.
+                          </div>
                         ) : (
                           <div className="stack">
                             {clinicalProcedures.map((procedure) => (

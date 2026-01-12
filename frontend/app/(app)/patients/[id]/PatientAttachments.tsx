@@ -210,7 +210,7 @@ export default function PatientAttachments({ patientId }: { patientId: number })
         {error && <div className="notice">{error}</div>}
 
         {attachments.length === 0 ? (
-          <div className="notice">No attachments yet.</div>
+          <div className="notice">No attachments yet. Use \"Upload file\" to add one.</div>
         ) : (
           <div className="stack" style={{ gap: 8 }}>
             {attachments.map((attachment) => (

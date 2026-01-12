@@ -483,7 +483,9 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
             <h4 style={{ marginTop: 0 }}>Generated documents</h4>
             {loadingDocs && <div className="badge">Loading documents…</div>}
             {documents.length === 0 && !loadingDocs ? (
-              <div className="notice">No documents generated yet.</div>
+              <div className="notice">
+                No documents generated yet. Use a template above to create the first.
+              </div>
             ) : (
               <div className="stack" style={{ gap: 8 }}>
                 {documents.map((doc) => (
