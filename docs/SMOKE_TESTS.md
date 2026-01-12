@@ -27,3 +27,11 @@ Run these checks after patient UX changes or infra updates.
 - Documents tab shows an empty-state CTA when no documents exist.
 - Attachments tab shows an empty-state CTA when no attachments exist.
 - Clinical tab shows empty-state guidance for notes/procedures when empty.
+
+## Stage 31 appointments workflow acceptance checks
+- Booking can be initiated from patient page, appointments page, and deep link (`/appointments?book=1`, optional `patientId=`).
+- Booking opens reliably after refresh, tab switches, and back/forward navigation.
+- Required fields enforced (date/time, duration, patient, clinician/resource if applicable).
+- Successful create appears immediately on calendar and persists after refresh.
+- Backend errors surface as clear user messages.
+- Timezone sanity: UK local times display consistently.
