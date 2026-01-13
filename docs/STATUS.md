@@ -56,6 +56,7 @@
 
 ## Recent fixes
 - Patient summary: in-page booking jump + collapsible docs/attachments + tighter two-column layout.
+- Summary grid breakpoint/spacing updated (class currently only used on patient summary).
 - Bcrypt/passlib pin
 - Session check 500 resolved by enum schema fix
 - Route groups + theme toggle
