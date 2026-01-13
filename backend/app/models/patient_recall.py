@@ -25,6 +25,13 @@ class PatientRecallStatus(str, enum.Enum):
     cancelled = "cancelled"
 
 
+class PatientRecallOutcome(str, enum.Enum):
+    attended = "attended"
+    dna = "dna"
+    cancelled = "cancelled"
+    rebooked = "rebooked"
+
+
 class PatientRecall(Base, AuditMixin):
     __tablename__ = "patient_recalls"
 
@@ -41,9 +48,16 @@ class PatientRecall(Base, AuditMixin):
         nullable=False,
         default=PatientRecallStatus.upcoming,
     )
+    outcome: Mapped[PatientRecallOutcome | None] = mapped_column(
+        Enum(PatientRecallOutcome, name="patient_recall_outcome"),
+        nullable=True,
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    linked_appointment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("appointments.id"), nullable=True
     )
 
     patient = relationship("Patient", back_populates="recalls", lazy="joined")

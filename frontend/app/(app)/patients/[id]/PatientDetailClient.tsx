@@ -161,6 +161,7 @@ type FinanceSummary = {
 
 type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
 type RecallItemStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
+type RecallOutcome = "attended" | "dna" | "cancelled" | "rebooked";
 
 type PatientRecallItem = {
   id: number;
@@ -170,6 +171,8 @@ type PatientRecallItem = {
   status: RecallItemStatus;
   notes?: string | null;
   completed_at?: string | null;
+  outcome?: RecallOutcome | null;
+  linked_appointment_id?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -341,6 +344,13 @@ const recallKindLabels: Record<RecallKind, string> = {
   perio: "Perio",
   implant: "Implant",
   custom: "Custom",
+};
+
+const recallOutcomeLabels: Record<RecallOutcome, string> = {
+  attended: "Attended",
+  dna: "DNA",
+  cancelled: "Cancelled",
+  rebooked: "Rebooked",
 };
 
 const treatmentStatusLabels: Record<TreatmentPlanStatus, string> = {
@@ -1394,7 +1404,31 @@ export default function PatientDetailClient({
     }
   }
 
-  async function markRecallCompleted(recall: PatientRecallItem) {
+  async function createNextRecall(recall: PatientRecallItem, months: number) {
+    const baseDate = recall.due_date ? new Date(recall.due_date) : new Date();
+    const dueDate = formatDateInput(addMonthsToDate(baseDate, months));
+    const res = await apiFetch(`/api/patients/${patientId}/recalls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: recall.kind,
+        due_date: dueDate,
+        notes: recall.notes || null,
+      }),
+    });
+    if (res.status === 401) {
+      clearToken();
+      router.replace("/login");
+      return false;
+    }
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || `Failed to create next recall (HTTP ${res.status})`);
+    }
+    return true;
+  }
+
+  async function markRecallCompleted(recall: PatientRecallItem, nextMonths?: number) {
     setRecallActionId(recall.id);
     setRecallsError(null);
     try {
@@ -1404,6 +1438,7 @@ export default function PatientDetailClient({
         body: JSON.stringify({
           status: "completed",
           completed_at: new Date().toISOString(),
+          outcome: "attended",
         }),
       });
       if (res.status === 401) {
@@ -1414,6 +1449,9 @@ export default function PatientDetailClient({
       if (!res.ok) {
         const msg = await res.text();
         throw new Error(msg || `Failed to complete recall (HTTP ${res.status})`);
+      }
+      if (nextMonths) {
+        await createNextRecall(recall, nextMonths);
       }
       await loadRecalls();
     } catch (err) {
@@ -4492,6 +4530,7 @@ export default function PatientDetailClient({
                             <th>Type</th>
                             <th>Due</th>
                             <th>Status</th>
+                            <th>Outcome</th>
                             <th>Notes</th>
                             <th>Completed</th>
                             <th>Actions</th>
@@ -4508,6 +4547,9 @@ export default function PatientDetailClient({
                                   <span className="badge">
                                     {recallItemStatusLabels[recall.status]}
                                   </span>
+                                </td>
+                                <td>
+                                  {recall.outcome ? recallOutcomeLabels[recall.outcome] : "—"}
                                 </td>
                                 <td>{recall.notes || "—"}</td>
                                 <td>
@@ -4534,6 +4576,22 @@ export default function PatientDetailClient({
                                       {recallActionId === recall.id
                                         ? "Updating..."
                                         : "Mark completed"}
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => void markRecallCompleted(recall, 6)}
+                                      disabled={isFinal || recallActionId === recall.id}
+                                    >
+                                      Complete +6m
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => void markRecallCompleted(recall, 12)}
+                                      disabled={isFinal || recallActionId === recall.id}
+                                    >
+                                      Complete +12m
                                     </button>
                                   </div>
                                 </td>
@@ -4564,6 +4622,10 @@ export default function PatientDetailClient({
                                   ? formatShortDate(recall.completed_at)
                                   : "—"}
                               </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                Outcome{" "}
+                                {recall.outcome ? recallOutcomeLabels[recall.outcome] : "—"}
+                              </div>
                               {recall.notes && <div>{recall.notes}</div>}
                               <div className="row">
                                 <button
@@ -4583,6 +4645,22 @@ export default function PatientDetailClient({
                                   {recallActionId === recall.id
                                     ? "Updating..."
                                     : "Mark completed"}
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void markRecallCompleted(recall, 6)}
+                                  disabled={isFinal || recallActionId === recall.id}
+                                >
+                                  Complete +6m
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void markRecallCompleted(recall, 12)}
+                                  disabled={isFinal || recallActionId === recall.id}
+                                >
+                                  Complete +12m
                                 </button>
                               </div>
                             </div>

@@ -4,7 +4,11 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.models.patient import CareSetting, PatientCategory, RecallStatus
-from app.models.patient_recall import PatientRecallKind, PatientRecallStatus
+from app.models.patient_recall import (
+    PatientRecallKind,
+    PatientRecallOutcome,
+    PatientRecallStatus,
+)
 from app.schemas.actor import ActorOut
 
 
@@ -180,6 +184,8 @@ class PatientRecallBase(BaseModel):
     status: PatientRecallStatus = PatientRecallStatus.upcoming
     notes: Optional[str] = None
     completed_at: Optional[datetime] = None
+    outcome: Optional[PatientRecallOutcome] = None
+    linked_appointment_id: Optional[int] = None
 
 
 class PatientRecallCreate(PatientRecallBase):
@@ -192,6 +198,8 @@ class PatientRecallUpdate(BaseModel):
     status: Optional[PatientRecallStatus] = None
     notes: Optional[str] = None
     completed_at: Optional[datetime] = None
+    outcome: Optional[PatientRecallOutcome] = None
+    linked_appointment_id: Optional[int] = None
 
 
 class PatientRecallOut(PatientRecallBase):
