@@ -11,6 +11,7 @@ from app.models.audit_log import AuditLog
 from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
+from app.models.patient_recall import PatientRecall, PatientRecallStatus
 from app.services.audit import log_event, snapshot_model
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.patient import (
@@ -19,6 +20,9 @@ from app.schemas.patient import (
     PatientFinanceSummaryOut,
     PatientOut,
     PatientSearchOut,
+    PatientRecallCreate,
+    PatientRecallOut,
+    PatientRecallUpdate,
     PatientUpdate,
     RecallUpdate,
 )
@@ -44,6 +48,19 @@ def _stringify(value: object | None) -> str:
     if hasattr(value, "value"):
         return value.value
     return str(value)
+
+
+def _resolved_recall_status(recall: PatientRecall) -> PatientRecallStatus:
+    if recall.status != PatientRecallStatus.upcoming:
+        return recall.status
+    if not recall.due_date:
+        return recall.status
+    today = date.today()
+    if recall.due_date < today:
+        return PatientRecallStatus.overdue
+    if recall.due_date <= today:
+        return PatientRecallStatus.due
+    return recall.status
 
 
 def _log_recall_timeline(
@@ -572,6 +589,107 @@ def get_patient_finance_summary(
         patient_id=patient_id,
         outstanding_balance_pence=int(balance),
         items=summary_items,
+    )
+
+
+@router.get("/{patient_id}/recalls", response_model=list[PatientRecallOut])
+def list_patient_recalls(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    recalls = list(
+        db.scalars(
+            select(PatientRecall)
+            .where(PatientRecall.patient_id == patient_id)
+            .order_by(PatientRecall.due_date.asc(), PatientRecall.id.asc())
+        )
+    )
+    output: list[PatientRecallOut] = []
+    for recall in recalls:
+        resolved_status = _resolved_recall_status(recall)
+        recall_out = PatientRecallOut.model_validate(recall).model_copy(
+            update={"status": resolved_status}
+        )
+        output.append(recall_out)
+    return output
+
+
+@router.post(
+    "/{patient_id}/recalls",
+    response_model=PatientRecallOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_patient_recall(
+    patient_id: int,
+    payload: PatientRecallCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    recall = PatientRecall(
+        patient_id=patient_id,
+        kind=payload.kind,
+        due_date=payload.due_date,
+        status=payload.status,
+        notes=payload.notes,
+        completed_at=payload.completed_at,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    if recall.status == PatientRecallStatus.completed and recall.completed_at is None:
+        recall.completed_at = datetime.now(timezone.utc)
+    db.add(recall)
+    db.commit()
+    db.refresh(recall)
+    resolved_status = _resolved_recall_status(recall)
+    return PatientRecallOut.model_validate(recall).model_copy(
+        update={"status": resolved_status}
+    )
+
+
+@router.patch(
+    "/{patient_id}/recalls/{recall_id}",
+    response_model=PatientRecallOut,
+)
+def update_patient_recall(
+    patient_id: int,
+    recall_id: int,
+    payload: PatientRecallUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    recall = db.get(PatientRecall, recall_id)
+    if not recall or recall.patient_id != patient_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+
+    if payload.kind is not None:
+        recall.kind = payload.kind
+    if payload.due_date is not None:
+        recall.due_date = payload.due_date
+    if payload.status is not None:
+        recall.status = payload.status
+    if payload.notes is not None:
+        recall.notes = payload.notes
+    if payload.completed_at is not None:
+        recall.completed_at = payload.completed_at
+    if payload.status == PatientRecallStatus.completed and payload.completed_at is None:
+        recall.completed_at = datetime.now(timezone.utc)
+
+    recall.updated_by_user_id = user.id
+    db.commit()
+    db.refresh(recall)
+    resolved_status = _resolved_recall_status(recall)
+    return PatientRecallOut.model_validate(recall).model_copy(
+        update={"status": resolved_status}
     )
 
 

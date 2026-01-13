@@ -4,6 +4,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.models.patient import CareSetting, PatientCategory, RecallStatus
+from app.models.patient_recall import PatientRecallKind, PatientRecallStatus
 from app.schemas.actor import ActorOut
 
 
@@ -171,3 +172,32 @@ class PatientFinanceSummaryOut(BaseModel):
     patient_id: int
     outstanding_balance_pence: int
     items: list[PatientFinanceItemOut]
+
+
+class PatientRecallBase(BaseModel):
+    kind: PatientRecallKind
+    due_date: date
+    status: PatientRecallStatus = PatientRecallStatus.upcoming
+    notes: Optional[str] = None
+    completed_at: Optional[datetime] = None
+
+
+class PatientRecallCreate(PatientRecallBase):
+    pass
+
+
+class PatientRecallUpdate(BaseModel):
+    kind: Optional[PatientRecallKind] = None
+    due_date: Optional[date] = None
+    status: Optional[PatientRecallStatus] = None
+    notes: Optional[str] = None
+    completed_at: Optional[datetime] = None
+
+
+class PatientRecallOut(PatientRecallBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    patient_id: int
+    created_at: datetime
+    updated_at: datetime
