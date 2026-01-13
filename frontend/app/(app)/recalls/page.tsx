@@ -110,6 +110,8 @@ export default function RecallsPage() {
   const [contactChannelFilter, setContactChannelFilter] = useState<
     RecallContactChannel[]
   >([]);
+  const [pageSize, setPageSize] = useState(50);
+  const [offset, setOffset] = useState(0);
   const [actionId, setActionId] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -149,12 +151,16 @@ export default function RecallsPage() {
     if (contactChannelFilter.length > 0) {
       params.set("contact_channel", contactChannelFilter.join(","));
     }
+    params.set("limit", String(pageSize));
+    params.set("offset", String(offset));
     return params;
   }, [
     contactedFilter,
     contactedWithinDays,
     contactChannelFilter,
     endDate,
+    offset,
+    pageSize,
     startDate,
     statusFilter,
     typeFilter,
@@ -316,6 +322,19 @@ export default function RecallsPage() {
       active = false;
     };
   }, [buildQueryParams, router]);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [
+    statusFilter,
+    typeFilter,
+    startDate,
+    endDate,
+    contactedFilter,
+    contactedWithinDays,
+    contactChannelFilter,
+    pageSize,
+  ]);
 
   function toggleStatus(value: RecallStatus) {
     setStatusFilter((prev) => {
@@ -488,6 +507,22 @@ export default function RecallsPage() {
           </div>
           <div className="row recall-toolbar">
             <div className="badge">{rows.length} recalls</div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="label" style={{ margin: 0 }}>
+                Per page
+              </span>
+              <select
+                className="input"
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+              >
+                {[25, 50, 100, 200].map((size) => (
+                  <option key={size} value={String(size)}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               className="btn btn-secondary"
               type="button"
@@ -525,6 +560,27 @@ export default function RecallsPage() {
               onClick={() => window.print()}
             >
               Print
+            </button>
+          </div>
+          <div className="row">
+            <div className="badge">
+              Showing {offset + 1}-{offset + rows.length}
+            </div>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setOffset((prev) => Math.max(0, prev - pageSize))}
+              disabled={offset === 0}
+            >
+              Prev
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setOffset((prev) => prev + pageSize)}
+              disabled={rows.length < pageSize}
+            >
+              Next
             </button>
           </div>
         </div>
