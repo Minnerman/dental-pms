@@ -87,6 +87,7 @@ export default function RecallsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [actionId, setActionId] = useState<number | null>(null);
+  const [downloadId, setDownloadId] = useState<number | null>(null);
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -97,6 +98,45 @@ export default function RecallsPage() {
       recallId: String(row.id),
     });
     router.push(`/appointments?${params.toString()}`);
+  }
+
+  function buildRecallFilename(row: RecallRow) {
+    const rawName = `${row.last_name}_${row.first_name}`;
+    const safeName = rawName.replace(/[^a-zA-Z0-9-_]+/g, "_");
+    const date = row.due_date?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    return `Recall_${safeName}_${date}.pdf`;
+  }
+
+  async function downloadRecallLetter(row: RecallRow) {
+    setDownloadId(row.id);
+    setError(null);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${row.patient_id}/recalls/${row.id}/letter.pdf`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download letter (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = buildRecallFilename(row);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download recall letter");
+    } finally {
+      setDownloadId(null);
+    }
   }
 
   useEffect(() => {
@@ -360,6 +400,14 @@ export default function RecallsPage() {
                       <button
                         className="btn btn-secondary"
                         type="button"
+                        disabled={downloadId === row.id}
+                        onClick={() => void downloadRecallLetter(row)}
+                      >
+                        {downloadId === row.id ? "Generating..." : "Generate letter"}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
                         disabled={
                           actionId === row.id ||
                           row.status === "completed" ||
@@ -424,6 +472,14 @@ export default function RecallsPage() {
                     onClick={() => handleBook(row)}
                   >
                     Book appointment
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    disabled={downloadId === row.id}
+                    onClick={() => void downloadRecallLetter(row)}
+                  >
+                    {downloadId === row.id ? "Generating..." : "Generate letter"}
                   </button>
                   <button
                     className="btn btn-secondary"

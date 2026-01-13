@@ -1,7 +1,7 @@
 from calendar import monthrange
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, nullslast, or_, select
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.models.patient_recall import PatientRecall, PatientRecallStatus
 from app.services.audit import log_event, snapshot_model
+from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recalls import resolve_recall_status
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.patient import (
@@ -685,6 +686,39 @@ def update_patient_recall(
     return PatientRecallOut.model_validate(recall).model_copy(
         update={"status": resolved_status}
     )
+
+
+@router.get("/{patient_id}/recalls/{recall_id}/letter.pdf")
+def get_recall_letter_pdf(
+    patient_id: int,
+    recall_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    recall = db.get(PatientRecall, recall_id)
+    if not recall or recall.patient_id != patient_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+    pdf_bytes = build_recall_letter_pdf(patient, recall)
+    log_event(
+        db,
+        actor=user,
+        action="recall.letter_generated",
+        entity_type="patient",
+        entity_id=str(patient_id),
+        before_obj=None,
+        after_obj=None,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    filename = f"recall-{patient_id}-{recall_id}.pdf"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
 @router.post("/{patient_id}/payments", response_model=LedgerEntryOut)
