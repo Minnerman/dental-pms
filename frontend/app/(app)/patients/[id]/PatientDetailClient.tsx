@@ -2624,7 +2624,7 @@ export default function PatientDetailClient({
                         <div className="stack">
                           <div className="row">
                             <div>
-                              <h4 style={{ marginTop: 0 }}>Finance</h4>
+                              <h4 style={{ marginTop: 0 }}>Finance summary</h4>
                               <div style={{ color: "var(--muted)" }}>
                                 Outstanding {formatCurrency(financeBalance)}
                               </div>
