@@ -26,3 +26,5 @@ backups/
 
 # OS
 .DS_Store
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
