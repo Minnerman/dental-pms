@@ -163,6 +163,19 @@
 - Risks/notes:
   - Date deep link does not remove `date` or `view` params after navigation.
 
+## PR draft (stage34-appointments-conflict-warning -> master)
+- Summary:
+  - Non-blocking warning for overlapping appointments for the same clinician
+  - Warning shown on create and reschedule/resize
+  - Smoke checklist updated with conflict cases
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - Overlapping same clinician shows warning (still saves)
+  - Overlapping different clinician shows no warning
+  - Boundary case end==start shows no warning
+- Risks/notes:
+  - Conflict detection is front-end only and limited to loaded range.
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)

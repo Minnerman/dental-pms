@@ -43,6 +43,9 @@ Run these checks after patient UX changes or infra updates.
 - Optional deep link `/appointments?date=2026-01-14&view=week` preserves week view.
 - Deep link `/appointments?date=2026-01-14&book=1` still opens booking.
 - Patient “Book appointment” routes to `/appointments?book=1&patientId=<id>`.
+- Creating an appointment that overlaps the same clinician shows a warning (non-blocking).
+- Creating an overlapping appointment for a different clinician shows no warning.
+- Boundary case: end time equals another start time shows no warning.
 - Required fields enforced (date/time, duration, patient, clinician/resource if applicable).
 - After creating an appointment, it appears immediately on the calendar/day sheet.
 - Refreshing the page shows the appointment persisted.

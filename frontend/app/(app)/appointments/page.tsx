@@ -158,6 +158,11 @@ type CalendarRange = {
   anchor: string;
 };
 
+type ConflictWarning = {
+  message: string;
+  details: string[];
+};
+
 const localizer = dateFnsLocalizer({
   format,
   parse,
@@ -295,6 +300,10 @@ function getRangeForView(date: Date, view: View) {
   return { start: date, end: date };
 }
 
+function overlaps(startA: Date, endA: Date, startB: Date, endB: Date) {
+  return startA < endB && endA > startB;
+}
+
 function formatTimeRange(start: string, end: string) {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -304,6 +313,18 @@ function formatTimeRange(start: string, end: string) {
     minute: "2-digit",
   });
   const endLabel = endDate.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${startLabel}–${endLabel}`;
+}
+
+function formatConflictTime(start: Date, end: Date) {
+  const startLabel = start.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const endLabel = end.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -511,6 +532,7 @@ export default function AppointmentsPage() {
   const [editStatus, setEditStatus] = useState<AppointmentStatus>("booked");
   const [editCancelReason, setEditCancelReason] = useState("");
   const [editNoteBody, setEditNoteBody] = useState("");
+  const [conflictWarning, setConflictWarning] = useState<ConflictWarning | null>(null);
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
 
@@ -554,6 +576,68 @@ export default function AppointmentsPage() {
         (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
       );
   }, [appointments, currentDate]);
+
+  function getClinicianLabel(clinicianId: number | null | undefined) {
+    if (!clinicianId) return "";
+    const clinician = users.find((user) => user.id === clinicianId);
+    if (!clinician) return `Clinician ${clinicianId}`;
+    return clinician.full_name || clinician.email || `Clinician ${clinicianId}`;
+  }
+
+  function buildConflictWarning(
+    conflicts: Array<{ start: Date; end: Date; patientName: string }>,
+    clinicianId: number | null | undefined
+  ): ConflictWarning | null {
+    if (conflicts.length === 0) return null;
+    const label = getClinicianLabel(clinicianId);
+    const message = `Warning: overlaps with ${conflicts.length} existing appointment${
+      conflicts.length === 1 ? "" : "s"
+    }${label ? ` for ${label}` : ""}.`;
+    const details = conflicts.slice(0, 2).map((conflict) => {
+      return `${conflict.patientName} (${formatConflictTime(
+        conflict.start,
+        conflict.end
+      )})`;
+    });
+    if (conflicts.length > 2) {
+      details.push(`and ${conflicts.length - 2} more`);
+    }
+    return { message, details };
+  }
+
+  function findConflicts({
+    clinicianId,
+    start,
+    end,
+    excludeId,
+  }: {
+    clinicianId: number | null;
+    start: Date;
+    end: Date;
+    excludeId?: number;
+  }) {
+    if (!clinicianId) return [];
+    return appointments
+      .filter((appt) => appt.clinician_user_id === clinicianId)
+      .filter((appt) => (excludeId ? appt.id !== excludeId : true))
+      .map((appt) => {
+        const startDate = new Date(appt.starts_at);
+        const endDate = new Date(appt.ends_at);
+        return {
+          id: appt.id,
+          start: startDate,
+          end: endDate,
+          patientName: `${appt.patient.first_name} ${appt.patient.last_name}`.trim(),
+        };
+      })
+      .filter(
+        (appt) =>
+          !Number.isNaN(appt.start.getTime()) &&
+          !Number.isNaN(appt.end.getTime()) &&
+          overlaps(start, end, appt.start, appt.end)
+      )
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
 
   useEffect(() => {
     const stored = localStorage.getItem("dental_pms_appointments_view");
@@ -603,6 +687,34 @@ export default function AppointmentsPage() {
       scroll: false,
     });
   }, [router, searchParams]);
+
+  useEffect(() => {
+    if (!showNewModal) {
+      setConflictWarning(null);
+      return;
+    }
+    if (!startsAt || !endsAt || !clinicianUserId) {
+      setConflictWarning(null);
+      return;
+    }
+    const startDate = new Date(startsAt);
+    const endDate = new Date(endsAt);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      setConflictWarning(null);
+      return;
+    }
+    if (endDate <= startDate) {
+      setConflictWarning(null);
+      return;
+    }
+    const clinicianId = Number(clinicianUserId);
+    if (!Number.isFinite(clinicianId)) {
+      setConflictWarning(null);
+      return;
+    }
+    const conflicts = findConflicts({ clinicianId, start: startDate, end: endDate });
+    setConflictWarning(buildConflictWarning(conflicts, clinicianId));
+  }, [appointments, startsAt, endsAt, clinicianUserId, showNewModal]);
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;
@@ -981,6 +1093,15 @@ export default function AppointmentsPage() {
     if (!isRangeWithinSchedule(startDate, endDate, schedule)) {
       setError("Appointment time is outside of working hours.");
       return;
+    }
+    const clinicianId = clinicianUserId ? Number(clinicianUserId) : null;
+    if (clinicianId) {
+      const conflicts = findConflicts({
+        clinicianId,
+        start: startDate,
+        end: endDate,
+      });
+      setConflictWarning(buildConflictWarning(conflicts, clinicianId));
     }
     setSaving(true);
     setError(null);
@@ -1405,6 +1526,17 @@ export default function AppointmentsPage() {
         await loadAppointments();
         return;
       }
+      if (event.resource.clinician_user_id) {
+        const conflicts = findConflicts({
+          clinicianId: event.resource.clinician_user_id,
+          start,
+          end,
+          excludeId: event.resource.id,
+        });
+        setConflictWarning(
+          buildConflictWarning(conflicts, event.resource.clinician_user_id)
+        );
+      }
       const confirmed = window.confirm("Reschedule this appointment?");
       if (!confirmed) {
         await loadAppointments();
@@ -1436,6 +1568,17 @@ export default function AppointmentsPage() {
         setError("Resize is outside of working hours.");
         await loadAppointments();
         return;
+      }
+      if (event.resource.clinician_user_id) {
+        const conflicts = findConflicts({
+          clinicianId: event.resource.clinician_user_id,
+          start,
+          end,
+          excludeId: event.resource.id,
+        });
+        setConflictWarning(
+          buildConflictWarning(conflicts, event.resource.clinician_user_id)
+        );
       }
       const confirmed = window.confirm("Update appointment duration?");
       if (!confirmed) {
@@ -1636,6 +1779,24 @@ export default function AppointmentsPage() {
 
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
+        {conflictWarning && (
+          <div
+            className="notice"
+            style={{
+              background: "rgba(245, 158, 11, 0.12)",
+              borderColor: "rgba(245, 158, 11, 0.4)",
+            }}
+          >
+            <div>{conflictWarning.message}</div>
+            {conflictWarning.details.length > 0 && (
+              <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
+                {conflictWarning.details.map((detail) => (
+                  <span key={detail}>{detail}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {viewMode === "calendar" ? (
           <div className="card" style={{ margin: 0, padding: 16 }}>
