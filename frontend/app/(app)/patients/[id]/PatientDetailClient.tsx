@@ -2421,7 +2421,7 @@ export default function PatientDetailClient({
               </div>
 
               {tab === "summary" ? (
-                <div className="stack">
+                <div className="stack summary-stack">
                   <div
                     style={{
                       display: "flex",
@@ -2461,7 +2461,8 @@ export default function PatientDetailClient({
                         type="button"
                         className="btn btn-primary"
                         onClick={() => {
-                          router.push(`/appointments?book=1&patientId=${patientId}`);
+                          openBookingModal();
+                          setPendingScrollTarget("patient-book-appointment");
                         }}
                       >
                         Book appointment
@@ -2807,8 +2808,18 @@ export default function PatientDetailClient({
                         </div>
                       </div>
 
-                      <PatientDocuments patientId={patientId} />
-                      <PatientAttachments patientId={patientIdNum} />
+                      <details className="card" style={{ margin: 0 }}>
+                        <summary className="label">Documents</summary>
+                        <div className="stack" style={{ marginTop: 12 }}>
+                          <PatientDocuments patientId={patientId} embedded />
+                        </div>
+                      </details>
+                      <details className="card" style={{ margin: 0 }}>
+                        <summary className="label">Attachments</summary>
+                        <div className="stack" style={{ marginTop: 12 }}>
+                          <PatientAttachments patientId={patientIdNum} embedded />
+                        </div>
+                      </details>
                     </div>
                   </div>
 

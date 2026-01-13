@@ -37,7 +37,13 @@ function formatBytes(bytes: number) {
   return `${mb.toFixed(1)} MB`;
 }
 
-export default function PatientAttachments({ patientId }: { patientId: number }) {
+export default function PatientAttachments({
+  patientId,
+  embedded = false,
+}: {
+  patientId: number;
+  embedded?: boolean;
+}) {
   const router = useRouter();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -179,9 +185,8 @@ export default function PatientAttachments({ patientId }: { patientId: number })
     void loadMe();
   }, []);
 
-  return (
-    <div className="card" style={{ margin: 0 }}>
-      <div className="stack">
+  const content = (
+    <div className="stack">
         <div className="row">
           <div>
             <h4 style={{ marginTop: 0 }}>Attachments</h4>
@@ -248,7 +253,16 @@ export default function PatientAttachments({ patientId }: { patientId: number })
             ))}
           </div>
         )}
-      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="card" style={{ margin: 0 }}>
+      {content}
     </div>
   );
 }

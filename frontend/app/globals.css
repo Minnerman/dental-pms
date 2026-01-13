@@ -367,14 +367,18 @@ button {
 
 .summary-grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: 1fr;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 960px) {
   .summary-grid {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   }
+}
+
+.summary-stack {
+  gap: 12px;
 }
 
 .panel {
