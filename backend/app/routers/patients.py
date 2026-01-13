@@ -12,6 +12,12 @@ from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.models.patient_recall import PatientRecall, PatientRecallStatus
+from app.models.patient_recall_communication import (
+    PatientRecallCommunication,
+    PatientRecallCommunicationChannel,
+    PatientRecallCommunicationDirection,
+    PatientRecallCommunicationStatus,
+)
 from app.services.audit import log_event, snapshot_model
 from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recalls import resolve_recall_status
@@ -28,8 +34,13 @@ from app.schemas.patient import (
     PatientUpdate,
     RecallUpdate,
 )
+from app.schemas.recall_communication import (
+    RecallCommunicationCreate,
+    RecallCommunicationOut,
+)
 from app.schemas.ledger import LedgerChargeCreate, LedgerEntryOut, LedgerPaymentCreate
 from app.models.user import User
+from app.services.recall_communications import log_recall_communication
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -688,6 +699,68 @@ def update_patient_recall(
     )
 
 
+@router.get(
+    "/{patient_id}/recalls/{recall_id}/communications",
+    response_model=list[RecallCommunicationOut],
+)
+def list_recall_communications(
+    patient_id: int,
+    recall_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    limit: int = Query(default=3, ge=1, le=50),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    recall = db.get(PatientRecall, recall_id)
+    if not recall or recall.patient_id != patient_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+    rows = list(
+        db.scalars(
+            select(PatientRecallCommunication)
+            .where(PatientRecallCommunication.patient_id == patient_id)
+            .where(PatientRecallCommunication.recall_id == recall_id)
+            .order_by(PatientRecallCommunication.created_at.desc())
+            .limit(limit)
+        )
+    )
+    return [RecallCommunicationOut.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/{patient_id}/recalls/{recall_id}/communications",
+    response_model=RecallCommunicationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_recall_communication(
+    patient_id: int,
+    recall_id: int,
+    payload: RecallCommunicationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    recall = db.get(PatientRecall, recall_id)
+    if not recall or recall.patient_id != patient_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+    entry = PatientRecallCommunication(
+        patient_id=patient_id,
+        recall_id=recall_id,
+        channel=payload.channel,
+        direction=PatientRecallCommunicationDirection.outbound,
+        status=PatientRecallCommunicationStatus.sent,
+        notes=payload.notes,
+        created_by_user_id=user.id,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return RecallCommunicationOut.model_validate(entry)
+
+
 @router.get("/{patient_id}/recalls/{recall_id}/letter.pdf")
 def get_recall_letter_pdf(
     patient_id: int,
@@ -704,6 +777,21 @@ def get_recall_letter_pdf(
     if not recall or recall.patient_id != patient_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
     pdf_bytes = build_recall_letter_pdf(patient, recall)
+    notes = (
+        f"Recall letter generated (PDF) - Type: {recall.kind.value}, "
+        f"Due: {recall.due_date.isoformat()}"
+    )
+    log_recall_communication(
+        db,
+        patient_id=patient_id,
+        recall_id=recall_id,
+        channel=PatientRecallCommunicationChannel.letter,
+        direction=PatientRecallCommunicationDirection.outbound,
+        status=PatientRecallCommunicationStatus.sent,
+        notes=notes,
+        created_by_user_id=user.id if user else None,
+        guard_seconds=60,
+    )
     log_event(
         db,
         actor=user,

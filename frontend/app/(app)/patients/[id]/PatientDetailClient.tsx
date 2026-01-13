@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
@@ -162,6 +162,9 @@ type FinanceSummary = {
 type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
 type RecallItemStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
 type RecallOutcome = "attended" | "dna" | "cancelled" | "rebooked";
+type RecallCommChannel = "letter" | "phone" | "email" | "sms";
+type RecallCommDirection = "outbound";
+type RecallCommStatus = "draft" | "sent" | "failed";
 
 type PatientRecallItem = {
   id: number;
@@ -175,6 +178,18 @@ type PatientRecallItem = {
   linked_appointment_id?: number | null;
   created_at: string;
   updated_at: string;
+};
+
+type RecallCommunication = {
+  id: number;
+  patient_id: number;
+  recall_id: number;
+  channel: RecallCommChannel;
+  direction: RecallCommDirection;
+  status: RecallCommStatus;
+  notes?: string | null;
+  created_at: string;
+  created_by_user_id?: number | null;
 };
 
 type TimelineItem = {
@@ -353,6 +368,19 @@ const recallOutcomeLabels: Record<RecallOutcome, string> = {
   rebooked: "Rebooked",
 };
 
+const recallCommChannelLabels: Record<RecallCommChannel, string> = {
+  letter: "Letter",
+  phone: "Phone",
+  email: "Email",
+  sms: "SMS",
+};
+
+const recallCommStatusLabels: Record<RecallCommStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  failed: "Failed",
+};
+
 const treatmentStatusLabels: Record<TreatmentPlanStatus, string> = {
   proposed: "Proposed",
   accepted: "Accepted",
@@ -528,6 +556,17 @@ export default function PatientDetailClient({
   const [recallEntrySaving, setRecallEntrySaving] = useState(false);
   const [recallActionId, setRecallActionId] = useState<number | null>(null);
   const [recallDownloadId, setRecallDownloadId] = useState<number | null>(null);
+  const [recallCommMap, setRecallCommMap] = useState<Record<number, RecallCommunication[]>>(
+    {}
+  );
+  const [recallCommLoadingId, setRecallCommLoadingId] = useState<number | null>(null);
+  const [recallCommError, setRecallCommError] = useState<string | null>(null);
+  const [expandedRecallId, setExpandedRecallId] = useState<number | null>(null);
+  const [showRecallCommModal, setShowRecallCommModal] = useState(false);
+  const [recallCommRecallId, setRecallCommRecallId] = useState<number | null>(null);
+  const [recallCommChannel, setRecallCommChannel] = useState<RecallCommChannel>("letter");
+  const [recallCommNotes, setRecallCommNotes] = useState("");
+  const [recallCommSaving, setRecallCommSaving] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [ledgerMode, setLedgerMode] = useState<LedgerEntryType>("payment");
   const [ledgerAmount, setLedgerAmount] = useState("");
@@ -758,6 +797,89 @@ export default function PatientDetailClient({
       setRecallsError(err instanceof Error ? err.message : "Failed to load recalls");
     } finally {
       setRecallsLoading(false);
+    }
+  }
+
+  async function loadRecallCommunications(recallId: number) {
+    setRecallCommLoadingId(recallId);
+    setRecallCommError(null);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/recalls/${recallId}/communications?limit=3`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load recall communications (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as RecallCommunication[];
+      setRecallCommMap((prev) => ({ ...prev, [recallId]: data }));
+    } catch (err) {
+      setRecallCommError(
+        err instanceof Error ? err.message : "Failed to load recall communications"
+      );
+    } finally {
+      setRecallCommLoadingId(null);
+    }
+  }
+
+  function openRecallCommModal(recall: PatientRecallItem) {
+    setRecallCommRecallId(recall.id);
+    setRecallCommChannel("letter");
+    setRecallCommNotes("");
+    setRecallCommError(null);
+    setShowRecallCommModal(true);
+  }
+
+  async function saveRecallCommunication() {
+    if (!recallCommRecallId) return;
+    setRecallCommSaving(true);
+    setRecallCommError(null);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/recalls/${recallCommRecallId}/communications`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel: recallCommChannel,
+            notes: recallCommNotes.trim() || null,
+          }),
+        }
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to log communication (HTTP ${res.status})`);
+      }
+      setShowRecallCommModal(false);
+      setRecallCommNotes("");
+      await loadRecallCommunications(recallCommRecallId);
+    } catch (err) {
+      setRecallCommError(
+        err instanceof Error ? err.message : "Failed to log communication"
+      );
+    } finally {
+      setRecallCommSaving(false);
+    }
+  }
+
+  function toggleRecallCommunications(recallId: number) {
+    if (expandedRecallId === recallId) {
+      setExpandedRecallId(null);
+      return;
+    }
+    setExpandedRecallId(recallId);
+    if (!recallCommMap[recallId]) {
+      void loadRecallCommunications(recallId);
     }
   }
 
@@ -1646,6 +1768,11 @@ export default function PatientDetailClient({
     );
   }, [toothHistory]);
 
+  const recallCommTarget = useMemo(() => {
+    if (!recallCommRecallId) return null;
+    return recalls.find((recall) => recall.id === recallCommRecallId) || null;
+  }, [recallCommRecallId, recalls]);
+
   function buildAddress(p: Patient | null) {
     if (!p) return "";
     return [p.address_line1, p.address_line2, p.city, p.postcode]
@@ -1692,6 +1819,13 @@ export default function PatientDetailClient({
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return "—";
     return parsed.toLocaleDateString("en-GB");
+  }
+
+  function formatDateTime(value?: string | null) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return parsed.toLocaleString("en-GB");
   }
 
   function normalizeBpeScores(scores?: string[] | null) {
@@ -4583,73 +4717,129 @@ export default function PatientDetailClient({
                         <tbody>
                           {recalls.map((recall) => {
                             const isFinal = ["completed", "cancelled"].includes(recall.status);
+                            const isExpanded = expandedRecallId === recall.id;
+                            const comms = recallCommMap[recall.id] || [];
                             return (
-                              <tr key={recall.id}>
-                                <td>{recallKindLabels[recall.kind]}</td>
-                                <td>{formatShortDate(recall.due_date)}</td>
-                                <td>
-                                  <span className="badge">
-                                    {recallItemStatusLabels[recall.status]}
-                                  </span>
-                                </td>
-                                <td>
-                                  {recall.outcome ? recallOutcomeLabels[recall.outcome] : "—"}
-                                </td>
-                                <td>{recall.notes || "—"}</td>
-                                <td>
-                                  {recall.completed_at
-                                    ? formatShortDate(recall.completed_at)
-                                    : "—"}
-                                </td>
-                                <td>
-                                  <div className="table-actions">
-                                    <button
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => startEditRecall(recall)}
-                                      disabled={recallEntrySaving}
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => void downloadRecallLetter(recall)}
-                                      disabled={recallDownloadId === recall.id}
-                                    >
-                                      {recallDownloadId === recall.id
-                                        ? "Generating..."
-                                        : "Generate letter"}
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => void markRecallCompleted(recall)}
-                                      disabled={isFinal || recallActionId === recall.id}
-                                    >
-                                      {recallActionId === recall.id
-                                        ? "Updating..."
-                                        : "Mark completed"}
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => void markRecallCompleted(recall, 6)}
-                                      disabled={isFinal || recallActionId === recall.id}
-                                    >
-                                      Complete +6m
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary"
-                                      type="button"
-                                      onClick={() => void markRecallCompleted(recall, 12)}
-                                      disabled={isFinal || recallActionId === recall.id}
-                                    >
-                                      Complete +12m
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
+                              <Fragment key={recall.id}>
+                                <tr>
+                                  <td>{recallKindLabels[recall.kind]}</td>
+                                  <td>{formatShortDate(recall.due_date)}</td>
+                                  <td>
+                                    <span className="badge">
+                                      {recallItemStatusLabels[recall.status]}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {recall.outcome ? recallOutcomeLabels[recall.outcome] : "—"}
+                                  </td>
+                                  <td>{recall.notes || "—"}</td>
+                                  <td>
+                                    {recall.completed_at
+                                      ? formatShortDate(recall.completed_at)
+                                      : "—"}
+                                  </td>
+                                  <td>
+                                    <div className="table-actions">
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => startEditRecall(recall)}
+                                        disabled={recallEntrySaving}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => void downloadRecallLetter(recall)}
+                                        disabled={recallDownloadId === recall.id}
+                                      >
+                                        {recallDownloadId === recall.id
+                                          ? "Generating..."
+                                          : "Generate letter"}
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => openRecallCommModal(recall)}
+                                      >
+                                        Log contact
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => toggleRecallCommunications(recall.id)}
+                                      >
+                                        {isExpanded ? "Hide log" : "Show log"}
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => void markRecallCompleted(recall)}
+                                        disabled={isFinal || recallActionId === recall.id}
+                                      >
+                                        {recallActionId === recall.id
+                                          ? "Updating..."
+                                          : "Mark completed"}
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => void markRecallCompleted(recall, 6)}
+                                        disabled={isFinal || recallActionId === recall.id}
+                                      >
+                                        Complete +6m
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        onClick={() => void markRecallCompleted(recall, 12)}
+                                        disabled={isFinal || recallActionId === recall.id}
+                                      >
+                                        Complete +12m
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr>
+                                    <td colSpan={7}>
+                                      <div className="stack" style={{ gap: 8 }}>
+                                        <strong>Recent communications</strong>
+                                        {recallCommError && (
+                                          <div className="notice">{recallCommError}</div>
+                                        )}
+                                        {recallCommLoadingId === recall.id ? (
+                                          <div className="badge">Loading communications…</div>
+                                        ) : comms.length === 0 ? (
+                                          <div className="badge">No communications yet.</div>
+                                        ) : (
+                                          <div className="stack" style={{ gap: 6 }}>
+                                            {comms.map((entry) => (
+                                              <div
+                                                key={entry.id}
+                                                className="row"
+                                                style={{ alignItems: "center" }}
+                                              >
+                                                <span className="badge">
+                                                  {recallCommChannelLabels[entry.channel]}
+                                                </span>
+                                                <span className="badge">
+                                                  {recallCommStatusLabels[entry.status]}
+                                                </span>
+                                                <span style={{ color: "var(--muted)" }}>
+                                                  {formatDateTime(entry.created_at)}
+                                                </span>
+                                                <span>{entry.notes || "—"}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
                             );
                           })}
                         </tbody>
@@ -4657,6 +4847,8 @@ export default function PatientDetailClient({
                       <div className="recall-cards">
                         {recalls.map((recall) => {
                           const isFinal = ["completed", "cancelled"].includes(recall.status);
+                          const isExpanded = expandedRecallId === recall.id;
+                          const comms = recallCommMap[recall.id] || [];
                           return (
                             <div className="card recall-card" key={recall.id}>
                               <div className="row">
@@ -4703,6 +4895,20 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
+                                  onClick={() => openRecallCommModal(recall)}
+                                >
+                                  Log contact
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => toggleRecallCommunications(recall.id)}
+                                >
+                                  {isExpanded ? "Hide log" : "Show log"}
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
                                   onClick={() => void markRecallCompleted(recall)}
                                   disabled={isFinal || recallActionId === recall.id}
                                 >
@@ -4727,6 +4933,40 @@ export default function PatientDetailClient({
                                   Complete +12m
                                 </button>
                               </div>
+                              {isExpanded && (
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <strong>Recent communications</strong>
+                                  {recallCommError && (
+                                    <div className="notice">{recallCommError}</div>
+                                  )}
+                                  {recallCommLoadingId === recall.id ? (
+                                    <div className="badge">Loading communications…</div>
+                                  ) : comms.length === 0 ? (
+                                    <div className="badge">No communications yet.</div>
+                                  ) : (
+                                    <div className="stack" style={{ gap: 6 }}>
+                                      {comms.map((entry) => (
+                                        <div
+                                          key={entry.id}
+                                          className="row"
+                                          style={{ alignItems: "center" }}
+                                        >
+                                          <span className="badge">
+                                            {recallCommChannelLabels[entry.channel]}
+                                          </span>
+                                          <span className="badge">
+                                            {recallCommStatusLabels[entry.status]}
+                                          </span>
+                                          <span style={{ color: "var(--muted)" }}>
+                                            {formatDateTime(entry.created_at)}
+                                          </span>
+                                          <span>{entry.notes || "—"}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -5506,6 +5746,75 @@ export default function PatientDetailClient({
                     {planSaving ? "Saving..." : "Add item"}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {showRecallCommModal && (
+            <div className="card" style={{ margin: 0 }}>
+              <div className="stack">
+                <div className="row">
+                  <div>
+                    <h3 style={{ marginTop: 0 }}>Log recall communication</h3>
+                    <p style={{ color: "var(--muted)" }}>
+                      {recallCommTarget
+                        ? `${recallKindLabels[recallCommTarget.kind]} due ${formatShortDate(
+                            recallCommTarget.due_date
+                          )}`
+                        : "Recall contact log"}
+                    </p>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowRecallCommModal(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+                {recallCommError && <div className="notice">{recallCommError}</div>}
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 12,
+                    gridTemplateColumns: "1fr 1fr",
+                  }}
+                >
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Channel</label>
+                    <select
+                      className="input"
+                      value={recallCommChannel}
+                      onChange={(e) =>
+                        setRecallCommChannel(e.target.value as RecallCommChannel)
+                      }
+                    >
+                      {Object.entries(recallCommChannelLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    <label className="label">Notes</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      value={recallCommNotes}
+                      onChange={(e) => setRecallCommNotes(e.target.value)}
+                      placeholder="Optional notes"
+                    />
+                  </div>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={saveRecallCommunication}
+                  disabled={recallCommSaving || !recallCommRecallId}
+                >
+                  {recallCommSaving ? "Saving..." : "Save log"}
+                </button>
               </div>
             </div>
           )}

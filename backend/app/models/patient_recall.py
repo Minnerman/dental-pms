@@ -61,3 +61,6 @@ class PatientRecall(Base, AuditMixin):
     )
 
     patient = relationship("Patient", back_populates="recalls", lazy="joined")
+    communications = relationship(
+        "PatientRecallCommunication", back_populates="recall"
+    )
