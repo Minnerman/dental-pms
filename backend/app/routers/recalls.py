@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
-from io import StringIO
+from io import BytesIO, StringIO
 import csv
+import re
+import zipfile
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import case, func, select
@@ -22,6 +24,7 @@ from app.models.document_template import DocumentTemplate
 from app.models.patient_document import PatientDocument
 from app.services.audit import log_event, snapshot_model
 from app.services.document_render import render_template_with_warnings
+from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recalls import resolve_recall_status
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
@@ -110,6 +113,10 @@ def _parse_csv_values(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [value.strip().lower() for value in raw.split(",") if value.strip()]
+
+def _safe_filename_part(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", value).strip("_")
+    return cleaned
 
 
 def _normalize_recall_filters(
@@ -265,6 +272,52 @@ def export_recalls_csv(
     filename = f"recalls-{date.today().isoformat()}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=buffer.getvalue(), media_type="text/csv", headers=headers)
+
+
+@router.get("/letters.zip")
+def export_recall_letters_zip(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    status: str | None = Query(default=None),
+    recall_type: str | None = Query(default=None, alias="type"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
+        status, recall_type
+    )
+    stmt = _build_recall_query(
+        start=start,
+        end=end,
+        stored_statuses=stored_statuses,
+        requested_type_members=requested_type_members,
+        limit=limit,
+        offset=offset,
+    )
+    results = db.execute(stmt).all()
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for recall, patient in results:
+            resolved_status = resolve_recall_status(recall)
+            if resolved_status.value not in requested_statuses:
+                continue
+            surname = _safe_filename_part(patient.last_name or "")
+            forename = _safe_filename_part(patient.first_name or "")
+            due_date = recall.due_date.isoformat()
+            if surname or forename:
+                name_part = "_".join(part for part in [surname, forename] if part)
+                filename = (
+                    f"RecallLetter_{name_part}_{patient.id}_{due_date}.pdf"
+                )
+            else:
+                filename = f"RecallLetter_patient-{patient.id}_{due_date}.pdf"
+            pdf_bytes = build_recall_letter_pdf(patient, recall)
+            zipf.writestr(filename, pdf_bytes)
+    filename = f"recall-letters-{date.today().isoformat()}.zip"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=buffer.getvalue(), media_type="application/zip", headers=headers)
 
 
 @router.get("/kpis", response_model=RecallKpiOut)
