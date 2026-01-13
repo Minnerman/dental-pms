@@ -88,6 +88,16 @@ export default function RecallsPage() {
   const [endDate, setEndDate] = useState("");
   const [actionId, setActionId] = useState<number | null>(null);
 
+  function handleBook(row: RecallRow) {
+    const reason = `Recall: ${kindLabels[row.recall_kind]}`;
+    const params = new URLSearchParams({
+      book: "1",
+      patientId: String(row.patient_id),
+      reason,
+    });
+    router.push(`/appointments?${params.toString()}`);
+  }
+
   useEffect(() => {
     let active = true;
     async function loadRecalls() {
@@ -341,6 +351,14 @@ export default function RecallsPage() {
                       <button
                         className="btn btn-secondary"
                         type="button"
+                        disabled={actionId === row.id}
+                        onClick={() => handleBook(row)}
+                      >
+                        Book appointment
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
                         disabled={
                           actionId === row.id ||
                           row.status === "completed" ||
@@ -398,6 +416,14 @@ export default function RecallsPage() {
                 </div>
                 <div>{row.notes || "No notes."}</div>
                 <div className="row">
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    disabled={actionId === row.id}
+                    onClick={() => handleBook(row)}
+                  >
+                    Book appointment
+                  </button>
                   <button
                     className="btn btn-secondary"
                     type="button"
