@@ -1483,14 +1483,14 @@ export default function AppointmentsPage() {
     const applyKey = `${targetDate}|${viewParam ?? ""}`;
     if (didApplyDate.current === applyKey) return;
     didApplyDate.current = applyKey;
-    if (viewParam && allowedViews.includes(viewParam)) {
-      setCalendarView(nextView);
-    }
     const storedViewMode = localStorage.getItem("dental_pms_appointments_view");
     const resolvedViewMode =
       storedViewMode === "calendar" || storedViewMode === "day_sheet"
         ? storedViewMode
         : viewMode;
+    if (viewParam && allowedViews.includes(viewParam) && resolvedViewMode === "calendar") {
+      setCalendarView(nextView);
+    }
     setCurrentDate(parsed);
     if (resolvedViewMode === "calendar") {
       const { start, end } = getRangeForView(parsed, nextView);

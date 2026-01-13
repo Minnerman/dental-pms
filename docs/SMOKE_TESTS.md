@@ -40,8 +40,9 @@ Run these checks after patient UX changes or infra updates.
 - Invalid `start` is ignored safely.
 - Optional `duration=30` prefills the end time when `start` is valid.
 - Deep link `/appointments?date=2026-01-14` jumps the calendar to that date.
-- Optional deep link `/appointments?date=2026-01-14&view=week` preserves week view.
+- Optional deep link `/appointments?date=2026-01-14&view=week` preserves week view (calendar mode only).
 - Deep link `/appointments?date=2026-01-14&book=1` still opens booking.
+- Day-sheet mode stays active when opening `/appointments?date=2026-01-14`.
 - Patient “Book appointment” routes to `/appointments?book=1&patientId=<id>`.
 - Creating an appointment that overlaps the same clinician shows a warning (non-blocking).
 - Creating an overlapping appointment for a different clinician shows no warning.
