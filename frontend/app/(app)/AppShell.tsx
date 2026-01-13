@@ -255,18 +255,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push(`/patients/${patient.id}`);
   }
 
-  function closePatientTab(patientId: number) {
-    setPatientTabs((prev) => {
-      const nextTabs = prev.filter((tab) => tab.id !== patientId);
-      if (activePatientTabId === patientId) {
-        const next = nextTabs[0]?.id ?? null;
-        setActivePatientTabId(next);
-        router.push(next ? `/patients/${next}` : "/");
-      }
-      return nextTabs;
-    });
-  }
-
   const tabs = [
     ...baseTabs,
     ...(isSuperadmin ? [{ href: "/treatments", label: "Treatments" }] : []),

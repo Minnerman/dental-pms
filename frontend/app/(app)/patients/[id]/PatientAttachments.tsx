@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken, getToken } from "@/lib/auth";
 
@@ -51,14 +51,14 @@ export default function PatientAttachments({
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
 
-  async function authFetch(path: string, init: RequestInit = {}) {
+  const authFetch = useCallback((path: string, init: RequestInit = {}) => {
     const token = getToken();
     const headers = new Headers(init.headers || {});
     if (token) headers.set("Authorization", `Bearer ${token}`);
     return fetch(buildApiUrl(path), { ...init, headers });
-  }
+  }, []);
 
-  async function loadAttachments() {
+  const loadAttachments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -78,9 +78,9 @@ export default function PatientAttachments({
     } finally {
       setLoading(false);
     }
-  }
+  }, [authFetch, patientId, router]);
 
-  async function loadMe() {
+  const loadMe = useCallback(async () => {
     try {
       const res = await apiFetch("/api/me");
       if (res.status === 401 || res.status === 403) {
@@ -94,7 +94,7 @@ export default function PatientAttachments({
     } catch {
       setIsSuperadmin(false);
     }
-  }
+  }, [router]);
 
   async function uploadAttachment(file: File) {
     setUploading(true);
@@ -179,11 +179,11 @@ export default function PatientAttachments({
 
   useEffect(() => {
     void loadAttachments();
-  }, [patientId]);
+  }, [loadAttachments]);
 
   useEffect(() => {
     void loadMe();
-  }, []);
+  }, [loadMe]);
 
   const content = (
     <div className="stack">
@@ -215,7 +215,9 @@ export default function PatientAttachments({
         {error && <div className="notice">{error}</div>}
 
         {attachments.length === 0 ? (
-          <div className="notice">No attachments yet. Use \"Upload file\" to add one.</div>
+          <div className="notice">
+            No attachments yet. Use &quot;Upload file&quot; to add one.
+          </div>
         ) : (
           <div className="stack" style={{ gap: 8 }}>
             {attachments.map((attachment) => (

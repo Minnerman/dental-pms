@@ -12,9 +12,10 @@ export async function GET() {
         "cache-control": "no-store",
       },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
-      { status: "error", message: "backend unreachable", detail: String(e?.message || e) },
+      { status: "error", message: "backend unreachable", detail: message },
       { status: 502, headers: { "cache-control": "no-store" } }
     );
   }

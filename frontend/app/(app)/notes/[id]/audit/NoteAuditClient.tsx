@@ -17,6 +17,11 @@ type AuditRow = {
   after_json: Record<string, unknown> | null;
 };
 
+type AuditRowApi = AuditRow & {
+  actor?: { email?: string | null; role?: string | null } | null;
+  actor_email?: string | null;
+};
+
 export default function NoteAuditClient({ id }: { id: string }) {
   const router = useRouter();
   const noteId = id;
@@ -46,7 +51,7 @@ export default function NoteAuditClient({ id }: { id: string }) {
         if (!res.ok) {
           throw new Error(`Failed to load audit (HTTP ${res.status})`);
         }
-        const data = (await res.json()) as any[];
+        const data = (await res.json()) as AuditRowApi[];
         const mapped = data.map((row) => ({
           id: row.id,
           entity_type: row.entity_type,
