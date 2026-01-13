@@ -55,7 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
-- 2026-01-14: Stage39 in progress (patient recalls list + create/complete actions).
+- 2026-01-14: Stage39 completed (patient recalls model + migration 0024_patient_recalls.py; endpoints GET/POST/PATCH /patients/{id}/recalls; patient Recalls tab with add/edit/complete + mobile cards).
 - 2026-01-14: Stage38 patient finance summary panel (balance + recent invoices/payments + PDF downloads).
 - 2026-01-13: PR #12 merged (ESLint config + lint fixes); lint runs with warnings only; typecheck passes; master f300dcd.
 - Patient summary: in-page booking jump + collapsible docs/attachments + tighter two-column layout.
