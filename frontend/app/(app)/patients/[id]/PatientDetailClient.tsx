@@ -159,6 +159,21 @@ type FinanceSummary = {
   items: FinanceSummaryItem[];
 };
 
+type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
+type RecallItemStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
+
+type PatientRecallItem = {
+  id: number;
+  patient_id: number;
+  kind: RecallKind;
+  due_date: string;
+  status: RecallItemStatus;
+  notes?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type TimelineItem = {
   entity_type: string;
   entity_id: string;
@@ -312,6 +327,22 @@ const recallStatusLabels: Record<RecallStatus, string> = {
   not_required: "Not required",
 };
 
+const recallItemStatusLabels: Record<RecallItemStatus, string> = {
+  upcoming: "Upcoming",
+  due: "Due",
+  overdue: "Overdue",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+const recallKindLabels: Record<RecallKind, string> = {
+  exam: "Exam",
+  hygiene: "Hygiene",
+  perio: "Perio",
+  implant: "Implant",
+  custom: "Custom",
+};
+
 const treatmentStatusLabels: Record<TreatmentPlanStatus, string> = {
   proposed: "Proposed",
   accepted: "Accepted",
@@ -379,6 +410,7 @@ type PatientTab =
   | "invoices"
   | "estimates"
   | "ledger"
+  | "recalls"
   | "documents"
   | "attachments";
 
@@ -475,6 +507,16 @@ export default function PatientDetailClient({
   const [financeSummary, setFinanceSummary] = useState<FinanceSummary | null>(null);
   const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
   const [financeSummaryError, setFinanceSummaryError] = useState<string | null>(null);
+  const [recalls, setRecalls] = useState<PatientRecallItem[]>([]);
+  const [recallsLoading, setRecallsLoading] = useState(false);
+  const [recallsError, setRecallsError] = useState<string | null>(null);
+  const [showRecallForm, setShowRecallForm] = useState(false);
+  const [editingRecallId, setEditingRecallId] = useState<number | null>(null);
+  const [recallEntryKind, setRecallEntryKind] = useState<RecallKind>("exam");
+  const [recallEntryDueDate, setRecallEntryDueDate] = useState("");
+  const [recallEntryNotes, setRecallEntryNotes] = useState("");
+  const [recallEntrySaving, setRecallEntrySaving] = useState(false);
+  const [recallActionId, setRecallActionId] = useState<number | null>(null);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [ledgerMode, setLedgerMode] = useState<LedgerEntryType>("payment");
   const [ledgerAmount, setLedgerAmount] = useState("");
@@ -682,6 +724,29 @@ export default function PatientDetailClient({
       setFinanceSummary(null);
     } finally {
       setFinanceSummaryLoading(false);
+    }
+  }
+
+  async function loadRecalls() {
+    setRecallsLoading(true);
+    setRecallsError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/recalls`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load recalls (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as PatientRecallItem[];
+      setRecalls(data);
+    } catch (err) {
+      setRecallsError(err instanceof Error ? err.message : "Failed to load recalls");
+    } finally {
+      setRecallsLoading(false);
     }
   }
 
@@ -1259,6 +1324,105 @@ export default function PatientDetailClient({
     return Math.round(parsed * 100);
   }
 
+  function formatDateInput(value: Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  function addMonthsToDate(base: Date, months: number) {
+    const year = base.getFullYear();
+    const month = base.getMonth();
+    const day = base.getDate();
+    const next = new Date(year, month + months, 1);
+    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, lastDay));
+    return next;
+  }
+
+  function resetRecallForm() {
+    setEditingRecallId(null);
+    setRecallEntryKind("exam");
+    setRecallEntryDueDate("");
+    setRecallEntryNotes("");
+    setShowRecallForm(false);
+  }
+
+  function startEditRecall(recall: PatientRecallItem) {
+    setEditingRecallId(recall.id);
+    setRecallEntryKind(recall.kind);
+    setRecallEntryDueDate(recall.due_date || "");
+    setRecallEntryNotes(recall.notes || "");
+    setShowRecallForm(true);
+  }
+
+  async function saveRecallEntry() {
+    if (!recallEntryDueDate) {
+      setRecallsError("Select a due date.");
+      return;
+    }
+    setRecallEntrySaving(true);
+    setRecallsError(null);
+    try {
+      const payload = {
+        kind: recallEntryKind,
+        due_date: recallEntryDueDate,
+        notes: recallEntryNotes.trim() || null,
+      };
+      const url = editingRecallId
+        ? `/api/patients/${patientId}/recalls/${editingRecallId}`
+        : `/api/patients/${patientId}/recalls`;
+      const method = editingRecallId ? "PATCH" : "POST";
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to save recall (HTTP ${res.status})`);
+      }
+      resetRecallForm();
+      await loadRecalls();
+    } catch (err) {
+      setRecallsError(err instanceof Error ? err.message : "Failed to save recall");
+    } finally {
+      setRecallEntrySaving(false);
+    }
+  }
+
+  async function markRecallCompleted(recall: PatientRecallItem) {
+    setRecallActionId(recall.id);
+    setRecallsError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/recalls/${recall.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to complete recall (HTTP ${res.status})`);
+      }
+      await loadRecalls();
+    } catch (err) {
+      setRecallsError(err instanceof Error ? err.message : "Failed to update recall");
+    } finally {
+      setRecallActionId(null);
+    }
+  }
+
   useEffect(() => {
     if (!isValidPatientId) return;
     void loadPatient();
@@ -1272,6 +1436,7 @@ export default function PatientDetailClient({
     void loadLedger();
     void loadLedgerBalance();
     void loadFinanceSummary();
+    void loadRecalls();
   }, [isValidPatientId, patientId]);
 
   useEffect(() => {
@@ -2460,6 +2625,14 @@ export default function PatientDetailClient({
                   aria-current={tab === "ledger" ? "page" : undefined}
                 >
                   Ledger ({ledgerEntries.length})
+                </button>
+                <button
+                  style={tabStyle(tab === "recalls")}
+                  onClick={() => setTab("recalls")}
+                  type="button"
+                  aria-current={tab === "recalls" ? "page" : undefined}
+                >
+                  Recalls ({recalls.length})
                 </button>
                 <button
                   style={tabStyle(tab === "estimates")}
@@ -4187,6 +4360,236 @@ export default function PatientDetailClient({
                         ))}
                       </tbody>
                     </table>
+                  )}
+                </div>
+              ) : tab === "recalls" ? (
+                <div className="stack">
+                  <div className="row">
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={() => {
+                          if (showRecallForm) {
+                            resetRecallForm();
+                          } else {
+                            setShowRecallForm(true);
+                          }
+                        }}
+                      >
+                        {showRecallForm ? "Close form" : "Add recall"}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => void loadRecalls()}
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+
+                  {showRecallForm && (
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack">
+                        <div className="row">
+                          <h4 style={{ margin: 0 }}>
+                            {editingRecallId ? "Edit recall" : "Add recall"}
+                          </h4>
+                          {editingRecallId && <span className="badge">Editing</span>}
+                        </div>
+                        <div className="grid grid-3">
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Type</label>
+                            <select
+                              className="input"
+                              value={recallEntryKind}
+                              onChange={(e) => setRecallEntryKind(e.target.value as RecallKind)}
+                            >
+                              {Object.entries(recallKindLabels).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Due date</label>
+                            <input
+                              className="input"
+                              type="date"
+                              value={recallEntryDueDate}
+                              onChange={(e) => setRecallEntryDueDate(e.target.value)}
+                            />
+                          </div>
+                          <div className="stack" style={{ gap: 8 }}>
+                            <label className="label">Quick set</label>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {[3, 6, 12].map((months) => (
+                                <button
+                                  key={months}
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() =>
+                                    setRecallEntryDueDate(
+                                      formatDateInput(addMonthsToDate(new Date(), months))
+                                    )
+                                  }
+                                >
+                                  {months} months
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="stack" style={{ gap: 8 }}>
+                          <label className="label">Notes</label>
+                          <textarea
+                            className="input"
+                            rows={3}
+                            value={recallEntryNotes}
+                            onChange={(e) => setRecallEntryNotes(e.target.value)}
+                            placeholder="Optional notes for this recall"
+                          />
+                        </div>
+                        <div className="row">
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            disabled={recallEntrySaving || !recallEntryDueDate}
+                            onClick={saveRecallEntry}
+                          >
+                            {recallEntrySaving
+                              ? "Saving..."
+                              : editingRecallId
+                              ? "Save recall"
+                              : "Add recall"}
+                          </button>
+                          {editingRecallId && (
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={resetRecallForm}
+                            >
+                              Cancel edit
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {recallsError && <div className="notice">{recallsError}</div>}
+                  {recallsLoading ? (
+                    <div className="badge">Loading recalls…</div>
+                  ) : recalls.length === 0 ? (
+                    <div className="notice">No recalls yet.</div>
+                  ) : (
+                    <>
+                      <Table className="recall-table">
+                        <thead>
+                          <tr>
+                            <th>Type</th>
+                            <th>Due</th>
+                            <th>Status</th>
+                            <th>Notes</th>
+                            <th>Completed</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recalls.map((recall) => {
+                            const isFinal = ["completed", "cancelled"].includes(recall.status);
+                            return (
+                              <tr key={recall.id}>
+                                <td>{recallKindLabels[recall.kind]}</td>
+                                <td>{formatShortDate(recall.due_date)}</td>
+                                <td>
+                                  <span className="badge">
+                                    {recallItemStatusLabels[recall.status]}
+                                  </span>
+                                </td>
+                                <td>{recall.notes || "—"}</td>
+                                <td>
+                                  {recall.completed_at
+                                    ? formatShortDate(recall.completed_at)
+                                    : "—"}
+                                </td>
+                                <td>
+                                  <div className="table-actions">
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => startEditRecall(recall)}
+                                      disabled={recallEntrySaving}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => void markRecallCompleted(recall)}
+                                      disabled={isFinal || recallActionId === recall.id}
+                                    >
+                                      {recallActionId === recall.id
+                                        ? "Updating..."
+                                        : "Mark completed"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </Table>
+                      <div className="recall-cards">
+                        {recalls.map((recall) => {
+                          const isFinal = ["completed", "cancelled"].includes(recall.status);
+                          return (
+                            <div className="card recall-card" key={recall.id}>
+                              <div className="row">
+                                <div>
+                                  <strong>{recallKindLabels[recall.kind]}</strong>
+                                  <div style={{ color: "var(--muted)" }}>
+                                    Due {formatShortDate(recall.due_date)}
+                                  </div>
+                                </div>
+                                <span className="badge">
+                                  {recallItemStatusLabels[recall.status]}
+                                </span>
+                              </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                Completed{" "}
+                                {recall.completed_at
+                                  ? formatShortDate(recall.completed_at)
+                                  : "—"}
+                              </div>
+                              {recall.notes && <div>{recall.notes}</div>}
+                              <div className="row">
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => startEditRecall(recall)}
+                                  disabled={recallEntrySaving}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void markRecallCompleted(recall)}
+                                  disabled={isFinal || recallActionId === recall.id}
+                                >
+                                  {recallActionId === recall.id
+                                    ? "Updating..."
+                                    : "Mark completed"}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
                 </div>
               ) : tab === "estimates" ? (

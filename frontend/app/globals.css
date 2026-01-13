@@ -446,6 +446,26 @@ button {
   z-index: 1;
 }
 
+.recall-cards {
+  display: none;
+}
+
+.recall-card {
+  display: grid;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .recall-table {
+    display: none;
+  }
+
+  .recall-cards {
+    display: grid;
+    gap: 12px;
+  }
+}
+
 .day-sheet-table thead th:first-child,
 .day-sheet-table tbody td:first-child {
   position: sticky;
