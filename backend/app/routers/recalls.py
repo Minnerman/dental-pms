@@ -1,21 +1,26 @@
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import get_current_user
-from app.models.invoice import Invoice, Payment
 from app.models.patient import Patient, RecallStatus
+from app.models.patient_recall import (
+    PatientRecall,
+    PatientRecallKind,
+    PatientRecallStatus,
+)
 from app.models.user import User
 from app.schemas.patient import PatientRecallOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
-from app.schemas.recalls import RecallKpiOut
+from app.schemas.recalls import RecallDashboardRow, RecallKpiOut
 from app.models.document_template import DocumentTemplate
 from app.models.patient_document import PatientDocument
 from app.services.audit import log_event, snapshot_model
 from app.services.document_render import render_template_with_warnings
+from app.services.recalls import resolve_recall_status
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
 
@@ -99,88 +104,86 @@ def _log_recall_timeline(
             ip_address=ip_address,
         )
 
-@router.get("", response_model=list[PatientRecallOut])
+def _parse_csv_values(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    return [value.strip().lower() for value in raw.split(",") if value.strip()]
+
+
+@router.get("", response_model=list[RecallDashboardRow])
 def list_recalls(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
-    status: RecallStatus | None = Query(default=None),
-    q: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
+    status: str | None = Query(default=None),
+    recall_type: str | None = Query(default=None, alias="type"),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
-    payment_sum = (
-        select(
-            Payment.invoice_id.label("invoice_id"),
-            func.coalesce(func.sum(Payment.amount_pence), 0).label("paid_pence"),
-        )
-        .group_by(Payment.invoice_id)
-        .subquery()
-    )
-    invoice_balance = (
-        select(
-            Invoice.patient_id.label("patient_id"),
-            (Invoice.total_pence - func.coalesce(payment_sum.c.paid_pence, 0)).label(
-                "balance_pence"
-            ),
-        )
-        .outerjoin(payment_sum, payment_sum.c.invoice_id == Invoice.id)
-        .subquery()
-    )
-    patient_balance = (
-        select(
-            invoice_balance.c.patient_id.label("patient_id"),
-            func.coalesce(func.sum(invoice_balance.c.balance_pence), 0).label("balance_pence"),
-        )
-        .group_by(invoice_balance.c.patient_id)
-        .subquery()
-    )
+    requested_statuses = set(_parse_csv_values(status))
+    if not requested_statuses:
+        requested_statuses = {"due", "overdue"}
+    allowed_statuses = {
+        "upcoming",
+        "due",
+        "overdue",
+        "completed",
+        "cancelled",
+    }
+    requested_statuses = {value for value in requested_statuses if value in allowed_statuses}
+    if not requested_statuses:
+        requested_statuses = {"due", "overdue"}
+
+    requested_types = set(_parse_csv_values(recall_type))
+    allowed_types = {kind.value for kind in PatientRecallKind}
+    requested_types = {value for value in requested_types if value in allowed_types}
+    requested_type_members = [
+        PatientRecallKind._value2member_map_[value] for value in requested_types
+    ]
+
+    stored_statuses: set[PatientRecallStatus] = set()
+    for value in requested_statuses:
+        member = PatientRecallStatus._value2member_map_.get(value)
+        if member:
+            stored_statuses.add(member)
+    if "due" in requested_statuses or "overdue" in requested_statuses:
+        stored_statuses.add(PatientRecallStatus.upcoming)
 
     stmt = (
-        select(Patient, patient_balance.c.balance_pence)
-        .outerjoin(patient_balance, patient_balance.c.patient_id == Patient.id)
+        select(PatientRecall, Patient)
+        .join(Patient, PatientRecall.patient_id == Patient.id)
         .where(Patient.deleted_at.is_(None))
-        .where(Patient.recall_due_date.is_not(None))
-        .order_by(Patient.recall_due_date.asc(), Patient.last_name.asc())
+        .order_by(PatientRecall.due_date.asc(), PatientRecall.id.asc())
         .limit(limit)
         .offset(offset)
     )
+    if stored_statuses:
+        stmt = stmt.where(PatientRecall.status.in_(stored_statuses))
+    if requested_type_members:
+        stmt = stmt.where(PatientRecall.kind.in_(requested_type_members))
     if start:
-        stmt = stmt.where(Patient.recall_due_date >= start)
+        stmt = stmt.where(PatientRecall.due_date >= start)
     if end:
-        stmt = stmt.where(Patient.recall_due_date <= end)
-    if status:
-        stmt = stmt.where(Patient.recall_status == status)
-    if q:
-        like = f"%{q.strip()}%"
-        stmt = stmt.where(
-            or_(
-                Patient.first_name.ilike(like),
-                Patient.last_name.ilike(like),
-                Patient.phone.ilike(like),
-                Patient.postcode.ilike(like),
-            )
-        )
+        stmt = stmt.where(PatientRecall.due_date <= end)
 
     results = db.execute(stmt).all()
-    output: list[PatientRecallOut] = []
-    for patient, balance_pence in results:
+    output: list[RecallDashboardRow] = []
+    for recall, patient in results:
+        resolved_status = resolve_recall_status(recall)
+        if resolved_status.value not in requested_statuses:
+            continue
         output.append(
-            PatientRecallOut(
-                id=patient.id,
+            RecallDashboardRow(
+                id=recall.id,
+                patient_id=patient.id,
                 first_name=patient.first_name,
                 last_name=patient.last_name,
-                phone=patient.phone,
-                postcode=patient.postcode,
-                recall_interval_months=patient.recall_interval_months,
-                recall_due_date=patient.recall_due_date,
-                recall_status=patient.recall_status,
-                recall_type=patient.recall_type,
-                recall_last_contacted_at=patient.recall_last_contacted_at,
-                recall_notes=patient.recall_notes,
-                recall_last_set_at=patient.recall_last_set_at,
-                balance_pence=balance_pence,
+                recall_kind=recall.kind,
+                due_date=recall.due_date,
+                status=resolved_status,
+                notes=recall.notes,
+                completed_at=recall.completed_at,
             )
         )
     return output

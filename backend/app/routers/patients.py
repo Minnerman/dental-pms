@@ -13,6 +13,7 @@ from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.models.patient_recall import PatientRecall, PatientRecallStatus
 from app.services.audit import log_event, snapshot_model
+from app.services.recalls import resolve_recall_status
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.patient import (
     PatientCreate,
@@ -48,19 +49,6 @@ def _stringify(value: object | None) -> str:
     if hasattr(value, "value"):
         return value.value
     return str(value)
-
-
-def _resolved_recall_status(recall: PatientRecall) -> PatientRecallStatus:
-    if recall.status != PatientRecallStatus.upcoming:
-        return recall.status
-    if not recall.due_date:
-        return recall.status
-    today = date.today()
-    if recall.due_date < today:
-        return PatientRecallStatus.overdue
-    if recall.due_date <= today:
-        return PatientRecallStatus.due
-    return recall.status
 
 
 def _log_recall_timeline(
@@ -610,7 +598,7 @@ def list_patient_recalls(
     )
     output: list[PatientRecallOut] = []
     for recall in recalls:
-        resolved_status = _resolved_recall_status(recall)
+        resolved_status = resolve_recall_status(recall)
         recall_out = PatientRecallOut.model_validate(recall).model_copy(
             update={"status": resolved_status}
         )
@@ -647,7 +635,7 @@ def create_patient_recall(
     db.add(recall)
     db.commit()
     db.refresh(recall)
-    resolved_status = _resolved_recall_status(recall)
+    resolved_status = resolve_recall_status(recall)
     return PatientRecallOut.model_validate(recall).model_copy(
         update={"status": resolved_status}
     )
@@ -687,7 +675,7 @@ def update_patient_recall(
     recall.updated_by_user_id = user.id
     db.commit()
     db.refresh(recall)
-    resolved_status = _resolved_recall_status(recall)
+    resolved_status = resolve_recall_status(recall)
     return PatientRecallOut.model_validate(recall).model_copy(
         update={"status": resolved_status}
     )

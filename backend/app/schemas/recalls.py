@@ -1,6 +1,20 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
+
+from app.models.patient_recall import PatientRecallKind, PatientRecallStatus
+
+
+class RecallDashboardRow(BaseModel):
+    id: int
+    patient_id: int
+    first_name: str
+    last_name: str
+    recall_kind: PatientRecallKind
+    due_date: date
+    status: PatientRecallStatus
+    notes: str | None = None
+    completed_at: datetime | None = None
 
 
 class RecallKpiRange(BaseModel):
