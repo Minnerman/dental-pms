@@ -89,6 +89,7 @@ export default function RecallsPage() {
   const [actionId, setActionId] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -185,6 +186,37 @@ export default function RecallsPage() {
       setError(err instanceof Error ? err.message : "Failed to export CSV");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function downloadLettersZip() {
+    setDownloadingZip(true);
+    setError(null);
+    try {
+      const params = buildQueryParams();
+      const res = await apiFetch(`/api/recalls/letters.zip?${params.toString()}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download ZIP (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `recall-letters-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download letters ZIP");
+    } finally {
+      setDownloadingZip(false);
     }
   }
 
@@ -371,6 +403,14 @@ export default function RecallsPage() {
               disabled={exporting}
             >
               {exporting ? "Exporting..." : "Export CSV"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => void downloadLettersZip()}
+              disabled={downloadingZip}
+            >
+              {downloadingZip ? "Preparing..." : "Download letters (ZIP)"}
             </button>
             <button
               className="btn btn-secondary"
