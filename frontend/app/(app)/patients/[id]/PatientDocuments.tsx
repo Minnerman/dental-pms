@@ -63,7 +63,13 @@ function filenameFromHeader(header: string | null) {
   return match?.[1] ?? null;
 }
 
-export default function PatientDocuments({ patientId }: { patientId: string }) {
+export default function PatientDocuments({
+  patientId,
+  embedded = false,
+}: {
+  patientId: string;
+  embedded?: boolean;
+}) {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [documents, setDocuments] = useState<PatientDocument[]>([]);
@@ -373,9 +379,8 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
     void loadDocuments();
   }, [patientId]);
 
-  return (
-    <div className="card" style={{ margin: 0 }}>
-      <div className="stack">
+  const content = (
+    <div className="stack">
         <div className="row">
           <div>
             <h4 style={{ marginTop: 0 }}>Documents</h4>
@@ -564,7 +569,16 @@ export default function PatientDocuments({ patientId }: { patientId: string }) {
             ))}
           </div>
         )}
-      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="card" style={{ margin: 0 }}>
+      {content}
     </div>
   );
 }
