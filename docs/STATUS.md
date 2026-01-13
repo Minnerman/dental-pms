@@ -55,7 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
-- 2026-01-14: Stage45 in progress (recall letters ZIP export).
+- 2026-01-14: Stage45 completed (GET /recalls/letters.zip; same params as /recalls; zip filename recall-letters-YYYY-MM-DD.zip; PDFs named RecallLetter_<Surname>_<Forename>_<patientId>_<dueDate>.pdf or RecallLetter_patient-<id>_<dueDate>.pdf).
 - 2026-01-14: Stage44 completed (/recalls Export CSV + Print view; GET /recalls/export.csv (same params as /recalls), filename recalls-YYYY-MM-DD.csv).
 - 2026-01-14: Stage43 completed (GET /patients/{patient_id}/recalls/{recall_id}/letter.pdf; generate letter buttons on /recalls and patient recalls tab).
 - 2026-01-14: Stage42 completed (/appointments prompt to mark recall completed when recallId present; PATCH recalls accepts outcome + linked_appointment_id (migration 0025); patient recalls tab shows outcome + quick next recall +6m/+12m).
