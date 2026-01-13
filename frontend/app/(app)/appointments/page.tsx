@@ -161,6 +161,7 @@ type CalendarRange = {
 type ConflictWarning = {
   message: string;
   details: string[];
+  anchorDate?: Date;
 };
 
 const localizer = dateFnsLocalizer({
@@ -602,7 +603,7 @@ export default function AppointmentsPage() {
     if (conflicts.length > 2) {
       details.push(`and ${conflicts.length - 2} more`);
     }
-    return { message, details };
+    return { message, details, anchorDate: conflicts[0]?.start };
   }
 
   function findConflicts({
@@ -1606,6 +1607,13 @@ export default function AppointmentsPage() {
     setCurrentDate(new Date(`${value}T00:00:00`));
   }
 
+  function viewConflictsAt(date: Date) {
+    setCurrentDate(date);
+    setCalendarView("day");
+    setViewMode("calendar");
+    updateRange(date, date, "day", date);
+  }
+
   function handleNavigate(date: Date) {
     setCurrentDate(date);
     setRange((prev) => (prev ? { ...prev, anchor: toDateKey(date) } : prev));
@@ -1787,7 +1795,27 @@ export default function AppointmentsPage() {
               borderColor: "rgba(245, 158, 11, 0.4)",
             }}
           >
-            <div>{conflictWarning.message}</div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                justifyContent: "space-between",
+              }}
+            >
+              <span>{conflictWarning.message}</span>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => {
+                  if (conflictWarning.anchorDate) {
+                    viewConflictsAt(conflictWarning.anchorDate);
+                  }
+                }}
+              >
+                View conflicts
+              </button>
+            </div>
             {conflictWarning.details.length > 0 && (
               <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
                 {conflictWarning.details.map((detail) => (
@@ -1795,6 +1823,9 @@ export default function AppointmentsPage() {
                 ))}
               </div>
             )}
+            <div style={{ marginTop: 6, color: "var(--muted)" }}>
+              Conflicts are checked within the loaded calendar range.
+            </div>
           </div>
         )}
 

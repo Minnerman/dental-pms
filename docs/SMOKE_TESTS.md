@@ -46,6 +46,7 @@ Run these checks after patient UX changes or infra updates.
 - Creating an appointment that overlaps the same clinician shows a warning (non-blocking).
 - Creating an overlapping appointment for a different clinician shows no warning.
 - Boundary case: end time equals another start time shows no warning.
+- Conflict warning “View conflicts” jumps calendar to the conflict time without blocking save.
 - Required fields enforced (date/time, duration, patient, clinician/resource if applicable).
 - After creating an appointment, it appears immediately on the calendar/day sheet.
 - Refreshing the page shows the appointment persisted.
