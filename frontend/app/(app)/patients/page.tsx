@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import HeaderBar from "@/components/ui/HeaderBar";
@@ -45,17 +45,16 @@ export default function PatientsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openFirst, setOpenFirst] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
-  async function loadPatients(filters?: {
+  const loadPatients = useCallback(async (filters?: {
     query?: string;
     email?: string;
     dob?: string;
     category?: PatientCategory | "";
     includeDeleted?: boolean;
     openFirst?: boolean;
-  }) {
+  }) => {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
@@ -84,11 +83,11 @@ export default function PatientsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, showArchived]);
 
   useEffect(() => {
     void loadPatients();
-  }, []);
+  }, [loadPatients]);
 
   useEffect(() => {
     searchRef.current?.focus();

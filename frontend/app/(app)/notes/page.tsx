@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import HeaderBar from "@/components/ui/HeaderBar";
@@ -56,9 +56,10 @@ export default function NotesPage() {
     });
   }, [notes, patientMap, query]);
 
-  async function loadNotes(includeDeleted: boolean = showArchived) {
-    setLoading(true);
-    setError(null);
+  const loadNotes = useCallback(
+    async (includeDeleted: boolean = showArchived) => {
+      setLoading(true);
+      setError(null);
     try {
       const params = new URLSearchParams();
       if (includeDeleted) params.set("include_deleted", "1");
@@ -78,9 +79,11 @@ export default function NotesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  },
+    [router, showArchived]
+  );
 
-  async function loadPatients() {
+  const loadPatients = useCallback(async () => {
     try {
       const res = await apiFetch("/api/patients?limit=200&include_deleted=1");
       if (res.status === 401) {
@@ -95,12 +98,12 @@ export default function NotesPage() {
     } catch {
       setPatients([]);
     }
-  }
+  }, [router]);
 
   useEffect(() => {
     void loadNotes();
     void loadPatients();
-  }, []);
+  }, [loadNotes, loadPatients]);
 
   useEffect(() => {
     if (!selectedNoteId && notes.length > 0) {

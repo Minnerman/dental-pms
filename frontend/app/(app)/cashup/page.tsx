@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -39,7 +39,7 @@ export default function CashupPage() {
     }).format(pence / 100);
   }
 
-  async function loadReport(targetDate: string) {
+  const loadReport = useCallback(async (targetDate: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -63,11 +63,11 @@ export default function CashupPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
 
   useEffect(() => {
     void loadReport(date);
-  }, [date]);
+  }, [date, loadReport]);
 
   return (
     <div className="app-grid">

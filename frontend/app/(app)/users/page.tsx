@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -38,7 +38,6 @@ export default function UsersPage() {
   const [showForm, setShowForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [resetUser, setResetUser] = useState<User | null>(null);
-  const [resetResult, setResetResult] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
@@ -77,7 +76,7 @@ export default function UsersPage() {
     [email, password, passwordConfirm]
   );
 
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -101,9 +100,9 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
 
-  async function loadMe() {
+  const loadMe = useCallback(async () => {
     try {
       const res = await apiFetch("/api/me");
       if (res.status === 401) {
@@ -117,9 +116,9 @@ export default function UsersPage() {
     } catch {
       setMe(null);
     }
-  }
+  }, [router]);
 
-  async function loadRoles() {
+  const loadRoles = useCallback(async () => {
     try {
       const res = await apiFetch("/api/users/roles");
       if (res.ok) {
@@ -131,13 +130,13 @@ export default function UsersPage() {
     } catch {
       setRoles(fallbackRoles);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void loadUsers();
     void loadRoles();
     void loadMe();
-  }, []);
+  }, [loadUsers, loadRoles, loadMe]);
 
   async function onCreateUser(e: React.FormEvent) {
     e.preventDefault();
@@ -693,7 +692,6 @@ export default function UsersPage() {
                             className="btn btn-secondary"
                             onClick={() => {
                               setResetUser(user);
-                              setResetResult(null);
                               setResetPassword("");
                             }}
                           >

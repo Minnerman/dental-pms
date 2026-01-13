@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -354,14 +354,6 @@ function toAppointmentCode(raw: string | null | undefined) {
   return found ? found.code : raw.trim().slice(0, 3).toUpperCase();
 }
 
-function formatDurationMinutes(start: string, end: string) {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "—";
-  const diffMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
-  return `${diffMinutes} min`;
-}
-
 function timeToMinutes(value: string) {
   const [hours, minutes = "0"] = value.split(":");
   return Number(hours) * 60 + Number(minutes);
@@ -579,67 +571,76 @@ export default function AppointmentsPage() {
       );
   }, [appointments, currentDate]);
 
-  function getClinicianLabel(clinicianId: number | null | undefined) {
-    if (!clinicianId) return "";
-    const clinician = users.find((user) => user.id === clinicianId);
-    if (!clinician) return `Clinician ${clinicianId}`;
-    return clinician.full_name || clinician.email || `Clinician ${clinicianId}`;
-  }
+  const getClinicianLabel = useCallback(
+    (clinicianId: number | null | undefined) => {
+      if (!clinicianId) return "";
+      const clinician = users.find((user) => user.id === clinicianId);
+      if (!clinician) return `Clinician ${clinicianId}`;
+      return clinician.full_name || clinician.email || `Clinician ${clinicianId}`;
+    },
+    [users]
+  );
 
-  function buildConflictWarning(
-    conflicts: Array<{ start: Date; end: Date; patientName: string }>,
-    clinicianId: number | null | undefined
-  ): ConflictWarning | null {
-    if (conflicts.length === 0) return null;
-    const label = getClinicianLabel(clinicianId);
-    const message = `Warning: overlaps with ${conflicts.length} existing appointment${
-      conflicts.length === 1 ? "" : "s"
-    }${label ? ` for ${label}` : ""}.`;
-    const details = conflicts.slice(0, 2).map((conflict) => {
-      return `${conflict.patientName} (${formatConflictTime(
-        conflict.start,
-        conflict.end
-      )})`;
-    });
-    if (conflicts.length > 2) {
-      details.push(`and ${conflicts.length - 2} more`);
-    }
-    return { message, details, anchorDate: conflicts[0]?.start };
-  }
+  const buildConflictWarning = useCallback(
+    (
+      conflicts: Array<{ start: Date; end: Date; patientName: string }>,
+      clinicianId: number | null | undefined
+    ): ConflictWarning | null => {
+      if (conflicts.length === 0) return null;
+      const label = getClinicianLabel(clinicianId);
+      const message = `Warning: overlaps with ${conflicts.length} existing appointment${
+        conflicts.length === 1 ? "" : "s"
+      }${label ? ` for ${label}` : ""}.`;
+      const details = conflicts.slice(0, 2).map((conflict) => {
+        return `${conflict.patientName} (${formatConflictTime(
+          conflict.start,
+          conflict.end
+        )})`;
+      });
+      if (conflicts.length > 2) {
+        details.push(`and ${conflicts.length - 2} more`);
+      }
+      return { message, details, anchorDate: conflicts[0]?.start };
+    },
+    [getClinicianLabel]
+  );
 
-  function findConflicts({
-    clinicianId,
-    start,
-    end,
-    excludeId,
-  }: {
-    clinicianId: number | null;
-    start: Date;
-    end: Date;
-    excludeId?: number;
-  }) {
-    if (!clinicianId) return [];
-    return appointments
-      .filter((appt) => appt.clinician_user_id === clinicianId)
-      .filter((appt) => (excludeId ? appt.id !== excludeId : true))
-      .map((appt) => {
-        const startDate = new Date(appt.starts_at);
-        const endDate = new Date(appt.ends_at);
-        return {
-          id: appt.id,
-          start: startDate,
-          end: endDate,
-          patientName: `${appt.patient.first_name} ${appt.patient.last_name}`.trim(),
-        };
-      })
-      .filter(
-        (appt) =>
-          !Number.isNaN(appt.start.getTime()) &&
-          !Number.isNaN(appt.end.getTime()) &&
-          overlaps(start, end, appt.start, appt.end)
-      )
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }
+  const findConflicts = useCallback(
+    ({
+      clinicianId,
+      start,
+      end,
+      excludeId,
+    }: {
+      clinicianId: number | null;
+      start: Date;
+      end: Date;
+      excludeId?: number;
+    }) => {
+      if (!clinicianId) return [];
+      return appointments
+        .filter((appt) => appt.clinician_user_id === clinicianId)
+        .filter((appt) => (excludeId ? appt.id !== excludeId : true))
+        .map((appt) => {
+          const startDate = new Date(appt.starts_at);
+          const endDate = new Date(appt.ends_at);
+          return {
+            id: appt.id,
+            start: startDate,
+            end: endDate,
+            patientName: `${appt.patient.first_name} ${appt.patient.last_name}`.trim(),
+          };
+        })
+        .filter(
+          (appt) =>
+            !Number.isNaN(appt.start.getTime()) &&
+            !Number.isNaN(appt.end.getTime()) &&
+            overlaps(start, end, appt.start, appt.end)
+        )
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+    },
+    [appointments]
+  );
 
   useEffect(() => {
     const stored = localStorage.getItem("dental_pms_appointments_view");
@@ -721,7 +722,15 @@ export default function AppointmentsPage() {
     }
     const conflicts = findConflicts({ clinicianId, start: startDate, end: endDate });
     setConflictWarning(buildConflictWarning(conflicts, clinicianId));
-  }, [appointments, startsAt, endsAt, clinicianUserId, showNewModal]);
+  }, [
+    appointments,
+    startsAt,
+    endsAt,
+    clinicianUserId,
+    showNewModal,
+    buildConflictWarning,
+    findConflicts,
+  ]);
 
   useEffect(() => {
     if (durationMinutes === null || !startsAt) return;
@@ -789,7 +798,7 @@ export default function AppointmentsPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [appointments, clipboard, lastSelectedSlot, selectedAppointmentId]);
+  }, [appointments, clipboard, lastSelectedSlot, pasteAppointment, selectedAppointmentId]);
 
   const { minTime, maxTime } = useMemo(() => {
     if (!schedule) return { minTime: undefined, maxTime: undefined };
@@ -830,7 +839,7 @@ export default function AppointmentsPage() {
     setEditNoteBody("");
   }
 
-  async function loadSchedule() {
+  const loadSchedule = useCallback(async () => {
     try {
       const res = await apiFetch("/api/settings/schedule");
       if (res.status === 401) {
@@ -844,7 +853,7 @@ export default function AppointmentsPage() {
     } catch {
       setSchedule(null);
     }
-  }
+  }, [router]);
 
   async function ensureNotesLoaded(appointmentId: number) {
     if (noteCache[appointmentId]) return;
@@ -890,7 +899,7 @@ export default function AppointmentsPage() {
     setTooltip({ x, y, content });
   }
 
-  async function loadAppointments() {
+  const loadAppointments = useCallback(async () => {
     if (!range) return;
     setLoading(true);
     setError(null);
@@ -913,9 +922,9 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [locationFilter, range, router]);
 
-  async function loadPatients() {
+  const loadPatients = useCallback(async () => {
     try {
       const res = await apiFetch("/api/patients?limit=200");
       if (res.ok) {
@@ -925,9 +934,9 @@ export default function AppointmentsPage() {
     } catch {
       setPatients([]);
     }
-  }
+  }, []);
 
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     try {
       const res = await apiFetch("/api/users");
       if (res.ok) {
@@ -937,7 +946,7 @@ export default function AppointmentsPage() {
     } catch {
       setUsers([]);
     }
-  }
+  }, []);
 
   async function updateAppointmentStatus(
     appointmentId: number,
@@ -1057,7 +1066,7 @@ export default function AppointmentsPage() {
     void loadSchedule();
     void loadPatients();
     void loadUsers();
-  }, []);
+  }, [loadSchedule, loadPatients, loadUsers]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -1068,7 +1077,7 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     void loadAppointments();
-  }, [range, locationFilter]);
+  }, [loadAppointments]);
 
   useEffect(() => {
     if (!selectedPatientId) return;

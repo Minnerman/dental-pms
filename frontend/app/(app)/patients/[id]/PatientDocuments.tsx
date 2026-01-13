@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -87,7 +87,7 @@ export default function PatientDocuments({
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
 
-  async function loadMe() {
+  const loadMe = useCallback(async () => {
     try {
       const res = await apiFetch("/api/me");
       if (res.status === 401 || res.status === 403) {
@@ -101,9 +101,9 @@ export default function PatientDocuments({
     } catch {
       setIsSuperadmin(false);
     }
-  }
+  }, [router]);
 
-  async function loadTemplates() {
+  const loadTemplates = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -129,9 +129,9 @@ export default function PatientDocuments({
     } finally {
       setLoading(false);
     }
-  }
+  }, [kindFilter, router]);
 
-  async function loadDocuments() {
+  const loadDocuments = useCallback(async () => {
     setLoadingDocs(true);
     setError(null);
     try {
@@ -151,7 +151,7 @@ export default function PatientDocuments({
     } finally {
       setLoadingDocs(false);
     }
-  }
+  }, [patientId, router]);
 
   async function downloadTemplate(template: DocumentTemplate) {
     setError(null);
@@ -369,15 +369,15 @@ export default function PatientDocuments({
 
   useEffect(() => {
     void loadTemplates();
-  }, [kindFilter]);
+  }, [loadTemplates]);
 
   useEffect(() => {
     void loadMe();
-  }, []);
+  }, [loadMe]);
 
   useEffect(() => {
     void loadDocuments();
-  }, [patientId]);
+  }, [loadDocuments]);
 
   const content = (
     <div className="stack">

@@ -376,9 +376,7 @@ export default function PatientDetailClient({
   const searchParams = useSearchParams();
   const patientId = id;
   const patientIdNum = Number(patientId);
-  if (!Number.isFinite(patientIdNum)) {
-    return <div className="notice">Invalid patient ID.</div>;
-  }
+  const isValidPatientId = Number.isFinite(patientIdNum);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [pastAppointments, setPastAppointments] = useState<AppointmentSummary[]>([]);
@@ -1216,6 +1214,7 @@ export default function PatientDetailClient({
   }
 
   useEffect(() => {
+    if (!isValidPatientId) return;
     void loadPatient();
     void loadNotes();
     void loadTimeline();
@@ -1226,7 +1225,7 @@ export default function PatientDetailClient({
     void loadUsers();
     void loadLedger();
     void loadLedgerBalance();
-  }, [patientId]);
+  }, [isValidPatientId, patientId]);
 
   useEffect(() => {
     if (!initialTab) return;
@@ -2107,9 +2106,13 @@ export default function PatientDetailClient({
       router.push(`/appointments?date=${bookingDate}&appointment=${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create appointment");
-    } finally {
-      setBookingSaving(false);
-    }
+  } finally {
+    setBookingSaving(false);
+  }
+}
+
+  if (!isValidPatientId) {
+    return <div className="notice">Invalid patient ID.</div>;
   }
 
   return (
