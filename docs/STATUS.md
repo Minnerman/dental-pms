@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-14: Stage47 in progress (recall last contact + contact filters).
 - 2026-01-14: Stage46 completed (migration 0026_patient_recall_communications.py; endpoints GET/POST /patients/{id}/recalls/{recallId}/communications; silent auto-log on letter.pdf + letters.zip with 60s guard).
 - 2026-01-14: Stage45 completed (GET /recalls/letters.zip; same params as /recalls; zip filename recall-letters-YYYY-MM-DD.zip; PDFs named RecallLetter_<Surname>_<Forename>_<patientId>_<dueDate>.pdf or RecallLetter_patient-<id>_<dueDate>.pdf).
 - 2026-01-14: Stage44 completed (/recalls Export CSV + Print view; GET /recalls/export.csv (same params as /recalls), filename recalls-YYYY-MM-DD.csv).

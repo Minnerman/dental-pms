@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 from app.models.patient_recall import PatientRecallKind, PatientRecallStatus
+from app.models.patient_recall_communication import PatientRecallCommunicationChannel
 
 
 class RecallDashboardRow(BaseModel):
@@ -15,6 +16,8 @@ class RecallDashboardRow(BaseModel):
     status: PatientRecallStatus
     notes: str | None = None
     completed_at: datetime | None = None
+    last_contacted_at: datetime | None = None
+    last_contact_channel: PatientRecallCommunicationChannel | None = None
 
 
 class RecallKpiRange(BaseModel):
