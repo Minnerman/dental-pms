@@ -475,6 +475,7 @@ export default function AppointmentsPage() {
   const [locationText, setLocationText] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(30);
   const [showNewModal, setShowNewModal] = useState(false);
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -669,6 +670,11 @@ export default function AppointmentsPage() {
           const endDate = new Date(parsedStart);
           endDate.setMinutes(endDate.getMinutes() + cappedMinutes);
           setEndsAt(toLocalDateTimeInput(endDate));
+          if ([10, 15, 20, 30, 45, 60, 90].includes(cappedMinutes)) {
+            setDurationMinutes(cappedMinutes);
+          } else {
+            setDurationMinutes(null);
+          }
         }
       }
     }
@@ -716,6 +722,18 @@ export default function AppointmentsPage() {
     const conflicts = findConflicts({ clinicianId, start: startDate, end: endDate });
     setConflictWarning(buildConflictWarning(conflicts, clinicianId));
   }, [appointments, startsAt, endsAt, clinicianUserId, showNewModal]);
+
+  useEffect(() => {
+    if (durationMinutes === null || !startsAt) return;
+    const startDate = new Date(startsAt);
+    if (Number.isNaN(startDate.getTime())) return;
+    const nextEnd = new Date(startDate);
+    nextEnd.setMinutes(nextEnd.getMinutes() + durationMinutes);
+    const nextValue = toLocalDateTimeInput(nextEnd);
+    if (nextValue !== endsAt) {
+      setEndsAt(nextValue);
+    }
+  }, [durationMinutes, startsAt, endsAt]);
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;
@@ -1148,6 +1166,7 @@ export default function AppointmentsPage() {
       setLocationText("");
       setStartsAt("");
       setEndsAt("");
+      setDurationMinutes(30);
       setShowNewModal(false);
       setNotice("Appointment created.");
       if (created?.id) {
@@ -2143,9 +2162,56 @@ export default function AppointmentsPage() {
                       className="input"
                       type="datetime-local"
                       value={endsAt}
-                      onChange={(e) => setEndsAt(e.target.value)}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setEndsAt(nextValue);
+                        if (!startsAt) return;
+                        const startDate = new Date(startsAt);
+                        const endDate = new Date(nextValue);
+                        if (
+                          Number.isNaN(startDate.getTime()) ||
+                          Number.isNaN(endDate.getTime()) ||
+                          endDate <= startDate
+                        ) {
+                          setDurationMinutes(null);
+                          return;
+                        }
+                        const diffMinutes = Math.round(
+                          (endDate.getTime() - startDate.getTime()) / 60000
+                        );
+                        if ([10, 15, 20, 30, 45, 60, 90].includes(diffMinutes)) {
+                          setDurationMinutes(diffMinutes);
+                        } else {
+                          setDurationMinutes(null);
+                        }
+                      }}
                     />
                   </div>
+                </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="label">Duration</label>
+                  <select
+                    className="input"
+                    value={durationMinutes === null ? "" : String(durationMinutes)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (!value) {
+                        setDurationMinutes(null);
+                        return;
+                      }
+                      const parsed = Number(value);
+                      if (Number.isFinite(parsed) && parsed > 0) {
+                        setDurationMinutes(parsed);
+                      }
+                    }}
+                  >
+                    <option value="">Custom</option>
+                    {[10, 15, 20, 30, 45, 60, 90].map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes} min
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
                   <label className="label">Clinician (optional)</label>

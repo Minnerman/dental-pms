@@ -192,6 +192,18 @@
 - Risks/notes:
   - View conflicts switches to calendar day view to show the conflict context.
 
+## PR draft (stage36-booking-duration-selector -> master)
+- Summary:
+  - Booking form includes duration selector with common minute values
+  - End time auto-adjusts when duration or start changes
+  - Smoke checklist updated for duration selector
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - Selecting duration updates end time
+  - Editing end time updates duration to match or falls back to Custom
+- Risks/notes:
+  - Duration auto-sync applies only when a preset duration is selected.
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
