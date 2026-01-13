@@ -178,6 +178,18 @@
 - Risks/notes:
   - Conflict detection is front-end only and limited to loaded range.
 
+## PR draft (stage35-conflict-warning-viewlink -> master)
+- Summary:
+  - Conflict warning includes “View conflicts” action to jump calendar to conflict time
+  - Warning notes conflicts are limited to loaded range
+  - Smoke checklist updated for view conflicts action
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - Conflict warning “View conflicts” jumps calendar to conflict time
+  - Warning remains non-blocking
+- Risks/notes:
+  - View conflicts switches to calendar day view to show the conflict context.
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
