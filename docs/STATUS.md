@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-14: Stage42 in progress (recall outcomes + booking completion prompt).
 - 2026-01-14: Stage41 completed (/recalls book appointment button; /appointments prefill via ?book=1&patientId=&reason=).
 - 2026-01-14: Stage40 completed (/recalls dashboard with filters + complete/snooze actions + mobile cards; GET /recalls query + shared status helper in backend/app/services/recalls.py).
 - 2026-01-14: Stage39 completed (patient recalls model + migration 0024_patient_recalls.py; endpoints GET/POST/PATCH /patients/{id}/recalls; patient Recalls tab with add/edit/complete + mobile cards).

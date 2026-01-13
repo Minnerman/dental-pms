@@ -474,6 +474,13 @@ export default function AppointmentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [recallContext, setRecallContext] = useState<{
+    recallId: string;
+    patientId: string;
+  } | null>(null);
+  const [showRecallPrompt, setShowRecallPrompt] = useState(false);
+  const [recallPromptSaving, setRecallPromptSaving] = useState(false);
+  const [recallAppointmentId, setRecallAppointmentId] = useState<number | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [notes, setNotes] = useState<AppointmentNote[]>([]);
@@ -688,6 +695,12 @@ export default function AppointmentsPage() {
     if (reasonParam) {
       setAppointmentType(reasonParam);
     }
+    const recallIdParam = searchParams.get("recallId");
+    if (patientIdParam && recallIdParam && /^\d+$/.test(recallIdParam)) {
+      setRecallContext({ recallId: recallIdParam, patientId: patientIdParam });
+    } else {
+      setRecallContext(null);
+    }
     const clinicianIdParam = searchParams.get("clinicianId");
     if (clinicianIdParam && /^\d+$/.test(clinicianIdParam)) {
       setClinicianUserId(clinicianIdParam);
@@ -695,6 +708,7 @@ export default function AppointmentsPage() {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("book");
     nextParams.delete("reason");
+    nextParams.delete("recallId");
     const nextQuery = nextParams.toString();
     router.replace(nextQuery ? `/appointments?${nextQuery}` : "/appointments", {
       scroll: false,
@@ -1183,6 +1197,10 @@ export default function AppointmentsPage() {
       setDurationMinutes(30);
       setShowNewModal(false);
       setNotice("Appointment created.");
+      if (recallContext) {
+        setRecallAppointmentId(created?.id ?? null);
+        setShowRecallPrompt(true);
+      }
       if (created?.id) {
         setAppointments((prev) => [created, ...prev.filter((appt) => appt.id !== created.id)]);
         setHighlightedAppointmentId(String(created.id));
@@ -1192,6 +1210,41 @@ export default function AppointmentsPage() {
       setError(err instanceof Error ? err.message : "Failed to create appointment");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function confirmRecallCompletion() {
+    if (!recallContext) return;
+    setRecallPromptSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${recallContext.patientId}/recalls/${recallContext.recallId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            outcome: "attended",
+            linked_appointment_id: recallAppointmentId ?? undefined,
+          }),
+        }
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+      }
+      setShowRecallPrompt(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update recall");
+    } finally {
+      setRecallPromptSaving(false);
     }
   }
 
@@ -1820,6 +1873,38 @@ export default function AppointmentsPage() {
 
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
+        {showRecallPrompt && recallContext && (
+          <div className="card" style={{ margin: 0 }}>
+            <div className="stack">
+              <div className="row">
+                <div>
+                  <strong>Mark recall completed?</strong>
+                  <div style={{ color: "var(--muted)" }}>
+                    Close the recall linked to this booking.
+                  </div>
+                </div>
+              </div>
+              <div className="row">
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={confirmRecallCompletion}
+                  disabled={recallPromptSaving}
+                >
+                  {recallPromptSaving ? "Saving..." : "Mark completed"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => setShowRecallPrompt(false)}
+                  disabled={recallPromptSaving}
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {conflictWarning && (
           <div
             className="notice"

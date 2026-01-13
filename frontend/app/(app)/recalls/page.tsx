@@ -94,6 +94,7 @@ export default function RecallsPage() {
       book: "1",
       patientId: String(row.patient_id),
       reason,
+      recallId: String(row.id),
     });
     router.push(`/appointments?${params.toString()}`);
   }

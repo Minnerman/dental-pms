@@ -627,6 +627,8 @@ def create_patient_recall(
         status=payload.status,
         notes=payload.notes,
         completed_at=payload.completed_at,
+        outcome=payload.outcome,
+        linked_appointment_id=payload.linked_appointment_id,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
     )
@@ -669,6 +671,10 @@ def update_patient_recall(
         recall.notes = payload.notes
     if payload.completed_at is not None:
         recall.completed_at = payload.completed_at
+    if payload.outcome is not None:
+        recall.outcome = payload.outcome
+    if payload.linked_appointment_id is not None:
+        recall.linked_appointment_id = payload.linked_appointment_id
     if payload.status == PatientRecallStatus.completed and payload.completed_at is None:
         recall.completed_at = datetime.now(timezone.utc)
 

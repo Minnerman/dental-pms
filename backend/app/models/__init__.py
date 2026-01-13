@@ -5,6 +5,7 @@ from app.models.patient import CareSetting, Patient, PatientCategory, RecallStat
 from app.models.patient_recall import (
     PatientRecall,
     PatientRecallKind,
+    PatientRecallOutcome,
     PatientRecallStatus,
 )
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
@@ -37,6 +38,7 @@ __all__ = [
     "RecallStatus",
     "PatientRecall",
     "PatientRecallKind",
+    "PatientRecallOutcome",
     "PatientRecallStatus",
     "Appointment",
     "AppointmentStatus",
