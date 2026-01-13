@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-14: Stage43 in progress (recall letter PDF endpoint + UI generate letter actions; clinic header details included).
 - 2026-01-14: Stage42 completed (/appointments prompt to mark recall completed when recallId present; PATCH recalls accepts outcome + linked_appointment_id (migration 0025); patient recalls tab shows outcome + quick next recall +6m/+12m).
 - 2026-01-14: Stage41 completed (/recalls book appointment button; /appointments prefill via ?book=1&patientId=&reason=).
 - 2026-01-14: Stage40 completed (/recalls dashboard with filters + complete/snooze actions + mobile cards; GET /recalls query + shared status helper in backend/app/services/recalls.py).

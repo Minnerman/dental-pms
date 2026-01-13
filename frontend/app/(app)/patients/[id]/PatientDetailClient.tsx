@@ -527,6 +527,7 @@ export default function PatientDetailClient({
   const [recallEntryNotes, setRecallEntryNotes] = useState("");
   const [recallEntrySaving, setRecallEntrySaving] = useState(false);
   const [recallActionId, setRecallActionId] = useState<number | null>(null);
+  const [recallDownloadId, setRecallDownloadId] = useState<number | null>(null);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [ledgerMode, setLedgerMode] = useState<LedgerEntryType>("payment");
   const [ledgerAmount, setLedgerAmount] = useState("");
@@ -1458,6 +1459,49 @@ export default function PatientDetailClient({
       setRecallsError(err instanceof Error ? err.message : "Failed to update recall");
     } finally {
       setRecallActionId(null);
+    }
+  }
+
+  function buildRecallLetterFilename(recall: PatientRecallItem) {
+    const date = recall.due_date?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const rawName = patient
+      ? `${patient.first_name}_${patient.last_name}`
+      : `patient_${patientId}`;
+    const safeName = rawName.replace(/[^a-zA-Z0-9-_]+/g, "_");
+    return `Recall_${safeName}_${date}.pdf`;
+  }
+
+  async function downloadRecallLetter(recall: PatientRecallItem) {
+    setRecallsError(null);
+    setRecallDownloadId(recall.id);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/recalls/${recall.id}/letter.pdf`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download letter (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = buildRecallLetterFilename(recall);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setRecallsError(
+        err instanceof Error ? err.message : "Failed to download recall letter"
+      );
+    } finally {
+      setRecallDownloadId(null);
     }
   }
 
@@ -4570,6 +4614,16 @@ export default function PatientDetailClient({
                                     <button
                                       className="btn btn-secondary"
                                       type="button"
+                                      onClick={() => void downloadRecallLetter(recall)}
+                                      disabled={recallDownloadId === recall.id}
+                                    >
+                                      {recallDownloadId === recall.id
+                                        ? "Generating..."
+                                        : "Generate letter"}
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
                                       onClick={() => void markRecallCompleted(recall)}
                                       disabled={isFinal || recallActionId === recall.id}
                                     >
@@ -4635,6 +4689,16 @@ export default function PatientDetailClient({
                                   disabled={recallEntrySaving}
                                 >
                                   Edit
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void downloadRecallLetter(recall)}
+                                  disabled={recallDownloadId === recall.id}
+                                >
+                                  {recallDownloadId === recall.id
+                                    ? "Generating..."
+                                    : "Generate letter"}
                                 </button>
                                 <button
                                   className="btn btn-secondary"
