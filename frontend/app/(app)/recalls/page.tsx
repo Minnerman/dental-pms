@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
@@ -88,6 +88,7 @@ export default function RecallsPage() {
   const [endDate, setEndDate] = useState("");
   const [actionId, setActionId] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -99,6 +100,23 @@ export default function RecallsPage() {
     });
     router.push(`/appointments?${params.toString()}`);
   }
+
+  const buildQueryParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (statusFilter.length > 0) {
+      params.set("status", statusFilter.join(","));
+    }
+    if (typeFilter !== "all") {
+      params.set("type", typeFilter);
+    }
+    if (startDate) {
+      params.set("start", startDate);
+    }
+    if (endDate) {
+      params.set("end", endDate);
+    }
+    return params;
+  }, [endDate, startDate, statusFilter, typeFilter]);
 
   function buildRecallFilename(row: RecallRow) {
     const rawName = `${row.last_name}_${row.first_name}`;
@@ -139,25 +157,44 @@ export default function RecallsPage() {
     }
   }
 
+  async function exportCsv() {
+    setExporting(true);
+    setError(null);
+    try {
+      const params = buildQueryParams();
+      const res = await apiFetch(`/api/recalls/export.csv?${params.toString()}`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to export CSV (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `recalls-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to export CSV");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   useEffect(() => {
     let active = true;
     async function loadRecalls() {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams();
-        if (statusFilter.length > 0) {
-          params.set("status", statusFilter.join(","));
-        }
-        if (typeFilter !== "all") {
-          params.set("type", typeFilter);
-        }
-        if (startDate) {
-          params.set("start", startDate);
-        }
-        if (endDate) {
-          params.set("end", endDate);
-        }
+        const params = buildQueryParams();
         const res = await apiFetch(`/api/recalls?${params.toString()}`);
         if (res.status === 401) {
           clearToken();
@@ -187,7 +224,7 @@ export default function RecallsPage() {
     return () => {
       active = false;
     };
-  }, [statusFilter, typeFilter, startDate, endDate, router]);
+  }, [buildQueryParams, router]);
 
   function toggleStatus(value: RecallStatus) {
     setStatusFilter((prev) => {
@@ -219,19 +256,7 @@ export default function RecallsPage() {
         const msg = await res.text();
         throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
       }
-      const params = new URLSearchParams();
-      if (statusFilter.length > 0) {
-        params.set("status", statusFilter.join(","));
-      }
-      if (typeFilter !== "all") {
-        params.set("type", typeFilter);
-      }
-      if (startDate) {
-        params.set("start", startDate);
-      }
-      if (endDate) {
-        params.set("end", endDate);
-      }
+      const params = buildQueryParams();
       const refresh = await apiFetch(`/api/recalls?${params.toString()}`);
       if (refresh.ok) {
         setRows((await refresh.json()) as RecallRow[]);
@@ -271,7 +296,7 @@ export default function RecallsPage() {
         </div>
       </div>
 
-      <div className="card" style={{ margin: 0 }}>
+      <div className="card print-hidden" style={{ margin: 0 }}>
         <div className="stack">
           <div className="grid grid-3">
             <div className="stack" style={{ gap: 8 }}>
@@ -325,7 +350,7 @@ export default function RecallsPage() {
               </div>
             </div>
           </div>
-          <div className="row">
+          <div className="row recall-toolbar">
             <div className="badge">{rows.length} recalls</div>
             <button
               className="btn btn-secondary"
@@ -338,6 +363,21 @@ export default function RecallsPage() {
               }}
             >
               Reset filters
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => void exportCsv()}
+              disabled={exporting}
+            >
+              {exporting ? "Exporting..." : "Export CSV"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => window.print()}
+            >
+              Print
             </button>
           </div>
         </div>
@@ -358,7 +398,7 @@ export default function RecallsPage() {
                 <th>Due date</th>
                 <th>Status</th>
                 <th>Notes</th>
-                <th>Actions</th>
+                <th className="recall-actions">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -387,7 +427,7 @@ export default function RecallsPage() {
                       {row.notes || "—"}
                     </span>
                   </td>
-                  <td>
+                  <td className="recall-actions">
                     <div className="table-actions">
                       <button
                         className="btn btn-secondary"
@@ -447,7 +487,7 @@ export default function RecallsPage() {
               ))}
             </tbody>
           </Table>
-          <div className="recall-cards">
+          <div className="recall-cards print-hidden">
             {rows.map((row) => (
               <div className="card recall-card" key={row.id}>
                 <div className="row">
@@ -515,6 +555,27 @@ export default function RecallsPage() {
           </div>
         </>
       )}
+      <style jsx global>{`
+        @media print {
+          .app-top,
+          .print-hidden,
+          .recall-actions,
+          .table-actions {
+            display: none !important;
+          }
+          .app-shell {
+            background: #fff;
+          }
+          .recall-table th,
+          .recall-table td {
+            padding: 4px 6px;
+          }
+          .badge {
+            border: none;
+            padding: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }
