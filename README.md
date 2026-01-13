@@ -59,6 +59,7 @@ docker compose down
 ## Operations
 - Common fixes: `docs/OPS_CHECKLIST.md#common-fixes`
 - Dev commands: `docs/DEV.md`
+- GitHub PR workflow (on practice server): use `gh pr create` and `gh pr merge --squash --delete-branch --auto` (origin remote via SSH).
 
 - Access URLs (Tailscale + local): `docs/ACCESS_URLS.md`
 - Quick ops checklist: `docs/OPS_CHECKLIST.md`
