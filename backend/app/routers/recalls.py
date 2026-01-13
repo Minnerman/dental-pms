@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
+from io import StringIO
+import csv
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
@@ -110,17 +112,9 @@ def _parse_csv_values(raw: str | None) -> list[str]:
     return [value.strip().lower() for value in raw.split(",") if value.strip()]
 
 
-@router.get("", response_model=list[RecallDashboardRow])
-def list_recalls(
-    db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
-    start: date | None = Query(default=None),
-    end: date | None = Query(default=None),
-    status: str | None = Query(default=None),
-    recall_type: str | None = Query(default=None, alias="type"),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-):
+def _normalize_recall_filters(
+    status: str | None, recall_type: str | None
+) -> tuple[set[str], list[PatientRecallKind], set[PatientRecallStatus]]:
     requested_statuses = set(_parse_csv_values(status))
     if not requested_statuses:
         requested_statuses = {"due", "overdue"}
@@ -150,6 +144,18 @@ def list_recalls(
     if "due" in requested_statuses or "overdue" in requested_statuses:
         stored_statuses.add(PatientRecallStatus.upcoming)
 
+    return requested_statuses, requested_type_members, stored_statuses
+
+
+def _build_recall_query(
+    *,
+    start: date | None,
+    end: date | None,
+    stored_statuses: set[PatientRecallStatus],
+    requested_type_members: list[PatientRecallKind],
+    limit: int,
+    offset: int,
+):
     stmt = (
         select(PatientRecall, Patient)
         .join(Patient, PatientRecall.patient_id == Patient.id)
@@ -166,6 +172,31 @@ def list_recalls(
         stmt = stmt.where(PatientRecall.due_date >= start)
     if end:
         stmt = stmt.where(PatientRecall.due_date <= end)
+    return stmt
+
+
+@router.get("", response_model=list[RecallDashboardRow])
+def list_recalls(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    status: str | None = Query(default=None),
+    recall_type: str | None = Query(default=None, alias="type"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
+        status, recall_type
+    )
+    stmt = _build_recall_query(
+        start=start,
+        end=end,
+        stored_statuses=stored_statuses,
+        requested_type_members=requested_type_members,
+        limit=limit,
+        offset=offset,
+    )
 
     results = db.execute(stmt).all()
     output: list[RecallDashboardRow] = []
@@ -187,6 +218,53 @@ def list_recalls(
             )
         )
     return output
+
+
+@router.get("/export.csv")
+def export_recalls_csv(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    status: str | None = Query(default=None),
+    recall_type: str | None = Query(default=None, alias="type"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
+        status, recall_type
+    )
+    stmt = _build_recall_query(
+        start=start,
+        end=end,
+        stored_statuses=stored_statuses,
+        requested_type_members=requested_type_members,
+        limit=limit,
+        offset=offset,
+    )
+    results = db.execute(stmt).all()
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        ["patient_id", "patient_name", "recall_type", "due_date", "status", "phone"]
+    )
+    for recall, patient in results:
+        resolved_status = resolve_recall_status(recall)
+        if resolved_status.value not in requested_statuses:
+            continue
+        writer.writerow(
+            [
+                patient.id,
+                f"{patient.last_name}, {patient.first_name}",
+                recall.kind.value,
+                recall.due_date.isoformat(),
+                resolved_status.value,
+                patient.phone or "",
+            ]
+        )
+    filename = f"recalls-{date.today().isoformat()}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=buffer.getvalue(), media_type="text/csv", headers=headers)
 
 
 @router.get("/kpis", response_model=RecallKpiOut)
