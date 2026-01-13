@@ -103,7 +103,7 @@
 - 2026-01-13: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
 - 2026-01-13: Stage37 merged + deployed (date deep link respects day-sheet mode).
 - 2026-01-13: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
-- 2026-01-13: Stage38 in progress (patient finance summary panel on patient home).
+- 2026-01-14: Stage38 completed (patient finance summary panel on patient home; adds GET /patients/{id}/finance-summary; next-env.d.ts hygiene update).
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)
