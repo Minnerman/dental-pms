@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-13: PR #12 merged (ESLint config + lint fixes); lint runs with warnings only; typecheck passes; master f300dcd.
 - Patient summary: in-page booking jump + collapsible docs/attachments + tighter two-column layout.
 - Summary grid breakpoint/spacing updated (class currently only used on patient summary).
 - Bcrypt/passlib pin
