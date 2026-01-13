@@ -69,6 +69,7 @@
 - Password reset validated end-to-end (debug mode used briefly, now disabled)
 - Health check confirmed OK (`./ops/health.sh`)
 - Frontend deterministic installs via package-lock + npm ci
+- Session handoff: master a70a77f, services running, exhaustive-deps lint warnings tracked (non-blocking).
 - Password reset rate limiting + audit logging (no token leakage)
 - Guarded route params/search params for strictNullChecks
 - Reset-password page moved to Suspense wrapper; Next build completes with BUILD_ID
