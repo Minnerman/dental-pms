@@ -2,18 +2,21 @@ from calendar import monthrange
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, nullslast, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.audit_log import AuditLog
+from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.services.audit import log_event, snapshot_model
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.patient import (
     PatientCreate,
+    PatientFinanceItemOut,
+    PatientFinanceSummaryOut,
     PatientOut,
     PatientSearchOut,
     PatientUpdate,
@@ -481,6 +484,95 @@ def get_patient_balance(
         or 0
     )
     return {"balance_pence": balance}
+
+
+@router.get("/{patient_id}/finance-summary", response_model=PatientFinanceSummaryOut)
+def get_patient_finance_summary(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    limit: int = Query(default=10, ge=1, le=20),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+    balance = (
+        db.scalar(
+            select(func.coalesce(func.sum(PatientLedgerEntry.amount_pence), 0)).where(
+                PatientLedgerEntry.patient_id == patient_id
+            )
+        )
+        or 0
+    )
+
+    invoices = list(
+        db.scalars(
+            select(Invoice)
+            .where(Invoice.patient_id == patient_id)
+            .order_by(nullslast(Invoice.issue_date.desc()), Invoice.created_at.desc())
+            .limit(limit)
+        )
+    )
+    payments = list(
+        db.scalars(
+            select(Payment)
+            .join(Invoice, Payment.invoice_id == Invoice.id)
+            .where(Invoice.patient_id == patient_id)
+            .order_by(Payment.paid_at.desc())
+            .limit(limit)
+        )
+    )
+
+    items: list[tuple[datetime, PatientFinanceItemOut]] = []
+    for invoice in invoices:
+        invoice_date = invoice.issue_date or invoice.created_at.date()
+        sort_key = (
+            datetime.combine(invoice_date, datetime.min.time())
+            if invoice.issue_date
+            else invoice.created_at
+        )
+        items.append(
+            (
+                sort_key,
+                PatientFinanceItemOut(
+                    id=invoice.id,
+                    kind="invoice",
+                    date=invoice_date,
+                    amount_pence=invoice.total_pence,
+                    status=invoice.status.value,
+                    invoice_id=invoice.id,
+                    invoice_number=invoice.invoice_number,
+                ),
+            )
+        )
+
+    for payment in payments:
+        invoice = payment.invoice
+        items.append(
+            (
+                payment.paid_at,
+                PatientFinanceItemOut(
+                    id=payment.id,
+                    kind="payment",
+                    date=payment.paid_at.date(),
+                    amount_pence=payment.amount_pence,
+                    status="received",
+                    invoice_id=payment.invoice_id,
+                    payment_id=payment.id,
+                    invoice_number=invoice.invoice_number if invoice else None,
+                ),
+            )
+        )
+
+    items.sort(key=lambda entry: entry[0], reverse=True)
+    summary_items = [entry for _, entry in items[:limit]]
+
+    return PatientFinanceSummaryOut(
+        patient_id=patient_id,
+        outstanding_balance_pence=int(balance),
+        items=summary_items,
+    )
 
 
 @router.post("/{patient_id}/payments", response_model=LedgerEntryOut)

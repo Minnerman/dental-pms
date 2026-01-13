@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
@@ -154,3 +154,20 @@ class PatientRecallOut(BaseModel):
     recall_notes: Optional[str] = None
     recall_last_set_at: Optional[datetime] = None
     balance_pence: Optional[int] = None
+
+
+class PatientFinanceItemOut(BaseModel):
+    id: int
+    kind: Literal["invoice", "payment"]
+    date: date
+    amount_pence: int
+    status: str
+    invoice_id: Optional[int] = None
+    payment_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+
+
+class PatientFinanceSummaryOut(BaseModel):
+    patient_id: int
+    outstanding_balance_pence: int
+    items: list[PatientFinanceItemOut]

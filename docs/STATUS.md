@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-14: Stage38 patient finance summary panel (balance + recent invoices/payments + PDF downloads).
 - 2026-01-13: PR #12 merged (ESLint config + lint fixes); lint runs with warnings only; typecheck passes; master f300dcd.
 - Patient summary: in-page booking jump + collapsible docs/attachments + tighter two-column layout.
 - Summary grid breakpoint/spacing updated (class currently only used on patient summary).
@@ -102,6 +103,7 @@
 - 2026-01-13: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
 - 2026-01-13: Stage37 merged + deployed (date deep link respects day-sheet mode).
 - 2026-01-13: Verified after deploy: `docker compose build`, `docker compose up -d`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- 2026-01-13: Stage38 in progress (patient finance summary panel on patient home).
 - See README.md (Middleware section) for details on invalid numeric ID handling via middleware rewrite to /__notfound__ and HTTP 404 behaviour.
 - Attribution columns added to patients/appointments lists; notes formatting aligned
 - Admin reset-password flow + must-change-password support (backend + frontend)

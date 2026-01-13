@@ -142,6 +142,23 @@ type InvoiceDetail = InvoiceSummary & {
   payments: Payment[];
 };
 
+type FinanceSummaryItem = {
+  id: number;
+  kind: "invoice" | "payment";
+  date: string;
+  amount_pence: number;
+  status: string;
+  invoice_id?: number | null;
+  payment_id?: number | null;
+  invoice_number?: string | null;
+};
+
+type FinanceSummary = {
+  patient_id: number;
+  outstanding_balance_pence: number;
+  items: FinanceSummaryItem[];
+};
+
 type TimelineItem = {
   entity_type: string;
   entity_id: string;
@@ -455,6 +472,9 @@ export default function PatientDetailClient({
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerBalance, setLedgerBalance] = useState<number>(0);
+  const [financeSummary, setFinanceSummary] = useState<FinanceSummary | null>(null);
+  const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
+  const [financeSummaryError, setFinanceSummaryError] = useState<string | null>(null);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [ledgerMode, setLedgerMode] = useState<LedgerEntryType>("payment");
   const [ledgerAmount, setLedgerAmount] = useState("");
@@ -636,6 +656,32 @@ export default function PatientDetailClient({
       setLedgerBalance(data.balance_pence ?? 0);
     } catch {
       setLedgerBalance(0);
+    }
+  }
+
+  async function loadFinanceSummary() {
+    setFinanceSummaryLoading(true);
+    setFinanceSummaryError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/finance-summary?limit=10`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load finance summary (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as FinanceSummary;
+      setFinanceSummary(data);
+    } catch (err) {
+      setFinanceSummaryError(
+        err instanceof Error ? err.message : "Failed to load finance summary"
+      );
+      setFinanceSummary(null);
+    } finally {
+      setFinanceSummaryLoading(false);
     }
   }
 
@@ -1225,6 +1271,7 @@ export default function PatientDetailClient({
     void loadUsers();
     void loadLedger();
     void loadLedgerBalance();
+    void loadFinanceSummary();
   }, [isValidPatientId, patientId]);
 
   useEffect(() => {
@@ -1325,6 +1372,10 @@ export default function PatientDetailClient({
       return { ...entry, running_balance: running };
     });
   }, [ledgerEntries]);
+
+  const financeItems = financeSummary?.items ?? [];
+  const financeBalance =
+    financeSummary?.outstanding_balance_pence ?? ledgerBalance ?? 0;
 
   const toothHistoryEntries = useMemo(() => {
     const entries = [
@@ -1641,6 +1692,7 @@ export default function PatientDetailClient({
       setLedgerNote("");
       await loadLedger();
       await loadLedgerBalance();
+      await loadFinanceSummary();
     } catch (err) {
       setLedgerError(err instanceof Error ? err.message : "Failed to save entry");
     } finally {
@@ -1707,6 +1759,7 @@ export default function PatientDetailClient({
       setNewInvoiceNotes("");
       setNewInvoiceDiscount("");
       await loadInvoices();
+      await loadFinanceSummary();
       setSelectedInvoice(invoice);
       setInvoiceNotes(invoice.notes || "");
       setInvoiceDiscount((invoice.discount_pence / 100).toFixed(2));
@@ -1933,6 +1986,7 @@ export default function PatientDetailClient({
       setPaymentDate("");
       await loadInvoiceDetail(selectedInvoice.id);
       await loadInvoices();
+      await loadFinanceSummary();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to add payment");
     } finally {
@@ -2458,7 +2512,7 @@ export default function PatientDetailClient({
                           : "not set"}
                       </div>
                       <div className="badge">
-                        Balance: {formatCurrency(ledgerBalance)}
+                        Balance: {formatCurrency(financeBalance)}
                       </div>
                       <button
                         type="button"
@@ -2570,14 +2624,23 @@ export default function PatientDetailClient({
                         <div className="stack">
                           <div className="row">
                             <div>
-                              <h4 style={{ marginTop: 0 }}>Finance</h4>
+                              <h4 style={{ marginTop: 0 }}>Finance summary</h4>
                               <div style={{ color: "var(--muted)" }}>
-                                Balance {formatCurrency(ledgerBalance)}
+                                Outstanding {formatCurrency(financeBalance)}
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               <button
                                 className="btn btn-primary"
+                                type="button"
+                                onClick={() => {
+                                  setTab("invoices");
+                                }}
+                              >
+                                Create invoice
+                              </button>
+                              <button
+                                className="btn btn-secondary"
                                 type="button"
                                 onClick={() => {
                                   setLedgerMode("payment");
@@ -2598,43 +2661,84 @@ export default function PatientDetailClient({
                               </button>
                             </div>
                           </div>
-                          {ledgerLoading ? (
-                            <div className="badge">Loading ledger…</div>
-                          ) : ledgerEntries.length === 0 ? (
-                            <div className="notice">No ledger entries yet.</div>
+                          {financeSummaryError && (
+                            <div className="notice">{financeSummaryError}</div>
+                          )}
+                          {financeSummaryLoading ? (
+                            <div className="badge">Loading finance…</div>
+                          ) : financeItems.length === 0 ? (
+                            <div className="notice">No finance activity yet.</div>
                           ) : (
-                            <div className="stack" style={{ gap: 6 }}>
-                              {ledgerEntries
-                                .slice(-10)
-                                .reverse()
-                                .map((entry) => (
+                            <div className="stack" style={{ gap: 8 }}>
+                              {financeItems.map((item) => {
+                                const amountPence =
+                                  item.kind === "payment" ? -item.amount_pence : item.amount_pence;
+                                const title =
+                                  item.kind === "invoice"
+                                    ? `Invoice${item.invoice_number ? ` · ${item.invoice_number}` : ""}`
+                                    : "Payment";
+                                return (
                                   <div
-                                    key={entry.id}
+                                    key={`${item.kind}-${item.id}`}
                                     style={{
                                       display: "flex",
                                       justifyContent: "space-between",
                                       gap: 12,
+                                      flexWrap: "wrap",
+                                      alignItems: "center",
                                     }}
                                   >
                                     <div>
-                                      <div style={{ fontWeight: 600 }}>
-                                        {entry.entry_type === "payment"
-                                          ? "Payment"
-                                          : entry.entry_type === "charge"
-                                          ? "Charge"
-                                          : "Adjustment"}
-                                      </div>
+                                      <div style={{ fontWeight: 600 }}>{title}</div>
                                       <div style={{ color: "var(--muted)" }}>
-                                        {new Date(entry.created_at).toLocaleDateString("en-GB")}
-                                        {entry.reference ? ` · ${entry.reference}` : ""}
-                                        {entry.note ? ` · ${entry.note}` : ""}
+                                        {formatShortDate(item.date)} · {item.status}
                                       </div>
                                     </div>
-                                    <div style={{ fontWeight: 600 }}>
-                                      {formatSignedCurrency(entry.amount_pence)}
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: 600 }}>
+                                        {formatSignedCurrency(amountPence)}
+                                      </div>
+                                      {item.kind === "invoice" && item.invoice_id && (
+                                        <button
+                                          className="btn btn-secondary"
+                                          style={{ padding: "4px 8px", fontSize: 12 }}
+                                          type="button"
+                                          onClick={() =>
+                                            downloadPdf(
+                                              `/api/invoices/${item.invoice_id}/pdf`,
+                                              `${item.invoice_number || `invoice-${item.invoice_id}`}.pdf`
+                                            )
+                                          }
+                                        >
+                                          Invoice PDF
+                                        </button>
+                                      )}
+                                      {item.kind === "payment" && item.payment_id && (
+                                        <button
+                                          className="btn btn-secondary"
+                                          style={{ padding: "4px 8px", fontSize: 12 }}
+                                          type="button"
+                                          onClick={() =>
+                                            downloadPdf(
+                                              `/api/payments/${item.payment_id}/receipt.pdf`,
+                                              `receipt-${item.invoice_number || item.payment_id}.pdf`
+                                            )
+                                          }
+                                        >
+                                          Receipt PDF
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
-                                ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
