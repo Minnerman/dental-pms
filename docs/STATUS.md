@@ -206,6 +206,19 @@
 - Risks/notes:
   - Duration auto-sync applies only when a preset duration is selected.
 
+## PR draft (stage37-date-deeplink-respect-daysheet -> master)
+- Summary:
+  - `?date=` deep link respects day-sheet mode without switching views
+  - `view=` only affects calendar mode
+  - Smoke checklist updated for day-sheet deep link behavior
+- Verification: `bash ops/verify.sh`, `bash ops/verify_prod_404.sh`, `./ops/health.sh`.
+- Manual checks:
+  - Day-sheet mode stays active with `/appointments?date=2026-01-14`
+  - `/appointments?date=2026-01-14&view=week` honors view only in calendar mode
+  - `/appointments?date=2026-01-14&book=1` opens booking without mode change
+- Risks/notes:
+  - Deep link view changes are ignored when in day-sheet mode.
+
 ## RBAC matrix
 - Templates: list/read/download (all), create/update/delete (superadmin)
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
