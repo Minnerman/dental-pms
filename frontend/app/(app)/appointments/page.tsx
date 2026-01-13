@@ -684,12 +684,17 @@ export default function AppointmentsPage() {
     if (patientIdParam && /^\d+$/.test(patientIdParam)) {
       setSelectedPatientId(patientIdParam);
     }
+    const reasonParam = searchParams.get("reason");
+    if (reasonParam) {
+      setAppointmentType(reasonParam);
+    }
     const clinicianIdParam = searchParams.get("clinicianId");
     if (clinicianIdParam && /^\d+$/.test(clinicianIdParam)) {
       setClinicianUserId(clinicianIdParam);
     }
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("book");
+    nextParams.delete("reason");
     const nextQuery = nextParams.toString();
     router.replace(nextQuery ? `/appointments?${nextQuery}` : "/appointments", {
       scroll: false,
