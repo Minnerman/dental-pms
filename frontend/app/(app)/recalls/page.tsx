@@ -8,6 +8,7 @@ import Table from "@/components/ui/Table";
 
 type RecallStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
 type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
+type RecallContactChannel = "letter" | "phone" | "email" | "sms";
 
 type RecallRow = {
   id: number;
@@ -19,6 +20,8 @@ type RecallRow = {
   status: RecallStatus;
   notes?: string | null;
   completed_at?: string | null;
+  last_contacted_at?: string | null;
+  last_contact_channel?: RecallContactChannel | null;
 };
 
 const statusLabels: Record<RecallStatus, string> = {
@@ -53,6 +56,20 @@ const kindOptions: { value: RecallKind; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
+const contactChannelOptions: { value: RecallContactChannel; label: string }[] = [
+  { value: "letter", label: "Letter" },
+  { value: "phone", label: "Phone" },
+  { value: "email", label: "Email" },
+  { value: "sms", label: "SMS" },
+];
+
+const contactChannelLabels: Record<RecallContactChannel, string> = {
+  letter: "Letter",
+  phone: "Phone",
+  email: "Email",
+  sms: "SMS",
+};
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   const parsed = new Date(value);
@@ -86,6 +103,13 @@ export default function RecallsPage() {
   const [typeFilter, setTypeFilter] = useState<RecallKind | "all">("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [contactedFilter, setContactedFilter] = useState<"all" | "yes" | "no">(
+    "all"
+  );
+  const [contactedWithinDays, setContactedWithinDays] = useState("");
+  const [contactChannelFilter, setContactChannelFilter] = useState<
+    RecallContactChannel[]
+  >([]);
   const [actionId, setActionId] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -116,8 +140,43 @@ export default function RecallsPage() {
     if (endDate) {
       params.set("end", endDate);
     }
+    if (contactedFilter !== "all") {
+      params.set("contacted", contactedFilter);
+    }
+    if (contactedWithinDays) {
+      params.set("contacted_within_days", contactedWithinDays);
+    }
+    if (contactChannelFilter.length > 0) {
+      params.set("contact_channel", contactChannelFilter.join(","));
+    }
     return params;
-  }, [endDate, startDate, statusFilter, typeFilter]);
+  }, [
+    contactedFilter,
+    contactedWithinDays,
+    contactChannelFilter,
+    endDate,
+    startDate,
+    statusFilter,
+    typeFilter,
+  ]);
+
+  function toggleContactChannel(value: RecallContactChannel) {
+    setContactChannelFilter((prev) => {
+      if (prev.includes(value)) {
+        return prev.filter((channel) => channel !== value);
+      }
+      return [...prev, value];
+    });
+  }
+
+  function formatLastContact(row: RecallRow) {
+    if (!row.last_contacted_at) return "—";
+    const dateLabel = formatDate(row.last_contacted_at);
+    if (row.last_contact_channel) {
+      return `${contactChannelLabels[row.last_contact_channel]} · ${dateLabel}`;
+    }
+    return dateLabel;
+  }
 
   function buildRecallFilename(row: RecallRow) {
     const rawName = `${row.last_name}_${row.first_name}`;
@@ -382,6 +441,51 @@ export default function RecallsPage() {
               </div>
             </div>
           </div>
+          <div className="grid grid-3">
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Contacted</label>
+              <select
+                className="input"
+                value={contactedFilter}
+                onChange={(e) =>
+                  setContactedFilter(e.target.value as "all" | "yes" | "no")
+                }
+              >
+                <option value="all">All</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Contacted within days</label>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                value={contactedWithinDays}
+                onChange={(e) => setContactedWithinDays(e.target.value)}
+                placeholder="e.g. 14"
+              />
+            </div>
+            <div className="stack" style={{ gap: 8 }}>
+              <label className="label">Contact channel</label>
+              <div className="stack" style={{ gap: 6 }}>
+                {contactChannelOptions.map((option) => (
+                  <label
+                    key={option.value}
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={contactChannelFilter.includes(option.value)}
+                      onChange={() => toggleContactChannel(option.value)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="row recall-toolbar">
             <div className="badge">{rows.length} recalls</div>
             <button
@@ -392,6 +496,9 @@ export default function RecallsPage() {
                 setTypeFilter("all");
                 setStartDate("");
                 setEndDate("");
+                setContactedFilter("all");
+                setContactedWithinDays("");
+                setContactChannelFilter([]);
               }}
             >
               Reset filters
@@ -437,6 +544,7 @@ export default function RecallsPage() {
                 <th>Type</th>
                 <th>Due date</th>
                 <th>Status</th>
+                <th>Last contact</th>
                 <th>Notes</th>
                 <th className="recall-actions">Actions</th>
               </tr>
@@ -454,6 +562,7 @@ export default function RecallsPage() {
                   <td>
                     <span className="badge">{statusLabels[row.status]}</span>
                   </td>
+                  <td>{formatLastContact(row)}</td>
                   <td title={row.notes || ""}>
                     <span
                       style={{
@@ -542,6 +651,9 @@ export default function RecallsPage() {
                     </div>
                   </div>
                   <span className="badge">{statusLabels[row.status]}</span>
+                </div>
+                <div style={{ color: "var(--muted)" }}>
+                  Last contact {formatLastContact(row)}
                 </div>
                 <div>{row.notes || "No notes."}</div>
                 <div className="row">

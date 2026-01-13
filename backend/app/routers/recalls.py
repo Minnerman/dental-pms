@@ -17,6 +17,10 @@ from app.models.patient_recall import (
     PatientRecallStatus,
 )
 from app.models.patient_recall_communication import (
+    PatientRecallCommunication,
+    PatientRecallCommunicationChannel,
+)
+from app.models.patient_recall_communication import (
     PatientRecallCommunicationChannel,
     PatientRecallCommunicationDirection,
     PatientRecallCommunicationStatus,
@@ -160,6 +164,67 @@ def _normalize_recall_filters(
     return requested_statuses, requested_type_members, stored_statuses
 
 
+def _normalize_contact_filters(
+    contacted: str | None,
+    contacted_within_days: int | None,
+    contact_channel: str | None,
+) -> tuple[str | None, int | None, list[PatientRecallCommunicationChannel]]:
+    contact_flag = contacted.lower().strip() if contacted else None
+    if contact_flag not in {"yes", "no"}:
+        contact_flag = None
+    within_days = contacted_within_days if contacted_within_days and contacted_within_days > 0 else None
+
+    requested_channels = set(_parse_csv_values(contact_channel))
+    allowed_channels = {channel.value for channel in PatientRecallCommunicationChannel}
+    requested_channels = {value for value in requested_channels if value in allowed_channels}
+    requested_channel_members = [
+        PatientRecallCommunicationChannel._value2member_map_[value]
+        for value in requested_channels
+    ]
+    return contact_flag, within_days, requested_channel_members
+
+
+def _build_last_contact_subquery():
+    return (
+        select(
+            PatientRecallCommunication.id.label("comm_id"),
+            PatientRecallCommunication.recall_id.label("recall_id"),
+            PatientRecallCommunication.created_at.label("created_at"),
+            PatientRecallCommunication.channel.label("channel"),
+            func.row_number()
+            .over(
+                partition_by=PatientRecallCommunication.recall_id,
+                order_by=(
+                    PatientRecallCommunication.created_at.desc(),
+                    PatientRecallCommunication.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .subquery()
+    )
+
+
+def _apply_contact_filters(
+    stmt,
+    *,
+    last_contact_subq,
+    contact_flag: str | None,
+    within_days: int | None,
+    channels: list[PatientRecallCommunicationChannel],
+):
+    if contact_flag == "yes":
+        stmt = stmt.where(last_contact_subq.c.comm_id.is_not(None))
+    elif contact_flag == "no":
+        stmt = stmt.where(last_contact_subq.c.comm_id.is_(None))
+    if within_days:
+        threshold = datetime.now(timezone.utc) - timedelta(days=within_days)
+        stmt = stmt.where(last_contact_subq.c.created_at >= threshold)
+    if channels:
+        stmt = stmt.where(last_contact_subq.c.channel.in_(channels))
+    return stmt
+
+
 def _build_recall_query(
     *,
     start: date | None,
@@ -168,11 +233,30 @@ def _build_recall_query(
     requested_type_members: list[PatientRecallKind],
     limit: int,
     offset: int,
+    last_contact_subq=None,
 ):
+    if last_contact_subq is not None:
+        stmt = (
+            select(
+                PatientRecall,
+                Patient,
+                last_contact_subq.c.created_at.label("last_contacted_at"),
+                last_contact_subq.c.channel.label("last_contact_channel"),
+            )
+            .join(Patient, PatientRecall.patient_id == Patient.id)
+            .join(
+                last_contact_subq,
+                (last_contact_subq.c.recall_id == PatientRecall.id)
+                & (last_contact_subq.c.rn == 1),
+                isouter=True,
+            )
+        )
+    else:
+        stmt = select(PatientRecall, Patient).join(
+            Patient, PatientRecall.patient_id == Patient.id
+        )
     stmt = (
-        select(PatientRecall, Patient)
-        .join(Patient, PatientRecall.patient_id == Patient.id)
-        .where(Patient.deleted_at.is_(None))
+        stmt.where(Patient.deleted_at.is_(None))
         .order_by(PatientRecall.due_date.asc(), PatientRecall.id.asc())
         .limit(limit)
         .offset(offset)
@@ -196,12 +280,19 @@ def list_recalls(
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
     recall_type: str | None = Query(default=None, alias="type"),
+    contacted: str | None = Query(default=None),
+    contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
+    contact_channel: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
+    contact_flag, within_days, channels = _normalize_contact_filters(
+        contacted, contacted_within_days, contact_channel
+    )
+    last_contact_subq = _build_last_contact_subquery()
     stmt = _build_recall_query(
         start=start,
         end=end,
@@ -209,11 +300,19 @@ def list_recalls(
         requested_type_members=requested_type_members,
         limit=limit,
         offset=offset,
+        last_contact_subq=last_contact_subq,
+    )
+    stmt = _apply_contact_filters(
+        stmt,
+        last_contact_subq=last_contact_subq,
+        contact_flag=contact_flag,
+        within_days=within_days,
+        channels=channels,
     )
 
     results = db.execute(stmt).all()
     output: list[RecallDashboardRow] = []
-    for recall, patient in results:
+    for recall, patient, last_contacted_at, last_contact_channel in results:
         resolved_status = resolve_recall_status(recall)
         if resolved_status.value not in requested_statuses:
             continue
@@ -228,6 +327,8 @@ def list_recalls(
                 status=resolved_status,
                 notes=recall.notes,
                 completed_at=recall.completed_at,
+                last_contacted_at=last_contacted_at,
+                last_contact_channel=last_contact_channel,
             )
         )
     return output
@@ -241,12 +342,19 @@ def export_recalls_csv(
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
     recall_type: str | None = Query(default=None, alias="type"),
+    contacted: str | None = Query(default=None),
+    contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
+    contact_channel: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
+    contact_flag, within_days, channels = _normalize_contact_filters(
+        contacted, contacted_within_days, contact_channel
+    )
+    last_contact_subq = _build_last_contact_subquery()
     stmt = _build_recall_query(
         start=start,
         end=end,
@@ -254,14 +362,31 @@ def export_recalls_csv(
         requested_type_members=requested_type_members,
         limit=limit,
         offset=offset,
+        last_contact_subq=last_contact_subq,
+    )
+    stmt = _apply_contact_filters(
+        stmt,
+        last_contact_subq=last_contact_subq,
+        contact_flag=contact_flag,
+        within_days=within_days,
+        channels=channels,
     )
     results = db.execute(stmt).all()
     buffer = StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
-        ["patient_id", "patient_name", "recall_type", "due_date", "status", "phone"]
+        [
+            "patient_id",
+            "patient_name",
+            "recall_type",
+            "due_date",
+            "status",
+            "phone",
+            "last_contacted_at",
+            "last_contact_channel",
+        ]
     )
-    for recall, patient in results:
+    for recall, patient, last_contacted_at, last_contact_channel in results:
         resolved_status = resolve_recall_status(recall)
         if resolved_status.value not in requested_statuses:
             continue
@@ -273,6 +398,8 @@ def export_recalls_csv(
                 recall.due_date.isoformat(),
                 resolved_status.value,
                 patient.phone or "",
+                last_contacted_at.isoformat() if last_contacted_at else "",
+                last_contact_channel.value if last_contact_channel else "",
             ]
         )
     filename = f"recalls-{date.today().isoformat()}.csv"
@@ -288,12 +415,19 @@ def export_recall_letters_zip(
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
     recall_type: str | None = Query(default=None, alias="type"),
+    contacted: str | None = Query(default=None),
+    contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
+    contact_channel: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
+    contact_flag, within_days, channels = _normalize_contact_filters(
+        contacted, contacted_within_days, contact_channel
+    )
+    last_contact_subq = _build_last_contact_subquery()
     stmt = _build_recall_query(
         start=start,
         end=end,
@@ -301,11 +435,19 @@ def export_recall_letters_zip(
         requested_type_members=requested_type_members,
         limit=limit,
         offset=offset,
+        last_contact_subq=last_contact_subq,
+    )
+    stmt = _apply_contact_filters(
+        stmt,
+        last_contact_subq=last_contact_subq,
+        contact_flag=contact_flag,
+        within_days=within_days,
+        channels=channels,
     )
     results = db.execute(stmt).all()
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for recall, patient in results:
+        for recall, patient, _last_contacted_at, _last_contact_channel in results:
             resolved_status = resolve_recall_status(recall)
             if resolved_status.value not in requested_statuses:
                 continue
