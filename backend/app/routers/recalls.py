@@ -16,6 +16,11 @@ from app.models.patient_recall import (
     PatientRecallKind,
     PatientRecallStatus,
 )
+from app.models.patient_recall_communication import (
+    PatientRecallCommunicationChannel,
+    PatientRecallCommunicationDirection,
+    PatientRecallCommunicationStatus,
+)
 from app.models.user import User
 from app.schemas.patient import PatientRecallOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
@@ -25,6 +30,7 @@ from app.models.patient_document import PatientDocument
 from app.services.audit import log_event, snapshot_model
 from app.services.document_render import render_template_with_warnings
 from app.services.recall_letter_pdf import build_recall_letter_pdf
+from app.services.recall_communications import log_recall_communication
 from app.services.recalls import resolve_recall_status
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
@@ -277,7 +283,7 @@ def export_recalls_csv(
 @router.get("/letters.zip")
 def export_recall_letters_zip(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
@@ -315,8 +321,20 @@ def export_recall_letters_zip(
                 filename = f"RecallLetter_patient-{patient.id}_{due_date}.pdf"
             pdf_bytes = build_recall_letter_pdf(patient, recall)
             zipf.writestr(filename, pdf_bytes)
+            log_recall_communication(
+                db,
+                patient_id=patient.id,
+                recall_id=recall.id,
+                channel=PatientRecallCommunicationChannel.letter,
+                direction=PatientRecallCommunicationDirection.outbound,
+                status=PatientRecallCommunicationStatus.sent,
+                notes="Recall letters ZIP generated",
+                created_by_user_id=user.id if user else None,
+                guard_seconds=60,
+            )
     filename = f"recall-letters-{date.today().isoformat()}.zip"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    db.commit()
     return Response(content=buffer.getvalue(), media_type="application/zip", headers=headers)
 
 

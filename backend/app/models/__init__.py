@@ -8,6 +8,12 @@ from app.models.patient_recall import (
     PatientRecallOutcome,
     PatientRecallStatus,
 )
+from app.models.patient_recall_communication import (
+    PatientRecallCommunication,
+    PatientRecallCommunicationChannel,
+    PatientRecallCommunicationDirection,
+    PatientRecallCommunicationStatus,
+)
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.note import Note, NoteType
 from app.models.invoice import Invoice, InvoiceLine, InvoiceStatus, Payment, PaymentMethod
@@ -40,6 +46,10 @@ __all__ = [
     "PatientRecallKind",
     "PatientRecallOutcome",
     "PatientRecallStatus",
+    "PatientRecallCommunication",
+    "PatientRecallCommunicationChannel",
+    "PatientRecallCommunicationDirection",
+    "PatientRecallCommunicationStatus",
     "Appointment",
     "AppointmentStatus",
     "AppointmentLocationType",
