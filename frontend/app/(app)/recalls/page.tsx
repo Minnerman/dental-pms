@@ -704,7 +704,12 @@ export default function RecallsPage() {
       </div>
 
       {error ? (
-        <div className="notice">{error}</div>
+        <div className="notice">
+          {error}
+          <div style={{ color: "var(--muted)", marginTop: 6 }}>
+            Server error loading recalls. Try Refresh. If it persists, check backend logs.
+          </div>
+        </div>
       ) : loading ? (
         <div className="badge">Loading recalls…</div>
       ) : rows.length === 0 ? (
