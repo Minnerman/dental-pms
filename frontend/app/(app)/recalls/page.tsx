@@ -451,6 +451,9 @@ export default function RecallsPage() {
     }
   }
 
+  const otherDetailRequired =
+    contactMethodInput === "other" && contactNote.trim().length === 0;
+
   return (
     <div className="stack">
       <div className="row" style={{ alignItems: "center" }}>
@@ -896,21 +899,32 @@ export default function RecallsPage() {
                 />
               </div>
               <div className="stack" style={{ gap: 8, gridColumn: "1 / -1" }}>
-                <label className="label">Note</label>
+                <label className="label">
+                  {contactMethodInput === "other" ? "Other detail" : "Note"}
+                </label>
                 <textarea
                   className="input"
                   rows={3}
                   value={contactNote}
                   onChange={(e) => setContactNote(e.target.value)}
-                  placeholder="Optional note"
+                  placeholder={
+                    contactMethodInput === "other"
+                      ? "e.g. WhatsApp"
+                      : "Optional note"
+                  }
                 />
+                {contactMethodInput === "other" && (
+                  <p style={{ color: "var(--muted)", margin: 0 }}>
+                    Required when method is Other.
+                  </p>
+                )}
               </div>
             </div>
             <button
               className="btn btn-primary"
               type="button"
               onClick={saveContact}
-              disabled={contactSaving || !contactTarget}
+              disabled={contactSaving || !contactTarget || otherDetailRequired}
             >
               {contactSaving ? "Saving..." : "Save log"}
             </button>

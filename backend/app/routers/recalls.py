@@ -424,6 +424,14 @@ def log_recall_contact(
     recall = db.get(PatientRecall, recall_id)
     if not recall:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+    if (
+        payload.method == PatientRecallCommunicationChannel.other
+        and not (payload.note or "").strip()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Note is required when method is other.",
+        )
 
     entry = PatientRecallCommunication(
         patient_id=recall.patient_id,
