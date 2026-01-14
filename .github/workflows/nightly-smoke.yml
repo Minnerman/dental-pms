@@ -12,6 +12,7 @@ jobs:
     env:
       APP_ENV: development
       ALLOW_DEV_SEED: "1"
+      COMPOSE_PROJECT_NAME: dentalpms_smoke
     steps:
       - name: Checkout
         uses: actions/checkout@v4
