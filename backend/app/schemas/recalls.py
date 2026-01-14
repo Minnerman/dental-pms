@@ -19,6 +19,8 @@ class RecallDashboardRow(BaseModel):
     last_contacted_at: datetime | None = None
     last_contact_channel: PatientRecallCommunicationChannel | None = None
     last_contact_method: PatientRecallCommunicationChannel | None = None
+    last_contact_note: str | None = None
+    last_contact_outcome: str | None = None
 
 
 class RecallContactCreate(BaseModel):
