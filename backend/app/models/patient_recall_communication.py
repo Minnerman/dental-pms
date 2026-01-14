@@ -14,6 +14,7 @@ class PatientRecallCommunicationChannel(str, enum.Enum):
     phone = "phone"
     email = "email"
     sms = "sms"
+    other = "other"
 
 
 class PatientRecallCommunicationDirection(str, enum.Enum):
@@ -55,6 +56,10 @@ class PatientRecallCommunication(Base):
         default=PatientRecallCommunicationStatus.sent,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contacted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

@@ -8,7 +8,7 @@ import Table from "@/components/ui/Table";
 
 type RecallStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
 type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
-type RecallContactChannel = "letter" | "phone" | "email" | "sms";
+type RecallContactChannel = "letter" | "phone" | "email" | "sms" | "other";
 
 type RecallRow = {
   id: number;
@@ -61,6 +61,7 @@ const contactChannelOptions: { value: RecallContactChannel; label: string }[] = 
   { value: "phone", label: "Phone" },
   { value: "email", label: "Email" },
   { value: "sms", label: "SMS" },
+  { value: "other", label: "Other" },
 ];
 
 const contactChannelLabels: Record<RecallContactChannel, string> = {
@@ -68,6 +69,7 @@ const contactChannelLabels: Record<RecallContactChannel, string> = {
   phone: "Phone",
   email: "Email",
   sms: "SMS",
+  other: "Other",
 };
 
 function formatDate(value?: string | null) {
@@ -103,19 +105,29 @@ export default function RecallsPage() {
   const [typeFilter, setTypeFilter] = useState<RecallKind | "all">("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [contactedFilter, setContactedFilter] = useState<"all" | "yes" | "no">(
-    "all"
-  );
-  const [contactedWithinDays, setContactedWithinDays] = useState("");
-  const [contactChannelFilter, setContactChannelFilter] = useState<
-    RecallContactChannel[]
-  >([]);
+  const [contactState, setContactState] = useState<
+    "all" | "never" | "contacted"
+  >("all");
+  const [lastContact, setLastContact] = useState<
+    "all" | "7d" | "30d" | "older30d"
+  >("all");
+  const [contactMethod, setContactMethod] = useState<
+    "all" | RecallContactChannel
+  >("all");
   const [pageSize, setPageSize] = useState(50);
   const [offset, setOffset] = useState(0);
   const [actionId, setActionId] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactTarget, setContactTarget] = useState<RecallRow | null>(null);
+  const [contactMethodInput, setContactMethodInput] =
+    useState<RecallContactChannel>("phone");
+  const [contactOutcome, setContactOutcome] = useState("");
+  const [contactNote, setContactNote] = useState("");
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -142,22 +154,22 @@ export default function RecallsPage() {
     if (endDate) {
       params.set("end", endDate);
     }
-    if (contactedFilter !== "all") {
-      params.set("contacted", contactedFilter);
+    if (contactState !== "all") {
+      params.set("contact_state", contactState);
     }
-    if (contactedWithinDays) {
-      params.set("contacted_within_days", contactedWithinDays);
+    if (lastContact !== "all") {
+      params.set("last_contact", lastContact);
     }
-    if (contactChannelFilter.length > 0) {
-      params.set("contact_channel", contactChannelFilter.join(","));
+    if (contactMethod !== "all") {
+      params.set("method", contactMethod);
     }
     params.set("limit", String(pageSize));
     params.set("offset", String(offset));
     return params;
   }, [
-    contactedFilter,
-    contactedWithinDays,
-    contactChannelFilter,
+    contactState,
+    lastContact,
+    contactMethod,
     endDate,
     offset,
     pageSize,
@@ -165,15 +177,6 @@ export default function RecallsPage() {
     statusFilter,
     typeFilter,
   ]);
-
-  function toggleContactChannel(value: RecallContactChannel) {
-    setContactChannelFilter((prev) => {
-      if (prev.includes(value)) {
-        return prev.filter((channel) => channel !== value);
-      }
-      return [...prev, value];
-    });
-  }
 
   function formatLastContact(row: RecallRow) {
     if (!row.last_contacted_at) return "—";
@@ -330,9 +333,9 @@ export default function RecallsPage() {
     typeFilter,
     startDate,
     endDate,
-    contactedFilter,
-    contactedWithinDays,
-    contactChannelFilter,
+    contactState,
+    lastContact,
+    contactMethod,
     pageSize,
   ]);
 
@@ -366,15 +369,27 @@ export default function RecallsPage() {
         const msg = await res.text();
         throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
       }
-      const params = buildQueryParams();
-      const refresh = await apiFetch(`/api/recalls?${params.toString()}`);
-      if (refresh.ok) {
-        setRows((await refresh.json()) as RecallRow[]);
-      }
+      await refreshRecalls();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update recall");
     } finally {
       setActionId(null);
+    }
+  }
+
+  async function refreshRecalls() {
+    const params = buildQueryParams();
+    const refresh = await apiFetch(`/api/recalls?${params.toString()}`);
+    if (refresh.status === 401) {
+      clearToken();
+      router.replace("/login");
+      return;
+    }
+    if (refresh.ok) {
+      setRows((await refresh.json()) as RecallRow[]);
+    } else {
+      const msg = await refresh.text();
+      throw new Error(msg || `Failed to refresh recalls (HTTP ${refresh.status})`);
     }
   }
 
@@ -393,6 +408,47 @@ export default function RecallsPage() {
       due_date: formatDateInput(next),
       completed_at: null,
     });
+  }
+
+  function openContactModal(row: RecallRow) {
+    setContactTarget(row);
+    setContactMethodInput("phone");
+    setContactOutcome("");
+    setContactNote("");
+    setContactError(null);
+    setShowContactModal(true);
+  }
+
+  async function saveContact() {
+    if (!contactTarget) return;
+    setContactSaving(true);
+    setContactError(null);
+    try {
+      const res = await apiFetch(`/api/recalls/${contactTarget.id}/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: contactMethodInput,
+          outcome: contactOutcome.trim() || null,
+          note: contactNote.trim() || null,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to log contact (HTTP ${res.status})`);
+      }
+      setShowContactModal(false);
+      await refreshRecalls();
+    } catch (err) {
+      setContactError(err instanceof Error ? err.message : "Failed to log contact");
+    } finally {
+      setContactSaving(false);
+    }
   }
 
   return (
@@ -462,47 +518,52 @@ export default function RecallsPage() {
           </div>
           <div className="grid grid-3">
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Contacted</label>
+              <label className="label">Contact state</label>
               <select
                 className="input"
-                value={contactedFilter}
+                value={contactState}
                 onChange={(e) =>
-                  setContactedFilter(e.target.value as "all" | "yes" | "no")
+                  setContactState(e.target.value as "all" | "never" | "contacted")
                 }
               >
                 <option value="all">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
+                <option value="never">Never contacted</option>
+                <option value="contacted">Contacted</option>
               </select>
             </div>
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Contacted within days</label>
-              <input
+              <label className="label">Last contact</label>
+              <select
                 className="input"
-                type="number"
-                min={1}
-                value={contactedWithinDays}
-                onChange={(e) => setContactedWithinDays(e.target.value)}
-                placeholder="e.g. 14"
-              />
+                value={lastContact}
+                onChange={(e) =>
+                  setLastContact(
+                    e.target.value as "all" | "7d" | "30d" | "older30d"
+                  )
+                }
+              >
+                <option value="all">All</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="older30d">Older than 30 days</option>
+              </select>
             </div>
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Contact channel</label>
-              <div className="stack" style={{ gap: 6 }}>
+              <label className="label">Method</label>
+              <select
+                className="input"
+                value={contactMethod}
+                onChange={(e) =>
+                  setContactMethod(e.target.value as "all" | RecallContactChannel)
+                }
+              >
+                <option value="all">All methods</option>
                 {contactChannelOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    style={{ display: "flex", gap: 8, alignItems: "center" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={contactChannelFilter.includes(option.value)}
-                      onChange={() => toggleContactChannel(option.value)}
-                    />
+                  <option key={option.value} value={option.value}>
                     {option.label}
-                  </label>
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
           </div>
           <div className="row recall-toolbar">
@@ -531,9 +592,9 @@ export default function RecallsPage() {
                 setTypeFilter("all");
                 setStartDate("");
                 setEndDate("");
-                setContactedFilter("all");
-                setContactedWithinDays("");
-                setContactChannelFilter([]);
+                setContactState("all");
+                setLastContact("all");
+                setContactMethod("all");
               }}
             >
               Reset filters
@@ -653,6 +714,14 @@ export default function RecallsPage() {
                       <button
                         className="btn btn-secondary"
                         type="button"
+                        disabled={contactSaving && contactTarget?.id === row.id}
+                        onClick={() => openContactModal(row)}
+                      >
+                        Log contact
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
                         disabled={
                           actionId === row.id ||
                           row.status === "completed" ||
@@ -732,6 +801,14 @@ export default function RecallsPage() {
                   <button
                     className="btn btn-secondary"
                     type="button"
+                    disabled={contactSaving && contactTarget?.id === row.id}
+                    onClick={() => openContactModal(row)}
+                  >
+                    Log contact
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
                     disabled={
                       actionId === row.id ||
                       row.status === "completed" ||
@@ -762,6 +839,83 @@ export default function RecallsPage() {
             ))}
           </div>
         </>
+      )}
+      {showContactModal && (
+        <div className="card" style={{ margin: 0 }}>
+          <div className="stack">
+            <div className="row">
+              <div>
+                <h3 style={{ marginTop: 0 }}>Log contact</h3>
+                <p style={{ color: "var(--muted)" }}>
+                  {contactTarget
+                    ? `${contactTarget.last_name.toUpperCase()}, ${
+                        contactTarget.first_name
+                      } · Due ${formatDate(contactTarget.due_date)}`
+                    : "Recall contact"}
+                </p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setShowContactModal(false)}
+              >
+                Close
+              </button>
+            </div>
+            {contactError && <div className="notice">{contactError}</div>}
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Method</label>
+                <select
+                  className="input"
+                  value={contactMethodInput}
+                  onChange={(e) =>
+                    setContactMethodInput(e.target.value as RecallContactChannel)
+                  }
+                >
+                  {contactChannelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <label className="label">Outcome</label>
+                <input
+                  className="input"
+                  value={contactOutcome}
+                  onChange={(e) => setContactOutcome(e.target.value)}
+                  placeholder="Optional outcome"
+                />
+              </div>
+              <div className="stack" style={{ gap: 8, gridColumn: "1 / -1" }}>
+                <label className="label">Note</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={contactNote}
+                  onChange={(e) => setContactNote(e.target.value)}
+                  placeholder="Optional note"
+                />
+              </div>
+            </div>
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={saveContact}
+              disabled={contactSaving || !contactTarget}
+            >
+              {contactSaving ? "Saving..." : "Save log"}
+            </button>
+          </div>
+        </div>
       )}
       <style jsx global>{`
         @media print {

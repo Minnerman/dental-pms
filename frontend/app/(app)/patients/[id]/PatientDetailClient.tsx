@@ -162,7 +162,7 @@ type FinanceSummary = {
 type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
 type RecallItemStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
 type RecallOutcome = "attended" | "dna" | "cancelled" | "rebooked";
-type RecallCommChannel = "letter" | "phone" | "email" | "sms";
+type RecallCommChannel = "letter" | "phone" | "email" | "sms" | "other";
 type RecallCommDirection = "outbound";
 type RecallCommStatus = "draft" | "sent" | "failed";
 
@@ -373,6 +373,7 @@ const recallCommChannelLabels: Record<RecallCommChannel, string> = {
   phone: "Phone",
   email: "Email",
   sms: "SMS",
+  other: "Other",
 };
 
 const recallCommStatusLabels: Record<RecallCommStatus, string> = {
