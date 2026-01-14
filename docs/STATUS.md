@@ -56,6 +56,8 @@
 
 ## Recent fixes
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
+- 2026-01-14: Stage54 completed (recall exports honor full filters; export guardrail; ZIP empty-result message; export UX hints).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
 - 2026-01-14: Stage53 completed (migration status/upgrade ops scripts; recalls error banner clarifies backend issue; alembic_version guard documented).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
 - Alembic guard: `backend/alembic/env.py` widens `alembic_version.version_num` to prevent long revision IDs from blocking upgrades on fresh/older DBs.
