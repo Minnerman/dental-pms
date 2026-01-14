@@ -155,7 +155,8 @@ export default function RecallsPage() {
     router.push(`/appointments?${params.toString()}`);
   }
 
-  const buildQueryParams = useCallback(() => {
+  const buildQueryParams = useCallback((options: { includePagination?: boolean } = {}) => {
+    const { includePagination = true } = options;
     const params = new URLSearchParams();
     if (statusFilter.length > 0) {
       params.set("status", statusFilter.join(","));
@@ -178,8 +179,10 @@ export default function RecallsPage() {
     if (contactMethod !== "all") {
       params.set("method", contactMethod);
     }
-    params.set("limit", String(pageSize));
-    params.set("offset", String(offset));
+    if (includePagination) {
+      params.set("limit", String(pageSize));
+      params.set("offset", String(offset));
+    }
     return params;
   }, [
     contactState,
@@ -279,7 +282,7 @@ export default function RecallsPage() {
     setExporting(true);
     setError(null);
     try {
-      const params = buildQueryParams();
+      const params = buildQueryParams({ includePagination: false });
       const res = await apiFetch(`/api/recalls/export.csv?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -288,7 +291,16 @@ export default function RecallsPage() {
       }
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || `Failed to export CSV (HTTP ${res.status})`);
+        let detail = msg;
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed?.detail) {
+            detail = parsed.detail;
+          }
+        } catch {
+          // keep original message
+        }
+        throw new Error(detail || `Failed to export CSV (HTTP ${res.status})`);
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -310,7 +322,7 @@ export default function RecallsPage() {
     setDownloadingZip(true);
     setError(null);
     try {
-      const params = buildQueryParams();
+      const params = buildQueryParams({ includePagination: false });
       const res = await apiFetch(`/api/recalls/letters.zip?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -319,7 +331,16 @@ export default function RecallsPage() {
       }
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || `Failed to download ZIP (HTTP ${res.status})`);
+        let detail = msg;
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed?.detail) {
+            detail = parsed.detail;
+          }
+        } catch {
+          // keep original message
+        }
+        throw new Error(detail || `Failed to download ZIP (HTTP ${res.status})`);
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -671,6 +692,9 @@ export default function RecallsPage() {
             >
               {downloadingZip ? "Preparing..." : "Download letters (ZIP)"}
             </button>
+            <span style={{ color: "var(--muted)", fontSize: 12 }}>
+              This may take a moment for large lists.
+            </span>
             <button
               className="btn btn-secondary"
               type="button"

@@ -38,6 +38,7 @@ from app.services.recall_communications import log_recall_communication
 from app.services.recalls import resolve_recall_status
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
+MAX_EXPORT_ROWS = 2000
 
 
 def _stringify(value: object | None) -> str:
@@ -164,6 +165,15 @@ def _normalize_recall_filters(
     return requested_statuses, requested_type_members, stored_statuses
 
 
+def _requested_status_members(requested_statuses: set[str]) -> set[PatientRecallStatus]:
+    members: set[PatientRecallStatus] = set()
+    for value in requested_statuses:
+        member = PatientRecallStatus._value2member_map_.get(value)
+        if member:
+            members.add(member)
+    return members
+
+
 def _normalize_contact_filters(
     contact_state: str | None,
     last_contact: str | None,
@@ -232,6 +242,26 @@ def _build_last_contact_subquery():
     )
 
 
+def _resolved_status_expr(today: date):
+    return case(
+        (
+            PatientRecall.status.in_(
+                [
+                    PatientRecallStatus.completed,
+                    PatientRecallStatus.cancelled,
+                    PatientRecallStatus.due,
+                    PatientRecallStatus.overdue,
+                ]
+            ),
+            PatientRecall.status,
+        ),
+        (PatientRecall.due_date.is_(None), PatientRecall.status),
+        (PatientRecall.due_date < today, PatientRecallStatus.overdue),
+        (PatientRecall.due_date <= today, PatientRecallStatus.due),
+        else_=PatientRecall.status,
+    )
+
+
 def _apply_contact_filters(
     stmt,
     *,
@@ -264,8 +294,8 @@ def _build_recall_query(
     end: date | None,
     stored_statuses: set[PatientRecallStatus],
     requested_type_members: list[PatientRecallKind],
-    limit: int,
-    offset: int,
+    limit: int | None,
+    offset: int | None,
     last_contact_subq=None,
 ):
     if last_contact_subq is not None:
@@ -294,9 +324,11 @@ def _build_recall_query(
     stmt = (
         stmt.where(Patient.deleted_at.is_(None))
         .order_by(PatientRecall.due_date.asc(), PatientRecall.id.asc())
-        .limit(limit)
-        .offset(offset)
     )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    if offset is not None:
+        stmt = stmt.offset(offset)
     if stored_statuses:
         stmt = stmt.where(PatientRecall.status.in_(stored_statuses))
     if requested_type_members:
@@ -496,12 +528,11 @@ def export_recalls_csv(
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
 ):
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
+    requested_status_members = _requested_status_members(requested_statuses)
     contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
         contact_state,
         last_contact,
@@ -516,8 +547,8 @@ def export_recalls_csv(
         end=end,
         stored_statuses=stored_statuses,
         requested_type_members=requested_type_members,
-        limit=limit,
-        offset=offset,
+        limit=None,
+        offset=None,
         last_contact_subq=last_contact_subq,
     )
     stmt = _apply_contact_filters(
@@ -528,6 +559,17 @@ def export_recalls_csv(
         older_than_days=older_than_days,
         channels=channels,
     )
+    resolved_status = _resolved_status_expr(date.today())
+    if requested_status_members:
+        stmt = stmt.where(resolved_status.in_(requested_status_members))
+
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    total = db.execute(count_stmt).scalar_one()
+    if total > MAX_EXPORT_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Too many recalls to export ({total}). Narrow your filters.",
+        )
     results = db.execute(stmt).all()
     buffer = StringIO()
     writer = csv.writer(buffer)
@@ -544,16 +586,14 @@ def export_recalls_csv(
         ]
     )
     for recall, patient, last_contacted_at, last_contact_channel in results:
-        resolved_status = resolve_recall_status(recall)
-        if resolved_status.value not in requested_statuses:
-            continue
+        resolved_status_value = resolve_recall_status(recall).value
         writer.writerow(
             [
                 patient.id,
                 f"{patient.last_name}, {patient.first_name}",
                 recall.kind.value,
                 recall.due_date.isoformat(),
-                resolved_status.value,
+                resolved_status_value,
                 patient.phone or "",
                 last_contacted_at.isoformat() if last_contacted_at else "",
                 last_contact_channel.value if last_contact_channel else "",
@@ -578,12 +618,11 @@ def export_recall_letters_zip(
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
 ):
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
+    requested_status_members = _requested_status_members(requested_statuses)
     contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
         contact_state,
         last_contact,
@@ -598,8 +637,8 @@ def export_recall_letters_zip(
         end=end,
         stored_statuses=stored_statuses,
         requested_type_members=requested_type_members,
-        limit=limit,
-        offset=offset,
+        limit=None,
+        offset=None,
         last_contact_subq=last_contact_subq,
     )
     stmt = _apply_contact_filters(
@@ -610,13 +649,27 @@ def export_recall_letters_zip(
         older_than_days=older_than_days,
         channels=channels,
     )
+    resolved_status = _resolved_status_expr(date.today())
+    if requested_status_members:
+        stmt = stmt.where(resolved_status.in_(requested_status_members))
+
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    total = db.execute(count_stmt).scalar_one()
+    if total == 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No recalls match your filters.",
+        )
+    if total > MAX_EXPORT_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Too many recalls to export ({total}). Narrow your filters.",
+        )
+
     results = db.execute(stmt).all()
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for recall, patient, _last_contacted_at, _last_contact_channel in results:
-            resolved_status = resolve_recall_status(recall)
-            if resolved_status.value not in requested_statuses:
-                continue
             surname = _safe_filename_part(patient.last_name or "")
             forename = _safe_filename_part(patient.first_name or "")
             due_date = recall.due_date.isoformat()
