@@ -40,7 +40,7 @@ from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recall_communications import log_recall_communication
 from app.services.recalls import resolve_recall_status
 
-logger = logging.getLogger("dental_pms.recalls")
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
 MAX_EXPORT_ROWS = 2000
