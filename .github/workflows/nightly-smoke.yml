@@ -1,0 +1,38 @@
+name: Nightly smoke
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: development
+      ALLOW_DEV_SEED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start services
+        run: docker compose up -d --build
+
+      - name: Run migrations
+        run: docker compose exec -T backend sh -lc 'python -m alembic upgrade head'
+
+      - name: Verify
+        run: bash ops/verify.sh
+
+      - name: Health check
+        run: ./ops/health.sh
+
+      - name: Seed recalls (dev)
+        run: ALLOW_DEV_SEED=1 bash ops/seed_recalls_dev.sh
+
+      - name: Smoke recalls
+        run: ALLOW_DEV_SEED=1 bash ops/smoke_recalls.sh
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
