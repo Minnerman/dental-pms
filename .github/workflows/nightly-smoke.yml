@@ -8,6 +8,7 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       APP_ENV: development
       ALLOW_DEV_SEED: "1"
@@ -32,6 +33,13 @@ jobs:
 
       - name: Smoke recalls
         run: ALLOW_DEV_SEED=1 bash ops/smoke_recalls.sh
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color --tail=300 backend
+          docker compose logs --no-color --tail=300 frontend
+          docker compose logs --no-color --tail=300 db
 
       - name: Tear down
         if: always()
