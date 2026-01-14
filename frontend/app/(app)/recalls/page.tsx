@@ -703,8 +703,9 @@ export default function RecallsPage() {
         </div>
       </div>
 
-      {error && <div className="notice">{error}</div>}
-      {loading ? (
+      {error ? (
+        <div className="notice">{error}</div>
+      ) : loading ? (
         <div className="badge">Loading recalls…</div>
       ) : rows.length === 0 ? (
         <div className="notice">

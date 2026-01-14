@@ -31,7 +31,7 @@ def upgrade() -> None:
         """
         UPDATE patient_recall_communications
         SET other_detail = notes
-        WHERE channel = 'other'
+        WHERE channel::text = 'other'
           AND (other_detail IS NULL OR other_detail = '')
           AND notes IS NOT NULL
           AND notes <> ''
