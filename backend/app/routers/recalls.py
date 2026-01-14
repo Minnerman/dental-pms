@@ -1,7 +1,10 @@
+from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 import csv
+import logging
 import re
+import time
 import zipfile
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
@@ -37,8 +40,13 @@ from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recall_communications import log_recall_communication
 from app.services.recalls import resolve_recall_status
 
+logger = logging.getLogger("dental_pms.recalls")
+
 router = APIRouter(prefix="/recalls", tags=["recalls"])
 MAX_EXPORT_ROWS = 2000
+EXPORT_COUNT_CACHE_TTL_SECONDS = 60
+EXPORT_COUNT_CACHE_MAX = 500
+_export_count_cache: OrderedDict[tuple, tuple[float, int]] = OrderedDict()
 
 
 def _stringify(value: object | None) -> str:
@@ -240,6 +248,64 @@ def _build_last_contact_subquery():
         )
         .subquery()
     )
+
+
+def _export_count_cache_key(
+    *,
+    start: date | None,
+    end: date | None,
+    status: str | None,
+    recall_type: str | None,
+    contact_state: str | None,
+    last_contact: str | None,
+    method: str | None,
+    contacted: str | None,
+    contacted_within_days: int | None,
+    contact_channel: str | None,
+) -> tuple:
+    requested_statuses, requested_type_members, _stored_statuses = _normalize_recall_filters(
+        status, recall_type
+    )
+    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
+        contact_state,
+        last_contact,
+        method,
+        contacted,
+        contacted_within_days,
+        contact_channel,
+    )
+    status_key = tuple(sorted(requested_statuses))
+    type_key = tuple(sorted(kind.value for kind in requested_type_members))
+    channel_key = tuple(sorted(channel.value for channel in channels))
+    return (
+        start.isoformat() if start else None,
+        end.isoformat() if end else None,
+        status_key,
+        type_key,
+        contact_flag,
+        within_days,
+        older_than_days,
+        channel_key,
+    )
+
+
+def _export_count_cache_get(key: tuple) -> int | None:
+    entry = _export_count_cache.get(key)
+    if not entry:
+        return None
+    timestamp, value = entry
+    if (time.monotonic() - timestamp) > EXPORT_COUNT_CACHE_TTL_SECONDS:
+        _export_count_cache.pop(key, None)
+        return None
+    _export_count_cache.move_to_end(key)
+    return value
+
+
+def _export_count_cache_set(key: tuple, value: int) -> None:
+    _export_count_cache[key] = (time.monotonic(), value)
+    _export_count_cache.move_to_end(key)
+    while len(_export_count_cache) > EXPORT_COUNT_CACHE_MAX:
+        _export_count_cache.popitem(last=False)
 
 
 def _resolved_status_expr(today: date):
@@ -460,6 +526,7 @@ def list_recalls(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    start_time = time.perf_counter()
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
@@ -523,6 +590,8 @@ def list_recalls(
                 last_contact_outcome=last_contact_outcome,
             )
         )
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info("perf: recalls_list_ms=%.2f rows=%d", elapsed_ms, len(output))
     return output
 
 
@@ -581,6 +650,7 @@ def export_recalls_csv(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    start_time = time.perf_counter()
     stmt, _ = _build_export_stmt(
         start=start,
         end=end,
@@ -634,6 +704,8 @@ def export_recalls_csv(
         )
     filename = f"recalls-{date.today().isoformat()}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info("perf: recalls_export_csv_ms=%.2f rows=%d", elapsed_ms, len(results))
     return Response(content=buffer.getvalue(), media_type="text/csv", headers=headers)
 
 
@@ -652,6 +724,27 @@ def export_recalls_count(
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
 ):
+    start_time = time.perf_counter()
+    cache_key = _export_count_cache_key(
+        start=start,
+        end=end,
+        status=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
+    )
+    cached = _export_count_cache_get(cache_key)
+    if cached is not None:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "perf: recalls_export_count_ms=%.2f cache=hit count=%d", elapsed_ms, cached
+        )
+        return {"count": cached}
+
     stmt, _requested_statuses = _build_export_stmt(
         start=start,
         end=end,
@@ -666,6 +759,11 @@ def export_recalls_count(
     )
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = db.execute(count_stmt).scalar_one()
+    _export_count_cache_set(cache_key, total)
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "perf: recalls_export_count_ms=%.2f cache=miss count=%d", elapsed_ms, total
+    )
     return {"count": total}
 
 
@@ -687,6 +785,7 @@ def export_recall_letters_zip(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    start_time = time.perf_counter()
     stmt, _ = _build_export_stmt(
         start=start,
         end=end,
@@ -745,6 +844,8 @@ def export_recall_letters_zip(
     filename = f"recall-letters-{date.today().isoformat()}.zip"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     db.commit()
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info("perf: recalls_export_zip_ms=%.2f rows=%d", elapsed_ms, len(results))
     return Response(content=buffer.getvalue(), media_type="application/zip", headers=headers)
 
 
