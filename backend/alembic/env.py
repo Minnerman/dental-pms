@@ -4,7 +4,7 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -51,6 +51,15 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        result = connection.execute(text("SELECT to_regclass('public.alembic_version')"))
+        has_version = result.scalar() is not None
+        if has_version:
+            connection.execute(
+                text(
+                    "ALTER TABLE alembic_version "
+                    "ALTER COLUMN version_num TYPE VARCHAR(64)"
+                )
+            )
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
