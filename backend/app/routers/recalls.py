@@ -29,7 +29,7 @@ from app.models.patient_recall_communication import (
     PatientRecallCommunicationStatus,
 )
 from app.models.user import User
-from app.schemas.patient import PatientRecallOut, RecallUpdate
+from app.schemas.patient import PatientRecallSettingsOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
 from app.schemas.recalls import RecallContactCreate, RecallDashboardRow, RecallKpiOut
 from app.models.document_template import DocumentTemplate
@@ -964,7 +964,7 @@ def recall_kpis(
     )
 
 
-@router.patch("/{patient_id}", response_model=PatientRecallOut)
+@router.patch("/{patient_id}", response_model=PatientRecallSettingsOut)
 def update_recall(
     patient_id: int,
     payload: RecallUpdate,
@@ -1014,7 +1014,7 @@ def update_recall(
     db.commit()
     db.refresh(patient)
     bump_export_count_cache_epoch("recalls.update_recall")
-    return PatientRecallOut(
+    return PatientRecallSettingsOut(
         id=patient.id,
         first_name=patient.first_name,
         last_name=patient.last_name,

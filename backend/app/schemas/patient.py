@@ -143,7 +143,7 @@ class RecallUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class PatientRecallOut(BaseModel):
+class PatientRecallSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
