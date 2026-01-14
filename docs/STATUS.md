@@ -56,6 +56,9 @@
 
 ## Recent fixes
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
+- 2026-01-14: Stage53 completed (migration status/upgrade ops scripts; recalls error banner clarifies backend issue; alembic_version guard documented).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
+- Alembic guard: `backend/alembic/env.py` widens `alembic_version.version_num` to prevent long revision IDs from blocking upgrades on fresh/older DBs.
 - 2026-01-14: Stage52 completed (recalls popover for last-contact details; canonical other detail field + backfill; pagination resets on filter changes; alembic preflight widens version_num).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
 - 2026-01-14: Stage51 completed (recalls dashboard shows other detail/outcome; empty-state with clear filters; last-contact metadata added to dashboard API).
