@@ -23,6 +23,7 @@ type RecallRow = {
   last_contacted_at?: string | null;
   last_contact_channel?: RecallContactChannel | null;
   last_contact_note?: string | null;
+  last_contact_other_detail?: string | null;
   last_contact_outcome?: string | null;
 };
 
@@ -81,6 +82,16 @@ function formatDate(value?: string | null) {
   return parsed.toLocaleDateString("en-GB");
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 function formatDateInput(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -126,10 +137,12 @@ export default function RecallsPage() {
   const [contactTarget, setContactTarget] = useState<RecallRow | null>(null);
   const [contactMethodInput, setContactMethodInput] =
     useState<RecallContactChannel>("phone");
+  const [contactOtherDetail, setContactOtherDetail] = useState("");
   const [contactOutcome, setContactOutcome] = useState("");
   const [contactNote, setContactNote] = useState("");
   const [contactSaving, setContactSaving] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
+  const [popoverId, setPopoverId] = useState<number | null>(null);
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -191,17 +204,36 @@ export default function RecallsPage() {
 
   function formatLastContactExtras(row: RecallRow) {
     const extras: string[] = [];
-    const note = row.last_contact_note?.trim();
-    if (row.last_contact_channel === "other" && note) {
-      extras.push(`Other: ${note}`);
-    } else if (note) {
-      extras.push(note);
+    const otherDetail = row.last_contact_other_detail?.trim();
+    if (row.last_contact_channel === "other" && otherDetail) {
+      extras.push(`Other: ${otherDetail}`);
     }
     const outcome = row.last_contact_outcome?.trim();
     if (outcome) {
       extras.push(`Outcome: ${outcome}`);
     }
     return extras;
+  }
+
+  function buildLastContactDetails(row: RecallRow) {
+    if (!row.last_contacted_at) return [];
+    const details = [
+      `Date: ${formatDateTime(row.last_contacted_at)}`,
+      `Method: ${row.last_contact_channel ? contactChannelLabels[row.last_contact_channel] : "—"}`,
+    ];
+    const otherDetail = row.last_contact_other_detail?.trim();
+    if (row.last_contact_channel === "other" && otherDetail) {
+      details.push(`Other detail: ${otherDetail}`);
+    }
+    const outcome = row.last_contact_outcome?.trim();
+    if (outcome) {
+      details.push(`Outcome: ${outcome}`);
+    }
+    const note = row.last_contact_note?.trim();
+    if (note) {
+      details.push(`Note: ${note}`);
+    }
+    return details;
   }
 
   function buildRecallFilename(row: RecallRow) {
@@ -440,6 +472,7 @@ export default function RecallsPage() {
   function openContactModal(row: RecallRow) {
     setContactTarget(row);
     setContactMethodInput("phone");
+    setContactOtherDetail("");
     setContactOutcome("");
     setContactNote("");
     setContactError(null);
@@ -456,6 +489,7 @@ export default function RecallsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           method: contactMethodInput,
+          other_detail: contactOtherDetail.trim() || null,
           outcome: contactOutcome.trim() || null,
           note: contactNote.trim() || null,
         }),
@@ -479,7 +513,7 @@ export default function RecallsPage() {
   }
 
   const otherDetailRequired =
-    contactMethodInput === "other" && contactNote.trim().length === 0;
+    contactMethodInput === "other" && contactOtherDetail.trim().length === 0;
 
   return (
     <div className="stack">
@@ -709,7 +743,56 @@ export default function RecallsPage() {
                     <span className="badge">{statusLabels[row.status]}</span>
                   </td>
                   <td>
-                    <div>{formatLastContact(row)}</div>
+                    {row.last_contacted_at ? (
+                      <div
+                        style={{ position: "relative", display: "inline-block" }}
+                        onMouseLeave={() => setPopoverId(null)}
+                      >
+                        <button
+                          type="button"
+                          onMouseEnter={() => setPopoverId(row.id)}
+                          onFocus={() => setPopoverId(row.id)}
+                          onBlur={() => setPopoverId(null)}
+                          onClick={() =>
+                            setPopoverId((prev) => (prev === row.id ? null : row.id))
+                          }
+                          aria-haspopup="dialog"
+                          aria-expanded={popoverId === row.id}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            color: "inherit",
+                            textAlign: "left",
+                          }}
+                        >
+                          {formatLastContact(row)}
+                        </button>
+                        {popoverId === row.id && (
+                          <div
+                            className="card"
+                            style={{
+                              position: "absolute",
+                              zIndex: 20,
+                              top: "100%",
+                              left: 0,
+                              marginTop: 6,
+                              padding: 12,
+                              minWidth: 220,
+                            }}
+                          >
+                            <div className="stack" style={{ gap: 6 }}>
+                              {buildLastContactDetails(row).map((text, index) => (
+                                <div key={`${text}-${index}`}>{text}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>—</div>
+                    )}
                     {formatLastContactExtras(row).map((text, index) => (
                       <div
                         key={`${text}-${index}`}
@@ -816,8 +899,58 @@ export default function RecallsPage() {
                   </div>
                   <span className="badge">{statusLabels[row.status]}</span>
                 </div>
-                <div style={{ color: "var(--muted)" }}>
-                  Last contact {formatLastContact(row)}
+                <div
+                  style={{ color: "var(--muted)", position: "relative" }}
+                  onMouseLeave={() => setPopoverId(null)}
+                >
+                  {row.last_contacted_at ? (
+                    <>
+                      <span>Last contact </span>
+                      <button
+                        type="button"
+                        onMouseEnter={() => setPopoverId(row.id)}
+                        onFocus={() => setPopoverId(row.id)}
+                        onBlur={() => setPopoverId(null)}
+                        onClick={() =>
+                          setPopoverId((prev) => (prev === row.id ? null : row.id))
+                        }
+                        aria-haspopup="dialog"
+                        aria-expanded={popoverId === row.id}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          color: "inherit",
+                          textAlign: "left",
+                        }}
+                      >
+                        {formatLastContact(row)}
+                      </button>
+                      {popoverId === row.id && (
+                        <div
+                          className="card"
+                          style={{
+                            position: "absolute",
+                            zIndex: 20,
+                            top: "100%",
+                            left: 0,
+                            marginTop: 6,
+                            padding: 12,
+                            minWidth: 220,
+                          }}
+                        >
+                          <div className="stack" style={{ gap: 6 }}>
+                            {buildLastContactDetails(row).map((text, index) => (
+                              <div key={`${text}-${index}`}>{text}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>Last contact —</>
+                  )}
                 </div>
                 {formatLastContactExtras(row).map((text, index) => (
                   <div
@@ -942,26 +1075,29 @@ export default function RecallsPage() {
                   placeholder="Optional outcome"
                 />
               </div>
+              {contactMethodInput === "other" && (
+                <div className="stack" style={{ gap: 8, gridColumn: "1 / -1" }}>
+                  <label className="label">Other detail</label>
+                  <input
+                    className="input"
+                    value={contactOtherDetail}
+                    onChange={(e) => setContactOtherDetail(e.target.value)}
+                    placeholder="e.g. WhatsApp"
+                  />
+                  <p style={{ color: "var(--muted)", margin: 0 }}>
+                    Required when method is Other.
+                  </p>
+                </div>
+              )}
               <div className="stack" style={{ gap: 8, gridColumn: "1 / -1" }}>
-                <label className="label">
-                  {contactMethodInput === "other" ? "Other detail" : "Note"}
-                </label>
+                <label className="label">Note</label>
                 <textarea
                   className="input"
                   rows={3}
                   value={contactNote}
                   onChange={(e) => setContactNote(e.target.value)}
-                  placeholder={
-                    contactMethodInput === "other"
-                      ? "e.g. WhatsApp"
-                      : "Optional note"
-                  }
+                  placeholder="Optional note"
                 />
-                {contactMethodInput === "other" && (
-                  <p style={{ color: "var(--muted)", margin: 0 }}>
-                    Required when method is Other.
-                  </p>
-                )}
               </div>
             </div>
             <button

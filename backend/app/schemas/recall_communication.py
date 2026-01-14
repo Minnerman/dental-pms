@@ -16,6 +16,7 @@ class RecallCommunicationCreate(BaseModel):
     notes: str | None = None
     outcome: str | None = None
     contacted_at: datetime | None = None
+    other_detail: str | None = None
 
 
 class RecallCommunicationOut(BaseModel):
@@ -28,6 +29,7 @@ class RecallCommunicationOut(BaseModel):
     direction: PatientRecallCommunicationDirection
     status: PatientRecallCommunicationStatus
     notes: str | None = None
+    other_detail: str | None = None
     outcome: str | None = None
     contacted_at: datetime | None = None
     created_at: datetime
