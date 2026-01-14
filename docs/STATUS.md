@@ -57,6 +57,8 @@
 ## Recent fixes
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
 - 2026-01-14: Stage48 completed (/recalls pagination controls with per-page + prev/next; filter changes reset offset; export.csv + letters.zip share params and honor pagination).
+- 2026-01-14: Stage49 completed (dev workflow hardening: ops/typecheck.sh; verify runs typecheck; README updated with root typecheck command).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
 - 2026-01-14: Stage47 in progress (recall last contact + contact filters).
 - 2026-01-14: Stage46 completed (migration 0026_patient_recall_communications.py; endpoints GET/POST /patients/{id}/recalls/{recallId}/communications; silent auto-log on letter.pdf + letters.zip with 60s guard).
 - 2026-01-14: Stage45 completed (GET /recalls/letters.zip; same params as /recalls; zip filename recall-letters-YYYY-MM-DD.zip; PDFs named RecallLetter_<Surname>_<Forename>_<patientId>_<dueDate>.pdf or RecallLetter_patient-<id>_<dueDate>.pdf).
