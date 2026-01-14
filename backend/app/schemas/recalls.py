@@ -20,6 +20,7 @@ class RecallDashboardRow(BaseModel):
     last_contact_channel: PatientRecallCommunicationChannel | None = None
     last_contact_method: PatientRecallCommunicationChannel | None = None
     last_contact_note: str | None = None
+    last_contact_other_detail: str | None = None
     last_contact_outcome: str | None = None
 
 
@@ -28,6 +29,7 @@ class RecallContactCreate(BaseModel):
     outcome: str | None = None
     note: str | None = None
     contacted_at: datetime | None = None
+    other_detail: str | None = None
 
 
 class RecallKpiRange(BaseModel):

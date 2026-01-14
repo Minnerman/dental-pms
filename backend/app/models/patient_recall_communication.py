@@ -56,6 +56,7 @@ class PatientRecallCommunication(Base):
         default=PatientRecallCommunicationStatus.sent,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    other_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
     contacted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True

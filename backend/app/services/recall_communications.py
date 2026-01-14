@@ -24,6 +24,7 @@ def log_recall_communication(
     notes: str | None,
     outcome: str | None = None,
     contacted_at: datetime | None = None,
+    other_detail: str | None = None,
     created_by_user_id: int | None,
     guard_seconds: int | None = 60,
 ) -> PatientRecallCommunication | None:
@@ -48,6 +49,7 @@ def log_recall_communication(
         direction=direction,
         status=status,
         notes=notes,
+        other_detail=other_detail,
         outcome=outcome,
         contacted_at=contacted_at or datetime.now(timezone.utc),
         created_by_user_id=created_by_user_id,

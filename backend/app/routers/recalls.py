@@ -216,6 +216,7 @@ def _build_last_contact_subquery():
             contact_ts.label("contacted_at"),
             PatientRecallCommunication.channel.label("channel"),
             PatientRecallCommunication.notes.label("notes"),
+            PatientRecallCommunication.other_detail.label("other_detail"),
             PatientRecallCommunication.outcome.label("outcome"),
             func.row_number()
             .over(
@@ -275,6 +276,7 @@ def _build_recall_query(
                 last_contact_subq.c.contacted_at.label("last_contacted_at"),
                 last_contact_subq.c.channel.label("last_contact_channel"),
                 last_contact_subq.c.notes.label("last_contact_note"),
+                last_contact_subq.c.other_detail.label("last_contact_other_detail"),
                 last_contact_subq.c.outcome.label("last_contact_outcome"),
             )
             .join(Patient, PatientRecall.patient_id == Patient.id)
@@ -315,6 +317,7 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
             last_contact_subq.c.contacted_at.label("last_contacted_at"),
             last_contact_subq.c.channel.label("last_contact_channel"),
             last_contact_subq.c.notes.label("last_contact_note"),
+            last_contact_subq.c.other_detail.label("last_contact_other_detail"),
             last_contact_subq.c.outcome.label("last_contact_outcome"),
         )
         .join(Patient, PatientRecall.patient_id == Patient.id)
@@ -330,7 +333,15 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
     row = db.execute(stmt).first()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
-    recall, patient, last_contacted_at, last_contact_channel, last_contact_note, last_contact_outcome = row
+    (
+        recall,
+        patient,
+        last_contacted_at,
+        last_contact_channel,
+        last_contact_note,
+        last_contact_other_detail,
+        last_contact_outcome,
+    ) = row
     resolved_status = resolve_recall_status(recall)
     return RecallDashboardRow(
         id=recall.id,
@@ -346,6 +357,7 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
         last_contact_channel=last_contact_channel,
         last_contact_method=last_contact_channel,
         last_contact_note=last_contact_note,
+        last_contact_other_detail=last_contact_other_detail,
         last_contact_outcome=last_contact_outcome,
     )
 
@@ -405,6 +417,7 @@ def list_recalls(
         last_contacted_at,
         last_contact_channel,
         last_contact_note,
+        last_contact_other_detail,
         last_contact_outcome,
     ) in results:
         resolved_status = resolve_recall_status(recall)
@@ -425,6 +438,7 @@ def list_recalls(
                 last_contact_channel=last_contact_channel,
                 last_contact_method=last_contact_channel,
                 last_contact_note=last_contact_note,
+                last_contact_other_detail=last_contact_other_detail,
                 last_contact_outcome=last_contact_outcome,
             )
         )
@@ -443,11 +457,11 @@ def log_recall_contact(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
     if (
         payload.method == PatientRecallCommunicationChannel.other
-        and not (payload.note or "").strip()
+        and not (payload.other_detail or "").strip()
     ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Note is required when method is other.",
+            detail="Other detail is required when method is other.",
         )
 
     entry = PatientRecallCommunication(
@@ -457,6 +471,7 @@ def log_recall_contact(
         direction=PatientRecallCommunicationDirection.outbound,
         status=PatientRecallCommunicationStatus.sent,
         notes=payload.note,
+        other_detail=payload.other_detail,
         outcome=payload.outcome,
         contacted_at=payload.contacted_at or datetime.now(timezone.utc),
         created_by_user_id=user.id,
