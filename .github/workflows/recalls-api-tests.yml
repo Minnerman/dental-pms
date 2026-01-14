@@ -57,11 +57,14 @@ jobs:
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
           EOF
 
-      - name: Start services
-        run: docker compose up -d --build
+      - name: Start database
+        run: docker compose up -d db
 
       - name: Run migrations
-        run: docker compose exec -T backend sh -lc 'python -m alembic upgrade head'
+        run: docker compose run --rm backend sh -lc 'python -m alembic upgrade head'
+
+      - name: Start backend
+        run: docker compose up -d backend
 
       - name: Seed recalls (dev)
         run: ALLOW_DEV_SEED=1 bash ops/seed_recalls_dev.sh
