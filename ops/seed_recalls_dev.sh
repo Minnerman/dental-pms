@@ -62,7 +62,7 @@ SELECT
     WHEN 4 THEN 'implant'
     ELSE 'custom'
   END::patient_recall_kind,
-  (CURRENT_DATE + ((sp.rn - 3) * 7))::date,
+  (CURRENT_DATE + ((sp.rn - 3) * INTERVAL '7 days'))::date,
   CASE (sp.rn % 4)
     WHEN 1 THEN 'upcoming'
     WHEN 2 THEN 'due'
