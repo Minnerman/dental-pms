@@ -247,6 +247,12 @@
 - Stage 23 follow-up:
   - Clinical reporting polish or batch recall exports
 
+## Roadmap (stages)
+- Stage 47: recall dashboard last contact and contact filters (in progress)
+- Stage 48: recall dashboard pagination controls (completed)
+- Stage 49: developer workflow hardening (typecheck entrypoint + verify guidance)
+- Stage 50+: TBD
+
 ## Stage 31 backlog
 - Appointments: deep link behavior (e.g. `?book=1`) in smoke tests.
 - Appointments: booking modal reliability across refresh/tab changes.
