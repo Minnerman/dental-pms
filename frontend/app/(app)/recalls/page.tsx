@@ -22,6 +22,8 @@ type RecallRow = {
   completed_at?: string | null;
   last_contacted_at?: string | null;
   last_contact_channel?: RecallContactChannel | null;
+  last_contact_note?: string | null;
+  last_contact_outcome?: string | null;
 };
 
 const statusLabels: Record<RecallStatus, string> = {
@@ -185,6 +187,21 @@ export default function RecallsPage() {
       return `${contactChannelLabels[row.last_contact_channel]} · ${dateLabel}`;
     }
     return dateLabel;
+  }
+
+  function formatLastContactExtras(row: RecallRow) {
+    const extras: string[] = [];
+    const note = row.last_contact_note?.trim();
+    if (row.last_contact_channel === "other" && note) {
+      extras.push(`Other: ${note}`);
+    } else if (note) {
+      extras.push(note);
+    }
+    const outcome = row.last_contact_outcome?.trim();
+    if (outcome) {
+      extras.push(`Outcome: ${outcome}`);
+    }
+    return extras;
   }
 
   function buildRecallFilename(row: RecallRow) {
@@ -410,6 +427,16 @@ export default function RecallsPage() {
     });
   }
 
+  function resetFilters() {
+    setStatusFilter(["due", "overdue"]);
+    setTypeFilter("all");
+    setStartDate("");
+    setEndDate("");
+    setContactState("all");
+    setLastContact("all");
+    setContactMethod("all");
+  }
+
   function openContactModal(row: RecallRow) {
     setContactTarget(row);
     setContactMethodInput("phone");
@@ -590,15 +617,7 @@ export default function RecallsPage() {
             <button
               className="btn btn-secondary"
               type="button"
-              onClick={() => {
-                setStatusFilter(["due", "overdue"]);
-                setTypeFilter("all");
-                setStartDate("");
-                setEndDate("");
-                setContactState("all");
-                setLastContact("all");
-                setContactMethod("all");
-              }}
+              onClick={resetFilters}
             >
               Reset filters
             </button>
@@ -654,7 +673,14 @@ export default function RecallsPage() {
       {loading ? (
         <div className="badge">Loading recalls…</div>
       ) : rows.length === 0 ? (
-        <div className="notice">No recalls found.</div>
+        <div className="notice">
+          <div className="stack" style={{ gap: 8 }}>
+            <div>No recalls match your filters.</div>
+            <button className="btn btn-secondary" type="button" onClick={resetFilters}>
+              Clear filters
+            </button>
+          </div>
+        </div>
       ) : (
         <>
           <Table className="recall-table">
@@ -682,7 +708,17 @@ export default function RecallsPage() {
                   <td>
                     <span className="badge">{statusLabels[row.status]}</span>
                   </td>
-                  <td>{formatLastContact(row)}</td>
+                  <td>
+                    <div>{formatLastContact(row)}</div>
+                    {formatLastContactExtras(row).map((text, index) => (
+                      <div
+                        key={`${text}-${index}`}
+                        style={{ color: "var(--muted)", fontSize: 12 }}
+                      >
+                        {text}
+                      </div>
+                    ))}
+                  </td>
                   <td title={row.notes || ""}>
                     <span
                       style={{
@@ -783,6 +819,14 @@ export default function RecallsPage() {
                 <div style={{ color: "var(--muted)" }}>
                   Last contact {formatLastContact(row)}
                 </div>
+                {formatLastContactExtras(row).map((text, index) => (
+                  <div
+                    key={`${text}-${index}`}
+                    style={{ color: "var(--muted)", fontSize: 12 }}
+                  >
+                    {text}
+                  </div>
+                ))}
                 <div>{row.notes || "No notes."}</div>
                 <div className="row">
                   <button

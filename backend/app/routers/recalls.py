@@ -215,6 +215,8 @@ def _build_last_contact_subquery():
             PatientRecallCommunication.recall_id.label("recall_id"),
             contact_ts.label("contacted_at"),
             PatientRecallCommunication.channel.label("channel"),
+            PatientRecallCommunication.notes.label("notes"),
+            PatientRecallCommunication.outcome.label("outcome"),
             func.row_number()
             .over(
                 partition_by=PatientRecallCommunication.recall_id,
@@ -272,6 +274,8 @@ def _build_recall_query(
                 Patient,
                 last_contact_subq.c.contacted_at.label("last_contacted_at"),
                 last_contact_subq.c.channel.label("last_contact_channel"),
+                last_contact_subq.c.notes.label("last_contact_note"),
+                last_contact_subq.c.outcome.label("last_contact_outcome"),
             )
             .join(Patient, PatientRecall.patient_id == Patient.id)
             .join(
@@ -310,6 +314,8 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
             Patient,
             last_contact_subq.c.contacted_at.label("last_contacted_at"),
             last_contact_subq.c.channel.label("last_contact_channel"),
+            last_contact_subq.c.notes.label("last_contact_note"),
+            last_contact_subq.c.outcome.label("last_contact_outcome"),
         )
         .join(Patient, PatientRecall.patient_id == Patient.id)
         .join(
@@ -324,7 +330,7 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
     row = db.execute(stmt).first()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
-    recall, patient, last_contacted_at, last_contact_channel = row
+    recall, patient, last_contacted_at, last_contact_channel, last_contact_note, last_contact_outcome = row
     resolved_status = resolve_recall_status(recall)
     return RecallDashboardRow(
         id=recall.id,
@@ -339,6 +345,8 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
         last_contacted_at=last_contacted_at,
         last_contact_channel=last_contact_channel,
         last_contact_method=last_contact_channel,
+        last_contact_note=last_contact_note,
+        last_contact_outcome=last_contact_outcome,
     )
 
 
@@ -391,7 +399,14 @@ def list_recalls(
 
     results = db.execute(stmt).all()
     output: list[RecallDashboardRow] = []
-    for recall, patient, last_contacted_at, last_contact_channel in results:
+    for (
+        recall,
+        patient,
+        last_contacted_at,
+        last_contact_channel,
+        last_contact_note,
+        last_contact_outcome,
+    ) in results:
         resolved_status = resolve_recall_status(recall)
         if resolved_status.value not in requested_statuses:
             continue
@@ -409,6 +424,8 @@ def list_recalls(
                 last_contacted_at=last_contacted_at,
                 last_contact_channel=last_contact_channel,
                 last_contact_method=last_contact_channel,
+                last_contact_note=last_contact_note,
+                last_contact_outcome=last_contact_outcome,
             )
         )
     return output

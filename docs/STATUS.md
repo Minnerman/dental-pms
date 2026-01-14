@@ -56,6 +56,9 @@
 
 ## Recent fixes
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
+- 2026-01-14: Stage51 completed (recalls dashboard shows other detail/outcome; empty-state with clear filters; last-contact metadata added to dashboard API).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
+  - Tests: none (no API test harness; backend/tests only has placeholder).
 - 2026-01-14: Stage50 completed (recall contact logging endpoint + dashboard log contact modal; last-contact filters by state/time/method; "other" method supported; migration 0027_recall_contact_events.py).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint || true`.
 - 2026-01-14: Stage48 completed (/recalls pagination controls with per-page + prev/next; filter changes reset offset; export.csv + letters.zip share params and honor pagination).
