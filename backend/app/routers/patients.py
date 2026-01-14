@@ -753,6 +753,8 @@ def create_recall_communication(
         direction=PatientRecallCommunicationDirection.outbound,
         status=PatientRecallCommunicationStatus.sent,
         notes=payload.notes,
+        outcome=payload.outcome,
+        contacted_at=payload.contacted_at,
         created_by_user_id=user.id,
     )
     db.add(entry)

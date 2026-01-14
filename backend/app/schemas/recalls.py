@@ -18,6 +18,14 @@ class RecallDashboardRow(BaseModel):
     completed_at: datetime | None = None
     last_contacted_at: datetime | None = None
     last_contact_channel: PatientRecallCommunicationChannel | None = None
+    last_contact_method: PatientRecallCommunicationChannel | None = None
+
+
+class RecallContactCreate(BaseModel):
+    method: PatientRecallCommunicationChannel
+    outcome: str | None = None
+    note: str | None = None
+    contacted_at: datetime | None = None
 
 
 class RecallKpiRange(BaseModel):

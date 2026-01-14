@@ -5,7 +5,7 @@ import re
 import zipfile
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, false, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -28,7 +28,7 @@ from app.models.patient_recall_communication import (
 from app.models.user import User
 from app.schemas.patient import PatientRecallOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
-from app.schemas.recalls import RecallDashboardRow, RecallKpiOut
+from app.schemas.recalls import RecallContactCreate, RecallDashboardRow, RecallKpiOut
 from app.models.document_template import DocumentTemplate
 from app.models.patient_document import PatientDocument
 from app.services.audit import log_event, snapshot_model
@@ -165,37 +165,61 @@ def _normalize_recall_filters(
 
 
 def _normalize_contact_filters(
+    contact_state: str | None,
+    last_contact: str | None,
+    method: str | None,
     contacted: str | None,
     contacted_within_days: int | None,
     contact_channel: str | None,
-) -> tuple[str | None, int | None, list[PatientRecallCommunicationChannel]]:
-    contact_flag = contacted.lower().strip() if contacted else None
-    if contact_flag not in {"yes", "no"}:
+) -> tuple[str | None, int | None, int | None, list[PatientRecallCommunicationChannel]]:
+    contact_flag = contact_state.lower().strip() if contact_state else None
+    if contact_flag == "never":
+        contact_flag = "no"
+    elif contact_flag == "contacted":
+        contact_flag = "yes"
+    elif contact_flag not in {"yes", "no"}:
         contact_flag = None
-    within_days = contacted_within_days if contacted_within_days and contacted_within_days > 0 else None
 
-    requested_channels = set(_parse_csv_values(contact_channel))
+    if contact_flag is None:
+        legacy_flag = contacted.lower().strip() if contacted else None
+        if legacy_flag in {"yes", "no"}:
+            contact_flag = legacy_flag
+
+    within_days = None
+    older_than_days = None
+    if last_contact in {"7d", "30d"}:
+        within_days = 7 if last_contact == "7d" else 30
+    elif last_contact == "older30d":
+        older_than_days = 30
+    elif contacted_within_days and contacted_within_days > 0:
+        within_days = contacted_within_days
+
+    requested_channels = set(_parse_csv_values(method or contact_channel))
     allowed_channels = {channel.value for channel in PatientRecallCommunicationChannel}
     requested_channels = {value for value in requested_channels if value in allowed_channels}
     requested_channel_members = [
         PatientRecallCommunicationChannel._value2member_map_[value]
         for value in requested_channels
     ]
-    return contact_flag, within_days, requested_channel_members
+    return contact_flag, within_days, older_than_days, requested_channel_members
 
 
 def _build_last_contact_subquery():
+    contact_ts = func.coalesce(
+        PatientRecallCommunication.contacted_at,
+        PatientRecallCommunication.created_at,
+    )
     return (
         select(
             PatientRecallCommunication.id.label("comm_id"),
             PatientRecallCommunication.recall_id.label("recall_id"),
-            PatientRecallCommunication.created_at.label("created_at"),
+            contact_ts.label("contacted_at"),
             PatientRecallCommunication.channel.label("channel"),
             func.row_number()
             .over(
                 partition_by=PatientRecallCommunication.recall_id,
                 order_by=(
-                    PatientRecallCommunication.created_at.desc(),
+                    contact_ts.desc(),
                     PatientRecallCommunication.id.desc(),
                 ),
             )
@@ -211,15 +235,21 @@ def _apply_contact_filters(
     last_contact_subq,
     contact_flag: str | None,
     within_days: int | None,
+    older_than_days: int | None,
     channels: list[PatientRecallCommunicationChannel],
 ):
+    if contact_flag == "no":
+        if within_days or older_than_days or channels:
+            return stmt.where(false())
+        return stmt.where(last_contact_subq.c.comm_id.is_(None))
     if contact_flag == "yes":
         stmt = stmt.where(last_contact_subq.c.comm_id.is_not(None))
-    elif contact_flag == "no":
-        stmt = stmt.where(last_contact_subq.c.comm_id.is_(None))
     if within_days:
         threshold = datetime.now(timezone.utc) - timedelta(days=within_days)
-        stmt = stmt.where(last_contact_subq.c.created_at >= threshold)
+        stmt = stmt.where(last_contact_subq.c.contacted_at >= threshold)
+    if older_than_days:
+        threshold = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+        stmt = stmt.where(last_contact_subq.c.contacted_at < threshold)
     if channels:
         stmt = stmt.where(last_contact_subq.c.channel.in_(channels))
     return stmt
@@ -240,7 +270,7 @@ def _build_recall_query(
             select(
                 PatientRecall,
                 Patient,
-                last_contact_subq.c.created_at.label("last_contacted_at"),
+                last_contact_subq.c.contacted_at.label("last_contacted_at"),
                 last_contact_subq.c.channel.label("last_contact_channel"),
             )
             .join(Patient, PatientRecall.patient_id == Patient.id)
@@ -272,6 +302,46 @@ def _build_recall_query(
     return stmt
 
 
+def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRow:
+    last_contact_subq = _build_last_contact_subquery()
+    stmt = (
+        select(
+            PatientRecall,
+            Patient,
+            last_contact_subq.c.contacted_at.label("last_contacted_at"),
+            last_contact_subq.c.channel.label("last_contact_channel"),
+        )
+        .join(Patient, PatientRecall.patient_id == Patient.id)
+        .join(
+            last_contact_subq,
+            (last_contact_subq.c.recall_id == PatientRecall.id)
+            & (last_contact_subq.c.rn == 1),
+            isouter=True,
+        )
+        .where(PatientRecall.id == recall_id)
+        .where(Patient.deleted_at.is_(None))
+    )
+    row = db.execute(stmt).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+    recall, patient, last_contacted_at, last_contact_channel = row
+    resolved_status = resolve_recall_status(recall)
+    return RecallDashboardRow(
+        id=recall.id,
+        patient_id=patient.id,
+        first_name=patient.first_name,
+        last_name=patient.last_name,
+        recall_kind=recall.kind,
+        due_date=recall.due_date,
+        status=resolved_status,
+        notes=recall.notes,
+        completed_at=recall.completed_at,
+        last_contacted_at=last_contacted_at,
+        last_contact_channel=last_contact_channel,
+        last_contact_method=last_contact_channel,
+    )
+
+
 @router.get("", response_model=list[RecallDashboardRow])
 def list_recalls(
     db: Session = Depends(get_db),
@@ -280,6 +350,9 @@ def list_recalls(
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
     recall_type: str | None = Query(default=None, alias="type"),
+    contact_state: str | None = Query(default=None),
+    last_contact: str | None = Query(default=None),
+    method: str | None = Query(default=None),
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
@@ -289,8 +362,13 @@ def list_recalls(
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
-    contact_flag, within_days, channels = _normalize_contact_filters(
-        contacted, contacted_within_days, contact_channel
+    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
+        contact_state,
+        last_contact,
+        method,
+        contacted,
+        contacted_within_days,
+        contact_channel,
     )
     last_contact_subq = _build_last_contact_subquery()
     stmt = _build_recall_query(
@@ -307,6 +385,7 @@ def list_recalls(
         last_contact_subq=last_contact_subq,
         contact_flag=contact_flag,
         within_days=within_days,
+        older_than_days=older_than_days,
         channels=channels,
     )
 
@@ -329,9 +408,46 @@ def list_recalls(
                 completed_at=recall.completed_at,
                 last_contacted_at=last_contacted_at,
                 last_contact_channel=last_contact_channel,
+                last_contact_method=last_contact_channel,
             )
         )
     return output
+
+
+@router.post("/{recall_id}/contact", response_model=RecallDashboardRow)
+def log_recall_contact(
+    recall_id: int,
+    payload: RecallContactCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recall = db.get(PatientRecall, recall_id)
+    if not recall:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
+    if (
+        payload.method == PatientRecallCommunicationChannel.other
+        and not (payload.note or "").strip()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Note is required when method is other.",
+        )
+
+    entry = PatientRecallCommunication(
+        patient_id=recall.patient_id,
+        recall_id=recall.id,
+        channel=payload.method,
+        direction=PatientRecallCommunicationDirection.outbound,
+        status=PatientRecallCommunicationStatus.sent,
+        notes=payload.note,
+        outcome=payload.outcome,
+        contacted_at=payload.contacted_at or datetime.now(timezone.utc),
+        created_by_user_id=user.id,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return _load_recall_dashboard_row(db, recall_id)
 
 
 @router.get("/export.csv")
@@ -342,6 +458,9 @@ def export_recalls_csv(
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
     recall_type: str | None = Query(default=None, alias="type"),
+    contact_state: str | None = Query(default=None),
+    last_contact: str | None = Query(default=None),
+    method: str | None = Query(default=None),
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
@@ -351,8 +470,13 @@ def export_recalls_csv(
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
-    contact_flag, within_days, channels = _normalize_contact_filters(
-        contacted, contacted_within_days, contact_channel
+    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
+        contact_state,
+        last_contact,
+        method,
+        contacted,
+        contacted_within_days,
+        contact_channel,
     )
     last_contact_subq = _build_last_contact_subquery()
     stmt = _build_recall_query(
@@ -369,6 +493,7 @@ def export_recalls_csv(
         last_contact_subq=last_contact_subq,
         contact_flag=contact_flag,
         within_days=within_days,
+        older_than_days=older_than_days,
         channels=channels,
     )
     results = db.execute(stmt).all()
@@ -415,6 +540,9 @@ def export_recall_letters_zip(
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
     recall_type: str | None = Query(default=None, alias="type"),
+    contact_state: str | None = Query(default=None),
+    last_contact: str | None = Query(default=None),
+    method: str | None = Query(default=None),
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
@@ -424,8 +552,13 @@ def export_recall_letters_zip(
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
-    contact_flag, within_days, channels = _normalize_contact_filters(
-        contacted, contacted_within_days, contact_channel
+    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
+        contact_state,
+        last_contact,
+        method,
+        contacted,
+        contacted_within_days,
+        contact_channel,
     )
     last_contact_subq = _build_last_contact_subquery()
     stmt = _build_recall_query(
@@ -442,6 +575,7 @@ def export_recall_letters_zip(
         last_contact_subq=last_contact_subq,
         contact_flag=contact_flag,
         within_days=within_days,
+        older_than_days=older_than_days,
         channels=channels,
     )
     results = db.execute(stmt).all()

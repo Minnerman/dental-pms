@@ -14,6 +14,8 @@ from app.models.patient_recall_communication import (
 class RecallCommunicationCreate(BaseModel):
     channel: PatientRecallCommunicationChannel
     notes: str | None = None
+    outcome: str | None = None
+    contacted_at: datetime | None = None
 
 
 class RecallCommunicationOut(BaseModel):
@@ -26,5 +28,7 @@ class RecallCommunicationOut(BaseModel):
     direction: PatientRecallCommunicationDirection
     status: PatientRecallCommunicationStatus
     notes: str | None = None
+    outcome: str | None = None
+    contacted_at: datetime | None = None
     created_at: datetime
     created_by_user_id: int | None = None
