@@ -653,7 +653,7 @@ def export_recalls_csv(
     _user: User = Depends(get_current_user),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
-    status: str | None = Query(default=None),
+    recall_status: str | None = Query(default=None, alias="status"),
     recall_type: str | None = Query(default=None, alias="type"),
     contact_state: str | None = Query(default=None),
     last_contact: str | None = Query(default=None),
@@ -669,7 +669,7 @@ def export_recalls_csv(
     stmt, _ = _build_export_stmt(
         start=start,
         end=end,
-        status=status,
+        status=recall_status,
         recall_type=recall_type,
         contact_state=contact_state,
         last_contact=last_contact,
@@ -703,7 +703,7 @@ def export_recalls_csv(
             "last_contact_channel",
         ]
     )
-    for recall, patient, last_contacted_at, last_contact_channel in results:
+    for recall, patient, last_contacted_at, last_contact_channel, *_ in results:
         resolved_status_value = resolve_recall_status(recall).value
         writer.writerow(
             [
@@ -788,7 +788,7 @@ def export_recall_letters_zip(
     user: User = Depends(get_current_user),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
-    status: str | None = Query(default=None),
+    recall_status: str | None = Query(default=None, alias="status"),
     recall_type: str | None = Query(default=None, alias="type"),
     contact_state: str | None = Query(default=None),
     last_contact: str | None = Query(default=None),
@@ -804,7 +804,7 @@ def export_recall_letters_zip(
     stmt, _ = _build_export_stmt(
         start=start,
         end=end,
-        status=status,
+        status=recall_status,
         recall_type=recall_type,
         contact_state=contact_state,
         last_contact=last_contact,
