@@ -288,6 +288,55 @@ def _apply_contact_filters(
     return stmt
 
 
+def _build_export_stmt(
+    *,
+    start: date | None,
+    end: date | None,
+    status: str | None,
+    recall_type: str | None,
+    contact_state: str | None,
+    last_contact: str | None,
+    method: str | None,
+    contacted: str | None,
+    contacted_within_days: int | None,
+    contact_channel: str | None,
+):
+    requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
+        status, recall_type
+    )
+    requested_status_members = _requested_status_members(requested_statuses)
+    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
+        contact_state,
+        last_contact,
+        method,
+        contacted,
+        contacted_within_days,
+        contact_channel,
+    )
+    last_contact_subq = _build_last_contact_subquery()
+    stmt = _build_recall_query(
+        start=start,
+        end=end,
+        stored_statuses=stored_statuses,
+        requested_type_members=requested_type_members,
+        limit=None,
+        offset=None,
+        last_contact_subq=last_contact_subq,
+    )
+    stmt = _apply_contact_filters(
+        stmt,
+        last_contact_subq=last_contact_subq,
+        contact_flag=contact_flag,
+        within_days=within_days,
+        older_than_days=older_than_days,
+        channels=channels,
+    )
+    resolved_status = _resolved_status_expr(date.today())
+    if requested_status_members:
+        stmt = stmt.where(resolved_status.in_(requested_status_members))
+    return stmt, requested_statuses
+
+
 def _build_recall_query(
     *,
     start: date | None,
@@ -528,48 +577,32 @@ def export_recalls_csv(
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
+    page_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ):
-    requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
-        status, recall_type
-    )
-    requested_status_members = _requested_status_members(requested_statuses)
-    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
-        contact_state,
-        last_contact,
-        method,
-        contacted,
-        contacted_within_days,
-        contact_channel,
-    )
-    last_contact_subq = _build_last_contact_subquery()
-    stmt = _build_recall_query(
+    stmt, _ = _build_export_stmt(
         start=start,
         end=end,
-        stored_statuses=stored_statuses,
-        requested_type_members=requested_type_members,
-        limit=None,
-        offset=None,
-        last_contact_subq=last_contact_subq,
+        status=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
     )
-    stmt = _apply_contact_filters(
-        stmt,
-        last_contact_subq=last_contact_subq,
-        contact_flag=contact_flag,
-        within_days=within_days,
-        older_than_days=older_than_days,
-        channels=channels,
-    )
-    resolved_status = _resolved_status_expr(date.today())
-    if requested_status_members:
-        stmt = stmt.where(resolved_status.in_(requested_status_members))
 
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = db.execute(count_stmt).scalar_one()
-    if total > MAX_EXPORT_ROWS:
+    if not page_only and total > MAX_EXPORT_ROWS:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Too many recalls to export ({total}). Narrow your filters.",
         )
+    if page_only:
+        stmt = stmt.limit(limit).offset(offset)
     results = db.execute(stmt).all()
     buffer = StringIO()
     writer = csv.writer(buffer)
@@ -604,6 +637,38 @@ def export_recalls_csv(
     return Response(content=buffer.getvalue(), media_type="text/csv", headers=headers)
 
 
+@router.get("/export_count")
+def export_recalls_count(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    status: str | None = Query(default=None),
+    recall_type: str | None = Query(default=None, alias="type"),
+    contact_state: str | None = Query(default=None),
+    last_contact: str | None = Query(default=None),
+    method: str | None = Query(default=None),
+    contacted: str | None = Query(default=None),
+    contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
+    contact_channel: str | None = Query(default=None),
+):
+    stmt, _requested_statuses = _build_export_stmt(
+        start=start,
+        end=end,
+        status=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
+    )
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    total = db.execute(count_stmt).scalar_one()
+    return {"count": total}
+
+
 @router.get("/letters.zip")
 def export_recall_letters_zip(
     db: Session = Depends(get_db),
@@ -618,40 +683,22 @@ def export_recall_letters_zip(
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
+    page_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ):
-    requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
-        status, recall_type
-    )
-    requested_status_members = _requested_status_members(requested_statuses)
-    contact_flag, within_days, older_than_days, channels = _normalize_contact_filters(
-        contact_state,
-        last_contact,
-        method,
-        contacted,
-        contacted_within_days,
-        contact_channel,
-    )
-    last_contact_subq = _build_last_contact_subquery()
-    stmt = _build_recall_query(
+    stmt, _ = _build_export_stmt(
         start=start,
         end=end,
-        stored_statuses=stored_statuses,
-        requested_type_members=requested_type_members,
-        limit=None,
-        offset=None,
-        last_contact_subq=last_contact_subq,
+        status=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
     )
-    stmt = _apply_contact_filters(
-        stmt,
-        last_contact_subq=last_contact_subq,
-        contact_flag=contact_flag,
-        within_days=within_days,
-        older_than_days=older_than_days,
-        channels=channels,
-    )
-    resolved_status = _resolved_status_expr(date.today())
-    if requested_status_members:
-        stmt = stmt.where(resolved_status.in_(requested_status_members))
 
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = db.execute(count_stmt).scalar_one()
@@ -660,11 +707,13 @@ def export_recall_letters_zip(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="No recalls match your filters.",
         )
-    if total > MAX_EXPORT_ROWS:
+    if not page_only and total > MAX_EXPORT_ROWS:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Too many recalls to export ({total}). Narrow your filters.",
         )
+    if page_only:
+        stmt = stmt.limit(limit).offset(offset)
 
     results = db.execute(stmt).all()
     buffer = BytesIO()

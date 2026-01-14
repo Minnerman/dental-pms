@@ -143,6 +143,10 @@ export default function RecallsPage() {
   const [contactSaving, setContactSaving] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   const [popoverId, setPopoverId] = useState<number | null>(null);
+  const [exportCount, setExportCount] = useState<number | null>(null);
+  const [exportCountLoading, setExportCountLoading] = useState(false);
+  const [exportCountError, setExportCountError] = useState<string | null>(null);
+  const [exportPageOnly, setExportPageOnly] = useState(false);
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -195,6 +199,22 @@ export default function RecallsPage() {
     statusFilter,
     typeFilter,
   ]);
+
+  const exportCountLabel =
+    exportCountLoading && exportCount === null
+      ? "Calculating..."
+      : exportCount !== null
+        ? `${exportCount} recalls`
+        : exportCountError
+          ? "Count unavailable"
+          : "—";
+  const errorText = error ?? "";
+  const exportLimitMatch = errorText.match(/Too many recalls to export \((\d+)\)/);
+  const exportLimitCount = exportLimitMatch ? Number(exportLimitMatch[1]) : exportCount;
+  const showExportLimitHint = Boolean(exportLimitMatch);
+  const showRecallsLoadHint =
+    Boolean(errorText) &&
+    (errorText.includes("Failed to load recalls") || errorText.includes("Internal server error"));
 
   function formatLastContact(row: RecallRow) {
     if (!row.last_contacted_at) return "—";
@@ -282,7 +302,10 @@ export default function RecallsPage() {
     setExporting(true);
     setError(null);
     try {
-      const params = buildQueryParams({ includePagination: false });
+      const params = buildQueryParams({ includePagination: exportPageOnly });
+      if (exportPageOnly) {
+        params.set("page_only", "true");
+      }
       const res = await apiFetch(`/api/recalls/export.csv?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -322,7 +345,10 @@ export default function RecallsPage() {
     setDownloadingZip(true);
     setError(null);
     try {
-      const params = buildQueryParams({ includePagination: false });
+      const params = buildQueryParams({ includePagination: exportPageOnly });
+      if (exportPageOnly) {
+        params.set("page_only", "true");
+      }
       const res = await apiFetch(`/api/recalls/letters.zip?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -393,6 +419,50 @@ export default function RecallsPage() {
     void loadRecalls();
     return () => {
       active = false;
+    };
+  }, [buildQueryParams, router]);
+
+  useEffect(() => {
+    let active = true;
+    setExportCountLoading(true);
+    setExportCountError(null);
+    const timer = setTimeout(() => {
+      async function loadExportCount() {
+        try {
+          const params = buildQueryParams({ includePagination: false });
+          const res = await apiFetch(`/api/recalls/export_count?${params.toString()}`);
+          if (res.status === 401) {
+            clearToken();
+            router.replace("/login");
+            return;
+          }
+          if (!res.ok) {
+            const msg = await res.text();
+            throw new Error(msg || `Failed to load export count (HTTP ${res.status})`);
+          }
+          const data = (await res.json()) as { count: number };
+          if (active) {
+            setExportCount(data.count);
+          }
+        } catch (err) {
+          if (active) {
+            setExportCountError(
+              err instanceof Error ? err.message : "Failed to load export count"
+            );
+          }
+        } finally {
+          if (active) {
+            setExportCountLoading(false);
+          }
+        }
+      }
+
+      void loadExportCount();
+    }, 200);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
     };
   }, [buildQueryParams, router]);
 
@@ -676,6 +746,18 @@ export default function RecallsPage() {
             >
               Reset filters
             </button>
+            <div className="badge">
+              Export will include: {exportCountLabel}
+              {exportPageOnly ? ` (this page: ${rows.length})` : ""}
+            </div>
+            <label className="row" style={{ gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={exportPageOnly}
+                onChange={(event) => setExportPageOnly(event.target.checked)}
+              />
+              <span>Export this page only</span>
+            </label>
             <button
               className="btn btn-secondary"
               type="button"
@@ -730,9 +812,20 @@ export default function RecallsPage() {
       {error ? (
         <div className="notice">
           {error}
-          <div style={{ color: "var(--muted)", marginTop: 6 }}>
-            Server error loading recalls. Try Refresh. If it persists, check backend logs.
-          </div>
+          {showExportLimitHint ? (
+            <div style={{ color: "var(--muted)", marginTop: 6 }}>
+              Too many results. Try narrowing by: Contact state, Last contacted timeframe,
+              Method.
+              {typeof exportLimitCount === "number"
+                ? ` Current matches: ${exportLimitCount}.`
+                : ""}
+            </div>
+          ) : null}
+          {showRecallsLoadHint ? (
+            <div style={{ color: "var(--muted)", marginTop: 6 }}>
+              Server error loading recalls. Try Refresh. If it persists, check backend logs.
+            </div>
+          ) : null}
         </div>
       ) : loading ? (
         <div className="badge">Loading recalls…</div>
