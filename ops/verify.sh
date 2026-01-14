@@ -17,5 +17,9 @@ echo "Frontend production build..."
 docker compose run --rm --no-deps frontend sh -lc 'set -eux; NODE_ENV=production npm run build'
 
 echo
+echo "Typecheck..."
+./ops/typecheck.sh
+
+echo
 echo "Health check..."
 ./ops/health.sh
