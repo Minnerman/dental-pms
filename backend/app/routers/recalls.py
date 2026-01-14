@@ -29,7 +29,7 @@ from app.models.patient_recall_communication import (
     PatientRecallCommunicationStatus,
 )
 from app.models.user import User
-from app.schemas.patient import PatientRecallOut, RecallUpdate
+from app.schemas.patient import PatientRecallSettingsOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
 from app.schemas.recalls import RecallContactCreate, RecallDashboardRow, RecallKpiOut
 from app.models.document_template import DocumentTemplate
@@ -47,6 +47,7 @@ MAX_EXPORT_ROWS = 2000
 EXPORT_COUNT_CACHE_TTL_SECONDS = 60
 EXPORT_COUNT_CACHE_MAX = 500
 _export_count_cache: OrderedDict[tuple, tuple[float, int]] = OrderedDict()
+_export_count_cache_epoch = 0
 
 
 def _stringify(value: object | None) -> str:
@@ -263,6 +264,7 @@ def _export_count_cache_key(
     contacted_within_days: int | None,
     contact_channel: str | None,
 ) -> tuple:
+    global _export_count_cache_epoch
     requested_statuses, requested_type_members, _stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
@@ -278,6 +280,7 @@ def _export_count_cache_key(
     type_key = tuple(sorted(kind.value for kind in requested_type_members))
     channel_key = tuple(sorted(channel.value for channel in channels))
     return (
+        _export_count_cache_epoch,
         start.isoformat() if start else None,
         end.isoformat() if end else None,
         status_key,
@@ -306,6 +309,17 @@ def _export_count_cache_set(key: tuple, value: int) -> None:
     _export_count_cache.move_to_end(key)
     while len(_export_count_cache) > EXPORT_COUNT_CACHE_MAX:
         _export_count_cache.popitem(last=False)
+
+
+def bump_export_count_cache_epoch(reason: str) -> None:
+    global _export_count_cache_epoch
+    _export_count_cache_epoch += 1
+    _export_count_cache.clear()
+    logger.info(
+        "export_count_cache_invalidate epoch=%d reason=%s",
+        _export_count_cache_epoch,
+        reason,
+    )
 
 
 def _resolved_status_expr(today: date):
@@ -629,6 +643,7 @@ def log_recall_contact(
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    bump_export_count_cache_epoch("recalls.log_recall_contact")
     return _load_recall_dashboard_row(db, recall_id)
 
 
@@ -844,6 +859,7 @@ def export_recall_letters_zip(
     filename = f"recall-letters-{date.today().isoformat()}.zip"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     db.commit()
+    bump_export_count_cache_epoch("recalls.export_letters_zip")
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     logger.info("perf: recalls_export_zip_ms=%.2f rows=%d", elapsed_ms, len(results))
     return Response(content=buffer.getvalue(), media_type="application/zip", headers=headers)
@@ -948,7 +964,7 @@ def recall_kpis(
     )
 
 
-@router.patch("/{patient_id}", response_model=PatientRecallOut)
+@router.patch("/{patient_id}", response_model=PatientRecallSettingsOut)
 def update_recall(
     patient_id: int,
     payload: RecallUpdate,
@@ -997,7 +1013,8 @@ def update_recall(
     )
     db.commit()
     db.refresh(patient)
-    return PatientRecallOut(
+    bump_export_count_cache_epoch("recalls.update_recall")
+    return PatientRecallSettingsOut(
         id=patient.id,
         first_name=patient.first_name,
         last_name=patient.last_name,

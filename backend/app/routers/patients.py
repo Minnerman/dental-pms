@@ -41,6 +41,7 @@ from app.schemas.recall_communication import (
 from app.schemas.ledger import LedgerChargeCreate, LedgerEntryOut, LedgerPaymentCreate
 from app.models.user import User
 from app.services.recall_communications import log_recall_communication
+from app.routers.recalls import bump_export_count_cache_epoch
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -693,6 +694,7 @@ def update_patient_recall(
     recall.updated_by_user_id = user.id
     db.commit()
     db.refresh(recall)
+    bump_export_count_cache_epoch("patients.update_recall")
     resolved_status = resolve_recall_status(recall)
     return PatientRecallOut.model_validate(recall).model_copy(
         update={"status": resolved_status}
@@ -761,6 +763,7 @@ def create_recall_communication(
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    bump_export_count_cache_epoch("patients.create_recall_communication")
     return RecallCommunicationOut.model_validate(entry)
 
 
@@ -807,6 +810,7 @@ def get_recall_letter_pdf(
         ip_address=request.client.host if request else None,
     )
     db.commit()
+    bump_export_count_cache_epoch("patients.recall_letter_pdf")
     filename = f"recall-{patient_id}-{recall_id}.pdf"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
