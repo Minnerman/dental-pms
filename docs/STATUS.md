@@ -291,6 +291,7 @@
 - Alembic: `docker compose run --rm backend alembic stamp 0001_initial` + `docker compose run --rm backend alembic upgrade head` (OK)
 - Build: `docker compose run --rm --no-deps frontend sh -lc 'set -eux; rm -rf .next; NODE_ENV=production npm run build'` (OK)
 - Health: `./ops/health.sh` (OK)
+- TypeScript typecheck: run from `frontend/` (`npm run typecheck`) or from repo root via `npm --prefix frontend run typecheck` (repo root has no package.json).
 
 ## Version pins
 - postgres:16
