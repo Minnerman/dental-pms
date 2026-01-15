@@ -1,8 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
+const envBase = process.env.FRONTEND_BASE_URL;
 const baseURL =
-  process.env.FRONTEND_BASE_URL ??
-  `http://localhost:${process.env.FRONTEND_PORT ?? "3100"}`;
+  envBase && !envBase.includes("${")
+    ? envBase
+    : `http://localhost:${process.env.FRONTEND_PORT ?? "3100"}`;
 
 export default defineConfig({
   testDir: "./tests",

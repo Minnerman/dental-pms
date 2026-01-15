@@ -117,7 +117,7 @@ jobs:
         run: npx playwright test
         working-directory: frontend
         env:
-          FRONTEND_BASE_URL: http://localhost:${FRONTEND_PORT}
+          FRONTEND_BASE_URL: http://localhost:${{ env.FRONTEND_PORT }}
 
       - name: Seed recalls (dev)
         run: ALLOW_DEV_SEED=1 bash ops/seed_recalls_dev.sh

@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 const adminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
 const adminPassword = process.env.ADMIN_PASSWORD ?? "ChangeMe123!";
+const envBase = process.env.FRONTEND_BASE_URL;
+const baseURL =
+  envBase && !envBase.includes("${")
+    ? envBase
+    : `http://localhost:${process.env.FRONTEND_PORT ?? "3100"}`;
 
 async function fetchAccessToken(baseURL: string, request: any) {
   const response = await request.post(`${baseURL}/api/auth/login`, {
@@ -18,7 +23,6 @@ test("appointments book=1 deep link opens and then clears on refresh", async ({
   page,
   request,
 }) => {
-  const baseURL = process.env.FRONTEND_BASE_URL ?? "http://localhost:3100";
   const token = await fetchAccessToken(baseURL, request);
   await page.addInitScript(({ tokenValue }) => {
     localStorage.setItem("dental_pms_token", tokenValue);
