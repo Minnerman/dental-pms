@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-15: Stage62 merged (PR #39, master 7dab879). Stage63 planned: move Playwright smoke out of recalls-api-tests.yml into a dedicated workflow (or Nightly smoke).
 - 2026-01-15: Stage62 completed (appointments `?book=1` deep link smoke coverage + booking modal guard).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-15: Stage61 merged (PR #38, master c1b7cd9); CI runs started: 21047920977, 21047920968 (in progress at merge).
