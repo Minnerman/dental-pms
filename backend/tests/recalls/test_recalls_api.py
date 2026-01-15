@@ -1,6 +1,7 @@
 import httpx
 import pytest
 from fastapi import HTTPException
+from datetime import datetime, timezone
 
 from app.routers import recalls as recalls_router
 
@@ -59,6 +60,48 @@ def test_export_count_filter_affects_results(api_client, auth_headers):
     never = never_resp.json().get("count")
     assert isinstance(never, int)
     assert never == 0
+
+
+def test_recalls_list_includes_last_contact_fields(api_client, auth_headers):
+    response = api_client.get(
+        "/recalls",
+        headers=auth_headers,
+        params={"contact_state": "contacted", "limit": 5},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert isinstance(data, list)
+    assert data, "Expected contacted recalls"
+    assert any(row.get("last_contacted_at") for row in data)
+
+
+def test_recalls_last_contact_filters(api_client, auth_headers):
+    recall_id = _get_first_recall_id(api_client, auth_headers)
+    contacted_at = datetime.now(timezone.utc).isoformat()
+    response = api_client.post(
+        f"/recalls/{recall_id}/contact",
+        headers=auth_headers,
+        json={"method": "phone", "contacted_at": contacted_at},
+    )
+    assert response.status_code == 200, response.text
+
+    recent = api_client.get(
+        "/recalls",
+        headers=auth_headers,
+        params={"last_contact": "7d", "method": "phone"},
+    )
+    assert recent.status_code == 200, recent.text
+    recent_ids = {row.get("id") for row in recent.json()}
+    assert recall_id in recent_ids
+
+    older = api_client.get(
+        "/recalls",
+        headers=auth_headers,
+        params={"last_contact": "older30d", "method": "phone"},
+    )
+    assert older.status_code == 200, older.text
+    older_ids = {row.get("id") for row in older.json()}
+    assert recall_id not in older_ids
 
 
 def test_contact_validation_other_detail(api_client, auth_headers):
