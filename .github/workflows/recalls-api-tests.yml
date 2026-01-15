@@ -89,6 +89,45 @@ jobs:
           docker compose logs --no-color --tail=200 backend
           exit 1
 
+      - name: Start frontend
+        run: docker compose up -d frontend
+
+      - name: Wait for frontend proxy
+        run: |
+          set -e
+          for attempt in $(seq 1 20); do
+            if curl -fsS "http://localhost:${FRONTEND_PORT}/api/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend proxy did not become healthy in time" >&2
+          docker compose logs --no-color --tail=200 frontend
+          exit 1
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run appointments deep link test
+        run: npx playwright test
+        working-directory: frontend
+        env:
+          FRONTEND_BASE_URL: http://localhost:${{ env.FRONTEND_PORT }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+
       - name: Seed recalls (dev)
         run: ALLOW_DEV_SEED=1 bash ops/seed_recalls_dev.sh
 
