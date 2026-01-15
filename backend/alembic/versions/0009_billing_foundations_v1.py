@@ -21,8 +21,9 @@ def upgrade() -> None:
         "domiciliary_private",
         "denplan",
         name="patient_category",
+        create_type=False,
     )
-    fee_type = sa.Enum("fixed", "range", "not_applicable", name="fee_type")
+    fee_type = sa.Enum("fixed", "range", "not_applicable", name="fee_type", create_type=False)
     estimate_status = sa.Enum(
         "draft",
         "issued",
@@ -30,8 +31,9 @@ def upgrade() -> None:
         "declined",
         "superseded",
         name="estimate_status",
+        create_type=False,
     )
-    estimate_fee_type = sa.Enum("fixed", "range", name="estimate_fee_type")
+    estimate_fee_type = sa.Enum("fixed", "range", name="estimate_fee_type", create_type=False)
 
     patient_category.create(op.get_bind(), checkfirst=True)
     fee_type.create(op.get_bind(), checkfirst=True)
