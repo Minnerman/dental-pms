@@ -19,6 +19,7 @@ jobs:
       POSTGRES_USER: dental_pms
       POSTGRES_PASSWORD: change-me
       POSTGRES_PORT: 5442
+      DATABASE_URL: postgresql+psycopg://dental_pms:change-me@db:5432/dental_pms
       BACKEND_PORT: 8100
       FRONTEND_PORT: 3100
       SECRET_KEY: dev-secret-please-change-32chars-long
@@ -62,7 +63,7 @@ jobs:
         run: docker compose up -d db
 
       - name: Run migrations
-        run: docker compose run --rm backend sh -lc 'python -m alembic upgrade head'
+        run: docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'
 
       - name: Start backend
         run: docker compose up -d backend
