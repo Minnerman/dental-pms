@@ -45,11 +45,14 @@ jobs:
           RESET_TOKEN_EXPIRE_MINUTES=60
           EOF
 
-      - name: Start services
-        run: docker compose up -d --build
+      - name: Start database
+        run: docker compose up -d db
 
       - name: Run migrations
-        run: docker compose exec -T backend sh -lc 'python -m alembic upgrade head'
+        run: docker compose run --rm backend sh -lc 'python -m alembic upgrade head'
+
+      - name: Start services
+        run: docker compose up -d --build backend frontend
 
       - name: Verify
         run: bash ops/verify.sh
