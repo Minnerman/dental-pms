@@ -1,0 +1,129 @@
+name: Playwright smoke
+
+on:
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  playwright-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: development
+      ALLOW_DEV_SEED: "1"
+      COMPOSE_PROJECT_NAME: dentalpms_playwright
+      POSTGRES_DB: dental_pms
+      POSTGRES_USER: dental_pms
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_PORT: 5442
+      DATABASE_URL: postgresql+psycopg://dental_pms:change-me@db:5432/dental_pms
+      BACKEND_PORT: 8100
+      FRONTEND_PORT: 3100
+      SECRET_KEY: dev-secret-please-change-32chars-long
+      JWT_SECRET: dev-jwt-secret-please-change-32chars
+      JWT_ALG: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 120
+      RESET_TOKEN_EXPIRE_MINUTES: 30
+      RESET_TOKEN_DEBUG: "false"
+      RESET_REQUESTS_PER_MINUTE: 5
+      RESET_CONFIRM_PER_MINUTE: 5
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: ChangeMe123!
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write CI .env
+        run: |
+          cat <<'EOF' > .env
+          POSTGRES_DB=${POSTGRES_DB}
+          POSTGRES_USER=${POSTGRES_USER}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_PORT=${POSTGRES_PORT}
+          DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+          BACKEND_PORT=${BACKEND_PORT}
+          FRONTEND_PORT=${FRONTEND_PORT}
+          APP_ENV=${APP_ENV}
+          SECRET_KEY=${SECRET_KEY}
+          JWT_SECRET=${JWT_SECRET}
+          JWT_ALG=${JWT_ALG}
+          ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+          RESET_TOKEN_EXPIRE_MINUTES=${RESET_TOKEN_EXPIRE_MINUTES}
+          RESET_TOKEN_DEBUG=${RESET_TOKEN_DEBUG}
+          RESET_REQUESTS_PER_MINUTE=${RESET_REQUESTS_PER_MINUTE}
+          RESET_CONFIRM_PER_MINUTE=${RESET_CONFIRM_PER_MINUTE}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          EOF
+
+      - name: Start database
+        run: docker compose up -d db
+
+      - name: Run migrations
+        run: docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'
+
+      - name: Start backend
+        run: docker compose up -d backend
+
+      - name: Wait for backend health
+        run: |
+          set -e
+          for attempt in $(seq 1 20); do
+            if curl -fsS "http://localhost:${BACKEND_PORT}/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend did not become healthy in time" >&2
+          docker compose logs --no-color --tail=200 backend
+          exit 1
+
+      - name: Start frontend
+        run: docker compose up -d frontend
+
+      - name: Wait for frontend proxy
+        run: |
+          set -e
+          for attempt in $(seq 1 20); do
+            if curl -fsS "http://localhost:${FRONTEND_PORT}/api/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend proxy did not become healthy in time" >&2
+          docker compose logs --no-color --tail=200 frontend
+          exit 1
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run Playwright smoke
+        run: npx playwright test
+        working-directory: frontend
+        env:
+          FRONTEND_BASE_URL: http://localhost:${{ env.FRONTEND_PORT }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color --tail=300 backend
+          docker compose logs --no-color --tail=300 frontend
+          docker compose logs --no-color --tail=300 db
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
