@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-15: Stage61 merged (PR #38, master c1b7cd9); CI runs started: 21047920977, 21047920968 (in progress at merge).
 - 2026-01-15: Stage61 completed (recalls last-contact filters + last-contact list coverage tests).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-15: CI hygiene (Nightly smoke .env generation; Recalls API workflow YAML parse fix; ops/smoke_recalls.sh port/root fix; backend health wait before pytest). Runs: 21047007486, 21047281140.
