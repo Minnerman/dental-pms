@@ -50,20 +50,28 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
+    # Ensure the version table can store long revision ids before migrations run.
     with connectable.connect() as connection:
-        result = connection.execute(text("SELECT to_regclass('public.alembic_version')"))
-        has_version = result.scalar() is not None
-        if has_version:
-            connection.execute(
-                text(
-                    "ALTER TABLE alembic_version "
-                    "ALTER COLUMN version_num TYPE VARCHAR(64)"
+        with connection.begin():
+            result = connection.execute(
+                text("SELECT to_regclass('public.alembic_version')")
+            )
+            has_version = result.scalar() is not None
+            if has_version:
+                connection.execute(
+                    text(
+                        "ALTER TABLE alembic_version "
+                        "ALTER COLUMN version_num TYPE VARCHAR(64)"
+                    )
                 )
-            )
-        else:
-            connection.execute(
-                text("CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL)")
-            )
+            else:
+                connection.execute(
+                    text(
+                        "CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL)"
+                    )
+                )
+
+    with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():

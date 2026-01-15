@@ -17,17 +17,8 @@ if [ "$APP_ENV" != "development" ] && [ "$ALLOW_DEV_SEED" != "1" ]; then
   exit 1
 fi
 
-DB_USER=""
-DB_NAME=""
-if [ -n "${DATABASE_URL:-}" ]; then
-  DB_URL="${DATABASE_URL#postgresql+psycopg://}"
-  DB_URL="${DB_URL#postgresql://}"
-  DB_USER="${DB_URL%%:*}"
-  DB_HOST_PATH="${DB_URL#*@}"
-  DB_NAME="${DB_HOST_PATH##*/}"
-  DB_NAME="${DB_NAME%%\?*}"
-fi
-
+DB_USER="${POSTGRES_USER:-}"
+DB_NAME="${POSTGRES_DB:-}"
 if [ -z "$DB_USER" ]; then
   DB_USER=$(docker compose exec -T db sh -lc 'echo ${POSTGRES_USER:-}')
 fi
@@ -38,6 +29,10 @@ if [ -z "$DB_USER" ] || [ -z "$DB_NAME" ]; then
   echo "Unable to determine POSTGRES_USER/POSTGRES_DB from db container" >&2
   exit 1
 fi
+
+echo "seed_recalls_dev: POSTGRES_DB=$DB_NAME POSTGRES_USER=$DB_USER"
+docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"select current_database(), current_user;\""
+docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"select to_regclass('public.patient_recall_communications');\""
 
 RECALL_TABLE=$(docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"SELECT to_regclass('public.patient_recall_communications');\"")
 if [ -z "$RECALL_TABLE" ]; then
