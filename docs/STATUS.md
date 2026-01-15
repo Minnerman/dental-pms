@@ -56,6 +56,8 @@
 
 ## Recent fixes
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
+- 2026-01-14: Stage60 completed (recalls API pytest suite + CI workflow for recall regressions).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend sh -lc "python -m alembic upgrade head"`, `ALLOW_DEV_SEED=1 bash ops/seed_recalls_dev.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-14: Stage58 completed (dev recall seed + smoke scripts; dev seed doc).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-14: Stage57 completed (export_count cache epoch invalidation on recall writes).

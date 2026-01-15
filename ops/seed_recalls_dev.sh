@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$HOME/dental-pms"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if [ -f .env ]; then
@@ -17,10 +17,27 @@ if [ "$APP_ENV" != "development" ] && [ "$ALLOW_DEV_SEED" != "1" ]; then
   exit 1
 fi
 
-DB_USER=$(docker compose exec -T db sh -lc 'echo ${POSTGRES_USER:-}')
-DB_NAME=$(docker compose exec -T db sh -lc 'echo ${POSTGRES_DB:-}')
+DB_USER="${POSTGRES_USER:-}"
+DB_NAME="${POSTGRES_DB:-}"
+if [ -z "$DB_USER" ]; then
+  DB_USER=$(docker compose exec -T db sh -lc 'echo ${POSTGRES_USER:-}')
+fi
+if [ -z "$DB_NAME" ]; then
+  DB_NAME=$(docker compose exec -T db sh -lc 'echo ${POSTGRES_DB:-}')
+fi
 if [ -z "$DB_USER" ] || [ -z "$DB_NAME" ]; then
   echo "Unable to determine POSTGRES_USER/POSTGRES_DB from db container" >&2
+  exit 1
+fi
+
+echo "seed_recalls_dev: POSTGRES_DB=$DB_NAME POSTGRES_USER=$DB_USER"
+docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"select current_database(), current_user;\""
+docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"select to_regclass('public.patient_recall_communications');\""
+
+RECALL_TABLE=$(docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"SELECT to_regclass('public.patient_recall_communications');\"")
+if [ -z "$RECALL_TABLE" ]; then
+  ALEMBIC_VERSION=$(docker compose exec -T db sh -lc "psql -U \"$DB_USER\" -d \"$DB_NAME\" -tAc \"SELECT version_num FROM alembic_version\" 2>/dev/null" || true)
+  echo "Missing patient_recall_communications in DB '$DB_NAME' (alembic_version=${ALEMBIC_VERSION:-unknown})." >&2
   exit 1
 fi
 
@@ -33,6 +50,32 @@ WHERE recall_id IN (
   SELECT id FROM patient_recalls WHERE notes LIKE 'seed:%'
 );
 DELETE FROM patient_recalls WHERE notes LIKE 'seed:%';
+
+WITH admin AS (
+  SELECT id AS user_id FROM users ORDER BY id LIMIT 1
+), existing_patients AS (
+  SELECT COUNT(*) AS cnt FROM patients WHERE deleted_at IS NULL
+)
+INSERT INTO patients (
+  first_name,
+  last_name,
+  patient_category,
+  care_setting,
+  recall_interval_months,
+  created_by_user_id,
+  updated_by_user_id
+)
+SELECT
+  'Seed' || gs.n,
+  'Patient' || gs.n,
+  'clinic_private',
+  'clinic',
+  6,
+  admin.user_id,
+  admin.user_id
+FROM admin
+CROSS JOIN generate_series(1, 5) AS gs(n)
+WHERE (SELECT cnt FROM existing_patients) = 0;
 
 WITH admin AS (
   SELECT id AS user_id FROM users ORDER BY id LIMIT 1
