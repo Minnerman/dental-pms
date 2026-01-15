@@ -55,6 +55,8 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-15: Stage61 completed (recalls last-contact filters + last-contact list coverage tests).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-15: CI hygiene (Nightly smoke .env generation; Recalls API workflow YAML parse fix; ops/smoke_recalls.sh port/root fix; backend health wait before pytest). Runs: 21047007486, 21047281140.
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
 - 2026-01-14: Stage60 completed (recalls API pytest suite + CI workflow for recall regressions).
@@ -277,7 +279,7 @@
   - Clinical reporting polish or batch recall exports
 
 ## Roadmap (stages)
-- Stage 47: recall dashboard last contact and contact filters (in progress)
+- Stage 47: recall dashboard last contact and contact filters (completed)
 - Stage 48: recall dashboard pagination controls (completed)
 - Stage 49: developer workflow hardening (typecheck entrypoint + verify guidance)
 - Stage 50+: TBD
