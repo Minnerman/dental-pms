@@ -36,6 +36,32 @@ DELETE FROM patient_recalls WHERE notes LIKE 'seed:%';
 
 WITH admin AS (
   SELECT id AS user_id FROM users ORDER BY id LIMIT 1
+), existing_patients AS (
+  SELECT COUNT(*) AS cnt FROM patients WHERE deleted_at IS NULL
+)
+INSERT INTO patients (
+  first_name,
+  last_name,
+  patient_category,
+  care_setting,
+  recall_interval_months,
+  created_by_user_id,
+  updated_by_user_id
+)
+SELECT
+  'Seed' || gs.n,
+  'Patient' || gs.n,
+  'clinic_private',
+  'clinic',
+  6,
+  admin.user_id,
+  admin.user_id
+FROM admin
+CROSS JOIN generate_series(1, 5) AS gs(n)
+WHERE (SELECT cnt FROM existing_patients) = 0;
+
+WITH admin AS (
+  SELECT id AS user_id FROM users ORDER BY id LIMIT 1
 ), seed_patients AS (
   SELECT id AS patient_id, row_number() OVER (ORDER BY id DESC) AS rn
   FROM patients

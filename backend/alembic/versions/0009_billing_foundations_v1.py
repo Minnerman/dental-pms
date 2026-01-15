@@ -48,13 +48,45 @@ def upgrade() -> None:
     )
 
     op.execute(
-        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE patient_category AS ENUM ('clinic_private','domiciliary_private','denplan');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+        """
+DO $$
+BEGIN
+  CREATE TYPE patient_category AS ENUM ('clinic_private','domiciliary_private','denplan');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+"""
+    )
     op.execute(
-        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE fee_type AS ENUM ('fixed','range','not_applicable');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+        """
+DO $$
+BEGIN
+  CREATE TYPE fee_type AS ENUM ('fixed','range','not_applicable');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+"""
+    )
     op.execute(
-        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE estimate_status AS ENUM ('draft','issued','accepted','declined','superseded');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+        """
+DO $$
+BEGIN
+  CREATE TYPE estimate_status AS ENUM ('draft','issued','accepted','declined','superseded');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+"""
+    )
     op.execute(
-        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE estimate_fee_type AS ENUM ('fixed','range');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+        """
+DO $$
+BEGIN
+  CREATE TYPE estimate_fee_type AS ENUM ('fixed','range');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+"""
+    )
 
     bind = op.get_bind()
     inspector = inspect(bind)
@@ -68,14 +100,9 @@ def upgrade() -> None:
 
     if "patients" in tables:
         if not has_column("patients", "patient_category"):
-            op.add_column(
-                "patients",
-                sa.Column(
-                    "patient_category",
-                    patient_category,
-                    nullable=False,
-                    server_default="clinic_private",
-                ),
+            op.execute(
+                "ALTER TABLE patients ADD COLUMN patient_category patient_category "
+                "NOT NULL DEFAULT 'clinic_private'"
             )
         if not has_column("patients", "denplan_member_no"):
             op.add_column(
@@ -124,14 +151,22 @@ def upgrade() -> None:
             "treatment_fees",
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("treatment_id", sa.Integer(), nullable=False),
-            sa.Column("patient_category", patient_category, nullable=False),
-            sa.Column("fee_type", fee_type, nullable=False),
+            sa.Column("patient_category", sa.String(length=32), nullable=False),
+            sa.Column("fee_type", sa.String(length=32), nullable=False),
             sa.Column("amount_pence", sa.Integer(), nullable=True),
             sa.Column("min_amount_pence", sa.Integer(), nullable=True),
             sa.Column("max_amount_pence", sa.Integer(), nullable=True),
             sa.Column("notes", sa.Text(), nullable=True),
             sa.ForeignKeyConstraint(["treatment_id"], ["treatments.id"]),
             sa.UniqueConstraint("treatment_id", "patient_category"),
+        )
+        op.execute(
+            "ALTER TABLE treatment_fees ALTER COLUMN patient_category "
+            "TYPE patient_category USING patient_category::patient_category"
+        )
+        op.execute(
+            "ALTER TABLE treatment_fees ALTER COLUMN fee_type "
+            "TYPE fee_type USING fee_type::fee_type"
         )
         op.create_index("ix_treatment_fees_treatment_id", "treatment_fees", ["treatment_id"])
     elif not has_index("treatment_fees", "ix_treatment_fees_treatment_id"):
@@ -143,8 +178,8 @@ def upgrade() -> None:
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("patient_id", sa.Integer(), nullable=False),
             sa.Column("appointment_id", sa.Integer(), nullable=True),
-            sa.Column("category_snapshot", patient_category, nullable=False),
-            sa.Column("status", estimate_status, nullable=False),
+            sa.Column("category_snapshot", sa.String(length=32), nullable=False),
+            sa.Column("status", sa.String(length=32), nullable=False),
             sa.Column("valid_until", sa.Date(), nullable=True),
             sa.Column("notes", sa.Text(), nullable=True),
             sa.Column(
@@ -166,6 +201,14 @@ def upgrade() -> None:
             sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"]),
             sa.ForeignKeyConstraint(["updated_by_user_id"], ["users.id"]),
         )
+        op.execute(
+            "ALTER TABLE estimates ALTER COLUMN category_snapshot "
+            "TYPE patient_category USING category_snapshot::patient_category"
+        )
+        op.execute(
+            "ALTER TABLE estimates ALTER COLUMN status "
+            "TYPE estimate_status USING status::estimate_status"
+        )
         op.create_index("ix_estimates_patient_id", "estimates", ["patient_id"])
         op.create_index("ix_estimates_appointment_id", "estimates", ["appointment_id"])
     else:
@@ -185,10 +228,14 @@ def upgrade() -> None:
             sa.Column("unit_amount_pence", sa.Integer(), nullable=True),
             sa.Column("min_unit_amount_pence", sa.Integer(), nullable=True),
             sa.Column("max_unit_amount_pence", sa.Integer(), nullable=True),
-            sa.Column("fee_type", estimate_fee_type, nullable=False),
+            sa.Column("fee_type", sa.String(length=32), nullable=False),
             sa.Column("sort_order", sa.Integer(), nullable=False, server_default="1"),
             sa.ForeignKeyConstraint(["estimate_id"], ["estimates.id"]),
             sa.ForeignKeyConstraint(["treatment_id"], ["treatments.id"]),
+        )
+        op.execute(
+            "ALTER TABLE estimate_items ALTER COLUMN fee_type "
+            "TYPE estimate_fee_type USING fee_type::estimate_fee_type"
         )
         op.create_index("ix_estimate_items_estimate_id", "estimate_items", ["estimate_id"])
     elif not has_index("estimate_items", "ix_estimate_items_estimate_id"):

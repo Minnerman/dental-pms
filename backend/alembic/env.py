@@ -60,6 +60,10 @@ def run_migrations_online() -> None:
                     "ALTER COLUMN version_num TYPE VARCHAR(64)"
                 )
             )
+        else:
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL)")
+            )
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
