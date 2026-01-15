@@ -65,7 +65,7 @@ jobs:
       - name: Run migrations
         run: docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'
 
-      - name: Sanity: recall tables exist
+      - name: Sanity recall tables exist
         run: |
           set -eux
           docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
