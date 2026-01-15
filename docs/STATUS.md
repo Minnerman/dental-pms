@@ -55,6 +55,7 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## Recent fixes
+- 2026-01-15: CI hygiene (Nightly smoke .env generation; Recalls API workflow YAML parse fix; ops/smoke_recalls.sh port/root fix; backend health wait before pytest). Runs: 21047007486, 21047281140.
 - 2026-01-13: Session close-out (baseline master d31ba9e; gh PR workflow enabled on practice server; backups in ~/backups/dental-pms/20260113T212657Z; services healthy; lint warnings remain warnings).
 - 2026-01-14: Stage60 completed (recalls API pytest suite + CI workflow for recall regressions).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend sh -lc "python -m alembic upgrade head"`, `ALLOW_DEV_SEED=1 bash ops/seed_recalls_dev.sh`, `docker compose exec -T backend pytest -q`.
