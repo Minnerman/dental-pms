@@ -11,19 +11,22 @@ if [ -f .env ]; then
   set +a
 fi
 
+BACKEND_PORT="${BACKEND_PORT:-8100}"
+FRONTEND_PORT="${FRONTEND_PORT:-3100}"
+
 echo "Dental PMS health"
 
 docker compose ps
 
 echo
 echo "Backend:"
-curl -fsS http://localhost:8100/health
+curl -fsS "http://localhost:${BACKEND_PORT}/health"
 
 echo
 echo "Frontend proxy:"
 frontend_ok=0
 for attempt in $(seq 1 10); do
-  if curl -fsS http://localhost:3100/api/health >/dev/null; then
+  if curl -fsS "http://localhost:${FRONTEND_PORT}/api/health" >/dev/null; then
     frontend_ok=1
     break
   fi
@@ -50,7 +53,7 @@ if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
   exit 1
 fi
 
-LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST http://localhost:3100/api/auth/login \
+LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${FRONTEND_PORT}/api/auth/login" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}")
 LOGIN_CODE="${LOGIN_RESPONSE##*$'\n'}"
@@ -96,6 +99,6 @@ PY
   exit 1
 fi
 
-curl -fsS http://localhost:3100/api/patients -H "Authorization: Bearer $TOKEN" >/dev/null
-curl -fsS http://localhost:3100/api/audit -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS "http://localhost:${FRONTEND_PORT}/api/patients" -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS "http://localhost:${FRONTEND_PORT}/api/audit" -H "Authorization: Bearer $TOKEN" >/dev/null
 echo "Auth checks: OK"
