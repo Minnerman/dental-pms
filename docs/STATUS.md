@@ -267,6 +267,10 @@
 - Patient documents: list/read/download (all), create (all), delete (superadmin)
 - Attachments: list/download/upload (all), delete (superadmin)
 
+## CI hygiene
+- Nightly smoke (run 21019750369) failed during `docker compose up -d --build` because `.env` was missing and required vars were unset (POSTGRES_*, BACKEND_PORT/FRONTEND_PORT, SECRET/JWT, ADMIN_*). Error: `env file .../.env not found` with multiple "variable is not set" warnings.
+- Workflow validation failure (run 21016501636) is a 0s failure on `.github/workflows/recalls-api-tests.yml` (no logs). Likely workflow-file validation issue; latest master CI run is green.
+
 ## Next up
 - Stage 23 follow-up:
   - Clinical reporting polish or batch recall exports
