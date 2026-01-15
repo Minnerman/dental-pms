@@ -14,4 +14,9 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 0
 fi
 
+if [ ! -d "frontend/node_modules" ]; then
+  echo "frontend/node_modules missing; installing dependencies."
+  npm --prefix frontend ci
+fi
+
 npm --prefix frontend run typecheck
