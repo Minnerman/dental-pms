@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$HOME/dental-pms"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if [ -f .env ]; then
@@ -30,7 +30,10 @@ if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
   exit 1
 fi
 
-LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST http://localhost:3100/api/auth/login \
+FRONTEND_PORT="${FRONTEND_PORT:-3100}"
+FRONTEND_BASE_URL="http://localhost:${FRONTEND_PORT}"
+
+LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${FRONTEND_BASE_URL}/api/auth/login" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}")
 LOGIN_CODE=$(printf "%s" "$LOGIN_RESPONSE" | tail -n 1)
@@ -68,7 +71,7 @@ if [ -z "$RECALL_ID" ]; then
 fi
 
 LIST_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  "http://localhost:3100/api/recalls?limit=1" \
+  "${FRONTEND_BASE_URL}/api/recalls?limit=1" \
   -H "Authorization: Bearer $TOKEN")
 if [ "$LIST_CODE" != "200" ]; then
   echo "Recalls list failed with HTTP ${LIST_CODE}" >&2
@@ -77,13 +80,13 @@ fi
 
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
-curl -fsS "http://localhost:3100/api/recalls/export_count" -H "Authorization: Bearer $TOKEN" >/dev/null
-curl -fsS "http://localhost:3100/api/recalls/export_count" -H "Authorization: Bearer $TOKEN" >/dev/null
-curl -fsS -X POST "http://localhost:3100/api/recalls/${RECALL_ID}/contact" \
+curl -fsS "${FRONTEND_BASE_URL}/api/recalls/export_count" -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS "${FRONTEND_BASE_URL}/api/recalls/export_count" -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS -X POST "${FRONTEND_BASE_URL}/api/recalls/${RECALL_ID}/contact" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"method":"phone","outcome":"smoke test"}' >/dev/null
-curl -fsS "http://localhost:3100/api/recalls/export_count" -H "Authorization: Bearer $TOKEN" >/dev/null
+curl -fsS "${FRONTEND_BASE_URL}/api/recalls/export_count" -H "Authorization: Bearer $TOKEN" >/dev/null
 
 sleep 1
 
