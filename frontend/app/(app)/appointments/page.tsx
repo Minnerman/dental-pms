@@ -468,7 +468,8 @@ export default function AppointmentsPage() {
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [durationMinutes, setDurationMinutes] = useState<number | null>(30);
-  const [showNewModal, setShowNewModal] = useState(false);
+  const bookIntent = searchParams?.get("book") === "1";
+  const [showNewModal, setShowNewModal] = useState(bookIntent);
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1806,7 +1807,7 @@ export default function AppointmentsPage() {
   }
 
   return (
-    <div className="app-grid">
+    <div className="app-grid" data-book-intent={bookIntent ? "1" : "0"}>
       <section className="card" style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
           <div>
@@ -2207,7 +2208,7 @@ export default function AppointmentsPage() {
         )}
 
         {showNewModal && (
-          <div className="card" style={{ margin: 0 }}>
+          <div className="card" style={{ margin: 0 }} data-testid="booking-modal">
             <div className="stack">
               <div className="row">
                 <div>
