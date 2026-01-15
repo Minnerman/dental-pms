@@ -1807,7 +1807,11 @@ export default function AppointmentsPage() {
   }
 
   return (
-    <div className="app-grid" data-book-intent={bookIntent ? "1" : "0"}>
+    <div
+      className="app-grid"
+      data-book-intent={bookIntent ? "1" : "0"}
+      data-testid="appointments-page"
+    >
       <section className="card" style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
           <div>

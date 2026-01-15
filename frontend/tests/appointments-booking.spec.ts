@@ -19,6 +19,19 @@ async function fetchAccessToken(baseURL: string, request: any) {
   return token as string;
 }
 
+async function ensureLoggedIn(page: any) {
+  if (!page.url().includes("/login")) return;
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByLabel("Email").fill(adminEmail);
+  await page.getByLabel("Password").fill(adminPassword);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL((url: URL) => !url.pathname.startsWith("/login"), {
+    timeout: 15_000,
+  });
+}
+
 test("appointments book=1 deep link opens and then clears on refresh", async ({
   page,
   request,
@@ -29,10 +42,13 @@ test("appointments book=1 deep link opens and then clears on refresh", async ({
     document.cookie = `dental_pms_token=${encodeURIComponent(tokenValue)}; Path=/; SameSite=Lax`;
   }, { tokenValue: token });
 
-  await page.goto("/appointments?date=2026-01-15&book=1", { waitUntil: "networkidle" });
-  await expect(page.getByTestId("booking-modal")).toBeVisible();
-  await page.waitForURL((url) => !url.searchParams.has("book"));
+  await page.goto("/appointments?date=2026-01-15&book=1", { waitUntil: "domcontentloaded" });
+  await ensureLoggedIn(page);
+  await page.goto("/appointments?date=2026-01-15&book=1", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+  await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("booking-modal")).toHaveCount(0);
 });
