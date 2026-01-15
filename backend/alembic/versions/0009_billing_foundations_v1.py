@@ -8,6 +8,7 @@ Create Date: 2026-01-06 21:10:00.000000
 from alembic import op
 from sqlalchemy import inspect
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision = "0009_billing_foundations_v1"
 down_revision = "0008_add_invoices"
@@ -16,15 +17,21 @@ depends_on = None
 
 
 def upgrade() -> None:
-    patient_category = sa.Enum(
+    patient_category = postgresql.ENUM(
         "clinic_private",
         "domiciliary_private",
         "denplan",
         name="patient_category",
         create_type=False,
     )
-    fee_type = sa.Enum("fixed", "range", "not_applicable", name="fee_type", create_type=False)
-    estimate_status = sa.Enum(
+    fee_type = postgresql.ENUM(
+        "fixed",
+        "range",
+        "not_applicable",
+        name="fee_type",
+        create_type=False,
+    )
+    estimate_status = postgresql.ENUM(
         "draft",
         "issued",
         "accepted",
@@ -33,12 +40,21 @@ def upgrade() -> None:
         name="estimate_status",
         create_type=False,
     )
-    estimate_fee_type = sa.Enum("fixed", "range", name="estimate_fee_type", create_type=False)
+    estimate_fee_type = postgresql.ENUM(
+        "fixed",
+        "range",
+        name="estimate_fee_type",
+        create_type=False,
+    )
 
-    patient_category.create(op.get_bind(), checkfirst=True)
-    fee_type.create(op.get_bind(), checkfirst=True)
-    estimate_status.create(op.get_bind(), checkfirst=True)
-    estimate_fee_type.create(op.get_bind(), checkfirst=True)
+    op.execute(
+        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE patient_category AS ENUM ('clinic_private','domiciliary_private','denplan');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+    op.execute(
+        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE fee_type AS ENUM ('fixed','range','not_applicable');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+    op.execute(
+        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE estimate_status AS ENUM ('draft','issued','accepted','declined','superseded');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
+    op.execute(
+        \"\"\"\nDO $$\nBEGIN\n  CREATE TYPE estimate_fee_type AS ENUM ('fixed','range');\nEXCEPTION\n  WHEN duplicate_object THEN NULL;\nEND $$;\n\"\"\"\n    )
 
     bind = op.get_bind()
     inspector = inspect(bind)
