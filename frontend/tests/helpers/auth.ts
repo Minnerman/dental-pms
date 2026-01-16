@@ -17,9 +17,18 @@ export async function ensureAuthReady(request: APIRequestContext) {
     new Set([currentPassword, fallbackPassword, altPassword].filter(Boolean))
   );
   for (const candidate of candidates) {
-    const response = await request.post(`${baseURL}/api/auth/login`, {
-      data: { email: adminEmail, password: candidate },
-    });
+    let response: Awaited<ReturnType<typeof request.post>> | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await request.post(`${baseURL}/api/auth/login`, {
+        data: { email: adminEmail, password: candidate },
+      });
+      if (response.status() === 429 || response.status() === 503) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        continue;
+      }
+      break;
+    }
+    if (!response) continue;
     if (!response.ok()) continue;
     const payload = await response.json();
     const token = payload.access_token || payload.accessToken;
