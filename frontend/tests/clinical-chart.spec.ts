@@ -4,10 +4,9 @@ import { createClinicalProcedure, createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
 test("clinical chart toggle renders tooth badges", async ({ page, request }) => {
+  await primePageAuth(page, request);
   const patientId = await createPatient(request);
   await createClinicalProcedure(request, patientId, { tooth: "11" });
-
-  await primePageAuth(page, request);
   const baseUrl = getBaseUrl();
 
   await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
@@ -21,7 +20,5 @@ test("clinical chart toggle renders tooth badges", async ({ page, request }) => 
   await viewHistory.click();
   await expect(viewHistory).toHaveAttribute("data-active", "true");
 
-  const badge = page.getByTestId("tooth-badge-11");
-  await expect(badge).toHaveCount(1, { timeout: 15_000 });
-  await expect(badge).toBeVisible();
+  await expect(page.getByTestId("tooth-badge-11")).toBeVisible({ timeout: 15_000 });
 });
