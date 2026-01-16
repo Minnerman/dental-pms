@@ -10,7 +10,16 @@ import {
   type View,
 } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
-import { endOfMonth, endOfWeek, format, parse, startOfMonth, startOfWeek, getDay } from "date-fns";
+import {
+  addDays,
+  endOfMonth,
+  endOfWeek,
+  format,
+  parse,
+  startOfMonth,
+  startOfWeek,
+  getDay,
+} from "date-fns";
 import { enGB } from "date-fns/locale";
 import { apiFetch, clearToken } from "@/lib/auth";
 import StatusIcon from "@/components/ui/StatusIcon";
@@ -229,7 +238,10 @@ const statusThemeTokens: Record<
 };
 
 function toDateKey(value: Date) {
-  return value.toLocaleDateString("en-CA");
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function toLocalDateTimeInput(date: Date) {
@@ -537,6 +549,7 @@ export default function AppointmentsPage() {
   const [conflictWarning, setConflictWarning] = useState<ConflictWarning | null>(null);
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
+  const loadAppointmentsRequestId = useRef(0);
 
   const filteredPatients = useMemo(() => {
     const q = patientQuery.toLowerCase().trim();
@@ -921,12 +934,15 @@ export default function AppointmentsPage() {
 
   const loadAppointments = useCallback(async () => {
     if (!range) return;
+    const requestId = ++loadAppointmentsRequestId.current;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
+      const endDate = parseDateParam(range.end);
+      const endExclusive = endDate ? addDays(endDate, 1) : null;
       params.set("start", range.start);
-      params.set("end", range.end);
+      params.set("end", endExclusive ? toDateKey(endExclusive) : range.end);
       if (locationFilter !== "all") params.set("location", locationFilter);
       const res = await apiFetch(`/api/appointments/range?${params.toString()}`);
       if (res.status === 401) {
@@ -936,10 +952,13 @@ export default function AppointmentsPage() {
       }
       if (!res.ok) throw new Error(`Failed to load appointments (HTTP ${res.status})`);
       const data = (await res.json()) as Appointment[];
+      if (requestId !== loadAppointmentsRequestId.current) return;
       setAppointments(data);
     } catch (err) {
+      if (requestId !== loadAppointmentsRequestId.current) return;
       setError(err instanceof Error ? err.message : "Failed to load appointments");
     } finally {
+      if (requestId !== loadAppointmentsRequestId.current) return;
       setLoading(false);
     }
   }, [locationFilter, range, router]);

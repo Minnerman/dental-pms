@@ -30,11 +30,11 @@ def list_appointments_range(
     _user: User = Depends(get_current_user),
 ):
     start_dt = datetime.combine(start, time.min, tzinfo=timezone.utc)
-    end_dt = datetime.combine(end, time.max, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end, time.min, tzinfo=timezone.utc)
     stmt = (
         select(Appointment)
         .where(Appointment.deleted_at.is_(None))
-        .where(Appointment.starts_at >= start_dt, Appointment.starts_at <= end_dt)
+        .where(Appointment.starts_at >= start_dt, Appointment.starts_at < end_dt)
         .options(selectinload(Appointment.patient))
         .order_by(Appointment.starts_at.asc())
     )
