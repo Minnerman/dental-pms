@@ -96,3 +96,71 @@ test("appointments modal survives view and location switches", async ({ page, re
   await page.getByTestId("booking-visit-address").fill("123 Test Street");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 });
+
+test("appointment creation uses latest clinician and location selections", async ({
+  page,
+  request,
+}) => {
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+
+  const patientSelect = page.getByLabel("Select patient");
+  const patientOptions = await patientSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  expect(patientOptions.length).toBeGreaterThan(0);
+  await patientSelect.selectOption(patientOptions[0]);
+
+  await page.getByLabel("Start").fill("2026-01-15T09:00");
+  await page.getByLabel("End").fill("2026-01-15T09:30");
+
+  const clinicianSelect = page.getByLabel("Clinician (optional)");
+  const clinicianOptions = await clinicianSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  let expectedClinician = "";
+  if (clinicianOptions.length >= 2) {
+    await clinicianSelect.selectOption(clinicianOptions[0]);
+    await clinicianSelect.selectOption(clinicianOptions[1]);
+    expectedClinician = clinicianOptions[1];
+  } else if (clinicianOptions.length === 1) {
+    await clinicianSelect.selectOption(clinicianOptions[0]);
+    expectedClinician = clinicianOptions[0];
+  }
+
+  const roomInput = page.getByTestId("booking-location-room");
+  await roomInput.fill("Room 1");
+  await roomInput.fill("Room 2");
+
+  const locationType = page.getByTestId("booking-location-type");
+  await locationType.selectOption("visit");
+  await page.getByTestId("booking-visit-address").fill("123 Test Street");
+  await locationType.selectOption("clinic");
+
+  const requestPromise = page.waitForRequest((req) => {
+    if (req.method() !== "POST") return false;
+    return new URL(req.url()).pathname.endsWith("/api/appointments");
+  });
+
+  await page.getByRole("button", { name: "Create appointment" }).click();
+  const req = await requestPromise;
+  const payload = req.postDataJSON() as Record<string, unknown>;
+
+  if (expectedClinician) {
+    expect(payload.clinician_user_id).toBe(Number(expectedClinician));
+  } else {
+    expect(payload.clinician_user_id ?? null).toBeNull();
+  }
+  expect(payload.location_type).toBe("clinic");
+  expect(payload.location).toBe("Room 2");
+  expect((payload.location_text as string | undefined) ?? "").toBe("");
+});
