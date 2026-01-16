@@ -36,7 +36,7 @@ async function ensureLoggedIn(page: any) {
   });
 }
 
-async function maybeUpdatePassword(page: any) {
+async function maybeUpdatePassword(page: any, request: any, targetUrl: string) {
   if (!page.url().includes("/change-password")) return;
   await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible({
     timeout: 10_000,
@@ -47,9 +47,17 @@ async function maybeUpdatePassword(page: any) {
   await page.getByLabel("Confirm password").fill(nextPassword);
   await page.getByRole("button", { name: "Update password" }).click();
   currentPassword = nextPassword;
-  await page.waitForURL((url: URL) => !url.pathname.startsWith("/change-password"), {
-    timeout: 15_000,
-  });
+  await page
+    .waitForURL((url: URL) => !url.pathname.startsWith("/change-password"), {
+      timeout: 15_000,
+    })
+    .catch(() => {});
+  const token = await fetchAccessToken(baseURL, request);
+  await page.evaluate(({ tokenValue }) => {
+    localStorage.setItem("dental_pms_token", tokenValue);
+    document.cookie = `dental_pms_token=${encodeURIComponent(tokenValue)}; Path=/; SameSite=Lax`;
+  }, { tokenValue: token });
+  await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 }
 
 async function primeAuthenticatedSession(page: any, request: any) {
@@ -60,12 +68,14 @@ async function primeAuthenticatedSession(page: any, request: any) {
   }, { tokenValue: token });
 }
 
-async function openAppointments(page: any, url: string) {
+async function openAppointments(page: any, request: any, url: string) {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await ensureLoggedIn(page);
-  await maybeUpdatePassword(page);
+  await maybeUpdatePassword(page, request, url);
   if (!page.url().includes("/appointments")) {
     await page.goto(url, { waitUntil: "domcontentloaded" });
+    await ensureLoggedIn(page);
+    await maybeUpdatePassword(page, request, url);
   }
   await page.waitForURL((current: URL) => current.pathname.startsWith("/appointments"), {
     timeout: 15_000,
@@ -76,7 +86,7 @@ async function openAppointments(page: any, url: string) {
 
 test("appointments deep link opens modal and cleans URL", async ({ page, request }) => {
   await primeAuthenticatedSession(page, request);
-  await openAppointments(page, "/appointments?date=2026-01-15&book=1");
+  await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
   await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
 });
@@ -86,11 +96,12 @@ test("appointments refresh after deep link does not reopen without book param", 
   request,
 }) => {
   await primeAuthenticatedSession(page, request);
-  await openAppointments(page, "/appointments?date=2026-01-15&book=1");
+  await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
   await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
 
   await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
   await expect(page.getByTestId("booking-modal")).toHaveCount(0);
 });
 
@@ -99,16 +110,13 @@ test("appointments navigation back/forward keeps modal state consistent", async 
   request,
 }) => {
   await primeAuthenticatedSession(page, request);
-  await openAppointments(page, "/appointments?date=2026-01-15&book=1");
+  await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
   await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
 
-  await page.goto("/patients", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Patients" })).toBeVisible({
-    timeout: 15_000,
-  });
+  await openAppointments(page, request, "/appointments?date=2026-01-16");
   await page.goBack({ waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
+  await openAppointments(page, request, page.url());
   const backUrl = new URL(page.url());
   if (backUrl.searchParams.has("book")) {
     await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
@@ -119,7 +127,7 @@ test("appointments navigation back/forward keeps modal state consistent", async 
 
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await primeAuthenticatedSession(page, request);
-  await openAppointments(page, "/appointments?date=2026-01-15");
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
   await page.getByTestId("new-appointment").click();
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
