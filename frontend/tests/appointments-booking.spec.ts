@@ -9,6 +9,22 @@ async function openAppointments(page: any, request: any, url: string) {
   await expect(page).not.toHaveURL(/\/change-password|\/login/);
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("new-appointment")).toBeVisible({ timeout: 15_000 });
+  return token;
+}
+
+async function createPatient(request: any) {
+  const token = await ensureAuthReady(request);
+  const unique = Date.now();
+  const response = await request.post(`${baseURL}/api/patients`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      first_name: "Test",
+      last_name: `Patient ${unique}`,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const payload = await response.json();
+  return String(payload.id);
 }
 
 async function clickNewAppointment(page: any) {
@@ -101,20 +117,15 @@ test("appointment creation uses latest clinician and location selections", async
   page,
   request,
 }) => {
+  const patientId = await createPatient(request);
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   const patientSelect = page.getByLabel("Select patient");
-  const patientOptions = await patientSelect
-    .locator("option")
-    .evaluateAll((options) =>
-      options
-        .map((option) => (option as HTMLOptionElement).value)
-        .filter(Boolean)
-    );
-  expect(patientOptions.length).toBeGreaterThan(0);
-  await patientSelect.selectOption(patientOptions[0]);
+  const patientOption = patientSelect.locator(`option[value="${patientId}"]`);
+  await expect(patientOption).toBeVisible({ timeout: 15_000 });
+  await patientSelect.selectOption(patientId);
 
   await page.getByLabel("Start").fill("2026-01-15T09:00");
   await page.getByLabel("End").fill("2026-01-15T09:30");
