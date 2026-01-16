@@ -135,9 +135,10 @@ test("appointments modal survives view and location switches", async ({ page, re
   }
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
-  await page.getByLabel("Location / room").fill("Room 1");
-  await page.getByLabel("Location type").selectOption("visit");
-  await expect(page.getByLabel("Visit address")).toBeVisible({ timeout: 10_000 });
-  await page.getByLabel("Visit address").fill("123 Test Street");
+  await page.getByTestId("booking-location-type").selectOption("visit");
+  await expect(page.getByTestId("booking-location-room")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("booking-location-room").fill("Room 1");
+  await expect(page.getByTestId("booking-visit-address")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("booking-visit-address").fill("123 Test Street");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 });

@@ -2351,6 +2351,7 @@ export default function AppointmentsPage() {
                   <label className="label">Location / room</label>
                   <input
                     className="input"
+                    data-testid="booking-location-room"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="Room 1"
@@ -2360,6 +2361,7 @@ export default function AppointmentsPage() {
                   <label className="label">Location type</label>
                   <select
                     className="input"
+                    data-testid="booking-location-type"
                     value={locationType}
                     onChange={(e) => {
                       const next = e.target.value as AppointmentLocationType;
@@ -2376,6 +2378,7 @@ export default function AppointmentsPage() {
                     <label className="label">Visit address</label>
                     <textarea
                       className="input"
+                      data-testid="booking-visit-address"
                       rows={3}
                       value={locationText}
                       onChange={(e) => setLocationText(e.target.value)}
