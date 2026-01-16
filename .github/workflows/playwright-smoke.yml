@@ -59,8 +59,20 @@ jobs:
       - name: Start database
         run: docker compose up -d db
 
-      - name: Run migrations
-        run: docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'
+      - name: Run migrations (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "Attempt $i/3: running migrations"
+            if docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
+              exit 0
+            fi
+            echo "Migrations failed (likely transient pull). Sleeping 15s..."
+            sleep 15
+          done
+          echo "Giving up after 3 attempts."
+          exit 1
 
       - name: Start backend
         run: docker compose up -d backend
