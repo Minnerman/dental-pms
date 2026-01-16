@@ -21,5 +21,7 @@ test("clinical chart toggle renders tooth badges", async ({ page, request }) => 
   await viewHistory.click();
   await expect(viewHistory).toHaveAttribute("data-active", "true");
 
-  await expect(page.getByTestId("tooth-badge-11")).toBeVisible({ timeout: 15_000 });
+  const badge = page.getByTestId("tooth-badge-11");
+  await expect(badge).toHaveCount(1, { timeout: 15_000 });
+  await expect(badge).toBeVisible();
 });
