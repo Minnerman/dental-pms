@@ -284,6 +284,9 @@
 - Stage 23 follow-up:
   - Clinical reporting polish
 
+## Stage 66
+- Completed (PR #43, master 1b4de3d): clinical tab last-updated + refresh, error retry, standardized timestamps, newest-first ordering for notes/procedures, and clearer empty-state copy.
+
 ## Stage 65
 - Completed (PR #42, master 67975f2): booking modal deep-link stability tests (refresh/back/forward/view+location), added booking modal field testids for Playwright selectors, CI hardening retries for docker pulls/builds (recalls-api, CI docker-build, Playwright smoke).
 
