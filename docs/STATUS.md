@@ -57,7 +57,7 @@
 ## Recent fixes
 - 2026-01-16: Stage64 completed (recalls CSV export already in place; added filter-respecting export coverage).
 - 2026-01-15: Stage63 completed (Playwright smoke moved to its own workflow).
-- 2026-01-15: Stage62 merged (PR #39, master 7dab879). Stage63 planned: move Playwright smoke out of recalls-api-tests.yml into a dedicated workflow (or Nightly smoke).
+- 2026-01-15: Stage62 merged (PR #39, master 7dab879).
 - 2026-01-15: Stage62 completed (appointments `?book=1` deep link smoke coverage + booking modal guard).
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-15: Stage61 merged (PR #38, master c1b7cd9); CI runs started: 21047920977, 21047920968 (in progress at merge).
@@ -281,8 +281,9 @@
 - Workflow validation failure (run 21016501636) is a 0s failure on `.github/workflows/recalls-api-tests.yml` (no logs). Likely workflow-file validation issue; latest master CI run is green.
 
 ## Next up
-- Stage 23 follow-up:
-  - Clinical reporting polish
+- P1: Clinical chart view mode toggle + tooth badges
+- P2: Stage 23 follow-up (details TBD)
+- P3: Stage 31 backlog (details TBD)
 
 ## Stage 66
 - Completed (PR #43, master 1b4de3d): clinical tab last-updated + refresh, error retry, standardized timestamps, newest-first ordering for notes/procedures, and clearer empty-state copy.
