@@ -15,16 +15,22 @@ async function openAppointments(page: any, request: any, url: string) {
 async function createPatient(request: any) {
   const token = await ensureAuthReady(request);
   const unique = Date.now();
+  const firstName = "Test";
+  const lastName = `Patient ${unique}`;
   const response = await request.post(`${baseURL}/api/patients`, {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      first_name: "Test",
-      last_name: `Patient ${unique}`,
+      first_name: firstName,
+      last_name: lastName,
     },
   });
   expect(response.ok()).toBeTruthy();
   const payload = await response.json();
-  return String(payload.id);
+  return {
+    id: String(payload.id),
+    firstName,
+    lastName,
+  };
 }
 
 async function clickNewAppointment(page: any) {
@@ -117,15 +123,17 @@ test("appointment creation uses latest clinician and location selections", async
   page,
   request,
 }) => {
-  const patientId = await createPatient(request);
+  const patient = await createPatient(request);
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
-  const patientSelect = page.getByLabel("Select patient");
-  const patientOption = patientSelect.locator(`option[value="${patientId}"]`);
+  const patientSearch = page.getByTestId("booking-patient-search");
+  await patientSearch.fill(patient.lastName);
+  const patientSelect = page.getByTestId("booking-patient-select");
+  const patientOption = patientSelect.locator(`option[value="${patient.id}"]`);
   await expect(patientOption).toBeVisible({ timeout: 15_000 });
-  await patientSelect.selectOption(patientId);
+  await patientSelect.selectOption(patient.id);
 
   await page.getByLabel("Start").fill("2026-01-15T09:00");
   await page.getByLabel("End").fill("2026-01-15T09:30");

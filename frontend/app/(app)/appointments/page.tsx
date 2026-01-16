@@ -2300,6 +2300,7 @@ export default function AppointmentsPage() {
                     placeholder="Start typing a name"
                     value={patientQuery}
                     onChange={(e) => setPatientQuery(e.target.value)}
+                    data-testid="booking-patient-search"
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
@@ -2308,6 +2309,7 @@ export default function AppointmentsPage() {
                     className="input"
                     value={selectedPatientId}
                     onChange={(e) => setSelectedPatientId(e.target.value)}
+                    data-testid="booking-patient-select"
                   >
                     <option value="">Choose patient</option>
                     {filteredPatients.map((p) => (
