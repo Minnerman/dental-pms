@@ -132,6 +132,26 @@ def test_export_csv_returns_csv(api_client, auth_headers):
     assert "patient_id" in body[0]
 
 
+def test_export_csv_respects_contact_filters(api_client, auth_headers):
+    contacted_resp = api_client.get(
+        "/recalls/export.csv",
+        headers=auth_headers,
+        params={"contact_state": "contacted"},
+    )
+    assert contacted_resp.status_code == 200, contacted_resp.text
+    contacted_lines = contacted_resp.text.strip().splitlines()
+    assert len(contacted_lines) > 1, "Expected rows for contacted recalls"
+
+    never_resp = api_client.get(
+        "/recalls/export.csv",
+        headers=auth_headers,
+        params={"contact_state": "never"},
+    )
+    assert never_resp.status_code == 200, never_resp.text
+    never_lines = never_resp.text.strip().splitlines()
+    assert len(never_lines) == 1, "Expected header-only CSV for never-contacted filter"
+
+
 def test_export_guardrail_rejects_large_exports(monkeypatch):
     monkeypatch.setattr(recalls_router, "MAX_EXPORT_ROWS", 0)
 
