@@ -3808,7 +3808,24 @@ export default function PatientDetailClient({
                     </button>
                   </div>
 
-                  {clinicalError && <div className="notice">{clinicalError}</div>}
+                  {clinicalError && (
+                    <div className="notice">
+                      <div
+                        className="row"
+                        style={{ justifyContent: "space-between", alignItems: "center", gap: 12 }}
+                      >
+                        <span>{clinicalError}</span>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={loadClinicalSummary}
+                          disabled={clinicalLoading}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {clinicalLoading ? (
                     <div className="badge">Loading clinical…</div>
                   ) : clinicalTab === "chart" ? (
