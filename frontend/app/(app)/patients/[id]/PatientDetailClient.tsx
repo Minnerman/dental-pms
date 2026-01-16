@@ -580,6 +580,7 @@ export default function PatientDetailClient({
   const [treatmentPlanItems, setTreatmentPlanItems] = useState<TreatmentPlanItem[]>([]);
   const [clinicalLoading, setClinicalLoading] = useState(false);
   const [clinicalError, setClinicalError] = useState<string | null>(null);
+  const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
   const [toothHistory, setToothHistory] = useState<ToothHistory>({
     notes: [],
@@ -1195,6 +1196,7 @@ export default function PatientDetailClient({
       setTreatmentPlanItems(data.treatment_plan_items ?? []);
       setBpeScores(normalizeBpeScores(data.bpe_scores));
       setBpeRecordedAt(data.bpe_recorded_at ?? null);
+      setClinicalLastUpdated(new Date().toISOString());
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to load clinical summary");
     } finally {
@@ -3784,6 +3786,28 @@ export default function PatientDetailClient({
                     </button>
                   </div>
 
+                  <div
+                    className="row"
+                    style={{
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ color: "var(--muted)" }}>
+                      Last updated: {formatDateTime(clinicalLastUpdated)}
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={loadClinicalSummary}
+                      disabled={clinicalLoading}
+                    >
+                      {clinicalLoading ? "Refreshing..." : "Refresh"}
+                    </button>
+                  </div>
+
                   {clinicalError && <div className="notice">{clinicalError}</div>}
                   {clinicalLoading ? (
                     <div className="badge">Loading clinical…</div>
@@ -4389,9 +4413,8 @@ export default function PatientDetailClient({
                                     {note.surface ? ` · ${note.surface}` : ""}
                                   </strong>
                                   <div style={{ color: "var(--muted)" }}>
-                                    {new Date(note.created_at).toLocaleString()} ·{" "}
-                                    {note.created_by.email}
-                                  </div>
+                                  {formatDateTime(note.created_at)} · {note.created_by.email}
+                                </div>
                                 </div>
                                 <span className="badge">Tooth note</span>
                               </div>
@@ -4480,7 +4503,7 @@ export default function PatientDetailClient({
                             <div>
                               <strong>{note.note_type}</strong>
                               <div style={{ color: "var(--muted)" }}>
-                                {new Date(note.created_at).toLocaleString()} • {note.created_by.email}
+                                {formatDateTime(note.created_at)} • {note.created_by.email}
                               </div>
                             </div>
                             <Link className="btn btn-secondary" href={`/notes/${note.id}/audit`}>
