@@ -1,7 +1,10 @@
 import httpx
 import pytest
-from fastapi import HTTPException
 from datetime import datetime, timezone
+from types import SimpleNamespace
+
+from fastapi import HTTPException
+from starlette.requests import Request
 
 from app.routers import recalls as recalls_router
 
@@ -132,6 +135,20 @@ def test_export_csv_returns_csv(api_client, auth_headers):
     assert "patient_id" in body[0]
 
 
+def test_export_csv_creates_audit_log(api_client, auth_headers):
+    export_resp = api_client.get("/recalls/export.csv", headers=auth_headers)
+    assert export_resp.status_code == 200, export_resp.text
+
+    audit_resp = api_client.get(
+        "/audit",
+        headers=auth_headers,
+        params={"entity_type": "recall_export", "entity_id": "csv", "limit": 10},
+    )
+    assert audit_resp.status_code == 200, audit_resp.text
+    logs = audit_resp.json()
+    assert any(log.get("action") == "recalls.export_csv" for log in logs)
+
+
 def test_export_csv_respects_contact_filters(api_client, auth_headers):
     contacted_resp = api_client.get(
         "/recalls/export.csv",
@@ -167,9 +184,18 @@ def test_export_guardrail_rejects_large_exports(monkeypatch):
             return DummyResult(1)
 
     with pytest.raises(HTTPException) as excinfo:
+        request = Request(
+            scope={
+                "type": "http",
+                "headers": [],
+                "client": ("testclient", 123),
+            }
+        )
+        dummy_user = SimpleNamespace(id=1, email="audit@example.com")
         recalls_router.export_recalls_csv(
+            request=request,
             db=DummyDB(),
-            _user=object(),
+            user=dummy_user,
             start=None,
             end=None,
             recall_status=None,
