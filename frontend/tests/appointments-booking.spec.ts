@@ -115,9 +115,12 @@ test("appointment creation uses latest clinician and location selections", async
   const patientSearch = page.getByTestId("booking-patient-search");
   await patientSearch.fill(lastName);
   const patientSelect = page.getByTestId("booking-patient-select");
-  const patientOption = patientSelect.locator(`option[value="${patientId}"]`);
-  await expect(patientOption).toBeVisible({ timeout: 15_000 });
-  await patientSelect.selectOption(patientId);
+  await expect(patientSelect.locator(`option[value="${patientId}"]`)).toHaveCount(
+    1,
+    { timeout: 15_000 }
+  );
+  await patientSelect.selectOption(String(patientId));
+  await expect(patientSelect).toHaveValue(String(patientId));
 
   await page.getByLabel("Start").fill("2026-01-15T09:00");
   await page.getByLabel("End").fill("2026-01-15T09:30");
