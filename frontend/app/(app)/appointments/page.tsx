@@ -1828,12 +1828,14 @@ export default function AppointmentsPage() {
               <button
                 className={viewMode === "day_sheet" ? "btn btn-primary" : "btn btn-secondary"}
                 onClick={() => setViewMode("day_sheet")}
+                data-testid="appointments-view-day-sheet"
               >
                 Day sheet
               </button>
               <button
                 className={viewMode === "calendar" ? "btn btn-primary" : "btn btn-secondary"}
                 onClick={() => setViewMode("calendar")}
+                data-testid="appointments-view-calendar"
               >
                 Calendar
               </button>

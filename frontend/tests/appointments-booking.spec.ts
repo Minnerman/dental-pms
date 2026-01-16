@@ -46,6 +46,9 @@ async function openAppointments(page: any, url: string) {
   if (!page.url().includes("/appointments")) {
     await page.goto(url, { waitUntil: "domcontentloaded" });
   }
+  await page.waitForURL((current: URL) => current.pathname.startsWith("/appointments"), {
+    timeout: 15_000,
+  });
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
 }
 
@@ -93,9 +96,9 @@ test("appointments modal survives view and location switches", async ({ page, re
   await page.getByRole("button", { name: "New appointment" }).click();
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Calendar" }).click();
+  await page.getByTestId("appointments-view-calendar").click();
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: "Day sheet" }).click();
+  await page.getByTestId("appointments-view-day-sheet").click();
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   await page.getByLabel("Jump to").fill("2026-01-16");
