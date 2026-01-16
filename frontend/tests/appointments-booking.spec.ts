@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const adminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
-const adminPassword = process.env.ADMIN_PASSWORD ?? "ChangeMe123!";
+let currentPassword = process.env.ADMIN_PASSWORD ?? "ChangeMe123!";
+const fallbackPassword = "ChangeMe123!ChangeMe123!";
+const altPassword = "ChangeMe123!ChangeMe123!2";
 const envBase = process.env.FRONTEND_BASE_URL;
 const baseURL =
   envBase && !envBase.includes("${")
@@ -10,9 +12,11 @@ const baseURL =
 
 async function fetchAccessToken(baseURL: string, request: any) {
   const response = await request.post(`${baseURL}/api/auth/login`, {
-    data: { email: adminEmail, password: adminPassword },
+    data: { email: adminEmail, password: currentPassword },
   });
-  expect(response.ok()).toBeTruthy();
+  if (!response.ok()) {
+    throw new Error(`Login failed for ${adminEmail} (status ${response.status()})`);
+  }
   const payload = await response.json();
   const token = payload.access_token || payload.accessToken;
   expect(token).toBeTruthy();
@@ -25,9 +29,25 @@ async function ensureLoggedIn(page: any) {
     timeout: 10_000,
   });
   await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
+  await page.getByLabel("Password").fill(currentPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url: URL) => !url.pathname.startsWith("/login"), {
+    timeout: 15_000,
+  });
+}
+
+async function maybeUpdatePassword(page: any) {
+  if (!page.url().includes("/change-password")) return;
+  await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible({
+    timeout: 10_000,
+  });
+  const nextPassword =
+    currentPassword === fallbackPassword ? altPassword : fallbackPassword;
+  await page.getByLabel("New password").fill(nextPassword);
+  await page.getByLabel("Confirm password").fill(nextPassword);
+  await page.getByRole("button", { name: "Update password" }).click();
+  currentPassword = nextPassword;
+  await page.waitForURL((url: URL) => !url.pathname.startsWith("/change-password"), {
     timeout: 15_000,
   });
 }
@@ -43,6 +63,7 @@ async function primeAuthenticatedSession(page: any, request: any) {
 async function openAppointments(page: any, url: string) {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await ensureLoggedIn(page);
+  await maybeUpdatePassword(page);
   if (!page.url().includes("/appointments")) {
     await page.goto(url, { waitUntil: "domcontentloaded" });
   }
