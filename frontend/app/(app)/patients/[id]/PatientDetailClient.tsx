@@ -1725,6 +1725,18 @@ export default function PatientDetailClient({
     return treatmentPlanItems.filter((item) => item.tooth === selectedTooth);
   }, [selectedTooth, treatmentPlanItems]);
 
+  const sortedClinicalNotes = useMemo(() => {
+    return [...clinicalNotes].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [clinicalNotes]);
+
+  const sortedClinicalProcedures = useMemo(() => {
+    return [...clinicalProcedures].sort(
+      (a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime()
+    );
+  }, [clinicalProcedures]);
+
   function getToothBadges(tooth: string) {
     const badges: { label: string; title: string }[] = [];
     if (clinicalViewMode !== "history" && plannedTeeth.has(tooth)) {
@@ -4415,13 +4427,13 @@ export default function PatientDetailClient({
                         </div>
                       </Panel>
 
-                      {clinicalNotes.length === 0 ? (
+                      {sortedClinicalNotes.length === 0 ? (
                         <div className="notice">
-                          No clinical notes yet. Add a note above to start the record.
+                          No clinical notes recorded yet. Add notes from the Clinical entry area.
                         </div>
                       ) : (
                         <div className="stack">
-                          {clinicalNotes.map((note) => (
+                          {sortedClinicalNotes.map((note) => (
                             <div className="card" key={note.id}>
                               <div className="row">
                                 <div>
@@ -4444,13 +4456,13 @@ export default function PatientDetailClient({
                       )}
 
                       <Panel title="Recent procedures">
-                        {clinicalProcedures.length === 0 ? (
+                        {sortedClinicalProcedures.length === 0 ? (
                           <div className="notice">
                             No procedures recorded yet. Add from the chart or treatment plan.
                           </div>
                         ) : (
                           <div className="stack">
-                            {clinicalProcedures.map((procedure) => (
+                            {sortedClinicalProcedures.map((procedure) => (
                               <div className="card" style={{ margin: 0 }} key={procedure.id}>
                                 <div className="row">
                                   <div>
