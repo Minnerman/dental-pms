@@ -1,8 +1,8 @@
-import httpx
-import pytest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import httpx
+import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
@@ -167,6 +167,66 @@ def test_export_csv_respects_contact_filters(api_client, auth_headers):
     assert never_resp.status_code == 200, never_resp.text
     never_lines = never_resp.text.strip().splitlines()
     assert len(never_lines) == 1, "Expected header-only CSV for never-contacted filter"
+
+
+def _fetch_export_audit(
+    client: httpx.Client,
+    headers: dict[str, str],
+    export_type: str,
+) -> dict:
+    response = client.get(
+        "/audit",
+        headers=headers,
+        params={"entity_type": "recall_export", "entity_id": export_type, "limit": 1},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload, "Expected audit log entry"
+    return payload[0]
+
+
+def _assert_export_audit_payload(entry: dict, export_type: str):
+    assert entry.get("entity_type") == "recall_export"
+    assert entry.get("entity_id") == export_type
+    after_json = entry.get("after_json") or {}
+    assert after_json.get("export_type") == export_type
+    assert isinstance(after_json.get("filters"), dict)
+    for key in [
+        "start",
+        "end",
+        "status",
+        "type",
+        "contact_state",
+        "last_contact",
+        "method",
+        "contacted",
+        "contacted_within_days",
+        "contact_channel",
+    ]:
+        assert key in after_json["filters"]
+    for key in [
+        "page_only",
+        "limit",
+        "offset",
+        "total",
+        "exported_rows",
+        "filename",
+    ]:
+        assert key in after_json
+
+
+def test_export_csv_audit_entry(api_client, auth_headers):
+    response = api_client.get("/recalls/export.csv", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    entry = _fetch_export_audit(api_client, auth_headers, "csv")
+    _assert_export_audit_payload(entry, "csv")
+
+
+def test_export_letters_zip_audit_entry(api_client, auth_headers):
+    response = api_client.get("/recalls/letters.zip", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    entry = _fetch_export_audit(api_client, auth_headers, "letters_zip")
+    _assert_export_audit_payload(entry, "letters_zip")
 
 
 def test_export_guardrail_rejects_large_exports(monkeypatch):
