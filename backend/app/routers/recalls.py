@@ -38,6 +38,7 @@ from app.services.audit import log_event, snapshot_model
 from app.services.document_render import render_template_with_warnings
 from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recall_communications import log_recall_communication
+from app.services.recalls_audit import build_export_filters, log_recall_export
 from app.services.recalls import resolve_recall_status
 
 logger = logging.getLogger("uvicorn.error")
@@ -667,6 +668,18 @@ def export_recalls_csv(
     offset: int = Query(default=0, ge=0),
 ):
     start_time = time.perf_counter()
+    export_filters = build_export_filters(
+        start=start,
+        end=end,
+        status=recall_status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
+    )
     stmt, _ = _build_export_stmt(
         start=start,
         end=end,
@@ -740,37 +753,21 @@ def export_recalls_csv(
         suffix_parts.append("page")
     suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
     filename = f"recalls-{date.today().isoformat()}{suffix}.csv"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-    log_event(
+    log_recall_export(
         db,
-        actor=user,
-        action="recalls.export_csv",
-        entity_type="recall_export",
-        entity_id="csv",
-        after_data={
-            "filters": {
-                "start": start.isoformat() if start else None,
-                "end": end.isoformat() if end else None,
-                "status": recall_status,
-                "type": recall_type,
-                "contact_state": contact_state,
-                "last_contact": last_contact,
-                "method": method,
-                "contacted": contacted,
-                "contacted_within_days": contacted_within_days,
-                "contact_channel": contact_channel,
-            },
-            "page_only": page_only,
-            "limit": limit,
-            "offset": offset,
-            "total": total,
-            "exported_rows": len(results),
-            "filename": filename,
-        },
-        request_id=request.headers.get("x-request-id") if request else None,
-        ip_address=request.client.host if request else None,
+        user=user,
+        request=request,
+        export_type="csv",
+        filters=export_filters,
+        page_only=page_only,
+        limit=limit,
+        offset=offset,
+        total=total,
+        exported_rows=len(results),
+        filename=filename,
     )
     db.commit()
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     logger.info("perf: recalls_export_csv_ms=%.2f rows=%d", elapsed_ms, len(results))
     return Response(content=buffer.getvalue(), media_type="text/csv", headers=headers)
@@ -854,6 +851,18 @@ def export_recall_letters_zip(
     offset: int = Query(default=0, ge=0),
 ):
     start_time = time.perf_counter()
+    export_filters = build_export_filters(
+        start=start,
+        end=end,
+        status=recall_status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
+    )
     stmt, _ = _build_export_stmt(
         start=start,
         end=end,
@@ -885,7 +894,7 @@ def export_recall_letters_zip(
     results = db.execute(stmt).all()
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for recall, patient, _last_contacted_at, _last_contact_channel in results:
+        for recall, patient, _last_contacted_at, _last_contact_channel, *_ in results:
             surname = _safe_filename_part(patient.last_name or "")
             forename = _safe_filename_part(patient.first_name or "")
             due_date = recall.due_date.isoformat()
@@ -931,36 +940,20 @@ def export_recall_letters_zip(
         suffix_parts.append("page")
     suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
     filename = f"recall-letters-{date.today().isoformat()}{suffix}.zip"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-    log_event(
+    log_recall_export(
         db,
-        actor=user,
-        action="recalls.export_letters_zip",
-        entity_type="recall_export",
-        entity_id="letters_zip",
-        after_data={
-            "filters": {
-                "start": start.isoformat() if start else None,
-                "end": end.isoformat() if end else None,
-                "status": recall_status,
-                "type": recall_type,
-                "contact_state": contact_state,
-                "last_contact": last_contact,
-                "method": method,
-                "contacted": contacted,
-                "contacted_within_days": contacted_within_days,
-                "contact_channel": contact_channel,
-            },
-            "page_only": page_only,
-            "limit": limit,
-            "offset": offset,
-            "total": total,
-            "exported_rows": len(results),
-            "filename": filename,
-        },
-        request_id=request.headers.get("x-request-id") if request else None,
-        ip_address=request.client.host if request else None,
+        user=user,
+        request=request,
+        export_type="letters_zip",
+        filters=export_filters,
+        page_only=page_only,
+        limit=limit,
+        offset=offset,
+        total=total,
+        exported_rows=len(results),
+        filename=filename,
     )
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     db.commit()
     bump_export_count_cache_epoch("recalls.export_letters_zip")
     elapsed_ms = (time.perf_counter() - start_time) * 1000
