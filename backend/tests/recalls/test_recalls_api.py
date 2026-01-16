@@ -222,6 +222,19 @@ def test_export_csv_audit_entry(api_client, auth_headers):
     _assert_export_audit_payload(entry, "csv")
 
 
+def test_export_csv_audit_includes_filters(api_client, auth_headers):
+    response = api_client.get(
+        "/recalls/export.csv",
+        headers=auth_headers,
+        params={"contact_state": "contacted", "last_contact": "7d"},
+    )
+    assert response.status_code == 200, response.text
+    entry = _fetch_export_audit(api_client, auth_headers, "csv")
+    filters = (entry.get("after_json") or {}).get("filters") or {}
+    assert filters.get("contact_state") == "contacted"
+    assert filters.get("last_contact") == "7d"
+
+
 def test_export_letters_zip_audit_entry(api_client, auth_headers):
     response = api_client.get("/recalls/letters.zip", headers=auth_headers)
     assert response.status_code == 200, response.text
