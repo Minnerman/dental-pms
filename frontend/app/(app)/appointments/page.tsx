@@ -238,7 +238,10 @@ const statusThemeTokens: Record<
 };
 
 function toDateKey(value: Date) {
-  return value.toLocaleDateString("en-CA");
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function toLocalDateTimeInput(date: Date) {
