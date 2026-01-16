@@ -10,82 +10,68 @@ const baseURL =
     ? envBase
     : `http://localhost:${process.env.FRONTEND_PORT ?? "3100"}`;
 
-async function fetchAccessToken(baseURL: string, request: any) {
-  const response = await request.post(`${baseURL}/api/auth/login`, {
-    data: { email: adminEmail, password: currentPassword },
-  });
-  if (!response.ok()) {
-    throw new Error(`Login failed for ${adminEmail} (status ${response.status()})`);
+async function ensureAuthReady(request: any) {
+  const candidates = Array.from(
+    new Set([currentPassword, fallbackPassword, altPassword].filter(Boolean))
+  );
+  for (const candidate of candidates) {
+    const response = await request.post(`${baseURL}/api/auth/login`, {
+      data: { email: adminEmail, password: candidate },
+    });
+    if (!response.ok()) continue;
+    const payload = await response.json();
+    const token = payload.access_token || payload.accessToken;
+    const mustChange = Boolean(payload.must_change_password ?? payload.mustChangePassword);
+    if (!mustChange) {
+      currentPassword = candidate;
+      return token as string;
+    }
+    const nextPassword = candidate === fallbackPassword ? altPassword : fallbackPassword;
+    const changeResponse = await request.post(`${baseURL}/api/auth/change-password`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { new_password: nextPassword, old_password: candidate },
+    });
+    expect(changeResponse.ok()).toBeTruthy();
+    currentPassword = nextPassword;
+    const retry = await request.post(`${baseURL}/api/auth/login`, {
+      data: { email: adminEmail, password: currentPassword },
+    });
+    expect(retry.ok()).toBeTruthy();
+    const retryPayload = await retry.json();
+    const retryToken = retryPayload.access_token || retryPayload.accessToken;
+    return retryToken as string;
   }
-  const payload = await response.json();
-  const token = payload.access_token || payload.accessToken;
-  expect(token).toBeTruthy();
-  return token as string;
+  throw new Error(`Unable to authenticate admin user ${adminEmail}`);
 }
 
-async function ensureLoggedIn(page: any) {
-  if (!page.url().includes("/login")) return;
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible({
-    timeout: 10_000,
-  });
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(currentPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL((url: URL) => !url.pathname.startsWith("/login"), {
-    timeout: 15_000,
-  });
-}
-
-async function maybeUpdatePassword(page: any, request: any, targetUrl: string) {
-  if (!page.url().includes("/change-password")) return;
-  await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible({
-    timeout: 10_000,
-  });
-  const nextPassword =
-    currentPassword === fallbackPassword ? altPassword : fallbackPassword;
-  await page.getByLabel("New password").fill(nextPassword);
-  await page.getByLabel("Confirm password").fill(nextPassword);
-  await page.getByRole("button", { name: "Update password" }).click();
-  currentPassword = nextPassword;
-  await page
-    .waitForURL((url: URL) => !url.pathname.startsWith("/change-password"), {
-      timeout: 15_000,
-    })
-    .catch(() => {});
-  const token = await fetchAccessToken(baseURL, request);
-  await page.evaluate(({ tokenValue }) => {
-    localStorage.setItem("dental_pms_token", tokenValue);
-    document.cookie = `dental_pms_token=${encodeURIComponent(tokenValue)}; Path=/; SameSite=Lax`;
-  }, { tokenValue: token });
-  await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
-}
-
-async function primeAuthenticatedSession(page: any, request: any) {
-  const token = await fetchAccessToken(baseURL, request);
+async function openAppointments(page: any, request: any, url: string) {
+  const token = await ensureAuthReady(request);
   await page.addInitScript(({ tokenValue }) => {
     localStorage.setItem("dental_pms_token", tokenValue);
     document.cookie = `dental_pms_token=${encodeURIComponent(tokenValue)}; Path=/; SameSite=Lax`;
   }, { tokenValue: token });
-}
-
-async function openAppointments(page: any, request: any, url: string) {
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await ensureLoggedIn(page);
-  await maybeUpdatePassword(page, request, url);
-  if (!page.url().includes("/appointments")) {
-    await page.goto(url, { waitUntil: "domcontentloaded" });
-    await ensureLoggedIn(page);
-    await maybeUpdatePassword(page, request, url);
-  }
-  await page.waitForURL((current: URL) => current.pathname.startsWith("/appointments"), {
-    timeout: 15_000,
-  });
+  await expect(page).toHaveURL(/\/appointments/);
+  await expect(page).not.toHaveURL(/\/change-password|\/login/);
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("new-appointment")).toBeVisible({ timeout: 15_000 });
 }
 
+async function clickNewAppointment(page: any) {
+  const button = page.getByTestId("new-appointment");
+  await expect(button).toBeVisible({ timeout: 15_000 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await button.click();
+      return;
+    } catch (error) {
+      if (attempt === 2) throw error;
+      await page.waitForTimeout(250);
+    }
+  }
+}
+
 test("appointments deep link opens modal and cleans URL", async ({ page, request }) => {
-  await primeAuthenticatedSession(page, request);
   await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
   await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
@@ -95,7 +81,6 @@ test("appointments refresh after deep link does not reopen without book param", 
   page,
   request,
 }) => {
-  await primeAuthenticatedSession(page, request);
   await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
   await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
@@ -109,7 +94,6 @@ test("appointments navigation back/forward keeps modal state consistent", async 
   page,
   request,
 }) => {
-  await primeAuthenticatedSession(page, request);
   await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
   await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
@@ -126,9 +110,8 @@ test("appointments navigation back/forward keeps modal state consistent", async 
 });
 
 test("appointments modal survives view and location switches", async ({ page, request }) => {
-  await primeAuthenticatedSession(page, request);
   await openAppointments(page, request, "/appointments?date=2026-01-15");
-  await page.getByTestId("new-appointment").click();
+  await clickNewAppointment(page);
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId("appointments-view-calendar").click();
