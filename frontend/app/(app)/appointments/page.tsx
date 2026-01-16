@@ -1821,19 +1821,25 @@ export default function AppointmentsPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button className="btn btn-primary" onClick={() => setShowNewModal(true)}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowNewModal(true)}
+              data-testid="new-appointment"
+            >
               New appointment
             </button>
             <div style={{ display: "flex", gap: 6 }}>
               <button
                 className={viewMode === "day_sheet" ? "btn btn-primary" : "btn btn-secondary"}
                 onClick={() => setViewMode("day_sheet")}
+                data-testid="appointments-view-day-sheet"
               >
                 Day sheet
               </button>
               <button
                 className={viewMode === "calendar" ? "btn btn-primary" : "btn btn-secondary"}
                 onClick={() => setViewMode("calendar")}
+                data-testid="appointments-view-calendar"
               >
                 Calendar
               </button>
@@ -2345,6 +2351,7 @@ export default function AppointmentsPage() {
                   <label className="label">Location / room</label>
                   <input
                     className="input"
+                    data-testid="booking-location-room"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="Room 1"
@@ -2354,6 +2361,7 @@ export default function AppointmentsPage() {
                   <label className="label">Location type</label>
                   <select
                     className="input"
+                    data-testid="booking-location-type"
                     value={locationType}
                     onChange={(e) => {
                       const next = e.target.value as AppointmentLocationType;
@@ -2370,6 +2378,7 @@ export default function AppointmentsPage() {
                     <label className="label">Visit address</label>
                     <textarea
                       className="input"
+                      data-testid="booking-visit-address"
                       rows={3}
                       value={locationText}
                       onChange={(e) => setLocationText(e.target.value)}

@@ -56,11 +56,49 @@ jobs:
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
           EOF
 
-      - name: Start database
-        run: docker compose up -d db
+      - name: Start database (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export COMPOSE_HTTP_TIMEOUT=300
+          export DOCKER_CLIENT_TIMEOUT=300
 
-      - name: Run migrations
-        run: docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'
+          for i in 1 2 3; do
+            echo "Attempt $i/3: docker compose pull db"
+            if docker compose pull db; then
+              break
+            fi
+            echo "Pull failed; sleeping 20s..."
+            sleep 20
+          done
+
+          for i in 1 2 3; do
+            echo "Attempt $i/3: docker compose up -d db"
+            if docker compose up -d db; then
+              exit 0
+            fi
+            echo "Up failed; sleeping 20s..."
+            sleep 20
+          done
+
+          echo "DB failed to start after retries"
+          docker compose logs --no-color --tail=200 db || true
+          exit 1
+
+      - name: Run migrations (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "Attempt $i/3: running migrations"
+            if docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
+              exit 0
+            fi
+            echo "Migrations failed (likely transient pull). Sleeping 15s..."
+            sleep 15
+          done
+          echo "Giving up after 3 attempts."
+          exit 1
 
       - name: Start backend
         run: docker compose up -d backend
