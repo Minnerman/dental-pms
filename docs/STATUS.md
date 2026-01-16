@@ -284,6 +284,9 @@
 - Stage 23 follow-up:
   - Clinical reporting polish
 
+## Stage 65
+- Completed (PR #42, master 67975f2): booking modal deep-link stability tests (refresh/back/forward/view+location), added booking modal field testids for Playwright selectors, CI hardening retries for docker pulls/builds (recalls-api, CI docker-build, Playwright smoke).
+
 ## Roadmap (stages)
 - Stage 47: recall dashboard last contact and contact filters (completed)
 - Stage 48: recall dashboard pagination controls (completed)
