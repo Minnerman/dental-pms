@@ -22,6 +22,14 @@ export async function ensureAuthReady(request: APIRequestContext) {
       response = await request.post(`${baseURL}/api/auth/login`, {
         data: { email: adminEmail, password: candidate },
       });
+      if (response && !response.ok()) {
+        const body = await response.text();
+        console.error("AUTH_LOGIN_FAIL", {
+          status: response.status(),
+          url: `${baseURL}/api/auth/login`,
+          body: body.slice(0, 500),
+        });
+      }
       if (response.status() === 429 || response.status() === 503) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         continue;
