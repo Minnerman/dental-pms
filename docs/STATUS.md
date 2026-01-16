@@ -287,6 +287,10 @@
 ## Stage 66
 - Completed (PR #43, master 1b4de3d): clinical tab last-updated + refresh, error retry, standardized timestamps, newest-first ordering for notes/procedures, and clearer empty-state copy.
 
+## Stage 67
+- Completed (PR #44, master 6b008a8): appointments range end is exclusive (frontend sends day-after end), stale range fetches are ignored, and backend range boundary tests cover late-day inclusion + end-day exclusion.
+- Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
+
 ## Stage 65
 - Completed (PR #42, master 67975f2): booking modal deep-link stability tests (refresh/back/forward/view+location), added booking modal field testids for Playwright selectors, CI hardening retries for docker pulls/builds (recalls-api, CI docker-build, Playwright smoke).
 
