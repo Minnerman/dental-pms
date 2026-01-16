@@ -1821,7 +1821,11 @@ export default function AppointmentsPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button className="btn btn-primary" onClick={() => setShowNewModal(true)}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowNewModal(true)}
+              data-testid="new-appointment"
+            >
               New appointment
             </button>
             <div style={{ display: "flex", gap: 6 }}>

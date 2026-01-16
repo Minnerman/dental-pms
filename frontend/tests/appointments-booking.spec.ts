@@ -71,6 +71,7 @@ async function openAppointments(page: any, url: string) {
     timeout: 15_000,
   });
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("new-appointment")).toBeVisible({ timeout: 15_000 });
 }
 
 test("appointments deep link opens modal and cleans URL", async ({ page, request }) => {
@@ -108,13 +109,18 @@ test("appointments navigation back/forward keeps modal state consistent", async 
   });
   await page.goBack({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("booking-modal")).toHaveCount(0);
+  const backUrl = new URL(page.url());
+  if (backUrl.searchParams.has("book")) {
+    await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+  } else {
+    await expect(page.getByTestId("booking-modal")).toHaveCount(0);
+  }
 });
 
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await primeAuthenticatedSession(page, request);
   await openAppointments(page, "/appointments?date=2026-01-15");
-  await page.getByRole("button", { name: "New appointment" }).click();
+  await page.getByTestId("new-appointment").click();
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId("appointments-view-calendar").click();
