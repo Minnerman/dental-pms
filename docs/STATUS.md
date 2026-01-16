@@ -291,6 +291,10 @@
 - Completed (PR #44, master 6b008a8): appointments range end is exclusive (frontend sends day-after end), stale range fetches are ignored, and backend range boundary tests cover late-day inclusion + end-day exclusion.
 - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
+## Stage 68
+- Completed (PR #45, master c004aa6): recall export audit logging for CSV+letters ZIP, Content-Disposition filenames include filters/page-only, and frontend respects export filenames.
+- Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
+
 ## Stage 65
 - Completed (PR #42, master 67975f2): booking modal deep-link stability tests (refresh/back/forward/view+location), added booking modal field testids for Playwright selectors, CI hardening retries for docker pulls/builds (recalls-api, CI docker-build, Playwright smoke).
 
