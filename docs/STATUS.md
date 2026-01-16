@@ -299,6 +299,10 @@
 - Completed (PR #47, master 0ade0c9): Playwright helpers for auth + test data, with appointments booking spec refactored to use shared helpers.
 - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
+## Stage 69
+- Completed (PR #46, master 754979e): booking modal create uses latest clinician/location selections; Playwright coverage with helper-based patient creation and stable booking selectors/timeouts (booking start/end testids).
+- Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
+
 ## Stage 65
 - Completed (PR #42, master 67975f2): booking modal deep-link stability tests (refresh/back/forward/view+location), added booking modal field testids for Playwright selectors, CI hardening retries for docker pulls/builds (recalls-api, CI docker-build, Playwright smoke).
 
