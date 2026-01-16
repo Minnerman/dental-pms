@@ -303,6 +303,10 @@
 - Completed (PR #46, master 754979e): booking modal create uses latest clinician/location selections; Playwright coverage with helper-based patient creation and stable booking selectors/timeouts (booking start/end testids).
 - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
+## Stage 71
+- Completed (PR #48, master ee843ce): recalls export audit logging standardized via helper, covers CSV + letters ZIP with filter/page metadata, and tests assert audit entries including filtered exports.
+- Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
+
 ## Stage 65
 - Completed (PR #42, master 67975f2): booking modal deep-link stability tests (refresh/back/forward/view+location), added booking modal field testids for Playwright selectors, CI hardening retries for docker pulls/builds (recalls-api, CI docker-build, Playwright smoke).
 
