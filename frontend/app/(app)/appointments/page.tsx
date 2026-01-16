@@ -2327,6 +2327,7 @@ export default function AppointmentsPage() {
                       type="datetime-local"
                       value={startsAt}
                       onChange={(e) => setStartsAt(e.target.value)}
+                      data-testid="booking-start"
                     />
                   </div>
                   <div className="stack" style={{ gap: 8 }}>
@@ -2358,6 +2359,7 @@ export default function AppointmentsPage() {
                           setDurationMinutes(null);
                         }
                       }}
+                      data-testid="booking-end"
                     />
                   </div>
                 </div>

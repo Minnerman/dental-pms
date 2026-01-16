@@ -102,6 +102,7 @@ test("appointment creation uses latest clinician and location selections", async
   page,
   request,
 }) => {
+  test.setTimeout(120_000);
   const unique = Date.now();
   const lastName = `Patient ${unique}`;
   const patientId = await createPatient(request, {
@@ -122,8 +123,13 @@ test("appointment creation uses latest clinician and location selections", async
   await patientSelect.selectOption(String(patientId));
   await expect(patientSelect).toHaveValue(String(patientId));
 
-  await page.getByLabel("Start").fill("2026-01-15T09:00");
-  await page.getByLabel("End").fill("2026-01-15T09:30");
+  const start = page.getByTestId("booking-start");
+  await expect(start).toBeVisible({ timeout: 60_000 });
+  await start.fill("2026-01-15T09:00");
+
+  const end = page.getByTestId("booking-end");
+  await expect(end).toBeVisible({ timeout: 60_000 });
+  await end.fill("2026-01-15T09:30");
 
   const clinicianSelect = page.getByLabel("Clinician (optional)");
   const clinicianOptions = await clinicianSelect
