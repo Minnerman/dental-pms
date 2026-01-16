@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { createPatient } from "./helpers/api";
 import { primePageAuth } from "./helpers/auth";
 
 async function openAppointments(page: any, request: any, url: string) {
@@ -9,28 +10,6 @@ async function openAppointments(page: any, request: any, url: string) {
   await expect(page).not.toHaveURL(/\/change-password|\/login/);
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("new-appointment")).toBeVisible({ timeout: 15_000 });
-  return token;
-}
-
-async function createPatient(request: any) {
-  const token = await ensureAuthReady(request);
-  const unique = Date.now();
-  const firstName = "Test";
-  const lastName = `Patient ${unique}`;
-  const response = await request.post(`${baseURL}/api/patients`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: {
-      first_name: firstName,
-      last_name: lastName,
-    },
-  });
-  expect(response.ok()).toBeTruthy();
-  const payload = await response.json();
-  return {
-    id: String(payload.id),
-    firstName,
-    lastName,
-  };
 }
 
 async function clickNewAppointment(page: any) {
@@ -123,17 +102,22 @@ test("appointment creation uses latest clinician and location selections", async
   page,
   request,
 }) => {
-  const patient = await createPatient(request);
+  const unique = Date.now();
+  const lastName = `Patient ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Test",
+    last_name: lastName,
+  });
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   const patientSearch = page.getByTestId("booking-patient-search");
-  await patientSearch.fill(patient.lastName);
+  await patientSearch.fill(lastName);
   const patientSelect = page.getByTestId("booking-patient-select");
-  const patientOption = patientSelect.locator(`option[value="${patient.id}"]`);
+  const patientOption = patientSelect.locator(`option[value="${patientId}"]`);
   await expect(patientOption).toBeVisible({ timeout: 15_000 });
-  await patientSelect.selectOption(patient.id);
+  await patientSelect.selectOption(patientId);
 
   await page.getByLabel("Start").fill("2026-01-15T09:00");
   await page.getByLabel("End").fill("2026-01-15T09:30");
