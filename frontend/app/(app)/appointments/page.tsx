@@ -549,6 +549,22 @@ export default function AppointmentsPage() {
   const [conflictWarning, setConflictWarning] = useState<ConflictWarning | null>(null);
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
+  const [modalClinicianUserId, setModalClinicianUserId] = useState<string | null>(null);
+  const [modalLocationType, setModalLocationType] =
+    useState<AppointmentLocationType | null>(null);
+  const [modalLocationText, setModalLocationText] = useState<string | null>(null);
+  const [modalLocation, setModalLocation] = useState<string | null>(null);
+
+  const activeClinicianUserId = showNewModal
+    ? modalClinicianUserId ?? clinicianUserId
+    : clinicianUserId;
+  const activeLocationType = showNewModal
+    ? modalLocationType ?? locationType
+    : locationType;
+  const activeLocationText = showNewModal
+    ? modalLocationText ?? locationText
+    : locationText;
+  const activeLocation = showNewModal ? modalLocation ?? location : location;
   const loadAppointmentsRequestId = useRef(0);
 
   const filteredPatients = useMemo(() => {
@@ -700,7 +716,6 @@ export default function AppointmentsPage() {
         }
       }
     }
-    setShowNewModal(true);
     const patientIdParam = searchParams.get("patientId");
     if (patientIdParam && /^\d+$/.test(patientIdParam)) {
       setSelectedPatientId(patientIdParam);
@@ -718,7 +733,9 @@ export default function AppointmentsPage() {
     const clinicianIdParam = searchParams.get("clinicianId");
     if (clinicianIdParam && /^\d+$/.test(clinicianIdParam)) {
       setClinicianUserId(clinicianIdParam);
+      setModalClinicianUserId(clinicianIdParam);
     }
+    setShowNewModal(true);
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("book");
     nextParams.delete("reason");
@@ -734,7 +751,7 @@ export default function AppointmentsPage() {
       setConflictWarning(null);
       return;
     }
-    if (!startsAt || !endsAt || !clinicianUserId) {
+    if (!startsAt || !endsAt || !activeClinicianUserId) {
       setConflictWarning(null);
       return;
     }
@@ -748,7 +765,7 @@ export default function AppointmentsPage() {
       setConflictWarning(null);
       return;
     }
-    const clinicianId = Number(clinicianUserId);
+    const clinicianId = Number(activeClinicianUserId);
     if (!Number.isFinite(clinicianId)) {
       setConflictWarning(null);
       return;
@@ -759,11 +776,25 @@ export default function AppointmentsPage() {
     appointments,
     startsAt,
     endsAt,
-    clinicianUserId,
+    activeClinicianUserId,
     showNewModal,
     buildConflictWarning,
     findConflicts,
   ]);
+
+  useEffect(() => {
+    if (!showNewModal) {
+      setModalClinicianUserId(null);
+      setModalLocationType(null);
+      setModalLocationText(null);
+      setModalLocation(null);
+      return;
+    }
+    setModalClinicianUserId(clinicianUserId);
+    setModalLocationType(locationType);
+    setModalLocationText(locationText);
+    setModalLocation(location);
+  }, [showNewModal]);
 
   useEffect(() => {
     if (durationMinutes === null || !startsAt) return;
@@ -1123,13 +1154,22 @@ export default function AppointmentsPage() {
     const patient = patients.find((p) => String(p.id) === selectedPatientId);
     if (!patient) return;
     if (patient.care_setting !== "CLINIC") {
+      const nextText = locationText.trim()
+        ? locationText
+        : patient.visit_address_text || "";
       setLocationType("visit");
-      if (!locationText.trim()) {
-        setLocationText(patient.visit_address_text || "");
+      setLocationText(nextText);
+      if (showNewModal) {
+        setModalLocationType("visit");
+        setModalLocationText(nextText);
       }
     } else {
       setLocationType("clinic");
       setLocationText("");
+      if (showNewModal) {
+        setModalLocationType("clinic");
+        setModalLocationText("");
+      }
     }
   }, [selectedPatientId, patients, locationText]);
 
@@ -1153,7 +1193,7 @@ export default function AppointmentsPage() {
       setError("End time must be after the start time.");
       return;
     }
-    if (locationType === "visit" && !locationText.trim()) {
+    if (activeLocationType === "visit" && !activeLocationText.trim()) {
       setError("Visit address is required for domiciliary visits.");
       return;
     }
@@ -1161,7 +1201,7 @@ export default function AppointmentsPage() {
       setError("Appointment time is outside of working hours.");
       return;
     }
-    const clinicianId = clinicianUserId ? Number(clinicianUserId) : null;
+    const clinicianId = activeClinicianUserId ? Number(activeClinicianUserId) : null;
     if (clinicianId) {
       const conflicts = findConflicts({
         clinicianId,
@@ -1177,14 +1217,16 @@ export default function AppointmentsPage() {
         method: "POST",
         body: JSON.stringify({
           patient_id: Number(selectedPatientId),
-          clinician_user_id: clinicianUserId ? Number(clinicianUserId) : undefined,
+          clinician_user_id: activeClinicianUserId
+            ? Number(activeClinicianUserId)
+            : undefined,
           starts_at: startDate.toISOString(),
           ends_at: endDate.toISOString(),
           status: "booked",
           appointment_type: appointmentType.trim() || undefined,
-          location: location.trim() || undefined,
-          location_type: locationType,
-          location_text: locationText.trim() || undefined,
+          location: activeLocation.trim() || undefined,
+          location_type: activeLocationType,
+          location_text: activeLocationText.trim() || undefined,
         }),
       });
       if (res.status === 401) {
@@ -2258,6 +2300,7 @@ export default function AppointmentsPage() {
                     placeholder="Start typing a name"
                     value={patientQuery}
                     onChange={(e) => setPatientQuery(e.target.value)}
+                    data-testid="booking-patient-search"
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
@@ -2266,6 +2309,7 @@ export default function AppointmentsPage() {
                     className="input"
                     value={selectedPatientId}
                     onChange={(e) => setSelectedPatientId(e.target.value)}
+                    data-testid="booking-patient-select"
                   >
                     <option value="">Choose patient</option>
                     {filteredPatients.map((p) => (
@@ -2283,6 +2327,7 @@ export default function AppointmentsPage() {
                       type="datetime-local"
                       value={startsAt}
                       onChange={(e) => setStartsAt(e.target.value)}
+                      data-testid="booking-start"
                     />
                   </div>
                   <div className="stack" style={{ gap: 8 }}>
@@ -2314,6 +2359,7 @@ export default function AppointmentsPage() {
                           setDurationMinutes(null);
                         }
                       }}
+                      data-testid="booking-end"
                     />
                   </div>
                 </div>
@@ -2346,8 +2392,12 @@ export default function AppointmentsPage() {
                   <label className="label">Clinician (optional)</label>
                   <select
                     className="input"
-                    value={clinicianUserId}
-                    onChange={(e) => setClinicianUserId(e.target.value)}
+                    value={activeClinicianUserId}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setClinicianUserId(next);
+                      if (showNewModal) setModalClinicianUserId(next);
+                    }}
                   >
                     <option value="">Unassigned</option>
                     {users.map((u) => (
@@ -2371,8 +2421,12 @@ export default function AppointmentsPage() {
                   <input
                     className="input"
                     data-testid="booking-location-room"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                    value={activeLocation}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setLocation(next);
+                      if (showNewModal) setModalLocation(next);
+                    }}
                     placeholder="Room 1"
                   />
                 </div>
@@ -2381,26 +2435,34 @@ export default function AppointmentsPage() {
                   <select
                     className="input"
                     data-testid="booking-location-type"
-                    value={locationType}
+                    value={activeLocationType}
                     onChange={(e) => {
                       const next = e.target.value as AppointmentLocationType;
                       setLocationType(next);
-                      if (next === "clinic") setLocationText("");
+                      if (showNewModal) setModalLocationType(next);
+                      if (next === "clinic") {
+                        setLocationText("");
+                        if (showNewModal) setModalLocationText("");
+                      }
                     }}
                   >
                     <option value="clinic">Clinic</option>
                     <option value="visit">Visit</option>
                   </select>
                 </div>
-                {locationType === "visit" && (
+                {activeLocationType === "visit" && (
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Visit address</label>
                     <textarea
                       className="input"
                       data-testid="booking-visit-address"
                       rows={3}
-                      value={locationText}
-                      onChange={(e) => setLocationText(e.target.value)}
+                      value={activeLocationText}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setLocationText(next);
+                        if (showNewModal) setModalLocationText(next);
+                      }}
                       placeholder="Full address for the home visit"
                     />
                   </div>

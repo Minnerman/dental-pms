@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { createPatient } from "./helpers/api";
 import { primePageAuth } from "./helpers/auth";
 
 async function openAppointments(page: any, request: any, url: string) {
@@ -95,4 +96,83 @@ test("appointments modal survives view and location switches", async ({ page, re
   await expect(page.getByTestId("booking-visit-address")).toBeVisible({ timeout: 15_000 });
   await page.getByTestId("booking-visit-address").fill("123 Test Street");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+});
+
+test("appointment creation uses latest clinician and location selections", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const unique = Date.now();
+  const lastName = `Patient ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Test",
+    last_name: lastName,
+  });
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+
+  const patientSearch = page.getByTestId("booking-patient-search");
+  await patientSearch.fill(lastName);
+  const patientSelect = page.getByTestId("booking-patient-select");
+  await expect(patientSelect.locator(`option[value="${patientId}"]`)).toHaveCount(
+    1,
+    { timeout: 15_000 }
+  );
+  await patientSelect.selectOption(String(patientId));
+  await expect(patientSelect).toHaveValue(String(patientId));
+
+  const start = page.getByTestId("booking-start");
+  await expect(start).toBeVisible({ timeout: 60_000 });
+  await start.fill("2026-01-15T09:00");
+
+  const end = page.getByTestId("booking-end");
+  await expect(end).toBeVisible({ timeout: 60_000 });
+  await end.fill("2026-01-15T09:30");
+
+  const clinicianSelect = page.getByLabel("Clinician (optional)");
+  const clinicianOptions = await clinicianSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  let expectedClinician = "";
+  if (clinicianOptions.length >= 2) {
+    await clinicianSelect.selectOption(clinicianOptions[0]);
+    await clinicianSelect.selectOption(clinicianOptions[1]);
+    expectedClinician = clinicianOptions[1];
+  } else if (clinicianOptions.length === 1) {
+    await clinicianSelect.selectOption(clinicianOptions[0]);
+    expectedClinician = clinicianOptions[0];
+  }
+
+  const roomInput = page.getByTestId("booking-location-room");
+  await roomInput.fill("Room 1");
+  await roomInput.fill("Room 2");
+
+  const locationType = page.getByTestId("booking-location-type");
+  await locationType.selectOption("visit");
+  await page.getByTestId("booking-visit-address").fill("123 Test Street");
+  await locationType.selectOption("clinic");
+
+  const requestPromise = page.waitForRequest((req) => {
+    if (req.method() !== "POST") return false;
+    return new URL(req.url()).pathname.endsWith("/api/appointments");
+  });
+
+  await page.getByRole("button", { name: "Create appointment" }).click();
+  const req = await requestPromise;
+  const payload = req.postDataJSON() as Record<string, unknown>;
+
+  if (expectedClinician) {
+    expect(payload.clinician_user_id).toBe(Number(expectedClinician));
+  } else {
+    expect(payload.clinician_user_id ?? null).toBeNull();
+  }
+  expect(payload.location_type).toBe("clinic");
+  expect(payload.location).toBe("Room 2");
+  expect((payload.location_text as string | undefined) ?? "").toBe("");
 });
