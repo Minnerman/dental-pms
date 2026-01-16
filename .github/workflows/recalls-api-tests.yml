@@ -14,6 +14,8 @@ jobs:
     env:
       APP_ENV: development
       ALLOW_DEV_SEED: "1"
+      COMPOSE_HTTP_TIMEOUT: "200"
+      DOCKER_CLIENT_TIMEOUT: "200"
       COMPOSE_PROJECT_NAME: dentalpms_ci_tests
       POSTGRES_DB: dental_pms
       POSTGRES_USER: dental_pms
@@ -59,8 +61,29 @@ jobs:
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
           EOF
 
-      - name: Start database
-        run: docker compose up -d db
+      - name: Start database (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "Attempt $i/3: pulling db image"
+            if docker compose pull db; then
+              break
+            fi
+            echo "Pull failed; sleeping 15s..."
+            sleep 15
+          done
+
+          for i in 1 2 3; do
+            echo "Attempt $i/3: starting db"
+            if docker compose up -d db; then
+              break
+            fi
+            echo "Start failed; sleeping 15s..."
+            sleep 15
+          done
+
+          echo "DB start step completed."
 
       - name: Run migrations
         run: docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'

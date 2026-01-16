@@ -37,9 +37,34 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    env:
+      DOCKER_CLIENT_TIMEOUT: "200"
+      COMPOSE_HTTP_TIMEOUT: "200"
     steps:
       - uses: actions/checkout@v4
-      - name: Build backend image
-        run: docker build -t dental-pms-backend -f backend/Dockerfile backend
-      - name: Build frontend image
-        run: docker build -t dental-pms-frontend -f frontend/Dockerfile frontend
+      - name: Build backend image (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "Attempt $i/3: build backend image"
+            if docker build -t dental-pms-backend -f backend/Dockerfile backend; then
+              exit 0
+            fi
+            echo "Build failed (possible registry timeout). Sleeping 20s..."
+            sleep 20
+          done
+          exit 1
+      - name: Build frontend image (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "Attempt $i/3: build frontend image"
+            if docker build -t dental-pms-frontend -f frontend/Dockerfile frontend; then
+              exit 0
+            fi
+            echo "Build failed (possible registry timeout). Sleeping 20s..."
+            sleep 20
+          done
+          exit 1
