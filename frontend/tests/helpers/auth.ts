@@ -14,28 +14,57 @@ export async function ensureAuthReady(request: APIRequestContext) {
   const baseURL = getBaseUrl();
   const candidate = process.env.ADMIN_PASSWORD ?? "ChangeMe123!";
   const maxAttempts = 5;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const response = await request.post(`${baseURL}/api/auth/login`, {
-      data: { email: adminEmail, password: candidate },
+
+  const loginWithBackoff = async () => {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const response = await request.post(`${baseURL}/api/auth/login`, {
+        data: { email: adminEmail, password: candidate },
+      });
+      if (!response.ok()) {
+        const body = await response.text();
+        console.error("AUTH_LOGIN_FAIL", {
+          status: response.status(),
+          url: `${baseURL}/api/auth/login`,
+          body: body.slice(0, 500),
+        });
+        if (response.status() === 429) {
+          const delayMs = 2000 * Math.pow(2, attempt);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+        return null;
+      }
+      return response.json();
+    }
+    return null;
+  };
+
+  const payload = await loginWithBackoff();
+  if (payload) {
+    const token = payload.access_token || payload.accessToken;
+    const mustChange = Boolean(payload.must_change_password ?? payload.mustChangePassword);
+    if (!mustChange) {
+      cachedAdminToken = token as string;
+      return cachedAdminToken;
+    }
+    const changeResponse = await request.post(`${baseURL}/api/auth/change-password`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { new_password: candidate },
     });
-    if (!response.ok()) {
-      const body = await response.text();
-      console.error("AUTH_LOGIN_FAIL", {
-        status: response.status(),
-        url: `${baseURL}/api/auth/login`,
+    if (!changeResponse.ok()) {
+      const body = await changeResponse.text();
+      console.error("AUTH_CHANGE_PASSWORD_FAIL", {
+        status: changeResponse.status(),
+        url: `${baseURL}/api/auth/change-password`,
         body: body.slice(0, 500),
       });
-      if (response.status() === 429) {
-        const delayMs = 2000 * Math.pow(2, attempt);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        continue;
-      }
-      break;
     }
-    const payload = await response.json();
-    const token = payload.access_token || payload.accessToken;
-    cachedAdminToken = token as string;
-    return cachedAdminToken;
+    const retryPayload = await loginWithBackoff();
+    if (retryPayload) {
+      const retryToken = retryPayload.access_token || retryPayload.accessToken;
+      cachedAdminToken = retryToken as string;
+      return cachedAdminToken;
+    }
   }
   throw new Error(`Unable to authenticate admin user ${adminEmail}`);
 }
