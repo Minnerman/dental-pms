@@ -54,6 +54,12 @@
 - Admin email/password live in `/home/amir/dental-pms/.env`
 - Default is `admin@example.com` / `ChangeMe123!`
 
+## In progress
+- Stage72: Clinical chart view mode toggle + tooth badges (MVP).
+  - Add minimal test ids for chart toggle and tooth badges.
+  - Add Playwright smoke for chart toggle + badge rendering.
+  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
+
 ## Recent fixes
 - 2026-01-16: Stage64 completed (recalls CSV export already in place; added filter-respecting export coverage).
 - 2026-01-15: Stage63 completed (Playwright smoke moved to its own workflow).
