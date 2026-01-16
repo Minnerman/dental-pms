@@ -580,6 +580,7 @@ export default function PatientDetailClient({
   const [treatmentPlanItems, setTreatmentPlanItems] = useState<TreatmentPlanItem[]>([]);
   const [clinicalLoading, setClinicalLoading] = useState(false);
   const [clinicalError, setClinicalError] = useState<string | null>(null);
+  const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
   const [toothHistory, setToothHistory] = useState<ToothHistory>({
     notes: [],
@@ -1195,6 +1196,7 @@ export default function PatientDetailClient({
       setTreatmentPlanItems(data.treatment_plan_items ?? []);
       setBpeScores(normalizeBpeScores(data.bpe_scores));
       setBpeRecordedAt(data.bpe_recorded_at ?? null);
+      setClinicalLastUpdated(new Date().toISOString());
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to load clinical summary");
     } finally {
@@ -1722,6 +1724,18 @@ export default function PatientDetailClient({
     if (!selectedTooth) return [];
     return treatmentPlanItems.filter((item) => item.tooth === selectedTooth);
   }, [selectedTooth, treatmentPlanItems]);
+
+  const sortedClinicalNotes = useMemo(() => {
+    return [...clinicalNotes].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [clinicalNotes]);
+
+  const sortedClinicalProcedures = useMemo(() => {
+    return [...clinicalProcedures].sort(
+      (a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime()
+    );
+  }, [clinicalProcedures]);
 
   function getToothBadges(tooth: string) {
     const badges: { label: string; title: string }[] = [];
@@ -3784,7 +3798,46 @@ export default function PatientDetailClient({
                     </button>
                   </div>
 
-                  {clinicalError && <div className="notice">{clinicalError}</div>}
+                  <div
+                    className="row"
+                    style={{
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ color: "var(--muted)" }}>
+                      Last updated: {formatDateTime(clinicalLastUpdated)}
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={loadClinicalSummary}
+                      disabled={clinicalLoading}
+                    >
+                      {clinicalLoading ? "Refreshing..." : "Refresh"}
+                    </button>
+                  </div>
+
+                  {clinicalError && (
+                    <div className="notice">
+                      <div
+                        className="row"
+                        style={{ justifyContent: "space-between", alignItems: "center", gap: 12 }}
+                      >
+                        <span>{clinicalError}</span>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={loadClinicalSummary}
+                          disabled={clinicalLoading}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {clinicalLoading ? (
                     <div className="badge">Loading clinical…</div>
                   ) : clinicalTab === "chart" ? (
@@ -4374,13 +4427,13 @@ export default function PatientDetailClient({
                         </div>
                       </Panel>
 
-                      {clinicalNotes.length === 0 ? (
+                      {sortedClinicalNotes.length === 0 ? (
                         <div className="notice">
-                          No clinical notes yet. Add a note above to start the record.
+                          No clinical notes recorded yet. Add notes from the Clinical entry area.
                         </div>
                       ) : (
                         <div className="stack">
-                          {clinicalNotes.map((note) => (
+                          {sortedClinicalNotes.map((note) => (
                             <div className="card" key={note.id}>
                               <div className="row">
                                 <div>
@@ -4389,9 +4442,8 @@ export default function PatientDetailClient({
                                     {note.surface ? ` · ${note.surface}` : ""}
                                   </strong>
                                   <div style={{ color: "var(--muted)" }}>
-                                    {new Date(note.created_at).toLocaleString()} ·{" "}
-                                    {note.created_by.email}
-                                  </div>
+                                  {formatDateTime(note.created_at)} · {note.created_by.email}
+                                </div>
                                 </div>
                                 <span className="badge">Tooth note</span>
                               </div>
@@ -4404,13 +4456,13 @@ export default function PatientDetailClient({
                       )}
 
                       <Panel title="Recent procedures">
-                        {clinicalProcedures.length === 0 ? (
+                        {sortedClinicalProcedures.length === 0 ? (
                           <div className="notice">
                             No procedures recorded yet. Add from the chart or treatment plan.
                           </div>
                         ) : (
                           <div className="stack">
-                            {clinicalProcedures.map((procedure) => (
+                            {sortedClinicalProcedures.map((procedure) => (
                               <div className="card" style={{ margin: 0 }} key={procedure.id}>
                                 <div className="row">
                                   <div>
@@ -4480,7 +4532,7 @@ export default function PatientDetailClient({
                             <div>
                               <strong>{note.note_type}</strong>
                               <div style={{ color: "var(--muted)" }}>
-                                {new Date(note.created_at).toLocaleString()} • {note.created_by.email}
+                                {formatDateTime(note.created_at)} • {note.created_by.email}
                               </div>
                             </div>
                             <Link className="btn btn-secondary" href={`/notes/${note.id}/audit`}>
