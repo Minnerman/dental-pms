@@ -649,8 +649,9 @@ def log_recall_contact(
 
 @router.get("/export.csv")
 def export_recalls_csv(
+    request: Request,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     recall_status: str | None = Query(default=None, alias="status"),
@@ -717,8 +718,59 @@ def export_recalls_csv(
                 last_contact_channel.value if last_contact_channel else "",
             ]
         )
-    filename = f"recalls-{date.today().isoformat()}.csv"
+    has_filters = any(
+        value
+        for value in [
+            start,
+            end,
+            recall_status,
+            recall_type,
+            contact_state,
+            last_contact,
+            method,
+            contacted,
+            contacted_within_days,
+            contact_channel,
+        ]
+    )
+    suffix_parts = []
+    if has_filters:
+        suffix_parts.append("filtered")
+    if page_only:
+        suffix_parts.append("page")
+    suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
+    filename = f"recalls-{date.today().isoformat()}{suffix}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    log_event(
+        db,
+        actor=user,
+        action="recalls.export_csv",
+        entity_type="recall_export",
+        entity_id="csv",
+        after_data={
+            "filters": {
+                "start": start.isoformat() if start else None,
+                "end": end.isoformat() if end else None,
+                "status": recall_status,
+                "type": recall_type,
+                "contact_state": contact_state,
+                "last_contact": last_contact,
+                "method": method,
+                "contacted": contacted,
+                "contacted_within_days": contacted_within_days,
+                "contact_channel": contact_channel,
+            },
+            "page_only": page_only,
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "exported_rows": len(results),
+            "filename": filename,
+        },
+        request_id=request.headers.get("x-request-id") if request else None,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     logger.info("perf: recalls_export_csv_ms=%.2f rows=%d", elapsed_ms, len(results))
     return Response(content=buffer.getvalue(), media_type="text/csv", headers=headers)
@@ -784,6 +836,7 @@ def export_recalls_count(
 
 @router.get("/letters.zip")
 def export_recall_letters_zip(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     start: date | None = Query(default=None),
@@ -856,8 +909,58 @@ def export_recall_letters_zip(
                 created_by_user_id=user.id if user else None,
                 guard_seconds=60,
             )
-    filename = f"recall-letters-{date.today().isoformat()}.zip"
+    has_filters = any(
+        value
+        for value in [
+            start,
+            end,
+            recall_status,
+            recall_type,
+            contact_state,
+            last_contact,
+            method,
+            contacted,
+            contacted_within_days,
+            contact_channel,
+        ]
+    )
+    suffix_parts = []
+    if has_filters:
+        suffix_parts.append("filtered")
+    if page_only:
+        suffix_parts.append("page")
+    suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
+    filename = f"recall-letters-{date.today().isoformat()}{suffix}.zip"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    log_event(
+        db,
+        actor=user,
+        action="recalls.export_letters_zip",
+        entity_type="recall_export",
+        entity_id="letters_zip",
+        after_data={
+            "filters": {
+                "start": start.isoformat() if start else None,
+                "end": end.isoformat() if end else None,
+                "status": recall_status,
+                "type": recall_type,
+                "contact_state": contact_state,
+                "last_contact": last_contact,
+                "method": method,
+                "contacted": contacted,
+                "contacted_within_days": contacted_within_days,
+                "contact_channel": contact_channel,
+            },
+            "page_only": page_only,
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "exported_rows": len(results),
+            "filename": filename,
+        },
+        request_id=request.headers.get("x-request-id") if request else None,
+        ip_address=request.client.host if request else None,
+    )
     db.commit()
     bump_export_count_cache_epoch("recalls.export_letters_zip")
     elapsed_ms = (time.perf_counter() - start_time) * 1000

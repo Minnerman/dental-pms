@@ -266,6 +266,13 @@ export default function RecallsPage() {
     return `Recall_${safeName}_${date}.pdf`;
   }
 
+  function getFilenameFromDisposition(res: Response, fallback: string) {
+    const header = res.headers.get("content-disposition");
+    if (!header) return fallback;
+    const match = /filename="?([^"]+)"?/i.exec(header);
+    return match?.[1] || fallback;
+  }
+
   async function downloadRecallLetter(row: RecallRow) {
     setDownloadId(row.id);
     setError(null);
@@ -286,7 +293,7 @@ export default function RecallsPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = buildRecallFilename(row);
+      link.download = getFilenameFromDisposition(res, buildRecallFilename(row));
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -329,7 +336,10 @@ export default function RecallsPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `recalls-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = getFilenameFromDisposition(
+        res,
+        `recalls-${new Date().toISOString().slice(0, 10)}.csv`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -372,7 +382,10 @@ export default function RecallsPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `recall-letters-${new Date().toISOString().slice(0, 10)}.zip`;
+      link.download = getFilenameFromDisposition(
+        res,
+        `recall-letters-${new Date().toISOString().slice(0, 10)}.zip`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
