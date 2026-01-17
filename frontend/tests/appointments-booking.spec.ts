@@ -98,10 +98,13 @@ test("appointments modal survives view and location switches", async ({ page, re
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId("booking-location-type").selectOption("visit");
-  await expect(page.getByTestId("booking-location-room")).toBeVisible({ timeout: 15_000 });
-  await page.getByTestId("booking-location-room").fill("Room 1");
+  const roomInput = page.getByTestId("booking-location-room");
+  await expect(roomInput).toBeDisabled({ timeout: 15_000 });
   await expect(page.getByTestId("booking-visit-address")).toBeVisible({ timeout: 15_000 });
   await page.getByTestId("booking-visit-address").fill("123 Test Street");
+  await page.getByTestId("booking-location-type").selectOption("clinic");
+  await expect(roomInput).toBeEnabled({ timeout: 15_000 });
+  await roomInput.fill("Room 1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 });
 
@@ -170,7 +173,7 @@ test("appointment creation uses latest clinician and location selections", async
     return new URL(req.url()).pathname.endsWith("/api/appointments");
   });
 
-  await page.getByRole("button", { name: "Create appointment" }).click();
+  await page.getByTestId("booking-submit").click();
   const req = await requestPromise;
   const payload = req.postDataJSON() as Record<string, unknown>;
 
@@ -182,4 +185,47 @@ test("appointment creation uses latest clinician and location selections", async
   expect(payload.location_type).toBe("clinic");
   expect(payload.location).toBe("Room 2");
   expect((payload.location_text as string | undefined) ?? "").toBe("");
+});
+
+test("booking modal requires minimum fields before enabling submit", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Test",
+    last_name: `Required ${Date.now()}`,
+  });
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+
+  const submit = page.getByTestId("booking-submit");
+  await expect(submit).toBeDisabled();
+
+  await page.getByTestId("booking-patient-select").selectOption(String(patientId));
+  await page.getByTestId("booking-start").fill("2026-01-15T09:00");
+  await page.getByTestId("booking-end").fill("2026-01-15T09:30");
+
+  await expect(submit).toBeEnabled({ timeout: 15_000 });
+});
+
+test("visit appointments require address, clinic does not", async ({ page, request }) => {
+  const patientId = await createPatient(request, {
+    first_name: "Visit",
+    last_name: `Test ${Date.now()}`,
+  });
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+
+  await page.getByTestId("booking-patient-select").selectOption(String(patientId));
+  await page.getByTestId("booking-start").fill("2026-01-15T10:00");
+  await page.getByTestId("booking-end").fill("2026-01-15T10:30");
+
+  const submit = page.getByTestId("booking-submit");
+  await page.getByTestId("booking-location-type").selectOption("visit");
+  await expect(submit).toBeDisabled();
+  await page.getByTestId("booking-visit-address").fill("45 Main Street");
+  await expect(submit).toBeEnabled({ timeout: 15_000 });
+
+  await page.getByTestId("booking-location-type").selectOption("clinic");
+  await expect(submit).toBeEnabled({ timeout: 15_000 });
 });
