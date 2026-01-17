@@ -23,4 +23,11 @@ test("clinical chart toggle renders tooth badges", async ({ page, request }) => 
   await expect(viewHistory).toHaveAttribute("data-active", "true");
 
   await expect(page.getByTestId("tooth-badge-UR1")).toBeVisible({ timeout: 30_000 });
+
+  await expect(page).toHaveURL(/clinicalView=history/);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("clinical-chart-view-history")).toHaveAttribute(
+    "data-active",
+    "true"
+  );
 });

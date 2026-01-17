@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
@@ -462,6 +462,7 @@ export default function PatientDetailClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const patientId = id;
   const patientIdNum = Number(patientId);
   const isValidPatientId = Number.isFinite(patientIdNum);
@@ -1703,12 +1704,48 @@ export default function PatientDetailClient({
     patient?.alerts_access ? { label: "Access", tone: "warning" } : null,
   ].filter(Boolean) as { label: string; tone: "danger" | "warning" }[];
 
+  function normalizeToothCode(code?: string | null) {
+    return code ? code.trim().toUpperCase() : null;
+  }
+
+  useEffect(() => {
+    const fromUrl = searchParams?.get("clinicalView");
+    if (fromUrl === "current" || fromUrl === "planned" || fromUrl === "history") {
+      if (fromUrl !== clinicalViewMode) setClinicalViewMode(fromUrl);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("clinicalViewMode");
+    if (stored === "current" || stored === "planned" || stored === "history") {
+      if (stored !== clinicalViewMode) setClinicalViewMode(stored);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("clinicalViewMode", clinicalViewMode);
+    }
+    if (!pathname) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (clinicalViewMode === "current") {
+      params.delete("clinicalView");
+    } else {
+      params.set("clinicalView", clinicalViewMode);
+    }
+    const current = searchParams?.get("clinicalView") ?? "";
+    const next = params.get("clinicalView") ?? "";
+    if (current === next) return;
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [clinicalViewMode, pathname, router, searchParams]);
+
   const plannedTeeth = useMemo(() => {
     const activeStatuses = new Set(["proposed", "accepted"]);
     return new Set(
       treatmentPlanItems
         .filter((item) => item.tooth && activeStatuses.has(item.status))
-        .map((item) => item.tooth as string)
+        .map((item) => normalizeToothCode(item.tooth))
+        .filter((tooth): tooth is string => Boolean(tooth))
     );
   }, [treatmentPlanItems]);
 
@@ -1716,7 +1753,8 @@ export default function PatientDetailClient({
     return new Set(
       clinicalProcedures
         .filter((procedure) => procedure.tooth)
-        .map((procedure) => procedure.tooth as string)
+        .map((procedure) => normalizeToothCode(procedure.tooth))
+        .filter((tooth): tooth is string => Boolean(tooth))
     );
   }, [clinicalProcedures]);
 
@@ -1739,10 +1777,11 @@ export default function PatientDetailClient({
 
   function getToothBadges(tooth: string) {
     const badges: { label: string; title: string }[] = [];
-    if (clinicalViewMode !== "history" && plannedTeeth.has(tooth)) {
+    const normalized = normalizeToothCode(tooth);
+    if (normalized && clinicalViewMode !== "history" && plannedTeeth.has(normalized)) {
       badges.push({ label: "P", title: "Planned treatment" });
     }
-    if (clinicalViewMode !== "planned" && historyTeeth.has(tooth)) {
+    if (normalized && clinicalViewMode !== "planned" && historyTeeth.has(normalized)) {
       badges.push({ label: "H", title: "History" });
     }
     // TODO: add missing/extracted/deciduous/gap-closed tooth badges once stored.
