@@ -538,6 +538,7 @@ export default function AppointmentsPage() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(
     null
   );
+  const [bookingSubmitError, setBookingSubmitError] = useState<string | null>(null);
   const [lastSelectedSlot, setLastSelectedSlot] = useState<Date | null>(null);
   const [noteCache, setNoteCache] = useState<Record<number, string[]>>({});
   const [tooltip, setTooltip] = useState<{
@@ -927,12 +928,14 @@ export default function AppointmentsPage() {
       setModalLocationType(null);
       setModalLocationText(null);
       setModalLocation(null);
+      setBookingSubmitError(null);
       return;
     }
     setModalClinicianUserId(clinicianUserId);
     setModalLocationType(locationType);
     setModalLocationText(locationText);
     setModalLocation(location);
+    setBookingSubmitError(null);
   }, [showNewModal]);
 
   useEffect(() => {
@@ -947,23 +950,32 @@ export default function AppointmentsPage() {
     }
   }, [durationMinutes, startsAt, endsAt]);
 
-  const bookingValidationError = useMemo(() => {
-    if (!selectedPatientId) return "Select a patient before booking.";
-    if (!startsAt || !endsAt) return "Select a start and end time.";
-    const startDate = new Date(startsAt);
-    const endDate = new Date(endsAt);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      return "Select a valid start and end time.";
+  const bookingFieldErrors = useMemo(() => {
+    const errors: { patient?: string; time?: string; visit?: string } = {};
+    if (!selectedPatientId) {
+      errors.patient = "Select a patient before booking.";
     }
-    if (endDate <= startDate) return "End time must be after the start time.";
+    if (!startsAt || !endsAt) {
+      errors.time = "Select a start and end time.";
+    } else {
+      const startDate = new Date(startsAt);
+      const endDate = new Date(endsAt);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        errors.time = "Select a valid start and end time.";
+      } else if (endDate <= startDate) {
+        errors.time = "End time must be after the start time.";
+      } else if (schedule && !isRangeWithinSchedule(startDate, endDate, schedule)) {
+        errors.time = "Appointment time is outside of working hours.";
+      }
+    }
     if (activeLocationType === "visit" && !activeLocationText.trim()) {
-      return "Visit address is required for domiciliary visits.";
+      errors.visit = "Visit address is required for domiciliary visits.";
     }
-    if (schedule && !isRangeWithinSchedule(startDate, endDate, schedule)) {
-      return "Appointment time is outside of working hours.";
-    }
-    return null;
+    return errors;
   }, [selectedPatientId, startsAt, endsAt, activeLocationType, activeLocationText, schedule]);
+
+  const bookingValidationError =
+    bookingFieldErrors.patient || bookingFieldErrors.time || bookingFieldErrors.visit || null;
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;
@@ -1346,6 +1358,7 @@ export default function AppointmentsPage() {
     }
     setSaving(true);
     setError(null);
+    setBookingSubmitError(null);
     try {
       const res = await apiFetch("/api/appointments", {
         method: "POST",
@@ -1404,7 +1417,9 @@ export default function AppointmentsPage() {
       }
       await loadAppointments();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create appointment");
+      setBookingSubmitError(
+        err instanceof Error ? err.message : "Failed to create appointment"
+      );
     } finally {
       setSaving(false);
     }
@@ -2455,6 +2470,11 @@ export default function AppointmentsPage() {
                 </button>
               </div>
               <form onSubmit={createAppointment} className="stack">
+                {(bookingSubmitError || bookingValidationError) && (
+                  <div className="notice" data-testid="booking-error">
+                    {bookingSubmitError || bookingValidationError}
+                  </div>
+                )}
                 <div className="stack" style={{ gap: 8 }}>
                   <label className="label">Search patient</label>
                   <input
@@ -2484,6 +2504,14 @@ export default function AppointmentsPage() {
                       </option>
                     ))}
                   </select>
+                  {bookingFieldErrors.patient && (
+                    <div
+                      style={{ color: "var(--danger)", fontSize: 12 }}
+                      data-testid="booking-error-patient"
+                    >
+                      {bookingFieldErrors.patient}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
                   <div className="stack" style={{ gap: 8 }}>
@@ -2535,6 +2563,14 @@ export default function AppointmentsPage() {
                     />
                   </div>
                 </div>
+                {bookingFieldErrors.time && (
+                  <div
+                    style={{ color: "var(--danger)", fontSize: 12 }}
+                    data-testid="booking-error-time"
+                  >
+                    {bookingFieldErrors.time}
+                  </div>
+                )}
                 {startsAt && endsAt && (
                   <div
                     style={{ color: "var(--muted)", fontSize: 12 }}
@@ -2656,11 +2692,14 @@ export default function AppointmentsPage() {
                       }}
                       placeholder="Full address for the home visit"
                     />
-                  </div>
-                )}
-                {bookingValidationError && (
-                  <div className="notice" data-testid="booking-error">
-                    {bookingValidationError}
+                    {bookingFieldErrors.visit && (
+                      <div
+                        style={{ color: "var(--danger)", fontSize: 12 }}
+                        data-testid="booking-error-visit"
+                      >
+                        {bookingFieldErrors.visit}
+                      </div>
+                    )}
                   </div>
                 )}
                 {conflictChecking && (
