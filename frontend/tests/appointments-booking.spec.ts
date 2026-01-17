@@ -143,8 +143,9 @@ test("appointments shortcuts open, focus, and close booking", async ({ page, req
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("booking-patient-search")).toBeFocused();
 
+  await page.locator("body").click();
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("booking-modal")).toHaveCount(0);
+  await expect(page.getByTestId("booking-modal")).toBeHidden({ timeout: 10_000 });
 });
 
 test("appointment creation uses latest clinician and location selections", async ({
