@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage82 completed (PR #59, master 581dbcf).
+  - Recalls export filenames sanitized + parity between preview and download; tests updated.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-17: Stage81 completed (PR #58, master f5cb445).
   - Recalls export filename preview + Playwright coverage.
 - 2026-01-17: Stage80 housekeeping (closed stale PRs #55/#56; removed remote branches).
