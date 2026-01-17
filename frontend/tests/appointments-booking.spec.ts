@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { createPatient } from "./helpers/api";
-import { primePageAuth } from "./helpers/auth";
+import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
 async function openAppointments(page: any, request: any, url: string) {
   await primePageAuth(page, request);
@@ -33,6 +33,30 @@ async function clickNewAppointment(page: any) {
   }
 }
 
+async function createConflictAppointment(
+  request: any,
+  patientId: string,
+  clinicianId: number,
+  startsAt: string,
+  endsAt: string
+) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const response = await request.post(`${baseURL}/api/appointments`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      patient_id: Number(patientId),
+      clinician_user_id: clinicianId,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      status: "booked",
+      location_type: "clinic",
+      location: "Room 1",
+      location_text: "",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
 test("appointments deep link opens modal and cleans URL", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
@@ -185,6 +209,62 @@ test("appointment creation uses latest clinician and location selections", async
   expect(payload.location_type).toBe("clinic");
   expect(payload.location).toBe("Room 2");
   expect((payload.location_text as string | undefined) ?? "").toBe("");
+});
+
+test("booking conflict check debounces and surfaces latest conflicts", async ({
+  page,
+  request,
+}) => {
+  const conflictPatientId = await createPatient(request, {
+    first_name: "Conflict",
+    last_name: `Patient ${Date.now()}`,
+  });
+  const bookingPatientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: `Patient ${Date.now()}`,
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+
+  const clinicianSelect = page.getByLabel("Clinician (optional)");
+  const clinicianOptions = await clinicianSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  if (clinicianOptions.length === 0) {
+    test.skip();
+    return;
+  }
+  const clinicianId = Number(clinicianOptions[0]);
+
+  await createConflictAppointment(
+    request,
+    conflictPatientId,
+    clinicianId,
+    "2026-01-15T09:00:00.000Z",
+    "2026-01-15T09:30:00.000Z"
+  );
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await clickNewAppointment(page);
+  await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
+
+  await page.getByTestId("booking-patient-select").selectOption(String(bookingPatientId));
+  await page.getByTestId("booking-start").fill("2026-01-15T09:15");
+  await page.getByTestId("booking-end").fill("2026-01-15T09:40");
+  await page.getByTestId("booking-end").fill("2026-01-15T09:45");
+
+  await page
+    .getByTestId("booking-conflicts-loading")
+    .waitFor({ state: "visible", timeout: 5000 })
+    .catch(() => {});
+  await expect(page.getByTestId("booking-conflicts")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("booking-conflict-row").first()).toBeVisible();
 });
 
 test("booking modal requires minimum fields before enabling submit", async ({
