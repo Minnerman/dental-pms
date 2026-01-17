@@ -57,6 +57,8 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage81 completed (PR #58, master f5cb445).
+  - Recalls export filename preview + Playwright coverage.
 - 2026-01-17: Stage80 housekeeping (closed stale PRs #55/#56; removed remote branches).
   - Billing-era CI failures noted for historical context; Actions now running normally.
 - 2026-01-17: Stage78 completed (PR #57, master c5f7ca8).
