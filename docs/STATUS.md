@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage87 completed (PR #64, master d55b615).
+  - Appointments overlap/conflict detection + UX; blocks conflicting bookings; Playwright covers overlap flow.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-17: Stage86 completed (PR #63, master 9d653b7).
   - Billing payment UX hardened: disable while saving/fully paid, clearer status, reliable receipt download + in-flight/error states; Playwright covers payment → receipt.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
