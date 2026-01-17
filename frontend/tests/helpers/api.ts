@@ -52,5 +52,7 @@ export async function createClinicalProcedure(
     data: payload,
   });
   expect(response.ok()).toBeTruthy();
-  return response.json();
+  const result = await response.json();
+  console.log("CREATED_PROCEDURE", result);
+  return result;
 }
