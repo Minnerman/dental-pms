@@ -655,6 +655,7 @@ export default function RecallsPage() {
               <label className="label">Recall type</label>
               <select
                 className="input"
+                data-testid="recalls-filter-type"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as RecallKind | "all")}
               >
@@ -672,12 +673,14 @@ export default function RecallsPage() {
                 <input
                   className="input"
                   type="date"
+                  data-testid="recalls-filter-start-date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                 />
                 <input
                   className="input"
                   type="date"
+                  data-testid="recalls-filter-end-date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                 />
@@ -689,6 +692,7 @@ export default function RecallsPage() {
               <label className="label">Contact state</label>
               <select
                 className="input"
+                data-testid="recalls-filter-contact-state"
                 value={contactState}
                 onChange={(e) =>
                   setContactState(e.target.value as "all" | "never" | "contacted")
@@ -703,6 +707,7 @@ export default function RecallsPage() {
               <label className="label">Last contact</label>
               <select
                 className="input"
+                data-testid="recalls-filter-last-contact"
                 value={lastContact}
                 onChange={(e) =>
                   setLastContact(
@@ -720,6 +725,7 @@ export default function RecallsPage() {
               <label className="label">Method</label>
               <select
                 className="input"
+                data-testid="recalls-filter-method"
                 value={contactMethod}
                 onChange={(e) =>
                   setContactMethod(e.target.value as "all" | RecallContactChannel)
@@ -756,18 +762,23 @@ export default function RecallsPage() {
               className="btn btn-secondary"
               type="button"
               onClick={resetFilters}
+              data-testid="recalls-reset-filters"
             >
               Reset filters
             </button>
-            <div className="badge">
+            <div className="badge" data-testid="recalls-export-summary">
               Export will include: {exportCountLabel}
               {exportPageOnly ? ` (this page: ${rows.length})` : ""}
             </div>
+            <span style={{ color: "var(--muted)", fontSize: 12 }} data-testid="recalls-export-hint">
+              Exports include active filters and the page toggle.
+            </span>
             <label className="row" style={{ gap: 6, alignItems: "center" }}>
               <input
                 type="checkbox"
                 checked={exportPageOnly}
                 onChange={(event) => setExportPageOnly(event.target.checked)}
+                data-testid="recalls-export-page-only"
               />
               <span>Export this page only</span>
             </label>
@@ -776,6 +787,7 @@ export default function RecallsPage() {
               type="button"
               onClick={() => void exportCsv()}
               disabled={exporting}
+              data-testid="recalls-export-csv"
             >
               {exporting ? "Exporting..." : "Export CSV"}
             </button>
@@ -784,6 +796,7 @@ export default function RecallsPage() {
               type="button"
               onClick={() => void downloadLettersZip()}
               disabled={downloadingZip}
+              data-testid="recalls-export-zip"
             >
               {downloadingZip ? "Preparing..." : "Download letters (ZIP)"}
             </button>
