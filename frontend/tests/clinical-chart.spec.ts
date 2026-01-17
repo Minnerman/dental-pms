@@ -6,7 +6,7 @@ import { getBaseUrl, primePageAuth } from "./helpers/auth";
 test("clinical chart toggle renders tooth badges", async ({ page, request }) => {
   await primePageAuth(page, request);
   const patientId = await createPatient(request);
-  await createClinicalProcedure(request, patientId, { tooth: "11" });
+  await createClinicalProcedure(request, patientId, { tooth: "UR1" });
   const baseUrl = getBaseUrl();
 
   await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
@@ -22,14 +22,5 @@ test("clinical chart toggle renders tooth badges", async ({ page, request }) => 
   await viewHistory.click();
   await expect(viewHistory).toHaveAttribute("data-active", "true");
 
-  const badgeIds = await page
-    .locator('[data-testid^="tooth-badge-"]')
-    .evaluateAll((elements) => elements.map((el) => el.getAttribute("data-testid")));
-  console.log("TOOTH_BADGE_IDS", badgeIds);
-
-  const badges = page.getByTestId(/^tooth-badge-/);
-  await expect(async () => {
-    const count = await badges.count();
-    expect(count).toBeGreaterThan(0);
-  }).toPass({ timeout: 30_000 });
+  await expect(page.getByTestId("tooth-badge-UR1")).toBeVisible({ timeout: 30_000 });
 });

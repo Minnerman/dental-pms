@@ -42,7 +42,7 @@ export async function createClinicalProcedure(
   const token = await ensureAuthReady(request);
   const baseURL = getBaseUrl();
   const payload = {
-    tooth: overrides.tooth ?? "11",
+    tooth: overrides.tooth ?? "UR1",
     procedure_code: overrides.procedure_code ?? "PROC",
     description: overrides.description ?? "Test procedure",
     fee_pence: overrides.fee_pence ?? 1200,
