@@ -55,6 +55,11 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
+- Stage75: booking modal UX correctness.
+  - Required fields: explicit markers + inline validation copy + submit disabled until valid.
+  - Visit vs clinic rules: visit address required; room disabled for visits; deterministic enablement.
+  - Conflict check indicator + stale-response guard.
+  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
 - 2026-01-17: Stage74 completed (PR #51, master 0288073).
