@@ -23,6 +23,19 @@ type AppointmentOverrides = {
   location_text?: string;
 };
 
+type InvoiceOverrides = {
+  issue_date?: string | null;
+  due_date?: string | null;
+  notes?: string | null;
+  discount_pence?: number | null;
+};
+
+type InvoiceLineOverrides = {
+  description?: string;
+  quantity?: number;
+  unit_price_pence?: number;
+};
+
 export async function createPatient(
   request: APIRequestContext,
   overrides: PatientOverrides = {}
@@ -88,6 +101,56 @@ export async function createAppointment(
       location: overrides.location ?? "Room 1",
       location_text: overrides.location_text ?? "",
     },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
+export async function createInvoice(
+  request: APIRequestContext,
+  patientId: string,
+  overrides: InvoiceOverrides = {}
+) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const response = await request.post(`${baseURL}/api/invoices`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      patient_id: Number(patientId),
+      issue_date: overrides.issue_date ?? null,
+      due_date: overrides.due_date ?? null,
+      notes: overrides.notes ?? null,
+      discount_pence: overrides.discount_pence ?? 0,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
+export async function addInvoiceLine(
+  request: APIRequestContext,
+  invoiceId: number,
+  overrides: InvoiceLineOverrides = {}
+) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const response = await request.post(`${baseURL}/api/invoices/${invoiceId}/lines`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      description: overrides.description ?? "Test line",
+      quantity: overrides.quantity ?? 1,
+      unit_price_pence: overrides.unit_price_pence ?? 1200,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
+export async function issueInvoice(request: APIRequestContext, invoiceId: number) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const response = await request.post(`${baseURL}/api/invoices/${invoiceId}/issue`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
   expect(response.ok()).toBeTruthy();
   return response.json();

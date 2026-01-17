@@ -500,6 +500,7 @@ export default function PatientDetailClient({
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [invoiceDiscount, setInvoiceDiscount] = useState("");
   const [recordingPayment, setRecordingPayment] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [paymentReference, setPaymentReference] = useState("");
@@ -2456,6 +2457,15 @@ export default function PatientDetailClient({
     }
   }
 
+  async function downloadReceipt(paymentId: number, filename: string) {
+    setDownloadingReceiptId(paymentId);
+    try {
+      await downloadPdf(`/api/payments/${paymentId}/receipt.pdf`, filename);
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  }
+
   function buildEstimateFilename() {
     const date = new Date().toISOString().slice(0, 10);
     if (!patient) return `Estimate_${patientId}_${date}.pdf`;
@@ -2490,6 +2500,27 @@ export default function PatientDetailClient({
       setEstimateError(err instanceof Error ? err.message : "Failed to download PDF");
     }
   }
+
+  const paymentStatusLabel = selectedInvoice
+    ? selectedInvoice.paid_pence <= 0
+      ? "Unpaid"
+      : selectedInvoice.paid_pence < selectedInvoice.total_pence
+        ? "Part-paid"
+        : "Paid"
+    : null;
+  const paymentLocked =
+    !selectedInvoice ||
+    selectedInvoice.status === "draft" ||
+    selectedInvoice.status === "void" ||
+    selectedInvoice.balance_pence <= 0;
+  const latestReceiptPayment =
+    selectedInvoice && selectedInvoice.payments.length > 0
+      ? selectedInvoice.payments.reduce((latest, current) =>
+          new Date(current.paid_at).getTime() > new Date(latest.paid_at).getTime()
+            ? current
+            : latest
+        )
+      : null;
 
   async function archivePatient() {
     if (!confirm("Archive this patient?")) return;
@@ -5423,8 +5454,11 @@ export default function PatientDetailClient({
                           <div>
                             <h3 style={{ marginTop: 0 }}>{selectedInvoice.invoice_number}</h3>
                             <div style={{ color: "var(--muted)" }}>
-                              Status: {selectedInvoice.status} · Issued:{" "}
-                              {selectedInvoice.issue_date || "—"}
+                              Status: {selectedInvoice.status} · Payment:{" "}
+                              <span data-testid="invoice-payment-status">
+                                {paymentStatusLabel ?? "—"}
+                              </span>{" "}
+                              · Issued: {selectedInvoice.issue_date || "—"}
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -5439,6 +5473,24 @@ export default function PatientDetailClient({
                             >
                               Download PDF
                             </button>
+                            {latestReceiptPayment && (
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                data-testid="download-latest-receipt"
+                                onClick={() =>
+                                  downloadReceipt(
+                                    latestReceiptPayment.id,
+                                    `receipt-${selectedInvoice.invoice_number}-${latestReceiptPayment.id}.pdf`
+                                  )
+                                }
+                                disabled={downloadingReceiptId === latestReceiptPayment.id}
+                              >
+                                {downloadingReceiptId === latestReceiptPayment.id
+                                  ? "Downloading..."
+                                  : "Download receipt"}
+                              </button>
+                            )}
                             {selectedInvoice.status === "draft" && (
                               <button className="btn btn-primary" onClick={issueInvoice}>
                                 Issue invoice
@@ -5655,14 +5707,18 @@ export default function PatientDetailClient({
                                       <td>
                                         <button
                                           className="btn btn-secondary"
+                                          type="button"
                                           onClick={() =>
-                                            downloadPdf(
-                                              `/api/payments/${payment.id}/receipt.pdf`,
+                                            downloadReceipt(
+                                              payment.id,
                                               `receipt-${selectedInvoice.invoice_number}-${payment.id}.pdf`
                                             )
                                           }
+                                          disabled={downloadingReceiptId === payment.id}
                                         >
-                                          Receipt
+                                          {downloadingReceiptId === payment.id
+                                            ? "Downloading..."
+                                            : "Receipt"}
                                         </button>
                                       </td>
                                     </tr>
@@ -5676,11 +5732,11 @@ export default function PatientDetailClient({
                                 <label className="label">Amount (£)</label>
                                 <input
                                   className="input"
+                                  data-testid="payment-amount"
                                   value={paymentAmount}
                                   onChange={(e) => setPaymentAmount(e.target.value)}
                                   disabled={
-                                    selectedInvoice.status === "draft" ||
-                                    selectedInvoice.status === "void"
+                                    paymentLocked || recordingPayment
                                   }
                                 />
                               </div>
@@ -5691,8 +5747,7 @@ export default function PatientDetailClient({
                                   value={paymentMethod}
                                   onChange={(e) => setPaymentMethod(e.target.value)}
                                   disabled={
-                                    selectedInvoice.status === "draft" ||
-                                    selectedInvoice.status === "void"
+                                    paymentLocked || recordingPayment
                                   }
                                 >
                                   <option value="card">Card</option>
@@ -5709,8 +5764,7 @@ export default function PatientDetailClient({
                                   value={paymentDate}
                                   onChange={(e) => setPaymentDate(e.target.value)}
                                   disabled={
-                                    selectedInvoice.status === "draft" ||
-                                    selectedInvoice.status === "void"
+                                    paymentLocked || recordingPayment
                                   }
                                 />
                               </div>
@@ -5722,8 +5776,7 @@ export default function PatientDetailClient({
                                 value={paymentReference}
                                 onChange={(e) => setPaymentReference(e.target.value)}
                                 disabled={
-                                  selectedInvoice.status === "draft" ||
-                                  selectedInvoice.status === "void"
+                                  paymentLocked || recordingPayment
                                 }
                               />
                             </div>
@@ -5732,10 +5785,9 @@ export default function PatientDetailClient({
                               type="button"
                               onClick={addPayment}
                               disabled={
-                                recordingPayment ||
-                                selectedInvoice.status === "draft" ||
-                                selectedInvoice.status === "void"
+                                recordingPayment || paymentLocked
                               }
+                              data-testid="record-payment"
                             >
                               {recordingPayment ? "Recording..." : "Record payment"}
                             </button>
