@@ -296,12 +296,15 @@ test("booking modal requires minimum fields before enabling submit", async ({
 
   const submit = page.getByTestId("booking-submit");
   await expect(submit).toBeDisabled();
+  await expect(page.getByTestId("booking-error")).toBeVisible();
+  await expect(page.getByTestId("booking-error-patient")).toBeVisible();
 
   await page.getByTestId("booking-patient-select").selectOption(String(patientId));
   await page.getByTestId("booking-start").fill("2026-01-15T09:00");
   await page.getByTestId("booking-end").fill("2026-01-15T09:30");
 
   await expect(submit).toBeEnabled({ timeout: 15_000 });
+  await expect(page.getByTestId("booking-error")).toHaveCount(0);
 });
 
 test("visit appointments require address, clinic does not", async ({ page, request }) => {
