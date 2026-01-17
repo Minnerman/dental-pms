@@ -55,11 +55,11 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
-- Stage78: recalls export UX polish.
-  - Export hint clarifies filters/page toggle; added testids for export controls and filters.
-  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
+- 2026-01-17: Stage78 completed (PR #57, master c5f7ca8).
+  - Clarified export hint + filter guidance; added testids.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-17: Stage76 completed (PR #53, master a306606).
   - Conflict banner lists overlaps with time + location and offers “View day”.
   - Playwright booking spec covers conflict banner + view link.
