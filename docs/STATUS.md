@@ -55,12 +55,12 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
-- Stage76: booking conflict details.
-  - Conflict banner lists overlaps with time + location and offers “View day”.
-  - Playwright booking spec covers conflict banner + view link.
-  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
+- 2026-01-17: Stage76 completed (PR #53, master a306606).
+  - Conflict banner lists overlaps with time + location and offers “View day”.
+  - Playwright booking spec covers conflict banner + view link.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-17: Stage77 completed (PR #54, master 82a5db0).
   - Debounced booking conflict checks with stale-response guard and loading state.
   - Playwright coverage for debounce flow and final conflict banner.
