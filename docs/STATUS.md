@@ -61,6 +61,11 @@
   - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
+- 2026-01-17: Stage72 completed (PR #49, master b3aa338).
+  - Clinical chart toggle + tooth badges smoke; added chart/badge testids.
+  - Added Playwright clinical chart smoke using API-created procedure (CI-only Playwright).
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
+
 - 2026-01-16: Stage64 completed (recalls CSV export already in place; added filter-respecting export coverage).
 - 2026-01-15: Stage63 completed (Playwright smoke moved to its own workflow).
 - 2026-01-15: Stage62 merged (PR #39, master 7dab879).
