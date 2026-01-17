@@ -487,6 +487,8 @@ export default function AppointmentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [conflictChecking, setConflictChecking] = useState(false);
+  const conflictCheckKeyRef = useRef<string>("");
   const [recallContext, setRecallContext] = useState<{
     recallId: string;
     patientId: string;
@@ -749,34 +751,52 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (!showNewModal) {
       setConflictWarning(null);
+      setConflictChecking(false);
       return;
     }
     if (!startsAt || !endsAt || !activeClinicianUserId) {
       setConflictWarning(null);
+      setConflictChecking(false);
       return;
     }
     const startDate = new Date(startsAt);
     const endDate = new Date(endsAt);
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
       setConflictWarning(null);
+      setConflictChecking(false);
       return;
     }
     if (endDate <= startDate) {
       setConflictWarning(null);
+      setConflictChecking(false);
       return;
     }
     const clinicianId = Number(activeClinicianUserId);
     if (!Number.isFinite(clinicianId)) {
       setConflictWarning(null);
+      setConflictChecking(false);
       return;
     }
+    const conflictKey = [
+      startsAt,
+      endsAt,
+      activeClinicianUserId,
+      activeLocationType,
+      activeLocation,
+    ].join("|");
+    conflictCheckKeyRef.current = conflictKey;
+    setConflictChecking(true);
     const conflicts = findConflicts({ clinicianId, start: startDate, end: endDate });
+    if (conflictCheckKeyRef.current !== conflictKey) return;
     setConflictWarning(buildConflictWarning(conflicts, clinicianId));
+    setConflictChecking(false);
   }, [
     appointments,
     startsAt,
     endsAt,
     activeClinicianUserId,
+    activeLocationType,
+    activeLocation,
     showNewModal,
     buildConflictWarning,
     findConflicts,
@@ -807,6 +827,24 @@ export default function AppointmentsPage() {
       setEndsAt(nextValue);
     }
   }, [durationMinutes, startsAt, endsAt]);
+
+  const bookingValidationError = useMemo(() => {
+    if (!selectedPatientId) return "Select a patient before booking.";
+    if (!startsAt || !endsAt) return "Select a start and end time.";
+    const startDate = new Date(startsAt);
+    const endDate = new Date(endsAt);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return "Select a valid start and end time.";
+    }
+    if (endDate <= startDate) return "End time must be after the start time.";
+    if (activeLocationType === "visit" && !activeLocationText.trim()) {
+      return "Visit address is required for domiciliary visits.";
+    }
+    if (schedule && !isRangeWithinSchedule(startDate, endDate, schedule)) {
+      return "Appointment time is outside of working hours.";
+    }
+    return null;
+  }, [selectedPatientId, startsAt, endsAt, activeLocationType, activeLocationText, schedule]);
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;
@@ -1175,32 +1213,9 @@ export default function AppointmentsPage() {
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedPatientId) {
-      setError("Select a patient before booking.");
-      return;
-    }
-    if (!startsAt || !endsAt) {
-      setError("Select a start and end time.");
-      return;
-    }
+    if (bookingValidationError) return;
     const startDate = new Date(startsAt);
     const endDate = new Date(endsAt);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      setError("Select a valid start and end time.");
-      return;
-    }
-    if (endDate <= startDate) {
-      setError("End time must be after the start time.");
-      return;
-    }
-    if (activeLocationType === "visit" && !activeLocationText.trim()) {
-      setError("Visit address is required for domiciliary visits.");
-      return;
-    }
-    if (!isRangeWithinSchedule(startDate, endDate, schedule)) {
-      setError("Appointment time is outside of working hours.");
-      return;
-    }
     const clinicianId = activeClinicianUserId ? Number(activeClinicianUserId) : null;
     if (clinicianId) {
       const conflicts = findConflicts({
@@ -1224,7 +1239,8 @@ export default function AppointmentsPage() {
           ends_at: endDate.toISOString(),
           status: "booked",
           appointment_type: appointmentType.trim() || undefined,
-          location: activeLocation.trim() || undefined,
+          location:
+            activeLocationType === "clinic" ? activeLocation.trim() || undefined : undefined,
           location_type: activeLocationType,
           location_text: activeLocationText.trim() || undefined,
         }),
@@ -1867,6 +1883,12 @@ export default function AppointmentsPage() {
     );
   }
 
+  const requiredMark = (
+    <span style={{ color: "var(--danger)", marginLeft: 4 }} aria-hidden="true">
+      *
+    </span>
+  );
+
   return (
     <div
       className="app-grid"
@@ -2304,7 +2326,10 @@ export default function AppointmentsPage() {
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Select patient</label>
+                  <label className="label">
+                    Select patient
+                    {requiredMark}
+                  </label>
                   <select
                     className="input"
                     value={selectedPatientId}
@@ -2321,7 +2346,10 @@ export default function AppointmentsPage() {
                 </div>
                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
                   <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">Start</label>
+                    <label className="label">
+                      Start
+                      {requiredMark}
+                    </label>
                     <input
                       className="input"
                       type="datetime-local"
@@ -2331,7 +2359,10 @@ export default function AppointmentsPage() {
                     />
                   </div>
                   <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">End</label>
+                    <label className="label">
+                      End
+                      {requiredMark}
+                    </label>
                     <input
                       className="input"
                       type="datetime-local"
@@ -2427,11 +2458,19 @@ export default function AppointmentsPage() {
                       setLocation(next);
                       if (showNewModal) setModalLocation(next);
                     }}
-                    placeholder="Room 1"
+                    placeholder={
+                      activeLocationType === "visit"
+                        ? "Not used for visit appointments"
+                        : "Room 1"
+                    }
+                    disabled={activeLocationType === "visit"}
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Location type</label>
+                  <label className="label">
+                    Location type
+                    {requiredMark}
+                  </label>
                   <select
                     className="input"
                     data-testid="booking-location-type"
@@ -2452,7 +2491,10 @@ export default function AppointmentsPage() {
                 </div>
                 {activeLocationType === "visit" && (
                   <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">Visit address</label>
+                    <label className="label">
+                      Visit address
+                      {requiredMark}
+                    </label>
                     <textarea
                       className="input"
                       data-testid="booking-visit-address"
@@ -2467,7 +2509,21 @@ export default function AppointmentsPage() {
                     />
                   </div>
                 )}
-                <button className="btn btn-primary" disabled={saving}>
+                {bookingValidationError && (
+                  <div className="notice" data-testid="booking-error">
+                    {bookingValidationError}
+                  </div>
+                )}
+                {conflictChecking && (
+                  <div className="notice" data-testid="booking-conflict-checking">
+                    Checking conflicts…
+                  </div>
+                )}
+                <button
+                  className="btn btn-primary"
+                  data-testid="booking-submit"
+                  disabled={saving || conflictChecking || Boolean(bookingValidationError)}
+                >
                   {saving ? "Saving..." : "Create appointment"}
                 </button>
               </form>
