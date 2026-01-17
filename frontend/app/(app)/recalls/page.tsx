@@ -214,6 +214,7 @@ export default function RecallsPage() {
         : exportCountError
           ? "Count unavailable"
           : "—";
+  const exportReady = !exportCountLoading && exportCountError === null;
   const fallbackFilenameCsv = buildExportFilename("csv");
   const fallbackFilenameZip = buildExportFilename("zip");
   const exportFilenameCsv = suggestedFilenameCsv ?? fallbackFilenameCsv;
@@ -366,6 +367,7 @@ export default function RecallsPage() {
   async function exportCsv() {
     setExporting(true);
     setError(null);
+    setExportCountError(null);
     try {
       const params = buildQueryParams({ includePagination: exportPageOnly });
       if (exportPageOnly) {
@@ -412,6 +414,7 @@ export default function RecallsPage() {
   async function downloadLettersZip() {
     setDownloadingZip(true);
     setError(null);
+    setExportCountError(null);
     try {
       const params = buildQueryParams({ includePagination: exportPageOnly });
       if (exportPageOnly) {
@@ -872,19 +875,31 @@ export default function RecallsPage() {
               className="btn btn-secondary"
               type="button"
               onClick={() => void exportCsv()}
-              disabled={exporting}
+              disabled={!exportReady || exporting || downloadingZip}
               data-testid="recalls-export-csv"
             >
-              {exporting ? "Exporting..." : "Export CSV"}
+              {exportCountLoading
+                ? "Preparing..."
+                : exportCountError
+                  ? "Export unavailable"
+                  : exporting
+                    ? "Exporting..."
+                    : "Export CSV"}
             </button>
             <button
               className="btn btn-secondary"
               type="button"
               onClick={() => void downloadLettersZip()}
-              disabled={downloadingZip}
+              disabled={!exportReady || downloadingZip || exporting}
               data-testid="recalls-export-zip"
             >
-              {downloadingZip ? "Preparing..." : "Download letters (ZIP)"}
+              {exportCountLoading
+                ? "Preparing..."
+                : exportCountError
+                  ? "Export unavailable"
+                  : downloadingZip
+                    ? "Preparing..."
+                    : "Download letters (ZIP)"}
             </button>
             <span style={{ color: "var(--muted)", fontSize: 12 }}>
               This may take a moment for large lists.

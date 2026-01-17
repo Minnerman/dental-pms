@@ -24,9 +24,15 @@ test("recalls export filename preview matches download and sanitizes", async ({
   const csvPreview = page.getByTestId("recalls-export-filename-csv");
   const zipPreview = page.getByTestId("recalls-export-filename-zip");
   const exportSummary = page.getByTestId("recalls-export-summary");
+  const exportCsvButton = page.getByTestId("recalls-export-csv");
+  const exportZipButton = page.getByTestId("recalls-export-zip");
   await expect(csvPreview).toBeVisible({ timeout: 15_000 });
   await expect(zipPreview).toBeVisible({ timeout: 15_000 });
   await expect(exportSummary).toBeVisible({ timeout: 15_000 });
+  await expect(exportCsvButton).toBeDisabled();
+  await expect(exportZipButton).toBeDisabled();
+  await expect(exportCsvButton).toBeEnabled({ timeout: 15_000 });
+  await expect(exportZipButton).toBeEnabled({ timeout: 15_000 });
 
   for (const label of ["Upcoming", "Completed", "Cancelled"]) {
     const checkbox = page.getByLabel(label);
