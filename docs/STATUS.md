@@ -57,6 +57,10 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage77 completed (PR #54, master 82a5db0).
+  - Debounced booking conflict checks with stale-response guard and loading state.
+  - Playwright coverage for debounce flow and final conflict banner.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-17: Stage75 completed (PR #52, master 555c1f5).
   - Booking modal validation + required markers; submit disabled until minimum valid state.
   - Visit vs clinic rules: visit address required; room disabled for visits; deterministic enablement.
