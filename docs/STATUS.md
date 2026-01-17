@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage85 completed (PR #62, master c6739ac).
+  - Booking modal validation (patient/time/address) + server error banner; disable submit while saving; Playwright covers validation.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-17: Stage84 completed (PR #61, master 04b1ff5).
   - Appointments shortcuts (N, /, Esc) + booking focus/prefill hint; Playwright covers shortcuts flow.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
