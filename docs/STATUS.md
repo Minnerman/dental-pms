@@ -55,13 +55,14 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
-- Stage73: Persist clinical chart view mode + deterministic tooth badges.
-  - Persist view mode via URL + localStorage.
-  - Normalise tooth codes for badge rendering.
-  - Extend Playwright clinical chart smoke for toggle persistence.
+- Stage74: Playwright auth + CI hardening.
+  - Add login mutex + capped backoff for 429s in Playwright auth helper.
+  - Harden Playwright workflow: pg_isready before migrations + longer health waits.
+  - Review remaining waits for deterministic selectors.
   - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
+
 - 2026-01-17: Stage73 completed (PR #50, master 4ddc0a9).
   - Persisted clinical chart view mode via URL + localStorage and normalised tooth codes for badges.
   - Playwright clinical chart smoke asserts view mode persistence after refresh.
