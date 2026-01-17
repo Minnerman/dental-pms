@@ -55,13 +55,12 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
-- Stage74: Playwright auth + CI hardening.
-  - Add login mutex + capped backoff for 429s in Playwright auth helper.
-  - Harden Playwright workflow: pg_isready before migrations + longer health waits.
-  - Review remaining waits for deterministic selectors.
-  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
+- 2026-01-17: Stage74 completed (PR #51, master 0288073).
+  - Playwright auth helper: token cache + mutex + capped backoff/jitter on 429.
+  - Playwright smoke workflow: pg_isready before migrations + longer health waits.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 - 2026-01-17: Stage73 completed (PR #50, master 4ddc0a9).
   - Persisted clinical chart view mode via URL + localStorage and normalised tooth codes for badges.
