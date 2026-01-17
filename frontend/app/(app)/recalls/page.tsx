@@ -147,6 +147,12 @@ export default function RecallsPage() {
   const [exportCountLoading, setExportCountLoading] = useState(false);
   const [exportCountError, setExportCountError] = useState<string | null>(null);
   const [exportPageOnly, setExportPageOnly] = useState(false);
+  const [suggestedFilenameCsv, setSuggestedFilenameCsv] = useState<string | null>(
+    null
+  );
+  const [suggestedFilenameZip, setSuggestedFilenameZip] = useState<string | null>(
+    null
+  );
 
   function handleBook(row: RecallRow) {
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
@@ -208,8 +214,10 @@ export default function RecallsPage() {
         : exportCountError
           ? "Count unavailable"
           : "—";
-  const exportFilenameCsv = buildExportFilename("csv");
-  const exportFilenameZip = buildExportFilename("zip");
+  const fallbackFilenameCsv = buildExportFilename("csv");
+  const fallbackFilenameZip = buildExportFilename("zip");
+  const exportFilenameCsv = suggestedFilenameCsv ?? fallbackFilenameCsv;
+  const exportFilenameZip = suggestedFilenameZip ?? fallbackFilenameZip;
   const errorText = error ?? "";
   const exportLimitMatch = errorText.match(/Too many recalls to export \((\d+)\)/);
   const exportLimitCount = exportLimitMatch ? Number(exportLimitMatch[1]) : exportCount;
@@ -268,6 +276,29 @@ export default function RecallsPage() {
     return `Recall_${safeName}_${date}.pdf`;
   }
 
+  function sanitizeExportFilename(value: string, maxLength = 120) {
+    let cleaned = value.replace(/[\x00-\x1f\x7f]+/g, "");
+    cleaned = cleaned.replace(/[<>:"/\\|?*]+/g, "_");
+    cleaned = cleaned.replace(/\s+/g, "_").trim();
+    cleaned = cleaned.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    cleaned = cleaned.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+    if (cleaned.length <= maxLength) return cleaned;
+    const match = cleaned.match(/(\.[a-zA-Z0-9]{1,10})$/);
+    if (!match) {
+      return cleaned.slice(0, maxLength);
+    }
+    const ext = match[1];
+    const base = cleaned.slice(0, -ext.length);
+    const baseMax = maxLength - ext.length;
+    if (baseMax <= 0) {
+      return cleaned.slice(0, maxLength);
+    }
+    if (baseMax > 3) {
+      return `${base.slice(0, baseMax - 3)}...${ext}`;
+    }
+    return `${base.slice(0, baseMax)}${ext}`;
+  }
+
   function buildExportFilename(kind: "csv" | "zip") {
     const hasFilters = Boolean(
       startDate ||
@@ -288,9 +319,9 @@ export default function RecallsPage() {
     const suffix = suffixParts.length > 0 ? `-${suffixParts.join("-")}` : "";
     const dateStamp = new Date().toISOString().slice(0, 10);
     if (kind === "zip") {
-      return `recall-letters-${dateStamp}${suffix}.zip`;
+      return sanitizeExportFilename(`recall-letters-${dateStamp}${suffix}.zip`);
     }
-    return `recalls-${dateStamp}${suffix}.csv`;
+    return sanitizeExportFilename(`recalls-${dateStamp}${suffix}.csv`);
   }
 
   function getFilenameFromDisposition(res: Response, fallback: string) {
@@ -464,12 +495,17 @@ export default function RecallsPage() {
 
   useEffect(() => {
     let active = true;
+    setSuggestedFilenameCsv(null);
+    setSuggestedFilenameZip(null);
     setExportCountLoading(true);
     setExportCountError(null);
     const timer = setTimeout(() => {
       async function loadExportCount() {
         try {
           const params = buildQueryParams({ includePagination: false });
+          if (exportPageOnly) {
+            params.set("page_only", "true");
+          }
           const res = await apiFetch(`/api/recalls/export_count?${params.toString()}`);
           if (res.status === 401) {
             clearToken();
@@ -480,9 +516,15 @@ export default function RecallsPage() {
             const msg = await res.text();
             throw new Error(msg || `Failed to load export count (HTTP ${res.status})`);
           }
-          const data = (await res.json()) as { count: number };
+          const data = (await res.json()) as {
+            count: number;
+            suggested_filename_csv?: string;
+            suggested_filename_zip?: string;
+          };
           if (active) {
             setExportCount(data.count);
+            setSuggestedFilenameCsv(data.suggested_filename_csv ?? null);
+            setSuggestedFilenameZip(data.suggested_filename_zip ?? null);
           }
         } catch (err) {
           if (active) {
@@ -504,7 +546,7 @@ export default function RecallsPage() {
       active = false;
       clearTimeout(timer);
     };
-  }, [buildQueryParams, router]);
+  }, [buildQueryParams, exportPageOnly, router]);
 
   useEffect(() => {
     setOffset(0);

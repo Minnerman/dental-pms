@@ -2,7 +2,19 @@ import { expect, test } from "@playwright/test";
 
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
-test("recalls export filename preview updates for page-only toggle", async ({
+function extractFilename(text: string | null) {
+  if (!text) return "";
+  const [, filename] = text.split(":");
+  return (filename || "").trim();
+}
+
+function expectSafeFilename(value: string) {
+  expect(value).toBeTruthy();
+  expect(value).not.toMatch(/[\\/:*?"<>|]/);
+  expect(value.length).toBeLessThanOrEqual(120);
+}
+
+test("recalls export filename preview matches download and sanitizes", async ({
   page,
   request,
 }) => {
@@ -18,9 +30,24 @@ test("recalls export filename preview updates for page-only toggle", async ({
   await expect(csvPreview).toContainText(`recalls-${dateStamp}-filtered.csv`);
   await expect(zipPreview).toContainText(`recall-letters-${dateStamp}-filtered.zip`);
 
+  const csvFilename = extractFilename(await csvPreview.textContent());
+  const zipFilename = extractFilename(await zipPreview.textContent());
+  expectSafeFilename(csvFilename);
+  expectSafeFilename(zipFilename);
+
+  const [csvDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("recalls-export-csv").click(),
+  ]);
+  expect(csvDownload.suggestedFilename()).toBe(csvFilename);
+
+  const [zipDownload] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60_000 }),
+    page.getByTestId("recalls-export-zip").click(),
+  ]);
+  expect(zipDownload.suggestedFilename()).toBe(zipFilename);
+
   await page.getByTestId("recalls-export-page-only").check();
   await expect(csvPreview).toContainText(`recalls-${dateStamp}-filtered-page.csv`);
-  await expect(zipPreview).toContainText(
-    `recall-letters-${dateStamp}-filtered-page.zip`
-  );
+  await expect(zipPreview).toContainText(`recall-letters-${dateStamp}-filtered-page.zip`);
 });
