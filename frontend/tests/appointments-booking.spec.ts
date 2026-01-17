@@ -379,3 +379,52 @@ test("conflict banner shows overlapping appointments with view day link", async 
   await expect(page.getByTestId("booking-conflict-row").first()).toBeVisible();
   await expect(page.getByTestId("booking-conflict-view-day")).toBeVisible();
 });
+
+test("booking submit is blocked when conflicts exist", async ({ page, request }) => {
+  const conflictPatientId = await createPatient(request, {
+    first_name: "Conflict",
+    last_name: `Patient ${Date.now()}`,
+  });
+  const bookingPatientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: `Patient ${Date.now()}`,
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+
+  const clinicianSelect = page.getByLabel("Clinician (optional)");
+  const clinicianOptions = await clinicianSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  if (clinicianOptions.length === 0) {
+    test.skip();
+    return;
+  }
+  const clinicianId = Number(clinicianOptions[0]);
+
+  await createAppointment(request, conflictPatientId, {
+    clinician_user_id: clinicianId,
+    starts_at: "2026-01-15T10:00:00.000Z",
+    ends_at: "2026-01-15T10:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await clickNewAppointment(page);
+  await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
+
+  await page.getByTestId("booking-patient-select").selectOption(String(bookingPatientId));
+  await page.getByTestId("booking-start").fill("2026-01-15T10:15");
+  await page.getByTestId("booking-end").fill("2026-01-15T10:45");
+
+  await expect(page.getByTestId("booking-conflicts")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("booking-submit")).toBeDisabled();
+  await expect(page.getByTestId("booking-error")).toContainText(/conflict/i);
+});

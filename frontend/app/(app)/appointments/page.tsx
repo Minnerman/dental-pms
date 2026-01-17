@@ -180,6 +180,21 @@ type ConflictWarning = {
   anchorDate?: Date;
 };
 
+type ConflictApiItem = {
+  id?: number;
+  starts_at: string;
+  ends_at: string;
+  patient_name?: string;
+  location?: string | null;
+  location_type?: AppointmentLocationType | null;
+};
+
+type ConflictApiResponse = {
+  detail?: string;
+  message?: string;
+  conflicts?: ConflictApiItem[];
+};
+
 const localizer = dateFnsLocalizer({
   format,
   parse,
@@ -349,6 +364,45 @@ function formatConflictTime(start: Date, end: Date) {
     minute: "2-digit",
   });
   return `${startLabel}–${endLabel}`;
+}
+
+function parseConflictResponse(raw: string): ConflictApiResponse | null {
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as ConflictApiResponse;
+    if (!data || typeof data !== "object") return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function toConflictItems(conflicts: ConflictApiItem[]) {
+  return conflicts
+    .map((conflict) => {
+      const start = new Date(conflict.starts_at);
+      const end = new Date(conflict.ends_at);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+      const patientName = (conflict.patient_name || "Another patient").trim();
+      const locationLabel =
+        conflict.location_type === "visit"
+          ? conflict.location || "Visit"
+          : conflict.location || "Clinic";
+      return {
+        id: conflict.id,
+        start,
+        end,
+        patientName,
+        locationLabel,
+      };
+    })
+    .filter(Boolean) as Array<{
+    id?: number;
+    start: Date;
+    end: Date;
+    patientName: string;
+    locationLabel?: string;
+  }>;
 }
 
 function toAppointmentCode(raw: string | null | undefined) {
@@ -560,6 +614,8 @@ export default function AppointmentsPage() {
   const [editCancelReason, setEditCancelReason] = useState("");
   const [editNoteBody, setEditNoteBody] = useState("");
   const [conflictWarning, setConflictWarning] = useState<ConflictWarning | null>(null);
+  const [editConflictWarning, setEditConflictWarning] =
+    useState<ConflictWarning | null>(null);
   useEffect(() => {
     function isEditableTarget(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false;
@@ -735,6 +791,9 @@ export default function AppointmentsPage() {
       if (!clinicianId) return [];
       return appointments
         .filter((appt) => appt.clinician_user_id === clinicianId)
+        .filter(
+          (appt) => appt.status !== "cancelled" && appt.status !== "no_show"
+        )
         .filter((appt) => (excludeId ? appt.id !== excludeId : true))
         .map((appt) => {
           const startDate = new Date(appt.starts_at);
@@ -923,6 +982,49 @@ export default function AppointmentsPage() {
   ]);
 
   useEffect(() => {
+    if (!isEditingAppointment || !selectedAppointment) {
+      setEditConflictWarning(null);
+      return;
+    }
+    if (!editStartsAt || !editEndsAt) {
+      setEditConflictWarning(null);
+      return;
+    }
+    const startDate = new Date(editStartsAt);
+    const endDate = new Date(editEndsAt);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      setEditConflictWarning(null);
+      return;
+    }
+    if (endDate <= startDate) {
+      setEditConflictWarning(null);
+      return;
+    }
+    const clinicianId = editClinicianUserId
+      ? Number(editClinicianUserId)
+      : selectedAppointment.clinician_user_id;
+    if (!clinicianId || !Number.isFinite(clinicianId)) {
+      setEditConflictWarning(null);
+      return;
+    }
+    const conflicts = findConflicts({
+      clinicianId,
+      start: startDate,
+      end: endDate,
+      excludeId: selectedAppointment.id,
+    });
+    setEditConflictWarning(buildConflictWarning(conflicts, clinicianId));
+  }, [
+    buildConflictWarning,
+    editClinicianUserId,
+    editEndsAt,
+    editStartsAt,
+    findConflicts,
+    isEditingAppointment,
+    selectedAppointment,
+  ]);
+
+  useEffect(() => {
     if (!showNewModal) {
       setModalClinicianUserId(null);
       setModalLocationType(null);
@@ -937,6 +1039,12 @@ export default function AppointmentsPage() {
     setModalLocation(location);
     setBookingSubmitError(null);
   }, [showNewModal]);
+
+  useEffect(() => {
+    if (!conflictWarning && bookingSubmitError?.toLowerCase().includes("conflict")) {
+      setBookingSubmitError(null);
+    }
+  }, [conflictWarning, bookingSubmitError]);
 
   useEffect(() => {
     if (durationMinutes === null || !startsAt) return;
@@ -976,6 +1084,14 @@ export default function AppointmentsPage() {
 
   const bookingValidationError =
     bookingFieldErrors.patient || bookingFieldErrors.time || bookingFieldErrors.visit || null;
+  const bookingConflictError = conflictWarning
+    ? "Conflicts detected. Choose a different time."
+    : null;
+  const activeConflictWarning = showNewModal
+    ? conflictWarning
+    : isEditingAppointment
+      ? editConflictWarning
+      : conflictWarning;
 
   useEffect(() => {
     if (!highlightedAppointmentId) return;
@@ -1236,8 +1352,16 @@ export default function AppointmentsPage() {
       return null;
     }
     if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+      const raw = await res.text();
+      const conflictData = parseConflictResponse(raw);
+      if (res.status === 409 && conflictData?.conflicts?.length) {
+        const items = toConflictItems(conflictData.conflicts);
+        setConflictWarning(buildConflictWarning(items, null));
+        throw new Error(
+          conflictData.detail || conflictData.message || "Conflicts detected."
+        );
+      }
+      throw new Error(raw || `Failed to update appointment (HTTP ${res.status})`);
     }
     return (await res.json()) as Appointment;
   }
@@ -1354,7 +1478,12 @@ export default function AppointmentsPage() {
         start: startDate,
         end: endDate,
       });
-      setConflictWarning(buildConflictWarning(conflicts, clinicianId));
+      const warning = buildConflictWarning(conflicts, clinicianId);
+      setConflictWarning(warning);
+      if (warning) {
+        setBookingSubmitError("Conflicts detected. Choose a different time.");
+        return;
+      }
     }
     setSaving(true);
     setError(null);
@@ -1386,6 +1515,15 @@ export default function AppointmentsPage() {
         const raw = await res.text();
         let message = `Failed to create appointment (HTTP ${res.status})`;
         if (raw) {
+          const conflictData = parseConflictResponse(raw);
+          if (res.status === 409 && conflictData?.conflicts?.length && clinicianId) {
+            const items = toConflictItems(conflictData.conflicts);
+            setConflictWarning(buildConflictWarning(items, clinicianId));
+            setBookingSubmitError(
+              conflictData.detail || conflictData.message || "Conflicts detected."
+            );
+            return;
+          }
           try {
             const data = JSON.parse(raw) as { detail?: string; message?: string };
             message = data.detail || data.message || message;
@@ -1616,6 +1754,10 @@ export default function AppointmentsPage() {
       setError("Start and end times are required.");
       return;
     }
+    if (editConflictWarning) {
+      setError("Conflicts detected. Choose a different time.");
+      return;
+    }
     if ((editStatus === "cancelled" || editStatus === "no_show") && !editCancelReason.trim()) {
       setError("Cancel reason is required for cancelled/no-show.");
       return;
@@ -1647,6 +1789,20 @@ export default function AppointmentsPage() {
       }
       if (!res.ok) {
         const msg = await res.text();
+        const conflictData = parseConflictResponse(msg);
+        if (res.status === 409 && conflictData?.conflicts?.length) {
+          const clinicianId = editClinicianUserId
+            ? Number(editClinicianUserId)
+            : selectedAppointment.clinician_user_id;
+          if (clinicianId) {
+            const items = toConflictItems(conflictData.conflicts);
+            setEditConflictWarning(buildConflictWarning(items, clinicianId));
+          }
+          setError(
+            conflictData.detail || conflictData.message || "Conflicts detected."
+          );
+          return;
+        }
         throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
       }
       const updated = (await res.json()) as Appointment;
@@ -2133,7 +2289,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
         )}
-        {conflictWarning && (
+        {activeConflictWarning && (
           <div
             className="notice"
             style={{
@@ -2150,15 +2306,15 @@ export default function AppointmentsPage() {
                 justifyContent: "space-between",
               }}
             >
-              <span>{conflictWarning.message}</span>
+              <span>{activeConflictWarning.message}</span>
               <button
                 className="btn btn-secondary"
                 type="button"
                 onClick={() => {
-                  if (conflictWarning.anchorDate) {
-                    viewConflictsAt(conflictWarning.anchorDate);
+                  if (activeConflictWarning.anchorDate) {
+                    viewConflictsAt(activeConflictWarning.anchorDate);
                     router.replace(
-                      `/appointments?date=${toDateKey(conflictWarning.anchorDate)}`,
+                      `/appointments?date=${toDateKey(activeConflictWarning.anchorDate)}`,
                       { scroll: false }
                     );
                   }
@@ -2168,9 +2324,9 @@ export default function AppointmentsPage() {
                 View day
               </button>
             </div>
-            {conflictWarning.items.length > 0 && (
+            {activeConflictWarning.items.length > 0 && (
               <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                {conflictWarning.items.map((item) => (
+                {activeConflictWarning.items.map((item) => (
                   <div
                     key={`${item.patientName}-${item.start.toISOString()}`}
                     style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
@@ -2183,9 +2339,9 @@ export default function AppointmentsPage() {
                     )}
                   </div>
                 ))}
-                {conflictWarning.extraCount > 0 && (
+                {activeConflictWarning.extraCount > 0 && (
                   <span style={{ color: "var(--muted)" }}>
-                    + {conflictWarning.extraCount} more
+                    + {activeConflictWarning.extraCount} more
                   </span>
                 )}
               </div>
@@ -2470,9 +2626,9 @@ export default function AppointmentsPage() {
                 </button>
               </div>
               <form onSubmit={createAppointment} className="stack">
-                {(bookingSubmitError || bookingValidationError) && (
+                {(bookingSubmitError || bookingValidationError || bookingConflictError) && (
                   <div className="notice" data-testid="booking-error">
-                    {bookingSubmitError || bookingValidationError}
+                    {bookingSubmitError || bookingValidationError || bookingConflictError}
                   </div>
                 )}
                 <div className="stack" style={{ gap: 8 }}>
@@ -2710,7 +2866,12 @@ export default function AppointmentsPage() {
                 <button
                   className="btn btn-primary"
                   data-testid="booking-submit"
-                  disabled={saving || conflictChecking || Boolean(bookingValidationError)}
+                  disabled={
+                    saving ||
+                    conflictChecking ||
+                    Boolean(bookingValidationError) ||
+                    Boolean(bookingConflictError)
+                  }
                 >
                   {saving ? "Saving..." : "Create appointment"}
                 </button>
@@ -2889,7 +3050,10 @@ export default function AppointmentsPage() {
                     />
                   </div>
                   <div className="row">
-                    <button className="btn btn-primary" disabled={savingDetail}>
+                    <button
+                      className="btn btn-primary"
+                      disabled={savingDetail || Boolean(editConflictWarning)}
+                    >
                       {savingDetail ? "Saving..." : "Save changes"}
                     </button>
                     <button

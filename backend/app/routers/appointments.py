@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,6 +20,53 @@ from app.services.run_sheet_pdf import build_run_sheet_pdf
 from app.services.schedule import load_schedule, validate_appointment_window
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
+
+
+def find_conflicting_appointments(
+    db: Session,
+    clinician_user_id: int | None,
+    starts_at: datetime,
+    ends_at: datetime,
+    exclude_id: int | None = None,
+) -> list[Appointment]:
+    if not clinician_user_id:
+        return []
+    stmt = (
+        select(Appointment)
+        .where(Appointment.deleted_at.is_(None))
+        .where(Appointment.clinician_user_id == clinician_user_id)
+        .where(Appointment.starts_at < ends_at, Appointment.ends_at > starts_at)
+        .where(Appointment.status.notin_([AppointmentStatus.cancelled, AppointmentStatus.no_show]))
+        .options(selectinload(Appointment.patient))
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(Appointment.id != exclude_id)
+    return list(db.scalars(stmt))
+
+
+def conflict_response(conflicts: list[Appointment]) -> JSONResponse:
+    items = []
+    for appt in conflicts:
+        patient_name = ""
+        if appt.patient:
+            patient_name = f"{appt.patient.first_name} {appt.patient.last_name}".strip()
+        items.append(
+            {
+                "id": appt.id,
+                "starts_at": appt.starts_at.isoformat(),
+                "ends_at": appt.ends_at.isoformat(),
+                "patient_name": patient_name or "Another patient",
+                "location": appt.location_text or appt.location or None,
+                "location_type": appt.location_type.value if appt.location_type else None,
+            }
+        )
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "detail": "Appointment overlaps with an existing booking.",
+            "conflicts": items,
+        },
+    )
 
 
 @router.get("/range", response_model=list[AppointmentOut])
@@ -128,6 +176,15 @@ def create_appointment(
         if not ok:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
+    conflicts = find_conflicting_appointments(
+        db,
+        payload.clinician_user_id,
+        payload.starts_at,
+        payload.ends_at,
+    )
+    if conflicts:
+        return conflict_response(conflicts)
+
     appt = Appointment(
         patient_id=payload.patient_id,
         clinician_user_id=payload.clinician_user_id,
@@ -202,6 +259,24 @@ def update_appointment(
             ok, reason = validate_appointment_window(starts_at, ends_at, hours, closures, overrides)
             if not ok:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+
+    if payload.starts_at is not None or payload.ends_at is not None or payload.clinician_user_id is not None:
+        starts_at = payload.starts_at or appt.starts_at
+        ends_at = payload.ends_at or appt.ends_at
+        clinician_user_id = (
+            payload.clinician_user_id
+            if payload.clinician_user_id is not None
+            else appt.clinician_user_id
+        )
+        conflicts = find_conflicting_appointments(
+            db,
+            clinician_user_id,
+            starts_at,
+            ends_at,
+            exclude_id=appt.id,
+        )
+        if conflicts:
+            return conflict_response(conflicts)
 
     before_data = snapshot_model(appt)
     if payload.starts_at is not None:
