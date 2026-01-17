@@ -62,6 +62,10 @@
   - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
+- 2026-01-17: Stage73 completed (PR #50, master 4ddc0a9).
+  - Persisted clinical chart view mode via URL + localStorage and normalised tooth codes for badges.
+  - Playwright clinical chart smoke asserts view mode persistence after refresh.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 - 2026-01-17: Stage72 completed (PR #49, master b3aa338).
   - Clinical chart toggle + tooth badges smoke; added chart/badge testids.
   - Added Playwright clinical chart smoke using API-created procedure (CI-only Playwright).
