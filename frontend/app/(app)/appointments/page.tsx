@@ -473,6 +473,7 @@ function isRangeWithinSchedule(
 export default function AppointmentsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const patientSearchRef = useRef<HTMLInputElement | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -558,6 +559,71 @@ export default function AppointmentsPage() {
   const [editCancelReason, setEditCancelReason] = useState("");
   const [editNoteBody, setEditNoteBody] = useState("");
   const [conflictWarning, setConflictWarning] = useState<ConflictWarning | null>(null);
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target.isContentEditable
+      );
+    }
+
+    function focusGlobalSearch() {
+      const input = document.querySelector(
+        'input[placeholder="Search patients..."]'
+      ) as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+        input.select();
+        return true;
+      }
+      return false;
+    }
+
+    function handleShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableTarget(event.target)) return;
+      if (event.key === "n" || event.key === "N") {
+        event.preventDefault();
+        setShowNewModal(true);
+        return;
+      }
+      if (event.key === "/") {
+        event.preventDefault();
+        if (showNewModal && patientSearchRef.current) {
+          patientSearchRef.current.focus();
+          patientSearchRef.current.select();
+          return;
+        }
+        focusGlobalSearch();
+        return;
+      }
+      if (event.key === "Escape" && showNewModal) {
+        event.preventDefault();
+        setShowNewModal(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleShortcut);
+    };
+  }, [showNewModal]);
+
+  useEffect(() => {
+    if (!showNewModal) return;
+    const focusTimer = window.setTimeout(() => {
+      if (patientSearchRef.current) {
+        patientSearchRef.current.focus();
+        patientSearchRef.current.select();
+      }
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [showNewModal]);
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
   const [modalClinicianUserId, setModalClinicianUserId] = useState<string | null>(null);
@@ -2396,6 +2462,7 @@ export default function AppointmentsPage() {
                     value={patientQuery}
                     onChange={(e) => setPatientQuery(e.target.value)}
                     data-testid="booking-patient-search"
+                    ref={patientSearchRef}
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
@@ -2467,6 +2534,14 @@ export default function AppointmentsPage() {
                     />
                   </div>
                 </div>
+                {startsAt && endsAt && (
+                  <div
+                    style={{ color: "var(--muted)", fontSize: 12 }}
+                    data-testid="booking-preselected-slot"
+                  >
+                    Slot prefilled — edit times if needed.
+                  </div>
+                )}
                 <div className="stack" style={{ gap: 8 }}>
                   <label className="label">Duration</label>
                   <select
