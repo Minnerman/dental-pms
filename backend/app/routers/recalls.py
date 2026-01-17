@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 import csv
 import logging
+import os
 import re
 import time
 import zipfile
@@ -45,6 +46,7 @@ logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
 MAX_EXPORT_ROWS = 2000
+MAX_EXPORT_FILENAME_LENGTH = 120
 EXPORT_COUNT_CACHE_TTL_SECONDS = 60
 EXPORT_COUNT_CACHE_MAX = 500
 _export_count_cache: OrderedDict[tuple, tuple[float, int]] = OrderedDict()
@@ -138,6 +140,80 @@ def _parse_csv_values(raw: str | None) -> list[str]:
 def _safe_filename_part(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", value).strip("_")
     return cleaned
+
+
+def _truncate_filename(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    base, ext = os.path.splitext(value)
+    if ext and len(ext) <= 10:
+        base_max = max_length - len(ext)
+        if base_max <= 0:
+            return value[:max_length]
+        if base_max > 3:
+            base = f"{base[: base_max - 3]}..."
+        else:
+            base = base[:base_max]
+        return f"{base}{ext}"
+    return value[:max_length]
+
+
+def _sanitize_export_filename(value: str) -> str:
+    cleaned = re.sub(r"[\x00-\x1f\x7f]+", "", value)
+    cleaned = re.sub(r"[<>:\"/\\\\|?*]+", "_", cleaned)
+    cleaned = re.sub(r"\s+", "_", cleaned.strip())
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", cleaned)
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return _truncate_filename(cleaned, MAX_EXPORT_FILENAME_LENGTH)
+
+
+def _has_export_filters(
+    *,
+    start: date | None,
+    end: date | None,
+    recall_status: str | None,
+    recall_type: str | None,
+    contact_state: str | None,
+    last_contact: str | None,
+    method: str | None,
+    contacted: str | None,
+    contacted_within_days: int | None,
+    contact_channel: str | None,
+) -> bool:
+    return any(
+        value
+        for value in [
+            start,
+            end,
+            recall_status,
+            recall_type,
+            contact_state,
+            last_contact,
+            method,
+            contacted,
+            contacted_within_days,
+            contact_channel,
+        ]
+    )
+
+
+def _build_export_filename(
+    *,
+    export_type: str,
+    has_filters: bool,
+    page_only: bool,
+    today: date | None = None,
+) -> str:
+    suffix_parts: list[str] = []
+    if has_filters:
+        suffix_parts.append("filtered")
+    if page_only:
+        suffix_parts.append("page")
+    suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
+    stamp = (today or date.today()).isoformat()
+    if export_type == "letters_zip":
+        return _sanitize_export_filename(f"recall-letters-{stamp}{suffix}.zip")
+    return _sanitize_export_filename(f"recalls-{stamp}{suffix}.csv")
 
 
 def _normalize_recall_filters(
@@ -731,28 +807,23 @@ def export_recalls_csv(
                 last_contact_channel.value if last_contact_channel else "",
             ]
         )
-    has_filters = any(
-        value
-        for value in [
-            start,
-            end,
-            recall_status,
-            recall_type,
-            contact_state,
-            last_contact,
-            method,
-            contacted,
-            contacted_within_days,
-            contact_channel,
-        ]
+    has_filters = _has_export_filters(
+        start=start,
+        end=end,
+        recall_status=recall_status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
     )
-    suffix_parts = []
-    if has_filters:
-        suffix_parts.append("filtered")
-    if page_only:
-        suffix_parts.append("page")
-    suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
-    filename = f"recalls-{date.today().isoformat()}{suffix}.csv"
+    filename = _build_export_filename(
+        export_type="csv",
+        has_filters=has_filters,
+        page_only=page_only,
+    )
     log_recall_export(
         db,
         user=user,
@@ -787,8 +858,31 @@ def export_recalls_count(
     contacted: str | None = Query(default=None),
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
+    page_only: bool = Query(default=False),
 ):
     start_time = time.perf_counter()
+    has_filters = _has_export_filters(
+        start=start,
+        end=end,
+        recall_status=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
+    )
+    filename_csv = _build_export_filename(
+        export_type="csv",
+        has_filters=has_filters,
+        page_only=page_only,
+    )
+    filename_zip = _build_export_filename(
+        export_type="letters_zip",
+        has_filters=has_filters,
+        page_only=page_only,
+    )
     cache_key = _export_count_cache_key(
         start=start,
         end=end,
@@ -807,7 +901,11 @@ def export_recalls_count(
         logger.info(
             "perf: recalls_export_count_ms=%.2f cache=hit count=%d", elapsed_ms, cached
         )
-        return {"count": cached}
+        return {
+            "count": cached,
+            "suggested_filename_csv": filename_csv,
+            "suggested_filename_zip": filename_zip,
+        }
 
     stmt, _requested_statuses = _build_export_stmt(
         start=start,
@@ -828,7 +926,11 @@ def export_recalls_count(
     logger.info(
         "perf: recalls_export_count_ms=%.2f cache=miss count=%d", elapsed_ms, total
     )
-    return {"count": total}
+    return {
+        "count": total,
+        "suggested_filename_csv": filename_csv,
+        "suggested_filename_zip": filename_zip,
+    }
 
 
 @router.get("/letters.zip")
@@ -918,28 +1020,23 @@ def export_recall_letters_zip(
                 created_by_user_id=user.id if user else None,
                 guard_seconds=60,
             )
-    has_filters = any(
-        value
-        for value in [
-            start,
-            end,
-            recall_status,
-            recall_type,
-            contact_state,
-            last_contact,
-            method,
-            contacted,
-            contacted_within_days,
-            contact_channel,
-        ]
+    has_filters = _has_export_filters(
+        start=start,
+        end=end,
+        recall_status=recall_status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contacted_within_days=contacted_within_days,
+        contact_channel=contact_channel,
     )
-    suffix_parts = []
-    if has_filters:
-        suffix_parts.append("filtered")
-    if page_only:
-        suffix_parts.append("page")
-    suffix = f"-{'-'.join(suffix_parts)}" if suffix_parts else ""
-    filename = f"recall-letters-{date.today().isoformat()}{suffix}.zip"
+    filename = _build_export_filename(
+        export_type="letters_zip",
+        has_filters=has_filters,
+        page_only=page_only,
+    )
     log_recall_export(
         db,
         user=user,

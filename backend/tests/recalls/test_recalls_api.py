@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+import re
 
 import httpx
 import pytest
@@ -16,6 +17,18 @@ def _get_first_recall_id(client: httpx.Client, headers: dict[str, str]) -> int:
     assert isinstance(data, list)
     assert data, "Expected seeded recalls"
     return data[0]["id"]
+
+
+def _get_filename_from_disposition(headers: httpx.Headers) -> str:
+    header = headers.get("content-disposition") or ""
+    match = re.search(r'filename="([^"]+)"', header)
+    return match.group(1) if match else ""
+
+
+def _assert_safe_filename(value: str) -> None:
+    assert value
+    assert not re.search(r"[\\/:*?\"<>|]", value)
+    assert len(value) <= recalls_router.MAX_EXPORT_FILENAME_LENGTH
 
 
 def test_recalls_list_returns_rows(api_client, auth_headers):
@@ -63,6 +76,20 @@ def test_export_count_filter_affects_results(api_client, auth_headers):
     never = never_resp.json().get("count")
     assert isinstance(never, int)
     assert never == 0
+
+
+def test_export_count_includes_filenames(api_client, auth_headers):
+    response = api_client.get("/recalls/export_count", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    csv_name = payload.get("suggested_filename_csv")
+    zip_name = payload.get("suggested_filename_zip")
+    assert isinstance(csv_name, str)
+    assert isinstance(zip_name, str)
+    assert csv_name.endswith(".csv")
+    assert zip_name.endswith(".zip")
+    _assert_safe_filename(csv_name)
+    _assert_safe_filename(zip_name)
 
 
 def test_recalls_list_includes_last_contact_fields(api_client, auth_headers):
@@ -133,6 +160,34 @@ def test_export_csv_returns_csv(api_client, auth_headers):
     body = response.text.strip().splitlines()
     assert body, "Expected CSV output"
     assert "patient_id" in body[0]
+
+
+def test_export_filenames_match_suggested(api_client, auth_headers):
+    count_resp = api_client.get(
+        "/recalls/export_count",
+        headers=auth_headers,
+        params={"page_only": True},
+    )
+    assert count_resp.status_code == 200, count_resp.text
+    payload = count_resp.json()
+    suggested_csv = payload.get("suggested_filename_csv")
+    suggested_zip = payload.get("suggested_filename_zip")
+
+    export_csv_resp = api_client.get(
+        "/recalls/export.csv",
+        headers=auth_headers,
+        params={"page_only": True},
+    )
+    assert export_csv_resp.status_code == 200, export_csv_resp.text
+    assert _get_filename_from_disposition(export_csv_resp.headers) == suggested_csv
+
+    export_zip_resp = api_client.get(
+        "/recalls/letters.zip",
+        headers=auth_headers,
+        params={"page_only": True},
+    )
+    assert export_zip_resp.status_code == 200, export_zip_resp.text
+    assert _get_filename_from_disposition(export_zip_resp.headers) == suggested_zip
 
 
 def test_export_csv_creates_audit_log(api_client, auth_headers):
@@ -240,6 +295,18 @@ def test_export_letters_zip_audit_entry(api_client, auth_headers):
     assert response.status_code == 200, response.text
     entry = _fetch_export_audit(api_client, auth_headers, "letters_zip")
     _assert_export_audit_payload(entry, "letters_zip")
+
+
+def test_sanitize_export_filename_strips_invalid_chars():
+    raw = "recalls-2026-01-17/filtered:page?.csv"
+    sanitized = recalls_router._sanitize_export_filename(raw)
+    assert sanitized.endswith(".csv")
+    _assert_safe_filename(sanitized)
+
+    long_raw = f"{'a' * 200}.csv"
+    truncated = recalls_router._sanitize_export_filename(long_raw)
+    assert truncated.endswith(".csv")
+    _assert_safe_filename(truncated)
 
 
 def test_export_guardrail_rejects_large_exports(monkeypatch):
