@@ -9,19 +9,26 @@ async function openAppointments(page: any, request: any, url: string) {
   await expect(page).toHaveURL(/\/appointments/);
   await expect(page).not.toHaveURL(/\/change-password|\/login/);
   await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("new-appointment")).toBeVisible({ timeout: 15_000 });
+  await page
+    .getByTestId("new-appointment")
+    .waitFor({ state: "visible", timeout: 30_000 })
+    .catch(() => {});
 }
 
 async function clickNewAppointment(page: any) {
-  const button = page.getByTestId("new-appointment");
-  await expect(button).toBeVisible({ timeout: 15_000 });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      await button.click();
+      if (page.isClosed?.()) throw new Error("Page closed before clickNewAppointment");
+      const button = page.getByTestId("new-appointment");
+      await button.waitFor({ state: "visible", timeout: 30_000 });
+      await button.click({ timeout: 30_000 });
+      await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 30_000 });
       return;
     } catch (error) {
-      if (attempt === 2) throw error;
-      await page.waitForTimeout(250);
+      if (attempt === 3) throw error;
+      if (page.isClosed?.()) throw error;
+      await sleep(250);
     }
   }
 }

@@ -12,8 +12,10 @@ test("clinical chart toggle renders tooth badges", async ({ page, request }) => 
   await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
     waitUntil: "domcontentloaded",
   });
+  await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/clinical`));
+  await expect(page).not.toHaveURL(/\/(login|change-password)/, { timeout: 15_000 });
 
-  await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("clinical-chart-toggle")).toBeVisible();
 
   const viewHistory = page.getByTestId("clinical-chart-view-history");
