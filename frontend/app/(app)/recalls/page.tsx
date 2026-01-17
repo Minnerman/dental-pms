@@ -208,6 +208,8 @@ export default function RecallsPage() {
         : exportCountError
           ? "Count unavailable"
           : "—";
+  const exportFilenameCsv = buildExportFilename("csv");
+  const exportFilenameZip = buildExportFilename("zip");
   const errorText = error ?? "";
   const exportLimitMatch = errorText.match(/Too many recalls to export \((\d+)\)/);
   const exportLimitCount = exportLimitMatch ? Number(exportLimitMatch[1]) : exportCount;
@@ -264,6 +266,31 @@ export default function RecallsPage() {
     const safeName = rawName.replace(/[^a-zA-Z0-9-_]+/g, "_");
     const date = row.due_date?.slice(0, 10) || new Date().toISOString().slice(0, 10);
     return `Recall_${safeName}_${date}.pdf`;
+  }
+
+  function buildExportFilename(kind: "csv" | "zip") {
+    const hasFilters = Boolean(
+      startDate ||
+        endDate ||
+        statusFilter.length > 0 ||
+        typeFilter !== "all" ||
+        contactState !== "all" ||
+        lastContact !== "all" ||
+        contactMethod !== "all"
+    );
+    const suffixParts: string[] = [];
+    if (hasFilters) {
+      suffixParts.push("filtered");
+    }
+    if (exportPageOnly) {
+      suffixParts.push("page");
+    }
+    const suffix = suffixParts.length > 0 ? `-${suffixParts.join("-")}` : "";
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    if (kind === "zip") {
+      return `recall-letters-${dateStamp}${suffix}.zip`;
+    }
+    return `recalls-${dateStamp}${suffix}.csv`;
   }
 
   function getFilenameFromDisposition(res: Response, fallback: string) {
@@ -338,7 +365,7 @@ export default function RecallsPage() {
       link.href = url;
       link.download = getFilenameFromDisposition(
         res,
-        `recalls-${new Date().toISOString().slice(0, 10)}.csv`
+        exportFilenameCsv
       );
       document.body.appendChild(link);
       link.click();
@@ -384,7 +411,7 @@ export default function RecallsPage() {
       link.href = url;
       link.download = getFilenameFromDisposition(
         res,
-        `recall-letters-${new Date().toISOString().slice(0, 10)}.zip`
+        exportFilenameZip
       );
       document.body.appendChild(link);
       link.click();
@@ -770,9 +797,26 @@ export default function RecallsPage() {
               Export will include: {exportCountLabel}
               {exportPageOnly ? ` (this page: ${rows.length})` : ""}
             </div>
-            <span style={{ color: "var(--muted)", fontSize: 12 }} data-testid="recalls-export-hint">
-              Exports include active filters and the page toggle.
-            </span>
+            <div className="stack" style={{ gap: 2 }}>
+              <span
+                style={{ color: "var(--muted)", fontSize: 12 }}
+                data-testid="recalls-export-hint"
+              >
+                Exports include active filters and the page toggle.
+              </span>
+              <span
+                style={{ color: "var(--muted)", fontSize: 12 }}
+                data-testid="recalls-export-filename-csv"
+              >
+                CSV filename: {exportFilenameCsv}
+              </span>
+              <span
+                style={{ color: "var(--muted)", fontSize: 12 }}
+                data-testid="recalls-export-filename-zip"
+              >
+                ZIP filename: {exportFilenameZip}
+              </span>
+            </div>
             <label className="row" style={{ gap: 6, alignItems: "center" }}>
               <input
                 type="checkbox"
