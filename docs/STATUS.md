@@ -55,6 +55,10 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
+- Stage76: booking conflict details.
+  - Conflict banner lists overlaps with time + location and offers “View day”.
+  - Playwright booking spec covers conflict banner + view link.
+  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
 - 2026-01-17: Stage77 completed (PR #54, master 82a5db0).

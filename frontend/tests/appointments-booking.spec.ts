@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-import { createPatient } from "./helpers/api";
+import { createAppointment, createPatient } from "./helpers/api";
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
 async function openAppointments(page: any, request: any, url: string) {
@@ -308,4 +307,55 @@ test("visit appointments require address, clinic does not", async ({ page, reque
 
   await page.getByTestId("booking-location-type").selectOption("clinic");
   await expect(submit).toBeEnabled({ timeout: 15_000 });
+});
+
+test("conflict banner shows overlapping appointments with view day link", async ({
+  page,
+  request,
+}) => {
+  const conflictPatientId = await createPatient(request, {
+    first_name: "Conflict",
+    last_name: `Patient ${Date.now()}`,
+  });
+  const bookingPatientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: `Patient ${Date.now()}`,
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await clickNewAppointment(page);
+
+  const clinicianSelect = page.getByLabel("Clinician (optional)");
+  const clinicianOptions = await clinicianSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  if (clinicianOptions.length === 0) {
+    test.skip();
+    return;
+  }
+  const clinicianId = Number(clinicianOptions[0]);
+  await createAppointment(request, conflictPatientId, {
+    clinician_user_id: clinicianId,
+    starts_at: "2026-01-15T09:00:00.000Z",
+    ends_at: "2026-01-15T09:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await clickNewAppointment(page);
+  await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
+
+  await page.getByTestId("booking-patient-select").selectOption(String(bookingPatientId));
+  await page.getByTestId("booking-start").fill("2026-01-15T09:15");
+  await page.getByTestId("booking-end").fill("2026-01-15T09:45");
+
+  await expect(page.getByTestId("booking-conflicts")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("booking-conflict-row").first()).toBeVisible();
+  await expect(page.getByTestId("booking-conflict-view-day")).toBeVisible();
 });

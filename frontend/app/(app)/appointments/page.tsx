@@ -169,7 +169,14 @@ type CalendarRange = {
 
 type ConflictWarning = {
   message: string;
-  details: string[];
+  items: Array<{
+    id?: number;
+    start: Date;
+    end: Date;
+    patientName: string;
+    locationLabel?: string;
+  }>;
+  extraCount: number;
   anchorDate?: Date;
 };
 
@@ -624,7 +631,13 @@ export default function AppointmentsPage() {
 
   const buildConflictWarning = useCallback(
     (
-      conflicts: Array<{ start: Date; end: Date; patientName: string }>,
+      conflicts: Array<{
+        id?: number;
+        start: Date;
+        end: Date;
+        patientName: string;
+        locationLabel?: string;
+      }>,
       clinicianId: number | null | undefined
     ): ConflictWarning | null => {
       if (conflicts.length === 0) return null;
@@ -632,16 +645,9 @@ export default function AppointmentsPage() {
       const message = `Warning: overlaps with ${conflicts.length} existing appointment${
         conflicts.length === 1 ? "" : "s"
       }${label ? ` for ${label}` : ""}.`;
-      const details = conflicts.slice(0, 2).map((conflict) => {
-        return `${conflict.patientName} (${formatConflictTime(
-          conflict.start,
-          conflict.end
-        )})`;
-      });
-      if (conflicts.length > 2) {
-        details.push(`and ${conflicts.length - 2} more`);
-      }
-      return { message, details, anchorDate: conflicts[0]?.start };
+      const items = conflicts.slice(0, 5);
+      const extraCount = Math.max(0, conflicts.length - items.length);
+      return { message, items, extraCount, anchorDate: conflicts[0]?.start };
     },
     [getClinicianLabel]
   );
@@ -665,11 +671,16 @@ export default function AppointmentsPage() {
         .map((appt) => {
           const startDate = new Date(appt.starts_at);
           const endDate = new Date(appt.ends_at);
+          const locationLabel =
+            appt.location_type === "visit"
+              ? appt.location_text || "Visit"
+              : appt.location || "Clinic";
           return {
             id: appt.id,
             start: startDate,
             end: endDate,
             patientName: `${appt.patient.first_name} ${appt.patient.last_name}`.trim(),
+            locationLabel,
           };
         })
         .filter(
@@ -2064,20 +2075,37 @@ export default function AppointmentsPage() {
                 onClick={() => {
                   if (conflictWarning.anchorDate) {
                     viewConflictsAt(conflictWarning.anchorDate);
+                    router.replace(
+                      `/appointments?date=${toDateKey(conflictWarning.anchorDate)}`,
+                      { scroll: false }
+                    );
                   }
                 }}
                 data-testid="booking-conflict-view-day"
               >
-                View conflicts
+                View day
               </button>
             </div>
-            {conflictWarning.details.length > 0 && (
-              <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
-                {conflictWarning.details.map((detail) => (
-                  <span key={detail} data-testid="booking-conflict-row">
-                    {detail}
-                  </span>
+            {conflictWarning.items.length > 0 && (
+              <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                {conflictWarning.items.map((item) => (
+                  <div
+                    key={`${item.patientName}-${item.start.toISOString()}`}
+                    style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                    data-testid="booking-conflict-row"
+                  >
+                    <span>{formatConflictTime(item.start, item.end)}</span>
+                    <span>{item.patientName}</span>
+                    {item.locationLabel && (
+                      <span style={{ color: "var(--muted)" }}>{item.locationLabel}</span>
+                    )}
+                  </div>
                 ))}
+                {conflictWarning.extraCount > 0 && (
+                  <span style={{ color: "var(--muted)" }}>
+                    + {conflictWarning.extraCount} more
+                  </span>
+                )}
               </div>
             )}
             <div style={{ marginTop: 6, color: "var(--muted)" }}>
