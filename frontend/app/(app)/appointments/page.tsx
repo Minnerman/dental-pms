@@ -587,12 +587,13 @@ export default function AppointmentsPage() {
       if (event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableTarget(event.target)) return;
-      if (event.key === "n" || event.key === "N") {
+      const key = event.key.toLowerCase();
+      if (key === "n") {
         event.preventDefault();
         setShowNewModal(true);
         return;
       }
-      if (event.key === "/") {
+      if (key === "/") {
         event.preventDefault();
         if (showNewModal && patientSearchRef.current) {
           patientSearchRef.current.focus();
@@ -602,7 +603,7 @@ export default function AppointmentsPage() {
         focusGlobalSearch();
         return;
       }
-      if (event.key === "Escape" && showNewModal) {
+      if (key === "escape" && showNewModal) {
         event.preventDefault();
         setShowNewModal(false);
       }

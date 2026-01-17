@@ -138,7 +138,8 @@ test("appointments shortcuts open, focus, and close booking", async ({ page, req
   await page.keyboard.press("Slash");
   await expect(globalSearch).toBeFocused();
 
-  await page.keyboard.press("KeyN");
+  await page.locator("body").click();
+  await page.keyboard.press("n");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("booking-patient-search")).toBeFocused();
 
