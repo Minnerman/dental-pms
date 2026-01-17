@@ -55,6 +55,9 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
+- Stage78: recalls export UX polish.
+  - Export hint clarifies filters/page toggle; added testids for export controls and filters.
+  - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
 - 2026-01-17: Stage77 completed (PR #54, master 82a5db0).
