@@ -55,9 +55,10 @@
 - Default is `admin@example.com` / `ChangeMe123!`
 
 ## In progress
-- Stage72: Clinical chart view mode toggle + tooth badges (MVP).
-  - Add minimal test ids for chart toggle and tooth badges.
-  - Add Playwright smoke for chart toggle + badge rendering.
+- Stage73: Persist clinical chart view mode + deterministic tooth badges.
+  - Persist view mode via URL + localStorage.
+  - Normalise tooth codes for badge rendering.
+  - Extend Playwright clinical chart smoke for toggle persistence.
   - Verification (planned): `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
 
 ## Recent fixes
