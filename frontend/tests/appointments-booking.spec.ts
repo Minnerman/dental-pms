@@ -131,6 +131,23 @@ test("appointments modal survives view and location switches", async ({ page, re
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 });
 
+test("appointments shortcuts open, focus, and close booking", async ({ page, request }) => {
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+
+  const globalSearch = page.getByPlaceholder("Search patients...");
+  await page.keyboard.press("Slash");
+  await expect(globalSearch).toBeFocused();
+
+  await page.locator("body").click();
+  await page.keyboard.press("n");
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("booking-patient-search")).toBeFocused();
+
+  await page.locator("body").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("booking-modal")).toBeHidden({ timeout: 10_000 });
+});
+
 test("appointment creation uses latest clinician and location selections", async ({
   page,
   request,

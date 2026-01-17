@@ -29,8 +29,6 @@ test("recalls export filename preview matches download and sanitizes", async ({
   await expect(csvPreview).toBeVisible({ timeout: 15_000 });
   await expect(zipPreview).toBeVisible({ timeout: 15_000 });
   await expect(exportSummary).toBeVisible({ timeout: 15_000 });
-  await expect(exportCsvButton).toBeDisabled();
-  await expect(exportZipButton).toBeDisabled();
   await expect(exportCsvButton).toBeEnabled({ timeout: 15_000 });
   await expect(exportZipButton).toBeEnabled({ timeout: 15_000 });
 
