@@ -489,6 +489,8 @@ export default function AppointmentsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [conflictChecking, setConflictChecking] = useState(false);
   const conflictCheckKeyRef = useRef<string>("");
+  const conflictCheckTimerRef = useRef<number | null>(null);
+  const conflictRequestIdRef = useRef(0);
   const [recallContext, setRecallContext] = useState<{
     recallId: string;
     patientId: string;
@@ -750,11 +752,21 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (!showNewModal) {
+      if (conflictCheckTimerRef.current) {
+        window.clearTimeout(conflictCheckTimerRef.current);
+        conflictCheckTimerRef.current = null;
+      }
+      conflictRequestIdRef.current += 1;
       setConflictWarning(null);
       setConflictChecking(false);
       return;
     }
     if (!startsAt || !endsAt || !activeClinicianUserId) {
+      if (conflictCheckTimerRef.current) {
+        window.clearTimeout(conflictCheckTimerRef.current);
+        conflictCheckTimerRef.current = null;
+      }
+      conflictRequestIdRef.current += 1;
       setConflictWarning(null);
       setConflictChecking(false);
       return;
@@ -762,17 +774,32 @@ export default function AppointmentsPage() {
     const startDate = new Date(startsAt);
     const endDate = new Date(endsAt);
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      if (conflictCheckTimerRef.current) {
+        window.clearTimeout(conflictCheckTimerRef.current);
+        conflictCheckTimerRef.current = null;
+      }
+      conflictRequestIdRef.current += 1;
       setConflictWarning(null);
       setConflictChecking(false);
       return;
     }
     if (endDate <= startDate) {
+      if (conflictCheckTimerRef.current) {
+        window.clearTimeout(conflictCheckTimerRef.current);
+        conflictCheckTimerRef.current = null;
+      }
+      conflictRequestIdRef.current += 1;
       setConflictWarning(null);
       setConflictChecking(false);
       return;
     }
     const clinicianId = Number(activeClinicianUserId);
     if (!Number.isFinite(clinicianId)) {
+      if (conflictCheckTimerRef.current) {
+        window.clearTimeout(conflictCheckTimerRef.current);
+        conflictCheckTimerRef.current = null;
+      }
+      conflictRequestIdRef.current += 1;
       setConflictWarning(null);
       setConflictChecking(false);
       return;
@@ -785,11 +812,25 @@ export default function AppointmentsPage() {
       activeLocation,
     ].join("|");
     conflictCheckKeyRef.current = conflictKey;
+    conflictRequestIdRef.current += 1;
+    const requestId = conflictRequestIdRef.current;
     setConflictChecking(true);
-    const conflicts = findConflicts({ clinicianId, start: startDate, end: endDate });
-    if (conflictCheckKeyRef.current !== conflictKey) return;
-    setConflictWarning(buildConflictWarning(conflicts, clinicianId));
-    setConflictChecking(false);
+    if (conflictCheckTimerRef.current) {
+      window.clearTimeout(conflictCheckTimerRef.current);
+    }
+    conflictCheckTimerRef.current = window.setTimeout(() => {
+      const conflicts = findConflicts({ clinicianId, start: startDate, end: endDate });
+      if (conflictRequestIdRef.current !== requestId) return;
+      if (conflictCheckKeyRef.current !== conflictKey) return;
+      setConflictWarning(buildConflictWarning(conflicts, clinicianId));
+      setConflictChecking(false);
+    }, 300);
+    return () => {
+      if (conflictCheckTimerRef.current) {
+        window.clearTimeout(conflictCheckTimerRef.current);
+        conflictCheckTimerRef.current = null;
+      }
+    };
   }, [
     appointments,
     startsAt,
@@ -2006,6 +2047,7 @@ export default function AppointmentsPage() {
               background: "rgba(245, 158, 11, 0.12)",
               borderColor: "rgba(245, 158, 11, 0.4)",
             }}
+            data-testid="booking-conflicts"
           >
             <div
               style={{
@@ -2024,6 +2066,7 @@ export default function AppointmentsPage() {
                     viewConflictsAt(conflictWarning.anchorDate);
                   }
                 }}
+                data-testid="booking-conflict-view-day"
               >
                 View conflicts
               </button>
@@ -2031,7 +2074,9 @@ export default function AppointmentsPage() {
             {conflictWarning.details.length > 0 && (
               <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
                 {conflictWarning.details.map((detail) => (
-                  <span key={detail}>{detail}</span>
+                  <span key={detail} data-testid="booking-conflict-row">
+                    {detail}
+                  </span>
                 ))}
               </div>
             )}
@@ -2515,7 +2560,7 @@ export default function AppointmentsPage() {
                   </div>
                 )}
                 {conflictChecking && (
-                  <div className="notice" data-testid="booking-conflict-checking">
+                  <div className="notice" data-testid="booking-conflicts-loading">
                     Checking conflicts…
                   </div>
                 )}
