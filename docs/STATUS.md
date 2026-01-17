@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage83 completed (PR #60, master 13123ca).
+  - Recalls export buttons gated on metadata; Playwright covers enablement.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-17: Stage82 completed (PR #59, master 581dbcf).
   - Recalls export filenames sanitized + parity between preview and download; tests updated.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
