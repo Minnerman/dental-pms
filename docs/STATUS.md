@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage84 completed (PR #61, master 04b1ff5).
+  - Appointments shortcuts (N, /, Esc) + booking focus/prefill hint; Playwright covers shortcuts flow.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-17: Stage83 completed (PR #60, master 13123ca).
   - Recalls export buttons gated on metadata; Playwright covers enablement.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
