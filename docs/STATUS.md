@@ -57,6 +57,8 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-17: Stage80 housekeeping (closed stale PRs #55/#56; removed remote branches).
+  - Billing-era CI failures noted for historical context; Actions now running normally.
 - 2026-01-17: Stage78 completed (PR #57, master c5f7ca8).
   - Clarified export hint + filter guidance; added testids.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`, `docker compose exec -T backend pytest -q`.
