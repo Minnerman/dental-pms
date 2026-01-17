@@ -23,8 +23,17 @@ test("recalls export filename preview matches download and sanitizes", async ({
 
   const csvPreview = page.getByTestId("recalls-export-filename-csv");
   const zipPreview = page.getByTestId("recalls-export-filename-zip");
+  const exportSummary = page.getByTestId("recalls-export-summary");
   await expect(csvPreview).toBeVisible({ timeout: 15_000 });
   await expect(zipPreview).toBeVisible({ timeout: 15_000 });
+  await expect(exportSummary).toBeVisible({ timeout: 15_000 });
+
+  for (const label of ["Upcoming", "Completed", "Cancelled"]) {
+    const checkbox = page.getByLabel(label);
+    if (!(await checkbox.isChecked())) {
+      await checkbox.check();
+    }
+  }
 
   const dateStamp = new Date().toISOString().slice(0, 10);
   await expect(csvPreview).toContainText(`recalls-${dateStamp}-filtered.csv`);
@@ -34,6 +43,18 @@ test("recalls export filename preview matches download and sanitizes", async ({
   const zipFilename = extractFilename(await zipPreview.textContent());
   expectSafeFilename(csvFilename);
   expectSafeFilename(zipFilename);
+
+  const summaryText = (await exportSummary.textContent()) || "";
+  if (summaryText.includes("0 recalls")) {
+    await page.getByTestId("recalls-export-page-only").check();
+    await expect(csvPreview).toContainText(
+      `recalls-${dateStamp}-filtered-page.csv`
+    );
+    await expect(zipPreview).toContainText(
+      `recall-letters-${dateStamp}-filtered-page.zip`
+    );
+    return;
+  }
 
   const [csvDownload] = await Promise.all([
     page.waitForEvent("download"),
