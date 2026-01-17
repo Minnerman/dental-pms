@@ -3844,11 +3844,14 @@ export default function PatientDetailClient({
                 <div className="stack">
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                     <div className="label">View mode</div>
-                    <div style={tabRowStyle}>
+                    <div style={tabRowStyle} data-testid="clinical-chart-toggle">
                       <button
                         type="button"
                         style={tabStyle(clinicalViewMode === "current", true)}
                         onClick={() => setClinicalViewMode("current")}
+                        data-testid="clinical-chart-view-current"
+                        data-active={clinicalViewMode === "current"}
+                        aria-pressed={clinicalViewMode === "current"}
                       >
                         Current
                       </button>
@@ -3856,6 +3859,9 @@ export default function PatientDetailClient({
                         type="button"
                         style={tabStyle(clinicalViewMode === "planned", true)}
                         onClick={() => setClinicalViewMode("planned")}
+                        data-testid="clinical-chart-view-planned"
+                        data-active={clinicalViewMode === "planned"}
+                        aria-pressed={clinicalViewMode === "planned"}
                       >
                         Planned
                       </button>
@@ -3863,6 +3869,9 @@ export default function PatientDetailClient({
                         type="button"
                         style={tabStyle(clinicalViewMode === "history", true)}
                         onClick={() => setClinicalViewMode("history")}
+                        data-testid="clinical-chart-view-history"
+                        data-active={clinicalViewMode === "history"}
+                        aria-pressed={clinicalViewMode === "history"}
                       >
                         History
                       </button>
@@ -3885,7 +3894,7 @@ export default function PatientDetailClient({
                       >
                         <div className="stack" style={{ gap: 16 }}>
                           <Panel title="Odontogram">
-                            <div className="stack" style={{ gap: 16 }}>
+                            <div className="stack" style={{ gap: 16 }} data-testid="clinical-chart">
                               <div className="stack" style={{ gap: 8 }}>
                                 <div className="label">Upper</div>
                                 <div
@@ -3906,6 +3915,7 @@ export default function PatientDetailClient({
                                           setSelectedTooth(tooth);
                                           setNotesTooth(tooth);
                                         }}
+                                        data-testid={`tooth-button-${tooth}`}
                                         style={{
                                           padding: "6px 0",
                                           fontWeight: 600,
@@ -3934,6 +3944,7 @@ export default function PatientDetailClient({
                                               flexWrap: "wrap",
                                               justifyContent: "center",
                                             }}
+                                            data-testid={`tooth-badge-${tooth}`}
                                           >
                                             {getToothBadges(tooth).map((badge) => (
                                               <span
@@ -3971,6 +3982,7 @@ export default function PatientDetailClient({
                                           setSelectedTooth(tooth);
                                           setNotesTooth(tooth);
                                         }}
+                                        data-testid={`tooth-button-${tooth}`}
                                         style={{
                                           padding: "6px 0",
                                           fontWeight: 600,
@@ -3999,6 +4011,7 @@ export default function PatientDetailClient({
                                               flexWrap: "wrap",
                                               justifyContent: "center",
                                             }}
+                                            data-testid={`tooth-badge-${tooth}`}
                                           >
                                             {getToothBadges(tooth).map((badge) => (
                                               <span
