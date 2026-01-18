@@ -151,7 +151,6 @@ def _upsert_appt(
         legacy_source=legacy_source,
         legacy_id=legacy_id,
         created_by_user_id=actor_id,
-        updated_by_user_id=actor_id,
         **updates,
     )
     session.add(row)
