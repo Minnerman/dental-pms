@@ -148,6 +148,45 @@ def download_attachment(
     )
 
 
+@attachments_router.get("/{attachment_id}/preview")
+def preview_attachment(
+    attachment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    attachment = get_attachment_or_404(db, attachment_id)
+    filename = sanitize_filename(attachment.original_filename)
+    headers = {"Content-Disposition": f'inline; filename="{filename}"'}
+    try:
+        handle = storage.open_file(attachment.storage_key)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment file missing",
+        )
+    log_event(
+        db,
+        actor=user,
+        action="attachment.previewed",
+        entity_type="attachment",
+        entity_id=str(attachment.id),
+        after_data={
+            "patient_id": attachment.patient_id,
+            "filename": filename,
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    return StreamingResponse(
+        handle,
+        media_type=attachment.content_type,
+        headers=headers,
+    )
+
+
 @attachments_router.delete("/{attachment_id}", response_model=AttachmentOut)
 def delete_attachment(
     attachment_id: int,
