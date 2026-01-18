@@ -65,6 +65,7 @@
   - Admin resolve endpoint with audit table `legacy_resolution_events`.
   - UI resolve action in legacy queue with patient search + notes.
   - Verification: `./ops/health.sh`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh` (react-hooks/exhaustive-deps warnings only).
+  - Stage 95 merged (PR #73): resolve unmapped legacy appointments + audit trail; CI green.
 - 2026-01-18: Stage94 completed (unmapped legacy appointment queue).
   - Added `legacy_patient_code` on appointments + importer writes it for reconciliation.
   - Admin-only endpoint: `GET /admin/legacy/unmapped-appointments` with filters + pagination.
