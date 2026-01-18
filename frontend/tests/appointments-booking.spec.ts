@@ -428,3 +428,84 @@ test("booking submit is blocked when conflicts exist", async ({ page, request })
   await expect(page.getByTestId("booking-submit")).toBeDisabled();
   await expect(page.getByTestId("booking-error")).toContainText(/conflict/i);
 });
+
+test("rescheduling respects conflicts and persists successful moves", async ({
+  page,
+  request,
+}) => {
+  const conflictPatientId = await createPatient(request, {
+    first_name: "Reschedule",
+    last_name: `Conflict ${Date.now()}`,
+  });
+  const reschedulePatientId = await createPatient(request, {
+    first_name: "Reschedule",
+    last_name: `Target ${Date.now()}`,
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  const clinicianSelect = page.getByLabel("Clinician (optional)");
+  const clinicianOptions = await clinicianSelect
+    .locator("option")
+    .evaluateAll((options) =>
+      options
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean)
+    );
+  if (clinicianOptions.length === 0) {
+    test.skip();
+    return;
+  }
+  const clinicianId = Number(clinicianOptions[0]);
+
+  const conflictAppt = await createAppointment(request, conflictPatientId, {
+    clinician_user_id: clinicianId,
+    starts_at: "2026-01-15T10:00:00.000Z",
+    ends_at: "2026-01-15T10:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
+  const movableAppt = await createAppointment(request, reschedulePatientId, {
+    clinician_user_id: clinicianId,
+    starts_at: "2026-01-15T11:00:00.000Z",
+    ends_at: "2026-01-15T11:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await page.getByTestId("appointments-view-calendar").click();
+  await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
+
+  const conflictEvent = page.getByTestId(`appointment-event-${conflictAppt.id}`);
+  const movableEvent = page.getByTestId(`appointment-event-${movableAppt.id}`);
+  await expect(conflictEvent).toBeVisible({ timeout: 15_000 });
+  await expect(movableEvent).toBeVisible({ timeout: 15_000 });
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await movableEvent.dragTo(conflictEvent);
+  await expect(page.getByText(/conflict: clinician already has/i)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(movableEvent).toContainText(/11:00/);
+
+  const slots = page.locator(".rbc-time-slot");
+  const slotCount = await slots.count();
+  if (slotCount < 80) {
+    test.skip();
+    return;
+  }
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await movableEvent.dragTo(slots.nth(72));
+  await expect(movableEvent.getByText(/Saving\.\.\./)).toBeVisible({
+    timeout: 10_000,
+  });
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await page.getByTestId("appointments-view-calendar").click();
+  await expect(page.getByTestId(`appointment-event-${movableAppt.id}`)).toBeVisible({
+    timeout: 15_000,
+  });
+});

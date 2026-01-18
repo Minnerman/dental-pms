@@ -616,6 +616,7 @@ export default function AppointmentsPage() {
   const [conflictWarning, setConflictWarning] = useState<ConflictWarning | null>(null);
   const [editConflictWarning, setEditConflictWarning] =
     useState<ConflictWarning | null>(null);
+  const [rescheduleSavingId, setRescheduleSavingId] = useState<number | null>(null);
   useEffect(() => {
     function isEditableTarget(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false;
@@ -721,6 +722,8 @@ export default function AppointmentsPage() {
       })),
     [appointments]
   );
+
+  const isRescheduleLocked = rescheduleSavingId !== null;
 
   const patientLookup = useMemo(() => {
     return new Map(patients.map((patient) => [patient.id, patient]));
@@ -1975,6 +1978,7 @@ export default function AppointmentsPage() {
     start: Date;
     end: Date;
   }) {
+    if (isRescheduleLocked) return;
     try {
       if (!isRangeWithinSchedule(start, end, schedule)) {
         setError("Reschedule is outside of working hours.");
@@ -1997,6 +2001,14 @@ export default function AppointmentsPage() {
         await loadAppointments();
         return;
       }
+      setRescheduleSavingId(event.resource.id);
+      setAppointments((prev) =>
+        prev.map((item) =>
+          item.id === event.resource.id
+            ? { ...item, starts_at: start.toISOString(), ends_at: end.toISOString() }
+            : item
+        )
+      );
       const updated = await updateAppointmentTimes(event.resource.id, start, end);
       if (updated) {
         setAppointments((prev) =>
@@ -2004,8 +2016,15 @@ export default function AppointmentsPage() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reschedule appointment");
+      const message = err instanceof Error ? err.message : "Failed to reschedule appointment";
+      if (message.toLowerCase().includes("overlap")) {
+        setError("Conflict: clinician already has an appointment at this time.");
+      } else {
+        setError(message);
+      }
       await loadAppointments();
+    } finally {
+      setRescheduleSavingId(null);
     }
   }
 
@@ -2018,6 +2037,7 @@ export default function AppointmentsPage() {
     start: Date;
     end: Date;
   }) {
+    if (isRescheduleLocked) return;
     try {
       if (!isRangeWithinSchedule(start, end, schedule)) {
         setError("Resize is outside of working hours.");
@@ -2040,6 +2060,14 @@ export default function AppointmentsPage() {
         await loadAppointments();
         return;
       }
+      setRescheduleSavingId(event.resource.id);
+      setAppointments((prev) =>
+        prev.map((item) =>
+          item.id === event.resource.id
+            ? { ...item, starts_at: start.toISOString(), ends_at: end.toISOString() }
+            : item
+        )
+      );
       const updated = await updateAppointmentTimes(event.resource.id, start, end);
       if (updated) {
         setAppointments((prev) =>
@@ -2047,8 +2075,15 @@ export default function AppointmentsPage() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to resize appointment");
+      const message = err instanceof Error ? err.message : "Failed to resize appointment";
+      if (message.toLowerCase().includes("overlap")) {
+        setError("Conflict: clinician already has an appointment at this time.");
+      } else {
+        setError(message);
+      }
       await loadAppointments();
+    } finally {
+      setRescheduleSavingId(null);
     }
   }
 
@@ -2090,6 +2125,7 @@ export default function AppointmentsPage() {
           event.resource.location_type === "visit"
             ? "0 0 0 2px rgba(255,255,255,0.5) inset"
             : undefined,
+        opacity: rescheduleSavingId === event.resource.id ? 0.65 : 1,
       },
     };
   }
@@ -2127,6 +2163,8 @@ export default function AppointmentsPage() {
     return (
         <div
           style={{ display: "grid", gap: 4 }}
+          data-testid={`appointment-event-${appt.id}`}
+          data-appointment-id={appt.id}
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -2168,6 +2206,18 @@ export default function AppointmentsPage() {
           >
             {appt.location_type === "visit" ? "Visit" : "Clinic"}
           </span>
+          {rescheduleSavingId === appt.id && (
+            <span
+              className="badge"
+              style={{
+                color: "white",
+                borderColor: "transparent",
+                background: "rgba(0, 0, 0, 0.35)",
+              }}
+            >
+              Saving...
+            </span>
+          )}
         </div>
       </div>
     );
@@ -2368,7 +2418,8 @@ export default function AppointmentsPage() {
               onSelectEvent={handleEventSelect}
               onEventDrop={handleEventDrop}
               onEventResize={handleEventResize}
-              draggableAccessor={() => true}
+              draggableAccessor={() => !isRescheduleLocked}
+              resizableAccessor={() => !isRescheduleLocked}
               view={calendarView}
               date={currentDate}
               onView={setCalendarView}
