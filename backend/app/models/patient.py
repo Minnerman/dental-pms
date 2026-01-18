@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base, SoftDeleteMixin
@@ -31,8 +31,17 @@ class RecallStatus(str, enum.Enum):
 
 class Patient(Base, AuditMixin, SoftDeleteMixin):
     __tablename__ = "patients"
+    __table_args__ = (
+        UniqueConstraint(
+            "legacy_source",
+            "legacy_id",
+            name="uq_patients_legacy_source_legacy_id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    legacy_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     nhs_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     title: Mapped[str | None] = mapped_column(String(50), nullable=True)
     first_name: Mapped[str] = mapped_column(String(120), nullable=False)

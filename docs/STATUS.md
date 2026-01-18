@@ -61,6 +61,12 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage93 completed (R4 import scaffolding).
+  - Legacy keys: `patients` + `appointments` get `legacy_source`/`legacy_id` with unique constraints; appointments allow `patient_id` NULL for unmapped legacy refs.
+  - Added fixture-backed importer + CLI (`python -m app.scripts.r4_import --source fixtures`), stats summary, and synthetic fixtures/tests.
+  - Docs: `docs/r4/IMPORT_SCAFFOLD.md`.
+  - Verification: `./ops/health.sh`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh` (react-hooks/exhaustive-deps warnings only).
+  - Tests: importer unit test added but not run in ops/verify.
 - 2026-01-18: Session close-out (master 9db606a).
   - Verification: `./ops/health.sh` OK; `bash ops/verify.sh` OK (react-hooks/exhaustive-deps warnings only); `bash ops/verify_prod_404.sh` OK (same warnings).
   - Note: R4 investigation doc added at `docs/r4/R4_SQLServer_investigation_prelim.md`.

@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base, SoftDeleteMixin
@@ -25,9 +25,18 @@ class AppointmentLocationType(str, enum.Enum):
 
 class Appointment(Base, AuditMixin, SoftDeleteMixin):
     __tablename__ = "appointments"
+    __table_args__ = (
+        UniqueConstraint(
+            "legacy_source",
+            "legacy_id",
+            name="uq_appointments_legacy_source_legacy_id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    legacy_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    patient_id: Mapped[int | None] = mapped_column(ForeignKey("patients.id"), nullable=True)
     clinician_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )

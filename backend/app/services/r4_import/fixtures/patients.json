@@ -1,0 +1,14 @@
+[
+  {
+    "patient_code": 1001,
+    "first_name": "Test",
+    "last_name": "Patient A",
+    "date_of_birth": "1980-01-02"
+  },
+  {
+    "patient_code": 1002,
+    "first_name": "Test",
+    "last_name": "Patient B",
+    "date_of_birth": "1990-03-04"
+  }
+]
