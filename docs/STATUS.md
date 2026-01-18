@@ -66,6 +66,7 @@
   - CLI supports `--dry-run --limit` samples and explicit `--apply` import gate.
   - Tests: `docker compose run --rm backend pytest tests/r4_import/test_r4_import_cli.py -q`.
   - Verification: `./ops/health.sh`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh` (react-hooks/exhaustive-deps warnings only).
+  - Stage 98 merged (PR #76): SQL Server streaming import (dry-run default, apply gated) + CLI filters; CI green.
 - 2026-01-18: Stage97 completed (read-only SQL Server source dry-run).
   - Added env-gated SQL Server source with read-only counts/samples and dry-run CLI mode.
   - Docs: `docs/r4/SQLSERVER_SOURCE.md` and `.env.example` placeholders.
