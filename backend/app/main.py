@@ -34,7 +34,9 @@ from app.routers.patient_documents import (
     router as patient_documents_router,
     documents_router as documents_router,
 )
+from app.routers.capabilities import router as capabilities_router
 from app.services.users import seed_initial_admin
+from app.services.capabilities import backfill_user_capabilities, ensure_capabilities
 from app.services.document_templates import ensure_default_templates
 from app.models.user import User
 from sqlalchemy import select
@@ -67,6 +69,12 @@ def startup():
             logger.info("Initial admin created for %s (must change password on first login).", admin_email)
         else:
             logger.info("Initial admin not created (users already exist).")
+        ensured = ensure_capabilities(db)
+        if ensured:
+            logger.info("Capabilities ensured (%s total).", len(ensured))
+        backfilled = backfill_user_capabilities(db)
+        if backfilled:
+            logger.info("Capabilities backfilled for existing users (%s grants).", backfilled)
         actor = db.scalar(select(User).order_by(User.id.asc()).limit(1))
         if actor:
             created_templates = ensure_default_templates(db, actor=actor)
@@ -105,6 +113,7 @@ app.include_router(patient_attachments_router)
 app.include_router(attachments_router)
 app.include_router(patient_documents_router)
 app.include_router(documents_router)
+app.include_router(capabilities_router)
 app.include_router(audit_router)
 app.include_router(timeline_router)
 app.include_router(reports_router)

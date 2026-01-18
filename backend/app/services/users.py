@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
 from app.models.user import Role, User
+from app.services.capabilities import ensure_capabilities, grant_all_capabilities
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
@@ -35,6 +36,7 @@ def create_user(
     is_active: bool = True,
     must_change_password: bool = False,
 ) -> User:
+    ensure_capabilities(db)
     now = datetime.now(timezone.utc)
     user = User(
         email=email.lower().strip(),
@@ -49,6 +51,7 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    grant_all_capabilities(db, user)
     return user
 
 

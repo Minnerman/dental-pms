@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.settings import settings
 from app.db.session import get_db
+from app.models.capability import Capability, UserCapability
 from app.models.user import User
 
 JWT_SECRET = settings.secret_key
@@ -52,3 +53,20 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     }:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return user
+
+
+def require_capability(code: str):
+    def _inner(
+        db: Session = Depends(get_db),
+        user: User = Depends(get_current_user),
+    ) -> User:
+        allowed = db.scalar(
+            select(UserCapability)
+            .join(Capability, Capability.id == UserCapability.capability_id)
+            .where(UserCapability.user_id == user.id, Capability.code == code)
+        )
+        if not allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        return user
+
+    return _inner
