@@ -82,6 +82,7 @@ def list_appointments_range(
     stmt = (
         select(Appointment)
         .where(Appointment.deleted_at.is_(None))
+        .where(Appointment.patient_id.is_not(None))
         .where(Appointment.starts_at >= start_dt, Appointment.starts_at < end_dt)
         .options(selectinload(Appointment.patient))
         .order_by(Appointment.starts_at.asc())
@@ -120,6 +121,7 @@ def list_appointments(
     stmt = stmt.order_by(Appointment.starts_at.desc())
     if not include_deleted:
         stmt = stmt.where(Appointment.deleted_at.is_(None))
+    stmt = stmt.where(Appointment.patient_id.is_not(None))
     if patient_id:
         stmt = stmt.where(Appointment.patient_id == patient_id)
     if date_filter and not (from_dt or to_dt):
@@ -506,6 +508,7 @@ def get_run_sheet_pdf(
     stmt = (
         select(Appointment)
         .where(Appointment.deleted_at.is_(None))
+        .where(Appointment.patient_id.is_not(None))
         .where(Appointment.starts_at >= start_dt, Appointment.starts_at <= end_dt)
         .options(selectinload(Appointment.patient), selectinload(Appointment.estimates))
         .order_by(Appointment.starts_at.asc())

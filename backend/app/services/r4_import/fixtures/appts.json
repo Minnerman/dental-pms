@@ -1,0 +1,24 @@
+[
+  {
+    "appointment_id": "A1001-1",
+    "patient_code": 1001,
+    "starts_at": "2026-01-10T09:00:00+00:00",
+    "ends_at": "2026-01-10T09:30:00+00:00",
+    "clinician": "Dr Example",
+    "location": "Room 1",
+    "location_type": "clinic",
+    "appointment_type": "Checkup",
+    "status": "booked"
+  },
+  {
+    "appointment_id": "A9999-1",
+    "patient_code": 9999,
+    "starts_at": "2026-01-11T10:00:00+00:00",
+    "ends_at": "2026-01-11T10:30:00+00:00",
+    "clinician": "Dr Example",
+    "location": "Room 2",
+    "location_type": "clinic",
+    "appointment_type": "Review",
+    "status": "booked"
+  }
+]
