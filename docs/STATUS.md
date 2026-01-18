@@ -61,6 +61,11 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage99 completed (R4 dry-run + pilot import runbook).
+  - Runbook: `docs/r4/R4_DRY_RUN_AND_PILOT_IMPORT.md` with dry-run and pilot import steps.
+  - Added `--confirm APPLY` safety latch for SQL Server imports.
+  - Tests: `docker compose run --rm backend pytest tests/r4_import/test_r4_import_cli.py -q`.
+  - Verification: `./ops/health.sh`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh` (react-hooks/exhaustive-deps warnings only).
 - 2026-01-18: Stage98 completed (SQL Server streaming into importer, dry-run default).
   - SQL Server source streams patients/appointments with keyset pagination and date filters.
   - CLI supports `--dry-run --limit` samples and explicit `--apply` import gate.

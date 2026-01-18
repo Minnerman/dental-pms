@@ -43,6 +43,11 @@ def main() -> int:
         help="Apply SQL Server data to Postgres via the importer (explicitly gated).",
     )
     parser.add_argument(
+        "--confirm",
+        default="",
+        help="Safety latch for apply mode (must be 'APPLY').",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -67,6 +72,9 @@ def main() -> int:
     if args.source == "sqlserver":
         if args.apply and args.dry_run:
             print("Choose either --apply or --dry-run (default is dry-run).")
+            return 2
+        if args.apply and args.confirm != "APPLY":
+            print("Refusing to apply without --confirm APPLY.")
             return 2
         try:
             config = R4SqlServerConfig.from_env()

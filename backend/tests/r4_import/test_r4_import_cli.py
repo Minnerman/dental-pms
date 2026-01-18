@@ -34,3 +34,27 @@ def test_cli_sqlserver_dry_run_no_import(monkeypatch):
     )
     monkeypatch.setattr(sys, "argv", ["r4_import.py", "--source", "sqlserver", "--dry-run"])
     assert r4_import_script.main() == 0
+
+
+def test_cli_sqlserver_apply_requires_confirm(monkeypatch):
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", DummySqlServerSource)
+    monkeypatch.setattr(
+        r4_import_script, "import_r4", lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("import_r4 should not run without confirm")
+        )
+    )
+    monkeypatch.setattr(sys, "argv", ["r4_import.py", "--source", "sqlserver", "--apply"])
+    assert r4_import_script.main() == 2
