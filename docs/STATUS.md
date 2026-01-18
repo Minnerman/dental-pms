@@ -61,6 +61,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Session close-out (master 9db606a).
+  - Verification: `./ops/health.sh` OK; `bash ops/verify.sh` OK (react-hooks/exhaustive-deps warnings only); `bash ops/verify_prod_404.sh` OK (same warnings).
+  - Note: R4 investigation doc added at `docs/r4/R4_SQLServer_investigation_prelim.md`.
 - 2026-01-18: Stage92 completed (PR #69, master 632fc99).
   - Capability scaffolding: capability tables + seed/backfill, admin-only endpoints, guard helper, and backend tests; default grant-all preserves behavior.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
