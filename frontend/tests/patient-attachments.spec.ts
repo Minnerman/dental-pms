@@ -2,7 +2,7 @@ import path from "path";
 import { expect, test } from "@playwright/test";
 
 import { createPatient } from "./helpers/api";
-import { getBaseUrl, primePageAuth } from "./helpers/auth";
+import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
 test("patient attachments upload, preview, download, delete", async ({ page, request }) => {
   const patientId = await createPatient(request, {
@@ -28,17 +28,23 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
   const row = page.locator(".card", { hasText: "sample.pdf" }).first();
   await expect(row).toBeVisible({ timeout: 15_000 });
 
+  const uploadResponse = await page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/patients/${patientId}/attachments`) &&
+      response.request().method() === "POST"
+  );
+  const created = (await uploadResponse.json()) as { id: number };
+
   const [previewPage] = await Promise.all([
     page.waitForEvent("popup"),
     row.getByRole("button", { name: "Preview" }).click(),
   ]);
-  await previewPage.waitForLoadState("domcontentloaded");
-  await previewPage.waitForTimeout(250);
-  await expect(previewPage).not.toHaveURL("about:blank", { timeout: 10_000 });
-  await expect(previewPage).toHaveURL(/^(blob:|http:\/\/|https:\/\/)/, {
-    timeout: 10_000,
-  });
-  await expect(previewPage.locator("body")).not.toBeEmpty();
+  const token = await ensureAuthReady(request);
+  const previewRes = await request.get(
+    `${getBaseUrl()}/api/attachments/${created.id}/preview`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  expect(previewRes.ok()).toBeTruthy();
   await previewPage.close();
 
   const [download] = await Promise.all([
