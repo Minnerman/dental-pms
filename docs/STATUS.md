@@ -61,6 +61,11 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage97 completed (read-only SQL Server source dry-run).
+  - Added env-gated SQL Server source with read-only counts/samples and dry-run CLI mode.
+  - Docs: `docs/r4/SQLSERVER_SOURCE.md` and `.env.example` placeholders.
+  - Tests: `docker compose run --rm backend pytest tests/r4_import/test_sqlserver_source.py -q`.
+  - Verification: `./ops/health.sh`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh` (react-hooks/exhaustive-deps warnings only).
 - 2026-01-18: Stage96 completed (preserve manual legacy appointment resolves on re-import).
   - Importer keeps existing `patient_id` on re-import when legacy mapping is missing; conflicts are tracked in stats.
   - Tests: `docker compose exec -T backend pytest tests/r4_import/test_importer.py -q`.
