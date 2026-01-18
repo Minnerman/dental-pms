@@ -535,7 +535,7 @@ test("appointment last updated metadata changes after edit", async ({ page, requ
   const beforeIso = await updatedMeta.getAttribute("data-iso");
 
   await page.getByRole("button", { name: "Edit" }).click();
-  const typeInput = page.getByLabel("Appointment type");
+  const typeInput = page.getByTestId("edit-appointment-type");
   await typeInput.fill("Checkup");
   await page.getByRole("button", { name: "Save changes" }).click();
 

@@ -3058,6 +3058,7 @@ export default function AppointmentsPage() {
                     <label className="label">Appointment type</label>
                     <input
                       className="input"
+                      data-testid="edit-appointment-type"
                       value={editAppointmentType}
                       onChange={(event) => setEditAppointmentType(event.target.value)}
                     />
