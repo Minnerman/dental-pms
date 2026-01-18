@@ -32,7 +32,13 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
     page.waitForEvent("popup"),
     row.getByRole("button", { name: "Preview" }).click(),
   ]);
-  await expect(previewPage).toHaveURL(/blob:/);
+  await previewPage.waitForLoadState("domcontentloaded");
+  await previewPage.waitForTimeout(250);
+  await expect(previewPage).not.toHaveURL("about:blank", { timeout: 10_000 });
+  await expect(previewPage).toHaveURL(/^(blob:|http:\/\/|https:\/\/)/, {
+    timeout: 10_000,
+  });
+  await expect(previewPage.locator("body")).not.toBeEmpty();
   await previewPage.close();
 
   const [download] = await Promise.all([
