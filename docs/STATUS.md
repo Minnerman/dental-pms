@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage91 completed (PR #68, master d6a2faa).
+  - Patient documents UX: upload CTA with in-flight state, preview/download reliability, metadata display, and audit logging; Playwright covers upload/preview/download/delete.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-18: Stage90 completed (PR #67, master 7f9bf71).
   - CI improvements: workflow concurrency (cancel superseded runs), npm + Playwright browser caching, improved failure diagnostics.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
