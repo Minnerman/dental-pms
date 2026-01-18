@@ -52,3 +52,84 @@ def test_r4_import_idempotent():
         assert unmapped.patient_id is None
     finally:
         session.close()
+
+
+def test_r4_import_preserves_manual_resolve():
+    session = SessionLocal()
+    try:
+        clear_r4(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = FixtureSource()
+
+        import_r4(session, source, actor_id)
+        session.commit()
+
+        unmapped = session.scalar(
+            select(Appointment).where(Appointment.legacy_id == "A9999-1")
+        )
+        assert unmapped is not None
+
+        target_patient = session.scalar(
+            select(Patient).where(
+                Patient.legacy_source == "r4",
+                Patient.legacy_id == "1001",
+            )
+        )
+        assert target_patient is not None
+
+        unmapped.patient_id = target_patient.id
+        unmapped.updated_by_user_id = actor_id
+        session.commit()
+
+        stats_second = import_r4(session, source, actor_id)
+        session.commit()
+
+        refreshed = session.get(Appointment, unmapped.id)
+        assert refreshed is not None
+        assert refreshed.patient_id == target_patient.id
+        assert stats_second.appts_unmapped_patient_refs == 0
+        assert stats_second.appts_patient_conflicts == 0
+    finally:
+        session.close()
+
+
+def test_r4_import_reports_patient_conflicts():
+    session = SessionLocal()
+    try:
+        clear_r4(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = FixtureSource()
+
+        import_r4(session, source, actor_id)
+        session.commit()
+
+        mapped = session.scalar(
+            select(Appointment).where(Appointment.legacy_id == "A1001-1")
+        )
+        assert mapped is not None
+
+        other_patient = session.scalar(
+            select(Patient).where(
+                Patient.legacy_source == "r4",
+                Patient.legacy_id == "1002",
+            )
+        )
+        assert other_patient is not None
+
+        mapped.patient_id = other_patient.id
+        mapped.updated_by_user_id = actor_id
+        session.commit()
+
+        stats_second = import_r4(session, source, actor_id)
+        session.commit()
+
+        refreshed = session.get(Appointment, mapped.id)
+        assert refreshed is not None
+        assert refreshed.patient_id == other_patient.id
+        assert stats_second.appts_patient_conflicts == 1
+    finally:
+        session.close()

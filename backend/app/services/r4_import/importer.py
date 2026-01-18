@@ -20,6 +20,7 @@ class ImportStats:
     appts_updated: int = 0
     appts_skipped: int = 0
     appts_unmapped_patient_refs: int = 0
+    appts_patient_conflicts: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return asdict(self)
@@ -115,8 +116,7 @@ def _upsert_appt(
                     Patient.legacy_id == str(appt.patient_code),
                 )
             )
-    if patient is None:
-        stats.appts_unmapped_patient_refs += 1
+    mapped_patient_id = patient.id if patient else None
 
     status = AppointmentStatus.booked
     if appt.status:
@@ -127,7 +127,6 @@ def _upsert_appt(
     is_domiciliary = location_type == AppointmentLocationType.visit
 
     updates = {
-        "patient_id": patient.id if patient else None,
         "starts_at": appt.starts_at,
         "ends_at": appt.ends_at,
         "status": status,
@@ -141,6 +140,13 @@ def _upsert_appt(
     }
 
     if existing:
+        if existing.patient_id is None:
+            if mapped_patient_id is None:
+                stats.appts_unmapped_patient_refs += 1
+            else:
+                updates["patient_id"] = mapped_patient_id
+        elif mapped_patient_id is not None and mapped_patient_id != existing.patient_id:
+            stats.appts_patient_conflicts += 1
         updated = _apply_updates(existing, updates)
         if updated:
             stats.appts_updated += 1
@@ -148,6 +154,9 @@ def _upsert_appt(
             stats.appts_skipped += 1
         return existing
 
+    if mapped_patient_id is None:
+        stats.appts_unmapped_patient_refs += 1
+    updates["patient_id"] = mapped_patient_id
     row = Appointment(
         legacy_source=legacy_source,
         legacy_id=legacy_id,
