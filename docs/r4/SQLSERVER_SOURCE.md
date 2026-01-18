@@ -43,6 +43,8 @@ docker compose exec -T backend python -m app.scripts.r4_import --source sqlserve
 Imports are gated behind `--apply`; without it, the CLI defaults to dry-run and
 does not write to Postgres.
 
+See `docs/r4/R4_DRY_RUN_AND_PILOT_IMPORT.md` for the full runbook.
+
 ## Pagination notes
 
 SQL Server 2008 R2 lacks `OFFSET/FETCH`, so the source uses keyset pagination on
