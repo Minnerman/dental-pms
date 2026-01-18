@@ -1,14 +1,20 @@
 from datetime import date, datetime, time, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import require_admin
 from app.models.appointment import Appointment
+from app.models.legacy_resolution_event import LegacyResolutionEvent
+from app.models.patient import Patient
 from app.models.user import User
-from app.schemas.legacy_admin import UnmappedLegacyAppointmentList
+from app.schemas.legacy_admin import (
+    LegacyResolveRequest,
+    LegacyResolveResponse,
+    UnmappedLegacyAppointmentList,
+)
 
 router = APIRouter(prefix="/admin/legacy", tags=["legacy-admin"])
 
@@ -59,4 +65,52 @@ def list_unmapped_appointments(
         total=int(total),
         limit=limit,
         offset=offset,
+    )
+
+
+@router.post(
+    "/unmapped-appointments/{appointment_id}/resolve",
+    response_model=LegacyResolveResponse,
+)
+def resolve_unmapped_appointment(
+    appointment_id: int,
+    payload: LegacyResolveRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    appt = db.get(Appointment, appointment_id)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appt.patient_id is not None:
+        raise HTTPException(
+            status_code=409, detail="Appointment already linked to a patient"
+        )
+    patient = db.get(Patient, payload.patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    from_patient_id = appt.patient_id
+    appt.patient_id = patient.id
+    appt.updated_by_user_id = admin.id
+    db.add(appt)
+
+    event = LegacyResolutionEvent(
+        actor_user_id=admin.id,
+        entity_type="appointment",
+        entity_id=str(appt.id),
+        legacy_source=appt.legacy_source,
+        legacy_id=appt.legacy_id,
+        action="link_patient",
+        from_patient_id=from_patient_id,
+        to_patient_id=patient.id,
+        notes=payload.notes,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(appt)
+    return LegacyResolveResponse(
+        id=appt.id,
+        patient_id=appt.patient_id,
+        legacy_source=appt.legacy_source,
+        legacy_id=appt.legacy_id,
     )

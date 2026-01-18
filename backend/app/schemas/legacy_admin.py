@@ -29,3 +29,15 @@ class UnmappedLegacyAppointmentList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class LegacyResolveRequest(BaseModel):
+    patient_id: int
+    notes: str | None = None
+
+
+class LegacyResolveResponse(BaseModel):
+    id: int
+    patient_id: int
+    legacy_source: str | None = None
+    legacy_id: str | None = None

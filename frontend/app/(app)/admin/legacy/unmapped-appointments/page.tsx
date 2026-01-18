@@ -29,6 +29,14 @@ type UnmappedResponse = {
   offset: number;
 };
 
+type PatientSearch = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  phone?: string | null;
+};
+
 function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -43,6 +51,11 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatPatientLabel(patient: PatientSearch) {
+  const dob = patient.date_of_birth ? ` (${patient.date_of_birth})` : "";
+  return `${patient.last_name}, ${patient.first_name}${dob}`;
 }
 
 export default function UnmappedLegacyAppointmentsPage() {
@@ -61,6 +74,15 @@ export default function UnmappedLegacyAppointmentsPage() {
   const [toDate, setToDate] = useState(() => formatDate(new Date()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<UnmappedAppointment | null>(null);
+  const [patientQuery, setPatientQuery] = useState("");
+  const [patientOptions, setPatientOptions] = useState<PatientSearch[]>([]);
+  const [patientLoading, setPatientLoading] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<PatientSearch | null>(null);
+  const [resolveNotes, setResolveNotes] = useState("");
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   const canPrev = offset > 0;
   const canNext = offset + limit < total;
@@ -81,6 +103,7 @@ export default function UnmappedLegacyAppointmentsPage() {
   const loadQueue = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNotice(null);
     try {
       const res = await apiFetch(`/api/admin/legacy/unmapped-appointments?${queryString}`);
       if (res.status === 401) {
@@ -114,6 +137,102 @@ export default function UnmappedLegacyAppointmentsPage() {
   useEffect(() => {
     setOffset(0);
   }, [legacySource, fromDate, toDate]);
+
+  useEffect(() => {
+    if (!resolveTarget) return;
+    const trimmed = patientQuery.trim();
+    if (selectedPatient && trimmed === formatPatientLabel(selectedPatient)) {
+      return;
+    }
+    if (trimmed.length < 2) {
+      setPatientOptions([]);
+      setSelectedPatient(null);
+      return;
+    }
+    const timeout = window.setTimeout(async () => {
+      setPatientLoading(true);
+      setResolveError(null);
+      try {
+        const params = new URLSearchParams({ q: trimmed, limit: "10" });
+        const res = await apiFetch(`/api/patients/search?${params.toString()}`);
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Patient search failed (HTTP ${res.status})`);
+        }
+        const data = (await res.json()) as PatientSearch[];
+        setPatientOptions(data);
+      } catch (err) {
+        setResolveError(err instanceof Error ? err.message : "Patient search failed");
+      } finally {
+        setPatientLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [patientQuery, resolveTarget, selectedPatient, router]);
+
+  const startResolve = useCallback((appt: UnmappedAppointment) => {
+    setResolveTarget(appt);
+    setPatientQuery("");
+    setPatientOptions([]);
+    setSelectedPatient(null);
+    setResolveNotes("");
+    setResolveError(null);
+  }, []);
+
+  const cancelResolve = useCallback(() => {
+    setResolveTarget(null);
+    setPatientQuery("");
+    setPatientOptions([]);
+    setSelectedPatient(null);
+    setResolveNotes("");
+    setResolveError(null);
+  }, []);
+
+  const submitResolve = useCallback(async () => {
+    if (!resolveTarget) return;
+    if (!selectedPatient) {
+      setResolveError("Select a patient to link.");
+      return;
+    }
+    setResolving(true);
+    setResolveError(null);
+    try {
+      const res = await apiFetch(
+        `/api/admin/legacy/unmapped-appointments/${resolveTarget.id}/resolve`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            patient_id: selectedPatient.id,
+            notes: resolveNotes.trim() || null,
+          }),
+        }
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setResolveError("Only admins can resolve legacy appointments.");
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Resolve failed (HTTP ${res.status})`);
+      }
+      setNotice("Appointment resolved.");
+      cancelResolve();
+      await loadQueue();
+    } catch (err) {
+      setResolveError(err instanceof Error ? err.message : "Resolve failed");
+    } finally {
+      setResolving(false);
+    }
+  }, [resolveTarget, selectedPatient, resolveNotes, loadQueue, cancelResolve, router]);
 
   return (
     <div className="app-grid">
@@ -149,6 +268,7 @@ export default function UnmappedLegacyAppointmentsPage() {
           />
 
           {loading && <div className="badge">Loading queue…</div>}
+          {notice && <div className="notice">{notice}</div>}
           {error && <div className="notice">{error}</div>}
 
           {!loading && items.length === 0 ? (
@@ -164,6 +284,7 @@ export default function UnmappedLegacyAppointmentsPage() {
                   <th>Clinician</th>
                   <th>Location</th>
                   <th>Status</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -181,10 +302,102 @@ export default function UnmappedLegacyAppointmentsPage() {
                     <td>{appt.clinician || "—"}</td>
                     <td>{appt.location || "—"}</td>
                     <td>{appt.status}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => startResolve(appt)}
+                      >
+                        Resolve
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+
+          {resolveTarget && (
+            <div className="card" style={{ margin: 0 }}>
+              <div className="stack">
+                <div>
+                  <h4 style={{ marginTop: 0 }}>Resolve appointment</h4>
+                  <div style={{ color: "var(--muted)" }}>
+                    {resolveTarget.legacy_source || "unknown"} ·{" "}
+                    {resolveTarget.legacy_id || "unknown"} ·{" "}
+                    {formatDateTime(resolveTarget.starts_at)}
+                  </div>
+                </div>
+
+                <div className="stack">
+                  <label className="stack">
+                    <span>Search patient</span>
+                    <input
+                      className="input"
+                      placeholder="Search by name, phone, or DOB..."
+                      value={patientQuery}
+                      onChange={(e) => setPatientQuery(e.target.value)}
+                    />
+                  </label>
+                  {patientLoading && <div className="badge">Searching patients…</div>}
+                  {patientOptions.length > 0 && (
+                    <div className="card" style={{ margin: 0 }}>
+                      <div className="stack">
+                        {patientOptions.map((patient) => (
+                          <button
+                            key={patient.id}
+                            className={
+                              selectedPatient?.id === patient.id
+                                ? "btn btn-primary"
+                                : "btn btn-secondary"
+                            }
+                            type="button"
+                            onClick={() => {
+                              setSelectedPatient(patient);
+                              setPatientQuery(formatPatientLabel(patient));
+                              setPatientOptions([]);
+                            }}
+                          >
+                            {formatPatientLabel(patient)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedPatient && (
+                    <div className="notice">
+                      Linking to: {formatPatientLabel(selectedPatient)}
+                    </div>
+                  )}
+                </div>
+
+                <label className="stack">
+                  <span>Notes (optional)</span>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    value={resolveNotes}
+                    onChange={(e) => setResolveNotes(e.target.value)}
+                  />
+                </label>
+
+                {resolveError && <div className="notice">{resolveError}</div>}
+
+                <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+                  <button className="btn btn-secondary" type="button" onClick={cancelResolve}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={submitResolve}
+                    disabled={resolving || !selectedPatient}
+                  >
+                    {resolving ? "Resolving..." : "Resolve"}
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           <div className="row" style={{ justifyContent: "space-between" }}>

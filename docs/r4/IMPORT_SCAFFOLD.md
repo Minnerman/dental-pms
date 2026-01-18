@@ -33,3 +33,10 @@ Admin-only queue to review imported appointments with `patient_id IS NULL`.
 
 UI: `/admin/legacy/unmapped-appointments`  
 API: `GET /admin/legacy/unmapped-appointments?legacy_source=r4&from=YYYY-MM-DD&to=YYYY-MM-DD`
+
+## Manual resolution (Stage 95)
+
+Admins can resolve unmapped legacy appointments by linking them to an existing patient.
+
+UI: `/admin/legacy/unmapped-appointments` (Resolve action)  
+API: `POST /admin/legacy/unmapped-appointments/{appointment_id}/resolve`

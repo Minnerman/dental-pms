@@ -33,6 +33,7 @@ from app.models.attachment import Attachment
 from app.models.patient_document import PatientDocument
 from app.models.practice_profile import PracticeProfile
 from app.models.capability import Capability, UserCapability
+from app.models.legacy_resolution_event import LegacyResolutionEvent
 
 __all__ = [
     "Base",
@@ -85,4 +86,5 @@ __all__ = [
     "PracticeProfile",
     "Capability",
     "UserCapability",
+    "LegacyResolutionEvent",
 ]
