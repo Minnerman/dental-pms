@@ -61,6 +61,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage92 completed (PR #69, master 632fc99).
+  - Capability scaffolding: capability tables + seed/backfill, admin-only endpoints, guard helper, and backend tests; default grant-all preserves behavior.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-18: Stage91 completed (PR #68, master d6a2faa).
   - Patient documents UX: upload CTA with in-flight state, preview/download reliability, metadata display, and audit logging; Playwright covers upload/preview/download/delete.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
