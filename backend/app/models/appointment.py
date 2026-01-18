@@ -36,6 +36,7 @@ class Appointment(Base, AuditMixin, SoftDeleteMixin):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     legacy_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
     legacy_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    legacy_patient_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     patient_id: Mapped[int | None] = mapped_column(ForeignKey("patients.id"), nullable=True)
     clinician_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
