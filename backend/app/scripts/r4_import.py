@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 
 from sqlalchemy import func, select
 
@@ -19,6 +20,10 @@ def resolve_actor_id(session) -> int:
     return int(actor_id)
 
 
+def _parse_date_arg(value: str) -> date:
+    return date.fromisoformat(value)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Import R4 data into the PMS.")
     parser.add_argument(
@@ -32,25 +37,72 @@ def main() -> int:
         action="store_true",
         help="For SQL Server source, run a read-only connectivity check and stats summary.",
     )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply SQL Server data to Postgres via the importer (explicitly gated).",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit rows for dry-run samples (or apply if specified).",
+    )
+    parser.add_argument(
+        "--appts-from",
+        dest="appts_from",
+        type=_parse_date_arg,
+        default=None,
+        help="Filter appointments from YYYY-MM-DD (inclusive).",
+    )
+    parser.add_argument(
+        "--appts-to",
+        dest="appts_to",
+        type=_parse_date_arg,
+        default=None,
+        help="Filter appointments to YYYY-MM-DD (inclusive).",
+    )
     args = parser.parse_args()
 
     if args.source == "sqlserver":
-        if not args.dry_run:
-            print("SQL Server source only supports --dry-run in Stage 97.")
+        if args.apply and args.dry_run:
+            print("Choose either --apply or --dry-run (default is dry-run).")
             return 2
         try:
             config = R4SqlServerConfig.from_env()
             config.require_enabled()
             source = R4SqlServerSource(config)
-            summary = source.dry_run_summary()
+            if args.apply:
+                session = SessionLocal()
+                try:
+                    actor_id = resolve_actor_id(session)
+                    stats = import_r4(
+                        session,
+                        source,
+                        actor_id,
+                        legacy_source="r4",
+                        appts_from=args.appts_from,
+                        appts_to=args.appts_to,
+                        limit=None,
+                    )
+                    session.commit()
+                finally:
+                    session.close()
+                print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
+                return 0
+            summary = source.dry_run_summary(
+                limit=args.limit or 10,
+                date_from=args.appts_from,
+                date_to=args.appts_to,
+            )
         except RuntimeError as exc:
             print(str(exc))
             return 2
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
 
-    if args.dry_run:
-        print("--dry-run is only supported with --source sqlserver.")
+    if args.dry_run or args.apply:
+        print("--dry-run/--apply are only supported with --source sqlserver.")
         return 2
 
     session = SessionLocal()
