@@ -3,10 +3,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import require_admin
+from app.deps import require_admin, require_capability, require_roles
 from app.models.user import Role, User
+from app.schemas.capability import CapabilityOut, UserCapabilitiesUpdate
 from app.schemas.user import UserCreate, UserOut, UserPasswordResetRequest, UserPasswordResetResponse, UserUpdate
 from app.services.audit import log_event
+from app.services.capabilities import get_user_capabilities, replace_user_capabilities
 from app.services.users import create_user, get_user_by_email, get_user_by_id, set_password, update_user
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -163,3 +165,33 @@ def reset_user_password(
     )
     db.commit()
     return UserPasswordResetResponse(message="Temporary password set.")
+
+
+@router.get("/{user_id}/capabilities", response_model=list[CapabilityOut])
+def list_user_capabilities(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_roles("superadmin")),
+    __=Depends(require_capability("admin.permissions.manage")),
+):
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return get_user_capabilities(db, user_id)
+
+
+@router.put("/{user_id}/capabilities", response_model=list[CapabilityOut])
+def replace_capabilities(
+    user_id: int,
+    payload: UserCapabilitiesUpdate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_roles("superadmin")),
+    __=Depends(require_capability("admin.permissions.manage")),
+):
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    try:
+        return replace_user_capabilities(db, user_id, payload.capability_codes)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
