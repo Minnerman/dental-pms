@@ -40,3 +40,9 @@ Admins can resolve unmapped legacy appointments by linking them to an existing p
 
 UI: `/admin/legacy/unmapped-appointments` (Resolve action)  
 API: `POST /admin/legacy/unmapped-appointments/{appointment_id}/resolve`
+
+## Preserve manual resolves (Stage 96)
+
+Re-imports keep manually linked `patient_id` values when the importer cannot map a
+patient from legacy data. Conflicts (imported patient differs from the manual
+link) are recorded in import stats and do not overwrite the existing link.
