@@ -57,6 +57,9 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage89 completed (PR #66, master eb62102).
+  - Appointment audit trail + created/last-updated UI; tests updated.
+  - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
 - 2026-01-17: Stage88 completed (PR #65, master cad08b6).
   - Appointments reschedule UX: saving state + disable drag/resize while saving; conflict-aware drag/drop with revert + message; Playwright covers reschedule.
   - Verification: `bash ops/verify.sh`, `./ops/health.sh`.
