@@ -509,3 +509,39 @@ test("rescheduling respects conflicts and persists successful moves", async ({
     timeout: 15_000,
   });
 });
+
+test("appointment last updated metadata changes after edit", async ({ page, request }) => {
+  const patientId = await createPatient(request, {
+    first_name: "Audit",
+    last_name: `Meta ${Date.now()}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    clinician_user_id: null,
+    starts_at: "2026-01-15T12:00:00.000Z",
+    ends_at: "2026-01-15T12:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await page.getByTestId("appointments-view-calendar").click();
+
+  const event = page.getByTestId(`appointment-event-${appointment.id}`);
+  await expect(event).toBeVisible({ timeout: 15_000 });
+  await event.click();
+
+  const updatedMeta = page.getByTestId("appointment-updated-meta");
+  await expect(updatedMeta).toBeVisible({ timeout: 15_000 });
+  const beforeIso = await updatedMeta.getAttribute("data-iso");
+
+  await page.getByRole("button", { name: "Edit" }).click();
+  const typeInput = page.getByTestId("edit-appointment-type");
+  await typeInput.fill("Checkup");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect
+    .poll(async () => updatedMeta.getAttribute("data-iso"), {
+      timeout: 15_000,
+    })
+    .not.toBe(beforeIso);
+});

@@ -64,6 +64,7 @@ type Appointment = {
   ends_at: string;
   status: AppointmentStatus;
   created_by: Actor;
+  created_at: string;
   updated_by?: Actor | null;
   updated_at: string;
   deleted_at?: string | null;
@@ -193,6 +194,14 @@ type ConflictApiResponse = {
   detail?: string;
   message?: string;
   conflicts?: ConflictApiItem[];
+};
+
+type AppointmentAuditEntry = {
+  id: number;
+  created_at: string;
+  actor_email?: string | null;
+  actor?: { email: string };
+  action: string;
 };
 
 const localizer = dateFnsLocalizer({
@@ -364,6 +373,13 @@ function formatConflictTime(start: Date, end: Date) {
     minute: "2-digit",
   });
   return `${startLabel}–${endLabel}`;
+}
+
+function formatMetaTimestamp(value?: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function parseConflictResponse(raw: string): ConflictApiResponse | null {
@@ -617,6 +633,10 @@ export default function AppointmentsPage() {
   const [editConflictWarning, setEditConflictWarning] =
     useState<ConflictWarning | null>(null);
   const [rescheduleSavingId, setRescheduleSavingId] = useState<number | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AppointmentAuditEntry[]>([]);
   useEffect(() => {
     function isEditableTarget(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false;
@@ -1170,6 +1190,10 @@ export default function AppointmentsPage() {
     setSelectedAppointment(appt);
     setSelectedAppointmentId(appt.id);
     setIsEditingAppointment(mode === "edit");
+    setAuditOpen(false);
+    setAuditEntries([]);
+    setAuditError(null);
+    setAuditLoading(false);
     setDetailLocationType(appt.location_type);
     setDetailLocationText(appt.location_text || "");
     void loadAppointmentNotes(appt.id);
@@ -1618,6 +1642,31 @@ export default function AppointmentsPage() {
       setNotes([]);
     } finally {
       setLoadingNotes(false);
+    }
+  }
+
+  async function loadAppointmentAudit(appointmentId: number) {
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const res = await apiFetch(`/api/audit/appointments/${appointmentId}?limit=10`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load audit history (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as AppointmentAuditEntry[];
+      setAuditEntries(data);
+    } catch (err) {
+      setAuditError(
+        err instanceof Error ? err.message : "Failed to load audit history"
+      );
+    } finally {
+      setAuditLoading(false);
     }
   }
 
@@ -3009,6 +3058,7 @@ export default function AppointmentsPage() {
                     <label className="label">Appointment type</label>
                     <input
                       className="input"
+                      data-testid="edit-appointment-type"
                       value={editAppointmentType}
                       onChange={(event) => setEditAppointmentType(event.target.value)}
                     />
@@ -3134,6 +3184,78 @@ export default function AppointmentsPage() {
                     </div>
                     <div>
                       <strong>Location:</strong> {selectedAppointment.location_text || "—"}
+                    </div>
+                    <div
+                      data-testid="appointment-created-meta"
+                      data-iso={selectedAppointment.created_at}
+                    >
+                      <strong>Created by:</strong>{" "}
+                      {selectedAppointment.created_by?.email || "—"} ·{" "}
+                      {formatMetaTimestamp(selectedAppointment.created_at)}
+                    </div>
+                    <div
+                      data-testid="appointment-updated-meta"
+                      data-iso={selectedAppointment.updated_at}
+                    >
+                      <strong>Last updated by:</strong>{" "}
+                      {selectedAppointment.updated_by?.email ||
+                        selectedAppointment.created_by?.email ||
+                        "—"}{" "}
+                      · {formatMetaTimestamp(selectedAppointment.updated_at)}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <div className="row">
+                        <strong>History</strong>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => {
+                            const next = !auditOpen;
+                            setAuditOpen(next);
+                            if (next && selectedAppointment) {
+                              void loadAppointmentAudit(selectedAppointment.id);
+                            }
+                          }}
+                          data-testid="appointment-history-toggle"
+                        >
+                          {auditOpen ? "Hide" : "View"}
+                        </button>
+                      </div>
+                      {auditOpen && (
+                        <>
+                          {auditLoading && (
+                            <div className="badge" data-testid="appointment-history-loading">
+                              Loading history…
+                            </div>
+                          )}
+                          {auditError && <div className="notice">{auditError}</div>}
+                          {!auditLoading && !auditError && auditEntries.length === 0 && (
+                            <div className="notice">No recent history.</div>
+                          )}
+                          {!auditLoading && auditEntries.length > 0 && (
+                            <div className="stack" style={{ gap: 6 }}>
+                              {auditEntries.map((entry) => (
+                                <div
+                                  key={entry.id}
+                                  style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+                                  data-testid="appointment-history-row"
+                                >
+                                  <span>{formatMetaTimestamp(entry.created_at)}</span>
+                                  <span>{entry.action.replace("appointment.", "")}</span>
+                                  <span style={{ color: "var(--muted)" }}>
+                                    {entry.actor_email ||
+                                      entry.actor?.email ||
+                                      "Unknown user"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
 
