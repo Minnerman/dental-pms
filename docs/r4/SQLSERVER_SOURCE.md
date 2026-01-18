@@ -27,11 +27,26 @@ R4_SQLSERVER_TIMEOUT_SECONDS=8
 ## Dry-run command
 
 ```
-docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run --limit 10
 ```
 
 The command prints a JSON summary (counts, date range if available, and sample
 patient codes/appointments).
+
+## Apply import (explicit)
+
+```
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --apply \
+  --appts-from 2026-01-01 --appts-to 2026-01-07
+```
+
+Imports are gated behind `--apply`; without it, the CLI defaults to dry-run and
+does not write to Postgres.
+
+## Pagination notes
+
+SQL Server 2008 R2 lacks `OFFSET/FETCH`, so the source uses keyset pagination on
+`PatientCode` and appointment start time (with a tie-breaker column).
 
 ## Security notes
 

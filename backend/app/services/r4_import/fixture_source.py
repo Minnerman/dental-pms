@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from app.services.r4_import.source import R4Source
@@ -13,13 +14,34 @@ class FixtureSource(R4Source):
             base_path = Path(__file__).resolve().parent / "fixtures"
         self.base_path = base_path
 
-    def list_patients(self) -> list[R4Patient]:
+    def list_patients(self, limit: int | None = None) -> list[R4Patient]:
         data = self._load_json("patients.json")
-        return [R4Patient.model_validate(item) for item in data]
+        items = [R4Patient.model_validate(item) for item in data]
+        if limit is None:
+            return items
+        return items[:limit]
 
-    def list_appts(self) -> list[R4Appointment]:
+    def list_appts(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> list[R4Appointment]:
         data = self._load_json("appts.json")
-        return [R4Appointment.model_validate(item) for item in data]
+        items = [R4Appointment.model_validate(item) for item in data]
+        if date_from or date_to:
+            filtered: list[R4Appointment] = []
+            for item in items:
+                starts_at = item.starts_at.date()
+                if date_from and starts_at < date_from:
+                    continue
+                if date_to and starts_at > date_to:
+                    continue
+                filtered.append(item)
+            items = filtered
+        if limit is None:
+            return items
+        return items[:limit]
 
     def _load_json(self, filename: str) -> list[dict]:
         path = self.base_path / filename

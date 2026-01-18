@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+from datetime import date, datetime, timedelta
+from typing import Any, Iterable
 
+from app.services.r4_import.types import R4Appointment, R4Patient
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
@@ -63,9 +64,14 @@ class R4SqlServerSource:
         self._config = config
         self._columns_cache: dict[str, list[str]] = {}
 
-    def dry_run_summary(self) -> dict[str, Any]:
+    def dry_run_summary(
+        self,
+        limit: int = 10,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict[str, Any]:
         patients_count = self.count_patients()
-        appts_count = self.count_appts()
+        appts_count = self.count_appts(date_from=date_from, date_to=date_to)
         appt_range = self.appt_date_range()
         return {
             "source": "sqlserver",
@@ -74,16 +80,24 @@ class R4SqlServerSource:
             "patients_count": patients_count,
             "appointments_count": appts_count,
             "appointments_date_range": appt_range,
-            "sample_patient_codes": self.sample_patient_codes(),
-            "sample_appointments": self.sample_appts(),
+            "sample_patient_codes": self.sample_patient_codes(limit=limit),
+            "sample_appointments": self.sample_appts(limit=limit),
         }
 
     def count_patients(self) -> int:
         rows = self._query("SELECT COUNT(1) AS count FROM dbo.Patients WITH (NOLOCK)")
         return int(rows[0]["count"]) if rows else 0
 
-    def count_appts(self) -> int:
-        rows = self._query("SELECT COUNT(1) AS count FROM dbo.Appts WITH (NOLOCK)")
+    def count_appts(self, date_from: date | None = None, date_to: date | None = None) -> int:
+        starts_col = self._pick_column("Appts", ["StartTime", "StartDateTime", "ApptDate", "ScheduledDate"])
+        if not starts_col:
+            rows = self._query("SELECT COUNT(1) AS count FROM dbo.Appts WITH (NOLOCK)")
+            return int(rows[0]["count"]) if rows else 0
+        where_clause, params = self._build_date_filter(starts_col, date_from, date_to)
+        rows = self._query(
+            f"SELECT COUNT(1) AS count FROM dbo.Appts WITH (NOLOCK){where_clause}",
+            params,
+        )
         return int(rows[0]["count"]) if rows else 0
 
     def appt_date_range(self) -> dict[str, str] | None:
@@ -112,14 +126,12 @@ class R4SqlServerSource:
         return [int(row["PatientCode"]) for row in rows if row.get("PatientCode") is not None]
 
     def sample_appts(self, limit: int = 10) -> list[dict[str, Any]]:
-        patient_col = self._pick_column("Appts", ["PatientCode"])
-        if not patient_col:
-            raise RuntimeError("Appts.PatientCode column not found; cannot sample appointments.")
+        patient_col = self._require_column("Appts", ["PatientCode"])
         appt_id_col = self._pick_column(
             "Appts",
             ["ApptID", "AppointmentID", "ApptNum", "ApptPrimaryKey", "ApptRecNum"],
         )
-        starts_col = self._pick_column("Appts", ["StartTime", "StartsAt", "ApptDate", "ScheduledDate"])
+        starts_col = self._pick_column("Appts", ["StartTime", "StartDateTime", "ApptDate", "ScheduledDate"])
         select_cols = [f"{patient_col} AS patient_code"]
         if appt_id_col:
             select_cols.append(f"{appt_id_col} AS legacy_id")
@@ -141,6 +153,146 @@ class R4SqlServerSource:
                 }
             )
         return samples
+
+    def list_patients(self, limit: int | None = None) -> Iterable[R4Patient]:
+        patient_code_col = self._require_column("Patients", ["PatientCode"])
+        first_name_col = self._pick_column("Patients", ["FirstName", "Forename"])
+        last_name_col = self._pick_column("Patients", ["LastName", "Surname"])
+        dob_col = self._pick_column("Patients", ["DOB", "DateOfBirth", "BirthDate"])
+        if not first_name_col or not last_name_col:
+            raise RuntimeError("Patients name columns not found; check sys2000.dbo.Patients schema.")
+
+        last_code = 0
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            rows = self._query(
+                f"SELECT TOP (?) {patient_code_col} AS patient_code, "
+                f"{first_name_col} AS first_name, {last_name_col} AS last_name"
+                + (f", {dob_col} AS date_of_birth" if dob_col else "")
+                + " FROM dbo.Patients WITH (NOLOCK) "
+                f"WHERE {patient_code_col} > ? ORDER BY {patient_code_col} ASC",
+                [batch_size, last_code],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                if patient_code is None:
+                    continue
+                last_code = int(patient_code)
+                first_name = (row.get("first_name") or "").strip()
+                last_name = (row.get("last_name") or "").strip()
+                yield R4Patient(
+                    patient_code=last_code,
+                    first_name=first_name,
+                    last_name=last_name,
+                    date_of_birth=row.get("date_of_birth"),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_appts(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4Appointment]:
+        patient_col = self._require_column("Appts", ["PatientCode"])
+        starts_col = self._require_column(
+            "Appts", ["StartTime", "StartDateTime", "ApptDate", "ScheduledDate"]
+        )
+        appt_id_col = self._pick_column(
+            "Appts",
+            ["ApptID", "AppointmentID", "ApptNum", "ApptPrimaryKey", "ApptRecNum"],
+        )
+        end_col = self._pick_column("Appts", ["EndTime", "EndDateTime", "ApptEnd", "EndDate"])
+        duration_col = self._pick_column("Appts", ["Minutes", "Duration", "ApptLength", "LengthMinutes"])
+        clinician_col = self._pick_column("Appts", ["Clinician", "Provider", "Doctor", "Operator"])
+        location_col = self._pick_column("Appts", ["Location", "Operatory", "Room", "Op"])
+        appt_type_col = self._pick_column("Appts", ["AppointmentType", "ApptType", "Type"])
+        status_col = self._pick_column("Appts", ["Status", "ApptStatus"])
+
+        tie_col = appt_id_col or patient_col
+        last_start: datetime | None = None
+        last_tie: Any | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            date_clause, date_params = self._build_date_filter(starts_col, date_from, date_to)
+            if date_clause:
+                where_parts.append(date_clause.replace("WHERE", "").strip())
+                params.extend(date_params)
+            if last_start is not None and last_tie is not None:
+                where_parts.append(f"({starts_col} > ? OR ({starts_col} = ? AND {tie_col} > ?))")
+                params.extend([last_start, last_start, last_tie])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [
+                f"{starts_col} AS starts_at",
+                f"{patient_col} AS patient_code",
+            ]
+            if appt_id_col:
+                select_cols.append(f"{appt_id_col} AS appointment_id")
+            if end_col:
+                select_cols.append(f"{end_col} AS ends_at")
+            if duration_col:
+                select_cols.append(f"{duration_col} AS duration_minutes")
+            if clinician_col:
+                select_cols.append(f"{clinician_col} AS clinician")
+            if location_col:
+                select_cols.append(f"{location_col} AS location")
+            if appt_type_col:
+                select_cols.append(f"{appt_type_col} AS appointment_type")
+            if status_col:
+                select_cols.append(f"{status_col} AS status")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Appts WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {starts_col} ASC, {tie_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                starts_at = row.get("starts_at")
+                if starts_at is None:
+                    continue
+                patient_code = row.get("patient_code")
+                tie_value = row.get("appointment_id") or patient_code
+                last_start = starts_at
+                if tie_value is not None:
+                    last_tie = tie_value
+                ends_at = row.get("ends_at")
+                if ends_at is None and duration_col:
+                    duration = row.get("duration_minutes")
+                    try:
+                        minutes = int(duration) if duration is not None else 0
+                    except (TypeError, ValueError):
+                        minutes = 0
+                    ends_at = starts_at + timedelta(minutes=minutes)
+                if ends_at is None:
+                    ends_at = starts_at
+                yield R4Appointment(
+                    appointment_id=str(row.get("appointment_id")) if row.get("appointment_id") else None,
+                    patient_code=int(patient_code) if patient_code is not None else None,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    clinician=(row.get("clinician") or "").strip() or None,
+                    location=(row.get("location") or "").strip() or None,
+                    appointment_type=(row.get("appointment_type") or "").strip() or None,
+                    status=(row.get("status") or "").strip() or None,
+                )
+                if remaining is not None:
+                    remaining -= 1
 
     def _connect(self):
         try:
@@ -168,7 +320,7 @@ class R4SqlServerSource:
         try:
             cursor = conn.cursor()
             cursor.timeout = self._config.timeout_seconds
-            cursor.execute(sql, params or [])
+            cursor.execute(f"SET NOCOUNT ON; {sql}", params or [])
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
         finally:
@@ -192,6 +344,33 @@ class R4SqlServerSource:
             if candidate in columns:
                 return candidate
         return None
+
+    def _require_column(self, table: str, candidates: list[str]) -> str:
+        column = self._pick_column(table, candidates)
+        if column is None:
+            raise RuntimeError(
+                f"{table} missing expected column (tried: {', '.join(candidates)})."
+            )
+        return column
+
+    def _build_date_filter(
+        self,
+        column: str,
+        date_from: date | None,
+        date_to: date | None,
+    ) -> tuple[str, list[Any]]:
+        if not date_from and not date_to:
+            return "", []
+        filters: list[str] = []
+        params: list[Any] = []
+        if date_from:
+            filters.append(f"{column} >= ?")
+            params.append(datetime.combine(date_from, datetime.min.time()))
+        if date_to:
+            end = datetime.combine(date_to, datetime.min.time()) + timedelta(days=1)
+            filters.append(f"{column} < ?")
+            params.append(end)
+        return f"WHERE {' AND '.join(filters)}", params
 
     @staticmethod
     def _format_dt(value: Any) -> str | None:

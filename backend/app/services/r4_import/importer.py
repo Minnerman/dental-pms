@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,17 +32,20 @@ def import_r4(
     source: R4Source,
     actor_id: int,
     legacy_source: str = "r4",
+    appts_from: date | None = None,
+    appts_to: date | None = None,
+    limit: int | None = None,
 ) -> ImportStats:
     stats = ImportStats()
     patients_by_code: dict[int, Patient] = {}
 
-    for patient in source.list_patients():
+    for patient in source.list_patients(limit=limit):
         row = _upsert_patient(session, patient, actor_id, legacy_source, stats)
         patients_by_code[patient.patient_code] = row
 
     session.flush()
 
-    for appt in source.list_appts():
+    for appt in source.list_appts(date_from=appts_from, date_to=appts_to, limit=limit):
         _upsert_appt(session, appt, actor_id, legacy_source, patients_by_code, stats)
 
     return stats
