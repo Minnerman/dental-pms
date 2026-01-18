@@ -26,3 +26,10 @@ counted in the summary.
 
 Add a real SQL Server source behind environment variables and reuse the same
 importer API.
+
+## Unmapped queue (Stage 94)
+
+Admin-only queue to review imported appointments with `patient_id IS NULL`.
+
+UI: `/admin/legacy/unmapped-appointments`  
+API: `GET /admin/legacy/unmapped-appointments?legacy_source=r4&from=YYYY-MM-DD&to=YYYY-MM-DD`

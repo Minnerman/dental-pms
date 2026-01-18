@@ -664,8 +664,13 @@ export default function AppointmentsPage() {
     function handleShortcut(event: KeyboardEvent) {
       if (event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isEditableTarget(event.target)) return;
       const key = event.key.toLowerCase();
+      if (key === "escape" && showNewModal) {
+        event.preventDefault();
+        setShowNewModal(false);
+        return;
+      }
+      if (isEditableTarget(event.target)) return;
       if (key === "n") {
         event.preventDefault();
         setShowNewModal(true);
@@ -680,10 +685,6 @@ export default function AppointmentsPage() {
         }
         focusGlobalSearch();
         return;
-      }
-      if (key === "escape" && showNewModal) {
-        event.preventDefault();
-        setShowNewModal(false);
       }
     }
 

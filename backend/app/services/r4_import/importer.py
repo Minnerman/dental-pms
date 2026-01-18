@@ -136,6 +136,7 @@ def _upsert_appt(
         "location": appt.location,
         "location_type": location_type,
         "is_domiciliary": is_domiciliary,
+        "legacy_patient_code": str(appt.patient_code) if appt.patient_code is not None else None,
         "updated_by_user_id": actor_id,
     }
 

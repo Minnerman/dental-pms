@@ -61,6 +61,11 @@
 ## In progress
 
 ## Recent fixes
+- 2026-01-18: Stage94 completed (unmapped legacy appointment queue).
+  - Added `legacy_patient_code` on appointments + importer writes it for reconciliation.
+  - Admin-only endpoint: `GET /admin/legacy/unmapped-appointments` with filters + pagination.
+  - UI: `/admin/legacy/unmapped-appointments` (superadmin tab: Legacy Queue).
+  - Verification: `./ops/health.sh`, `bash ops/verify.sh`, `bash ops/verify_prod_404.sh` (react-hooks/exhaustive-deps warnings only).
 - 2026-01-18: Stage93 completed (R4 import scaffolding).
   - Legacy keys: `patients` + `appointments` get `legacy_source`/`legacy_id` with unique constraints; appointments allow `patient_id` NULL for unmapped legacy refs.
   - Added fixture-backed importer + CLI (`python -m app.scripts.r4_import --source fixtures`), stats summary, and synthetic fixtures/tests.
