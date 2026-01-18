@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken, getToken } from "@/lib/auth";
 
+type Actor = { id: number; email: string; role: string };
+
 type Attachment = {
   id: number;
   patient_id: number;
@@ -11,6 +13,7 @@ type Attachment = {
   content_type: string;
   byte_size: number;
   created_at: string;
+  created_by: Actor;
 };
 
 function buildApiUrl(path: string) {
@@ -48,6 +51,7 @@ export default function PatientAttachments({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [previewingId, setPreviewingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
 
@@ -115,11 +119,43 @@ export default function PatientAttachments({
         const msg = await res.text();
         throw new Error(msg || `Failed to upload attachment (HTTP ${res.status})`);
       }
-      await loadAttachments();
+      const created = (await res.json()) as Attachment;
+      setAttachments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload attachment");
     } finally {
       setUploading(false);
+    }
+  }
+
+  function isPreviewable(attachment: Attachment) {
+    if (attachment.content_type?.startsWith("image/")) return true;
+    if (attachment.content_type === "application/pdf") return true;
+    return attachment.original_filename.toLowerCase().endsWith(".pdf");
+  }
+
+  async function previewAttachment(attachment: Attachment) {
+    setPreviewingId(attachment.id);
+    setError(null);
+    try {
+      const res = await authFetch(`/api/attachments/${attachment.id}/preview`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to preview attachment (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to preview attachment");
+    } finally {
+      setPreviewingId(null);
     }
   }
 
@@ -194,8 +230,8 @@ export default function PatientAttachments({
               Upload files for this patient (stored locally).
             </div>
           </div>
-          <label className="btn btn-secondary">
-            {uploading ? "Uploading..." : "Upload file"}
+          <label className="btn btn-secondary" data-testid="attachment-upload">
+            {uploading ? "Uploading..." : "Upload document"}
             <input
               type="file"
               style={{ display: "none" }}
@@ -224,20 +260,40 @@ export default function PatientAttachments({
               <div
                 key={attachment.id}
                 className="card"
+                data-testid={`attachment-card-${attachment.id}`}
                 style={{ margin: 0, display: "flex", justifyContent: "space-between", gap: 12 }}
               >
                 <div>
                   <div style={{ fontWeight: 600 }}>{attachment.original_filename}</div>
                   <div style={{ color: "var(--muted)" }}>
-                    {formatBytes(attachment.byte_size)} ·{" "}
-                    {new Date(attachment.created_at).toLocaleDateString("en-GB")}
+                    {formatBytes(attachment.byte_size)} · {attachment.content_type}
+                  </div>
+                  <div style={{ color: "var(--muted)" }}>
+                    Uploaded{" "}
+                    {new Date(attachment.created_at).toLocaleString("en-GB", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}{" "}
+                    by {attachment.created_by?.email || "—"}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
+                  {isPreviewable(attachment) && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={() => previewAttachment(attachment)}
+                      data-testid={`attachment-preview-${attachment.id}`}
+                      disabled={previewingId === attachment.id}
+                    >
+                      {previewingId === attachment.id ? "Opening..." : "Preview"}
+                    </button>
+                  )}
                   <button
                     className="btn btn-secondary"
                     type="button"
                     onClick={() => downloadAttachment(attachment)}
+                    data-testid={`attachment-download-${attachment.id}`}
                   >
                     Download
                   </button>
@@ -246,6 +302,7 @@ export default function PatientAttachments({
                       className="btn btn-secondary"
                       type="button"
                       onClick={() => deleteAttachment(attachment)}
+                      data-testid={`attachment-delete-${attachment.id}`}
                     >
                       Delete
                     </button>
