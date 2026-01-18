@@ -54,6 +54,10 @@
 - Admin email/password live in `/home/amir/dental-pms/.env`
 - Default is `admin@example.com` / `ChangeMe123!`
 
+## Project docs
+- V1 finish line: `docs/V1_FINISH_LINE.md`
+- Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
+
 ## In progress
 
 ## Recent fixes
