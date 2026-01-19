@@ -30,7 +30,7 @@ from app.routers.attachments import (
     router as patient_attachments_router,
     attachments_router as attachments_router,
 )
-from app.routers.legacy_admin import router as legacy_admin_router
+from app.routers.legacy_admin import router as legacy_admin_router, r4_router as r4_admin_router
 from app.routers.patient_documents import (
     router as patient_documents_router,
     documents_router as documents_router,
@@ -119,3 +119,4 @@ app.include_router(audit_router)
 app.include_router(timeline_router)
 app.include_router(reports_router)
 app.include_router(legacy_admin_router)
+app.include_router(r4_admin_router)

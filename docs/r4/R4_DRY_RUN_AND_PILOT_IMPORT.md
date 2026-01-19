@@ -125,6 +125,10 @@ docker compose exec -T backend python -m app.scripts.r4_import --source sqlserve
   --entity treatment_plans
 ```
 
+Inspect in admin UI (read-only):
+- `http://100.100.149.40:3100/admin/r4/treatment-plans`
+- Search by legacy patient code to see imported plans + items.
+
 ## G) Rollback (dev-only guidance)
 
 If the pilot window was incorrect, remove rows by legacy markers. Use extreme

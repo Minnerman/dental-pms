@@ -60,6 +60,7 @@
 
 ## In progress
 - Stage 103: R4 treatment catalogue + treatment plan ingest (new r4_* tables, importer, fixtures/tests).
+- Stage 104: Admin read-only view for R4 treatment plans/items.
 
 ## Recent fixes
 - 2026-01-18: Stage99 completed (R4 dry-run + pilot import runbook).
