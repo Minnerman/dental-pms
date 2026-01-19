@@ -9,14 +9,24 @@ from app.deps import require_admin
 from app.models.appointment import Appointment
 from app.models.legacy_resolution_event import LegacyResolutionEvent
 from app.models.patient import Patient
+from app.models.r4_treatment_plan import (
+    R4TreatmentPlan,
+    R4TreatmentPlanItem,
+    R4TreatmentPlanReview,
+)
 from app.models.user import User
 from app.schemas.legacy_admin import (
     LegacyResolveRequest,
     LegacyResolveResponse,
     UnmappedLegacyAppointmentList,
 )
+from app.schemas.r4_admin import (
+    R4TreatmentPlanDetail,
+    R4TreatmentPlanSummary,
+)
 
 router = APIRouter(prefix="/admin/legacy", tags=["legacy-admin"])
+r4_router = APIRouter(prefix="/admin/r4", tags=["r4-admin"])
 
 
 @router.get("/unmapped-appointments", response_model=UnmappedLegacyAppointmentList)
@@ -113,4 +123,84 @@ def resolve_unmapped_appointment(
         patient_id=appt.patient_id,
         legacy_source=appt.legacy_source,
         legacy_id=appt.legacy_id,
+    )
+
+
+@r4_router.get("/treatment-plans", response_model=list[R4TreatmentPlanSummary])
+def list_r4_treatment_plans(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+    legacy_patient_code: int = Query(..., ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    item_counts = (
+        select(
+            R4TreatmentPlanItem.treatment_plan_id.label("plan_id"),
+            func.count().label("item_count"),
+        )
+        .group_by(R4TreatmentPlanItem.treatment_plan_id)
+        .subquery()
+    )
+    stmt = (
+        select(
+            R4TreatmentPlan,
+            func.coalesce(item_counts.c.item_count, 0).label("item_count"),
+        )
+        .outerjoin(item_counts, item_counts.c.plan_id == R4TreatmentPlan.id)
+        .where(R4TreatmentPlan.legacy_patient_code == legacy_patient_code)
+        .order_by(desc(R4TreatmentPlan.creation_date).nullslast(), desc(R4TreatmentPlan.id))
+        .limit(limit)
+    )
+    rows = db.execute(stmt).all()
+    summaries: list[R4TreatmentPlanSummary] = []
+    for plan, item_count in rows:
+        summaries.append(
+            R4TreatmentPlanSummary(
+                id=plan.id,
+                legacy_patient_code=plan.legacy_patient_code,
+                legacy_tp_number=plan.legacy_tp_number,
+                plan_index=plan.plan_index,
+                is_master=plan.is_master,
+                is_current=plan.is_current,
+                is_accepted=plan.is_accepted,
+                creation_date=plan.creation_date,
+                acceptance_date=plan.acceptance_date,
+                completion_date=plan.completion_date,
+                status_code=plan.status_code,
+                reason_id=plan.reason_id,
+                tp_group=plan.tp_group,
+                item_count=int(item_count or 0),
+            )
+        )
+    return summaries
+
+
+@r4_router.get("/treatment-plans/{plan_id}", response_model=R4TreatmentPlanDetail)
+def get_r4_treatment_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    plan = db.get(R4TreatmentPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Treatment plan not found")
+
+    items = list(
+        db.scalars(
+            select(R4TreatmentPlanItem)
+            .where(R4TreatmentPlanItem.treatment_plan_id == plan.id)
+            .order_by(R4TreatmentPlanItem.legacy_tp_item.asc())
+        )
+    )
+    reviews = list(
+        db.scalars(
+            select(R4TreatmentPlanReview).where(
+                R4TreatmentPlanReview.treatment_plan_id == plan.id
+            )
+        )
+    )
+    return R4TreatmentPlanDetail(
+        plan=plan,
+        items=items,
+        reviews=reviews,
     )
