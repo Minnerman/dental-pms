@@ -1,0 +1,41 @@
+FROM python:3.12-slim-bullseye
+
+WORKDIR /app
+
+# System deps + Microsoft ODBC driver 17 (bullseye)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    unixodbc \
+    unixodbc-dev \
+    curl \
+    gnupg \
+    ca-certificates \
+  && mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+     | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/11/prod bullseye main" \
+     > /etc/apt/sources.list.d/microsoft-prod.list \
+  && apt-get update \
+  && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Allow legacy TLS/ciphers for SQL Server 2008 R2 (r4_import container ONLY)
+# This reduces TLS security inside this tool container; do not apply to main backend.
+RUN if [ -f /etc/ssl/openssl.cnf ]; then \
+      sed -i 's/^CipherString = .*/CipherString = DEFAULT@SECLEVEL=0/' /etc/ssl/openssl.cnf || true; \
+      grep -q '^MinProtocol' /etc/ssl/openssl.cnf && \
+        sed -i 's/^MinProtocol = .*/MinProtocol = TLSv1/' /etc/ssl/openssl.cnf || \
+        printf '\nMinProtocol = TLSv1\n' >> /etc/ssl/openssl.cnf; \
+    fi
+
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+COPY app /app/app
+COPY alembic.ini /app/alembic.ini
+COPY alembic /app/alembic
+COPY pytest.ini /app/pytest.ini
+COPY tests /app/tests
+
+# Default command is a no-op; run explicit commands via docker compose run
+CMD ["python", "-c", "print('r4-import container ready')"]
