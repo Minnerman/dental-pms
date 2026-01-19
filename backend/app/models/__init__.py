@@ -34,6 +34,12 @@ from app.models.patient_document import PatientDocument
 from app.models.practice_profile import PracticeProfile
 from app.models.capability import Capability, UserCapability
 from app.models.legacy_resolution_event import LegacyResolutionEvent
+from app.models.r4_treatment_plan import (
+    R4Treatment,
+    R4TreatmentPlan,
+    R4TreatmentPlanItem,
+    R4TreatmentPlanReview,
+)
 
 __all__ = [
     "Base",
@@ -87,4 +93,8 @@ __all__ = [
     "Capability",
     "UserCapability",
     "LegacyResolutionEvent",
+    "R4Treatment",
+    "R4TreatmentPlan",
+    "R4TreatmentPlanItem",
+    "R4TreatmentPlanReview",
 ]

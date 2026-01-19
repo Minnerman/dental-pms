@@ -5,12 +5,29 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
-from app.services.r4_import.types import R4Appointment, R4Patient
+from app.services.r4_import.types import (
+    R4Appointment,
+    R4Patient,
+    R4Treatment,
+    R4TreatmentPlan,
+    R4TreatmentPlanItem,
+    R4TreatmentPlanReview,
+)
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _coerce_bool(value: Any | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -84,6 +101,54 @@ class R4SqlServerSource:
             "sample_appointments": self.sample_appts(limit=limit),
         }
 
+    def dry_run_summary_treatments(self, limit: int = 10) -> dict[str, Any]:
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "treatments_count": self.count_treatments(),
+            "sample_treatments": self.sample_treatments(limit=limit),
+        }
+
+    def dry_run_summary_treatment_plans(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "treatment_plans_count": self.count_treatment_plans(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                tp_from=tp_from,
+                tp_to=tp_to,
+            ),
+            "treatment_plan_items_count": self.count_treatment_plan_items(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                tp_from=tp_from,
+                tp_to=tp_to,
+            ),
+            "treatment_plan_reviews_count": self.count_treatment_plan_reviews(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                tp_from=tp_from,
+                tp_to=tp_to,
+            ),
+            "sample_treatment_plans": self.sample_treatment_plans(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+                tp_from=tp_from,
+                tp_to=tp_to,
+            ),
+        }
+
     def count_patients(self) -> int:
         rows = self._query("SELECT COUNT(1) AS count FROM dbo.Patients WITH (NOLOCK)")
         return int(rows[0]["count"]) if rows else 0
@@ -96,6 +161,89 @@ class R4SqlServerSource:
         where_clause, params = self._build_date_filter(starts_col, date_from, date_to)
         rows = self._query(
             f"SELECT COUNT(1) AS count FROM dbo.Appts WITH (NOLOCK){where_clause}",
+            params,
+        )
+        return int(rows[0]["count"]) if rows else 0
+
+    def count_treatments(self) -> int:
+        rows = self._query("SELECT COUNT(1) AS count FROM dbo.Treatments WITH (NOLOCK)")
+        return int(rows[0]["count"]) if rows else 0
+
+    def count_treatment_plans(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+    ) -> int:
+        patient_col = self._require_column("TreatmentPlans", ["PatientCode"])
+        tp_col = self._require_column("TreatmentPlans", ["TPNumber", "TPNum", "TPNo"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        tp_prefix = "AND" if where_clause else "WHERE"
+        tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix=tp_prefix)
+        where_clause = f"{where_clause}{tp_clause}"
+        params.extend(tp_params)
+        rows = self._query(
+            f"SELECT COUNT(1) AS count FROM dbo.TreatmentPlans WITH (NOLOCK){where_clause}",
+            params,
+        )
+        return int(rows[0]["count"]) if rows else 0
+
+    def count_treatment_plan_items(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+    ) -> int:
+        patient_col = self._require_column("TreatmentPlanItems", ["PatientCode"])
+        tp_col = self._require_column("TreatmentPlanItems", ["TPNumber", "TPNum", "TPNo"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        tp_prefix = "AND" if where_clause else "WHERE"
+        tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix=tp_prefix)
+        where_clause = f"{where_clause}{tp_clause}"
+        params.extend(tp_params)
+        rows = self._query(
+            "SELECT COUNT(1) AS count FROM dbo.TreatmentPlanItems WITH (NOLOCK)"
+            f"{where_clause}",
+            params,
+        )
+        return int(rows[0]["count"]) if rows else 0
+
+    def count_treatment_plan_reviews(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+    ) -> int:
+        columns = self._get_columns("TreatmentPlanReviews")
+        if not columns:
+            return 0
+        patient_col = self._pick_column("TreatmentPlanReviews", ["PatientCode"])
+        tp_col = self._pick_column("TreatmentPlanReviews", ["TPNumber", "TPNum", "TPNo"])
+        if not patient_col or not tp_col:
+            return 0
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        tp_prefix = "AND" if where_clause else "WHERE"
+        tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix=tp_prefix)
+        where_clause = f"{where_clause}{tp_clause}"
+        params.extend(tp_params)
+        rows = self._query(
+            "SELECT COUNT(1) AS count FROM dbo.TreatmentPlanReviews WITH (NOLOCK)"
+            f"{where_clause}",
             params,
         )
         return int(rows[0]["count"]) if rows else 0
@@ -150,6 +298,76 @@ class R4SqlServerSource:
                     "legacy_id": row.get("legacy_id"),
                     "patient_code": row.get("patient_code"),
                     "starts_at": self._format_dt(row.get("starts_at")),
+                }
+            )
+        return samples
+
+    def sample_treatments(self, limit: int = 10) -> list[dict[str, Any]]:
+        code_col = self._require_column(
+            "Treatments",
+            ["TreatmentCode", "CodeID", "TreatmentID", "Code"],
+        )
+        desc_col = self._pick_column("Treatments", ["Description", "TreatmentDescription", "Name"])
+        short_col = self._pick_column("Treatments", ["ShortCode", "ShortDesc", "Code"])
+        select_cols = [f"{code_col} AS treatment_code"]
+        if desc_col:
+            select_cols.append(f"{desc_col} AS description")
+        if short_col:
+            select_cols.append(f"{short_col} AS short_code")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Treatments WITH (NOLOCK) "
+            f"ORDER BY {code_col}",
+            [limit],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "treatment_code": row.get("treatment_code"),
+                    "description": row.get("description"),
+                    "short_code": row.get("short_code"),
+                }
+            )
+        return samples
+
+    def sample_treatment_plans(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_col = self._require_column("TreatmentPlans", ["PatientCode"])
+        tp_col = self._require_column("TreatmentPlans", ["TPNumber", "TPNum", "TPNo"])
+        created_col = self._pick_column(
+            "TreatmentPlans",
+            ["CreationDate", "CreatedDate", "DateCreated", "CreatedOn"],
+        )
+        select_cols = [f"{patient_col} AS patient_code", f"{tp_col} AS tp_number"]
+        if created_col:
+            select_cols.append(f"{created_col} AS creation_date")
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        tp_prefix = "AND" if where_clause else "WHERE"
+        tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix=tp_prefix)
+        where_clause = f"{where_clause}{tp_clause}"
+        params.extend(tp_params)
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentPlans WITH (NOLOCK)"
+            f"{where_clause} ORDER BY {patient_col}, {tp_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "patient_code": row.get("patient_code"),
+                    "tp_number": row.get("tp_number"),
+                    "creation_date": self._format_dt(row.get("creation_date")),
                 }
             )
         return samples
@@ -294,6 +512,409 @@ class R4SqlServerSource:
                 if remaining is not None:
                     remaining -= 1
 
+    def list_treatments(self, limit: int | None = None) -> Iterable[R4Treatment]:
+        code_col = self._require_column(
+            "Treatments",
+            ["TreatmentCode", "CodeID", "TreatmentID", "Code"],
+        )
+        desc_col = self._pick_column("Treatments", ["Description", "TreatmentDescription", "Name"])
+        short_col = self._pick_column("Treatments", ["ShortCode", "ShortDesc", "Code"])
+        default_time_col = self._pick_column(
+            "Treatments",
+            ["DefaultTime", "DefaultMinutes", "DefaultDuration"],
+        )
+        exam_col = self._pick_column("Treatments", ["Exam", "IsExam"])
+        patient_required_col = self._pick_column(
+            "Treatments",
+            ["PatientRequired", "RequiresPatient", "PatientReq"],
+        )
+
+        last_code = 0
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            select_cols = [f"{code_col} AS treatment_code"]
+            if desc_col:
+                select_cols.append(f"{desc_col} AS description")
+            if short_col:
+                select_cols.append(f"{short_col} AS short_code")
+            if default_time_col:
+                select_cols.append(
+                    "CASE WHEN {0} IS NULL THEN NULL ELSE "
+                    "(DATEPART(HOUR, {0}) * 60 + DATEPART(MINUTE, {0})) "
+                    "END AS default_time_minutes".format(default_time_col)
+                )
+            if exam_col:
+                select_cols.append(f"{exam_col} AS exam")
+            if patient_required_col:
+                select_cols.append(f"{patient_required_col} AS patient_required")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Treatments WITH (NOLOCK) "
+                f"WHERE {code_col} > ? ORDER BY {code_col}",
+                [batch_size, last_code],
+            )
+            if not rows:
+                break
+            for row in rows:
+                treatment_code = row.get("treatment_code")
+                if treatment_code is None:
+                    continue
+                last_code = int(treatment_code)
+                yield R4Treatment(
+                    treatment_code=last_code,
+                    description=(row.get("description") or "").strip() or None,
+                    short_code=(row.get("short_code") or "").strip() or None,
+                    default_time_minutes=(
+                        int(row["default_time_minutes"])
+                        if row.get("default_time_minutes") is not None
+                        else None
+                    ),
+                    exam=_coerce_bool(row.get("exam"), default=False),
+                    patient_required=_coerce_bool(row.get("patient_required"), default=False),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_treatment_plans(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentPlan]:
+        patient_col = self._require_column("TreatmentPlans", ["PatientCode"])
+        tp_col = self._require_column("TreatmentPlans", ["TPNumber", "TPNum", "TPNo"])
+        index_col = self._pick_column("TreatmentPlans", ["Index", "TPIndex", "PlanIndex"])
+        is_master_col = self._pick_column("TreatmentPlans", ["IsMaster"])
+        is_current_col = self._pick_column("TreatmentPlans", ["IsCurrent"])
+        is_accepted_col = self._pick_column("TreatmentPlans", ["IsAccepted"])
+        creation_col = self._pick_column(
+            "TreatmentPlans",
+            ["CreationDate", "CreatedDate", "DateCreated", "CreatedOn"],
+        )
+        acceptance_col = self._pick_column(
+            "TreatmentPlans",
+            ["AcceptanceDate", "AcceptedDate", "DateAccepted", "AcceptedOn"],
+        )
+        completion_col = self._pick_column(
+            "TreatmentPlans",
+            ["CompletionDate", "CompletedDate", "DateCompleted", "CompletedOn"],
+        )
+        status_col = self._pick_column("TreatmentPlans", ["StatusCode", "TPStatus", "Status"])
+        reason_col = self._pick_column("TreatmentPlans", ["ReasonID", "ReasonCode"])
+        group_col = self._pick_column("TreatmentPlans", ["TPGroup", "GroupCode", "GroupId"])
+
+        last_patient: int | None = None
+        last_tp: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col, patients_from, patients_to
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix="AND")
+            if tp_clause:
+                where_parts.append(tp_clause.replace("AND", "").strip())
+                params.extend(tp_params)
+            if last_patient is not None and last_tp is not None:
+                where_parts.append(
+                    f"({patient_col} > ? OR ({patient_col} = ? AND {tp_col} > ?))"
+                )
+                params.extend([last_patient, last_patient, last_tp])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{patient_col} AS patient_code", f"{tp_col} AS tp_number"]
+            if index_col:
+                select_cols.append(f"{index_col} AS plan_index")
+            if is_master_col:
+                select_cols.append(f"{is_master_col} AS is_master")
+            if is_current_col:
+                select_cols.append(f"{is_current_col} AS is_current")
+            if is_accepted_col:
+                select_cols.append(f"{is_accepted_col} AS is_accepted")
+            if creation_col:
+                select_cols.append(f"{creation_col} AS creation_date")
+            if acceptance_col:
+                select_cols.append(f"{acceptance_col} AS acceptance_date")
+            if completion_col:
+                select_cols.append(f"{completion_col} AS completion_date")
+            if status_col:
+                select_cols.append(f"{status_col} AS status_code")
+            if reason_col:
+                select_cols.append(f"{reason_col} AS reason_id")
+            if group_col:
+                select_cols.append(f"{group_col} AS tp_group")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentPlans WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_col} ASC, {tp_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                tp_number = row.get("tp_number")
+                if patient_code is None or tp_number is None:
+                    continue
+                last_patient = int(patient_code)
+                last_tp = int(tp_number)
+                yield R4TreatmentPlan(
+                    patient_code=last_patient,
+                    tp_number=last_tp,
+                    plan_index=int(row["plan_index"]) if row.get("plan_index") is not None else None,
+                    is_master=_coerce_bool(row.get("is_master"), default=False),
+                    is_current=_coerce_bool(row.get("is_current"), default=False),
+                    is_accepted=_coerce_bool(row.get("is_accepted"), default=False),
+                    creation_date=row.get("creation_date"),
+                    acceptance_date=row.get("acceptance_date"),
+                    completion_date=row.get("completion_date"),
+                    status_code=int(row["status_code"]) if row.get("status_code") is not None else None,
+                    reason_id=int(row["reason_id"]) if row.get("reason_id") is not None else None,
+                    tp_group=int(row["tp_group"]) if row.get("tp_group") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_treatment_plan_items(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentPlanItem]:
+        patient_col = self._require_column("TreatmentPlanItems", ["PatientCode"])
+        tp_col = self._require_column("TreatmentPlanItems", ["TPNumber", "TPNum", "TPNo"])
+        item_col = self._require_column("TreatmentPlanItems", ["TPItem", "TPItemNo", "TPItemNumber"])
+        item_key_col = self._pick_column("TreatmentPlanItems", ["TPItemKey", "TPItemID"])
+        code_col = self._pick_column("TreatmentPlanItems", ["CodeID"])
+        tooth_col = self._pick_column("TreatmentPlanItems", ["Tooth"])
+        surface_col = self._pick_column("TreatmentPlanItems", ["Surface"])
+        appt_need_col = self._pick_column(
+            "TreatmentPlanItems",
+            ["AppointmentNeedID", "ApptNeedID", "AppointmentNeed"],
+        )
+        completed_col = self._pick_column("TreatmentPlanItems", ["Completed", "IsCompleted"])
+        completed_date_col = self._pick_column(
+            "TreatmentPlanItems",
+            ["CompletedDate", "CompletionDate", "DateCompleted"],
+        )
+        patient_cost_col = self._pick_column("TreatmentPlanItems", ["PatientCost"])
+        dpb_cost_col = self._pick_column("TreatmentPlanItems", ["DPBCost", "DPBCharge"])
+        discretionary_cost_col = self._pick_column(
+            "TreatmentPlanItems",
+            ["DiscretionaryCost", "DiscretionaryCharge"],
+        )
+        material_col = self._pick_column("TreatmentPlanItems", ["Material"])
+        arch_col = self._pick_column("TreatmentPlanItems", ["ArchCode", "Arch"])
+
+        last_patient: int | None = None
+        last_tp: int | None = None
+        last_item: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col, patients_from, patients_to
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix="AND")
+            if tp_clause:
+                where_parts.append(tp_clause.replace("AND", "").strip())
+                params.extend(tp_params)
+            if last_patient is not None and last_tp is not None and last_item is not None:
+                where_parts.append(
+                    f"({patient_col} > ? OR ({patient_col} = ? AND ({tp_col} > ? OR "
+                    f"({tp_col} = ? AND {item_col} > ?))))"
+                )
+                params.extend(
+                    [last_patient, last_patient, last_tp, last_tp, last_item]
+                )
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [
+                f"{patient_col} AS patient_code",
+                f"{tp_col} AS tp_number",
+                f"{item_col} AS tp_item",
+            ]
+            if item_key_col:
+                select_cols.append(f"{item_key_col} AS tp_item_key")
+            if code_col:
+                select_cols.append(f"{code_col} AS code_id")
+            if tooth_col:
+                select_cols.append(f"{tooth_col} AS tooth")
+            if surface_col:
+                select_cols.append(f"{surface_col} AS surface")
+            if appt_need_col:
+                select_cols.append(f"{appt_need_col} AS appointment_need_id")
+            if completed_col:
+                select_cols.append(f"{completed_col} AS completed")
+            if completed_date_col:
+                select_cols.append(f"{completed_date_col} AS completed_date")
+            if patient_cost_col:
+                select_cols.append(f"{patient_cost_col} AS patient_cost")
+            if dpb_cost_col:
+                select_cols.append(f"{dpb_cost_col} AS dpb_cost")
+            if discretionary_cost_col:
+                select_cols.append(f"{discretionary_cost_col} AS discretionary_cost")
+            if material_col:
+                select_cols.append(f"{material_col} AS material")
+            if arch_col:
+                select_cols.append(f"{arch_col} AS arch_code")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentPlanItems WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_col} ASC, {tp_col} ASC, {item_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                tp_number = row.get("tp_number")
+                tp_item = row.get("tp_item")
+                if patient_code is None or tp_number is None or tp_item is None:
+                    continue
+                last_patient = int(patient_code)
+                last_tp = int(tp_number)
+                last_item = int(tp_item)
+                yield R4TreatmentPlanItem(
+                    patient_code=last_patient,
+                    tp_number=last_tp,
+                    tp_item=last_item,
+                    tp_item_key=int(row["tp_item_key"]) if row.get("tp_item_key") is not None else None,
+                    code_id=int(row["code_id"]) if row.get("code_id") is not None else None,
+                    tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
+                    surface=int(row["surface"]) if row.get("surface") is not None else None,
+                    appointment_need_id=(
+                        int(row["appointment_need_id"])
+                        if row.get("appointment_need_id") is not None
+                        else None
+                    ),
+                    completed=_coerce_bool(row.get("completed"), default=False),
+                    completed_date=row.get("completed_date"),
+                    patient_cost=float(row["patient_cost"])
+                    if row.get("patient_cost") is not None
+                    else None,
+                    dpb_cost=float(row["dpb_cost"]) if row.get("dpb_cost") is not None else None,
+                    discretionary_cost=float(row["discretionary_cost"])
+                    if row.get("discretionary_cost") is not None
+                    else None,
+                    material=(row.get("material") or "").strip() or None,
+                    arch_code=int(row["arch_code"]) if row.get("arch_code") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_treatment_plan_reviews(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentPlanReview]:
+        columns = self._get_columns("TreatmentPlanReviews")
+        if not columns:
+            return
+        patient_col = self._pick_column("TreatmentPlanReviews", ["PatientCode"])
+        tp_col = self._pick_column("TreatmentPlanReviews", ["TPNumber", "TPNum", "TPNo"])
+        if not patient_col or not tp_col:
+            return
+        note_col = self._pick_column(
+            "TreatmentPlanReviews",
+            ["TemporaryNote", "TempNote", "Notes"],
+        )
+        reviewed_col = self._pick_column("TreatmentPlanReviews", ["Reviewed", "IsReviewed"])
+        edit_user_col = self._pick_column(
+            "TreatmentPlanReviews",
+            ["LastEditUser", "LastEditedBy", "EditedBy"],
+        )
+        edit_date_col = self._pick_column(
+            "TreatmentPlanReviews",
+            ["LastEditDate", "LastEditedAt", "EditedAt"],
+        )
+
+        last_patient: int | None = None
+        last_tp: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col, patients_from, patients_to
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix="AND")
+            if tp_clause:
+                where_parts.append(tp_clause.replace("AND", "").strip())
+                params.extend(tp_params)
+            if last_patient is not None and last_tp is not None:
+                where_parts.append(
+                    f"({patient_col} > ? OR ({patient_col} = ? AND {tp_col} > ?))"
+                )
+                params.extend([last_patient, last_patient, last_tp])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{patient_col} AS patient_code", f"{tp_col} AS tp_number"]
+            if note_col:
+                select_cols.append(f"{note_col} AS temporary_note")
+            if reviewed_col:
+                select_cols.append(f"{reviewed_col} AS reviewed")
+            if edit_user_col:
+                select_cols.append(f"{edit_user_col} AS last_edit_user")
+            if edit_date_col:
+                select_cols.append(f"{edit_date_col} AS last_edit_date")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentPlanReviews WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_col} ASC, {tp_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                tp_number = row.get("tp_number")
+                if patient_code is None or tp_number is None:
+                    continue
+                last_patient = int(patient_code)
+                last_tp = int(tp_number)
+                yield R4TreatmentPlanReview(
+                    patient_code=last_patient,
+                    tp_number=last_tp,
+                    temporary_note=(row.get("temporary_note") or "").strip() or None,
+                    reviewed=_coerce_bool(row.get("reviewed"), default=False),
+                    last_edit_user=(row.get("last_edit_user") or "").strip() or None,
+                    last_edit_date=row.get("last_edit_date"),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
     def _connect(self):
         try:
             import pyodbc  # type: ignore
@@ -374,6 +995,28 @@ class R4SqlServerSource:
             end = datetime.combine(date_to, datetime.min.time()) + timedelta(days=1)
             filters.append(f"{column} < ?")
             params.append(end)
+        return f"WHERE {' AND '.join(filters)}", params
+
+    def _build_range_filter(
+        self,
+        column: str,
+        value_from: int | None,
+        value_to: int | None,
+        prefix: str = "WHERE",
+    ) -> tuple[str, list[Any]]:
+        if value_from is None and value_to is None:
+            return "", []
+        filters: list[str] = []
+        params: list[Any] = []
+        if value_from is not None:
+            filters.append(f"{column} >= ?")
+            params.append(value_from)
+        if value_to is not None:
+            filters.append(f"{column} <= ?")
+            params.append(value_to)
+        clause_prefix = prefix.strip()
+        if clause_prefix:
+            return f"{clause_prefix} {' AND '.join(filters)}", params
         return f"WHERE {' AND '.join(filters)}", params
 
     @staticmethod
