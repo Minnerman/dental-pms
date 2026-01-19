@@ -50,6 +50,16 @@ services:
       timeout: 3s
       retries: 12
 
+  r4_import:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.r4
+    env_file:
+      - /home/amir/secrets/dental-pms-r4.env
+    depends_on:
+      db:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
