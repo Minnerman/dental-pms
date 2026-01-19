@@ -116,6 +116,8 @@ def test_r4_treatment_plans_idempotent_and_missing_patient():
         assert stats_second.plans_created == 0
         assert stats_second.items_created == 0
         assert stats_second.reviews_created == 0
+        assert stats_second.plans_updated == 0
+        assert stats_second.items_updated == 0
     finally:
         session.close()
 
