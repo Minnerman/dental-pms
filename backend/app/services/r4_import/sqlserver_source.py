@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
@@ -28,6 +29,18 @@ def _coerce_bool(value: Any | None, default: bool = False) -> bool:
     if isinstance(value, (int, float)):
         return value != 0
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+NOLOCK_RETRY_MAX = 6
+NOLOCK_RETRY_BASE_SLEEP = 0.5
+NOLOCK_RETRY_MAX_SLEEP = 8.0
+
+
+def _is_nolock_601_error(exc: Exception, sql: str) -> bool:
+    message = str(exc)
+    if "(601)" not in message and "Could not continue scan with NOLOCK" not in message:
+        return False
+    return "NOLOCK" in sql.upper()
 
 
 @dataclass
@@ -940,15 +953,41 @@ class R4SqlServerSource:
     def _query(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         conn = self._connect()
         try:
-            cursor = conn.cursor()
-            # Some pyodbc builds don't support cursor.timeout; connect() already sets timeout.
             try:
-                cursor.timeout = self._config.timeout_seconds
-            except AttributeError:
-                pass
-            cursor.execute(f"SET NOCOUNT ON; {sql}", params or [])
-            columns = [col[0] for col in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                import pyodbc  # type: ignore
+            except ImportError:
+                pyodbc = None
+            error_types: tuple[type[BaseException], ...]
+            if pyodbc is not None:
+                error_types = (pyodbc.Error,)
+            else:
+                error_types = (Exception,)
+            attempt = 0
+            while True:
+                cursor = conn.cursor()
+                try:
+                    # Some pyodbc builds don't support cursor.timeout; connect() already sets timeout.
+                    try:
+                        cursor.timeout = self._config.timeout_seconds
+                    except AttributeError:
+                        pass
+                    cursor.execute(f"SET NOCOUNT ON; {sql}", params or [])
+                    columns = [col[0] for col in cursor.description]
+                    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                except error_types as exc:
+                    if _is_nolock_601_error(exc, sql) and attempt < NOLOCK_RETRY_MAX:
+                        sleep_for = min(
+                            NOLOCK_RETRY_BASE_SLEEP * (2**attempt), NOLOCK_RETRY_MAX_SLEEP
+                        )
+                        attempt += 1
+                        time.sleep(sleep_for)
+                        continue
+                    raise
+                finally:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
         finally:
             conn.close()
 
