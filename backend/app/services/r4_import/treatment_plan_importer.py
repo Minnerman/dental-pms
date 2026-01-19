@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
+import os
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -208,9 +211,9 @@ def _upsert_plan(
         "is_master": plan.is_master,
         "is_current": plan.is_current,
         "is_accepted": plan.is_accepted,
-        "creation_date": plan.creation_date,
-        "acceptance_date": plan.acceptance_date,
-        "completion_date": plan.completion_date,
+        "creation_date": _normalize_datetime(plan.creation_date),
+        "acceptance_date": _normalize_datetime(plan.acceptance_date),
+        "completion_date": _normalize_datetime(plan.completion_date),
         "status_code": plan.status_code,
         "reason_id": plan.reason_id,
         "tp_group": plan.tp_group,
@@ -221,7 +224,7 @@ def _upsert_plan(
             updates["patient_id"] = mapped_patient_id
         elif existing.patient_id is None and mapped_patient_id is None:
             stats.plans_unmapped_patient_refs += 1
-        updated = _apply_updates(existing, updates)
+        updated = _apply_updates(existing, updates, debug_label="plan")
         if updated:
             stats.plans_updated += 1
         else:
@@ -274,16 +277,16 @@ def _upsert_item(
         "surface": item.surface,
         "appointment_need_id": item.appointment_need_id,
         "completed": item.completed,
-        "completed_date": item.completed_date,
-        "patient_cost": item.patient_cost,
-        "dpb_cost": item.dpb_cost,
-        "discretionary_cost": item.discretionary_cost,
-        "material": item.material,
+        "completed_date": _normalize_datetime(item.completed_date),
+        "patient_cost": _normalize_money(item.patient_cost),
+        "dpb_cost": _normalize_money(item.dpb_cost),
+        "discretionary_cost": _normalize_money(item.discretionary_cost),
+        "material": _normalize_string(item.material),
         "arch_code": item.arch_code,
     }
     if existing:
         updates["updated_by_user_id"] = actor_id
-        updated = _apply_updates(existing, updates)
+        updated = _apply_updates(existing, updates, debug_label="item")
         if updated:
             stats.items_updated += 1
         else:
@@ -316,12 +319,12 @@ def _upsert_review(
     updates = {
         "temporary_note": review.temporary_note,
         "reviewed": review.reviewed,
-        "last_edit_user": review.last_edit_user,
-        "last_edit_date": review.last_edit_date,
+        "last_edit_user": _normalize_string(review.last_edit_user),
+        "last_edit_date": _normalize_datetime(review.last_edit_date),
     }
     if existing:
         updates["updated_by_user_id"] = actor_id
-        updated = _apply_updates(existing, updates)
+        updated = _apply_updates(existing, updates, debug_label="review")
         if updated:
             stats.reviews_updated += 1
         else:
@@ -357,10 +360,42 @@ def _resolve_patient(
     return patient
 
 
-def _apply_updates(model, updates: dict) -> bool:
-    changed = False
+def _apply_updates(model, updates: dict, debug_label: str | None = None) -> bool:
+    changed_fields: list[str] = []
     for field, value in updates.items():
         if getattr(model, field) != value:
+            changed_fields.append(field)
             setattr(model, field, value)
-            changed = True
-    return changed
+    if changed_fields and debug_label and _debug_diffs_enabled():
+        print(f"r4_import_diff {debug_label} fields={','.join(changed_fields)}")
+    return bool(changed_fields)
+
+
+def _debug_diffs_enabled() -> bool:
+    return os.getenv("R4_IMPORT_DEBUG_DIFFS") == "1"
+
+
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    microseconds = (value.microsecond // 1000) * 1000
+    return value.replace(microsecond=microseconds)
+
+
+def _normalize_money(value: float | Decimal | None) -> Decimal | None:
+    if value is None:
+        return None
+    if not isinstance(value, Decimal):
+        value = Decimal(str(value))
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _normalize_string(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.rstrip()
+    return cleaned or None
