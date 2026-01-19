@@ -319,7 +319,11 @@ class R4SqlServerSource:
         conn = self._connect()
         try:
             cursor = conn.cursor()
-            cursor.timeout = self._config.timeout_seconds
+            # Some pyodbc builds don't support cursor.timeout; connect() already sets timeout.
+            try:
+                cursor.timeout = self._config.timeout_seconds
+            except AttributeError:
+                pass
             cursor.execute(f"SET NOCOUNT ON; {sql}", params or [])
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
