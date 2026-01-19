@@ -637,9 +637,9 @@ class R4SqlServerSource:
                 params.extend([last_patient, last_patient, last_tp])
             where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
             select_cols = [f"{patient_col} AS patient_code", f"{tp_col} AS tp_number"]
-        if index_col:
-            index_expr = f"[{index_col}]" if index_col.lower() == "index" else index_col
-            select_cols.append(f"{index_expr} AS plan_index")
+            if index_col:
+                index_expr = f"[{index_col}]" if index_col.lower() == "index" else index_col
+                select_cols.append(f"{index_expr} AS plan_index")
             if is_master_col:
                 select_cols.append(f"{is_master_col} AS is_master")
             if is_current_col:
