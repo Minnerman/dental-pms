@@ -1,0 +1,30 @@
+[
+  {
+    "patient_code": 1001,
+    "tp_number": 1,
+    "plan_index": 1,
+    "is_master": true,
+    "is_current": true,
+    "is_accepted": false,
+    "creation_date": "2026-01-05T09:00:00+00:00",
+    "acceptance_date": null,
+    "completion_date": null,
+    "status_code": 1,
+    "reason_id": null,
+    "tp_group": 10
+  },
+  {
+    "patient_code": 9999,
+    "tp_number": 2,
+    "plan_index": 1,
+    "is_master": false,
+    "is_current": true,
+    "is_accepted": false,
+    "creation_date": "2026-01-06T10:00:00+00:00",
+    "acceptance_date": null,
+    "completion_date": null,
+    "status_code": 1,
+    "reason_id": null,
+    "tp_group": 10
+  }
+]

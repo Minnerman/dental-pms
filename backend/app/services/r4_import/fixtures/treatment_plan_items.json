@@ -1,0 +1,36 @@
+[
+  {
+    "patient_code": 1001,
+    "tp_number": 1,
+    "tp_item": 1,
+    "tp_item_key": 5001,
+    "code_id": 2001,
+    "tooth": 11,
+    "surface": 1,
+    "appointment_need_id": null,
+    "completed": false,
+    "completed_date": null,
+    "patient_cost": 45.0,
+    "dpb_cost": 0.0,
+    "discretionary_cost": 0.0,
+    "material": "N",
+    "arch_code": 1
+  },
+  {
+    "patient_code": 9999,
+    "tp_number": 2,
+    "tp_item": 1,
+    "tp_item_key": 5002,
+    "code_id": 2002,
+    "tooth": 21,
+    "surface": 2,
+    "appointment_need_id": null,
+    "completed": false,
+    "completed_date": null,
+    "patient_cost": 60.0,
+    "dpb_cost": 0.0,
+    "discretionary_cost": 5.0,
+    "material": "N",
+    "arch_code": 2
+  }
+]

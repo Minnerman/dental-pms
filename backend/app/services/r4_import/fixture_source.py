@@ -5,7 +5,14 @@ from datetime import date
 from pathlib import Path
 
 from app.services.r4_import.source import R4Source
-from app.services.r4_import.types import R4Appointment, R4Patient
+from app.services.r4_import.types import (
+    R4Appointment,
+    R4Patient,
+    R4Treatment,
+    R4TreatmentPlan,
+    R4TreatmentPlanItem,
+    R4TreatmentPlanReview,
+)
 
 
 class FixtureSource(R4Source):
@@ -50,3 +57,92 @@ class FixtureSource(R4Source):
         if not isinstance(data, list):
             raise ValueError(f"{path} must contain a JSON list.")
         return data
+
+    def list_treatments(self, limit: int | None = None) -> list[R4Treatment]:
+        data = self._load_json("treatments.json")
+        items = [R4Treatment.model_validate(item) for item in data]
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_treatment_plans(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TreatmentPlan]:
+        data = self._load_json("treatment_plans.json")
+        items = [R4TreatmentPlan.model_validate(item) for item in data]
+        items = self._filter_plans(items, patients_from, patients_to, tp_from, tp_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_treatment_plan_items(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TreatmentPlanItem]:
+        data = self._load_json("treatment_plan_items.json")
+        items = [R4TreatmentPlanItem.model_validate(item) for item in data]
+        items = self._filter_plan_items(items, patients_from, patients_to, tp_from, tp_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_treatment_plan_reviews(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        tp_from: int | None = None,
+        tp_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TreatmentPlanReview]:
+        path = self.base_path / "treatment_plan_reviews.json"
+        if not path.exists():
+            return []
+        data = self._load_json("treatment_plan_reviews.json")
+        items = [R4TreatmentPlanReview.model_validate(item) for item in data]
+        items = self._filter_plans(items, patients_from, patients_to, tp_from, tp_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    @staticmethod
+    def _filter_plans(items, patients_from, patients_to, tp_from, tp_to):
+        if patients_from is None and patients_to is None and tp_from is None and tp_to is None:
+            return items
+        filtered = []
+        for item in items:
+            if patients_from is not None and item.patient_code < patients_from:
+                continue
+            if patients_to is not None and item.patient_code > patients_to:
+                continue
+            if tp_from is not None and item.tp_number < tp_from:
+                continue
+            if tp_to is not None and item.tp_number > tp_to:
+                continue
+            filtered.append(item)
+        return filtered
+
+    @staticmethod
+    def _filter_plan_items(items, patients_from, patients_to, tp_from, tp_to):
+        if patients_from is None and patients_to is None and tp_from is None and tp_to is None:
+            return items
+        filtered = []
+        for item in items:
+            if patients_from is not None and item.patient_code < patients_from:
+                continue
+            if patients_to is not None and item.patient_code > patients_to:
+                continue
+            if tp_from is not None and item.tp_number < tp_from:
+                continue
+            if tp_to is not None and item.tp_number > tp_to:
+                continue
+            filtered.append(item)
+        return filtered

@@ -1,0 +1,18 @@
+[
+  {
+    "treatment_code": 2001,
+    "description": "Initial exam",
+    "short_code": "EXAM",
+    "default_time_minutes": 30,
+    "exam": true,
+    "patient_required": true
+  },
+  {
+    "treatment_code": 2002,
+    "description": "Scale and polish",
+    "short_code": "SNP",
+    "default_time_minutes": 20,
+    "exam": false,
+    "patient_required": true
+  }
+]

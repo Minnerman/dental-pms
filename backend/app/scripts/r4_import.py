@@ -11,6 +11,10 @@ from app.models.user import User
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.importer import import_r4
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
+from app.services.r4_import.treatment_plan_importer import (
+    import_r4_treatment_plans,
+    import_r4_treatments,
+)
 
 
 def resolve_actor_id(session) -> int:
@@ -33,6 +37,12 @@ def main() -> int:
         help="Import source (fixtures or sqlserver).",
     )
     parser.add_argument(
+        "--entity",
+        default="patients_appts",
+        choices=("patients_appts", "treatments", "treatment_plans"),
+        help="Entity to import (default: patients_appts).",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="For SQL Server source, run a read-only connectivity check and stats summary.",
@@ -52,6 +62,34 @@ def main() -> int:
         type=int,
         default=None,
         help="Limit rows for dry-run samples (or apply if specified).",
+    )
+    parser.add_argument(
+        "--patients-from",
+        dest="patients_from",
+        type=int,
+        default=None,
+        help="Filter treatment plans/items from patient code (inclusive).",
+    )
+    parser.add_argument(
+        "--patients-to",
+        dest="patients_to",
+        type=int,
+        default=None,
+        help="Filter treatment plans/items to patient code (inclusive).",
+    )
+    parser.add_argument(
+        "--tp-from",
+        dest="tp_from",
+        type=int,
+        default=None,
+        help="Filter treatment plans/items from TP number (inclusive).",
+    )
+    parser.add_argument(
+        "--tp-to",
+        dest="tp_to",
+        type=int,
+        default=None,
+        help="Filter treatment plans/items to TP number (inclusive).",
     )
     parser.add_argument(
         "--appts-from",
@@ -84,25 +122,57 @@ def main() -> int:
                 session = SessionLocal()
                 try:
                     actor_id = resolve_actor_id(session)
-                    stats = import_r4(
-                        session,
-                        source,
-                        actor_id,
-                        legacy_source="r4",
-                        appts_from=args.appts_from,
-                        appts_to=args.appts_to,
-                        limit=None,
-                    )
+                    if args.entity == "patients_appts":
+                        stats = import_r4(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            appts_from=args.appts_from,
+                            appts_to=args.appts_to,
+                            limit=None,
+                        )
+                    elif args.entity == "treatments":
+                        stats = import_r4_treatments(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            limit=args.limit,
+                        )
+                    else:
+                        stats = import_r4_treatment_plans(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            patients_from=args.patients_from,
+                            patients_to=args.patients_to,
+                            tp_from=args.tp_from,
+                            tp_to=args.tp_to,
+                            limit=args.limit,
+                        )
                     session.commit()
                 finally:
                     session.close()
                 print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
                 return 0
-            summary = source.dry_run_summary(
-                limit=args.limit or 10,
-                date_from=args.appts_from,
-                date_to=args.appts_to,
-            )
+            if args.entity == "patients_appts":
+                summary = source.dry_run_summary(
+                    limit=args.limit or 10,
+                    date_from=args.appts_from,
+                    date_to=args.appts_to,
+                )
+            elif args.entity == "treatments":
+                summary = source.dry_run_summary_treatments(limit=args.limit or 10)
+            else:
+                summary = source.dry_run_summary_treatment_plans(
+                    limit=args.limit or 10,
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                    tp_from=args.tp_from,
+                    tp_to=args.tp_to,
+                )
         except RuntimeError as exc:
             print(str(exc))
             return 2
@@ -117,7 +187,21 @@ def main() -> int:
     try:
         actor_id = resolve_actor_id(session)
         source = FixtureSource()
-        stats = import_r4(session, source, actor_id)
+        if args.entity == "patients_appts":
+            stats = import_r4(session, source, actor_id)
+        elif args.entity == "treatments":
+            stats = import_r4_treatments(session, source, actor_id)
+        else:
+            stats = import_r4_treatment_plans(
+                session,
+                source,
+                actor_id,
+                patients_from=args.patients_from,
+                patients_to=args.patients_to,
+                tp_from=args.tp_from,
+                tp_to=args.tp_to,
+                limit=args.limit,
+            )
         session.commit()
         print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
         return 0

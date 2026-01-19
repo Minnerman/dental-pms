@@ -92,7 +92,40 @@ Verify:
 - unmapped legacy queue: `/admin/legacy/unmapped-appointments`
 - conflict stats (if any)
 
-## F) Rollback (dev-only guidance)
+## F) Stage 103: treatments + treatment plans
+
+Run treatments before treatment plans (CodeID enrichment later).
+
+Dry-run treatments:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run --entity treatments
+```
+
+Dry-run treatment plans:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run --entity treatment_plans
+```
+
+Optionally filter by patient code or TP number:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run \
+  --entity treatment_plans --patients-from 1000 --patients-to 1100 --tp-from 1 --tp-to 20
+```
+
+Apply (gated):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --apply --confirm APPLY \
+  --entity treatments
+
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --apply --confirm APPLY \
+  --entity treatment_plans
+```
+
+## G) Rollback (dev-only guidance)
 
 If the pilot window was incorrect, remove rows by legacy markers. Use extreme
 caution and avoid production unless approved.
@@ -114,7 +147,7 @@ Notes:
 - Prefer filtering by `legacy_source` and date windows.
 - Do not delete records that were manually resolved unless you intend to reset.
 
-## G) Troubleshooting
+## H) Troubleshooting
 
 Common failures and fixes:
 - Driver not found: install `msodbcsql18` or `msodbcsql17`.
