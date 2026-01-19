@@ -129,7 +129,32 @@ Inspect in admin UI (read-only):
 - `http://100.100.149.40:3100/admin/r4/treatment-plans`
 - Search by legacy patient code to see imported plans + items.
 
-## G) Rollback (dev-only guidance)
+## G) Stage 105: full treatment plan import (batched + resumable)
+
+Full import (safe defaults; resumable on re-run):
+
+```bash
+docker compose run --rm r4_import python -m app.scripts.r4_import \
+  --source sqlserver --apply --confirm APPLY --entity treatments
+
+docker compose run --rm r4_import python -m app.scripts.r4_import \
+  --source sqlserver --apply --confirm APPLY --entity treatment_plans \
+  --batch-size 1000 --sleep-ms 50 --progress-every 5000
+```
+
+Notes:
+- The importer is idempotent; re-running the same command resumes safely.
+- Progress is printed as compact JSON lines when `--apply` is used.
+- Adjust `--batch-size` and `--sleep-ms` if SQL Server load is high.
+
+Summary report (Postgres-only; no SQL Server connection required):
+
+```bash
+docker compose run --rm backend python -m app.scripts.r4_import \
+  --entity treatment_plans_summary
+```
+
+## H) Rollback (dev-only guidance)
 
 If the pilot window was incorrect, remove rows by legacy markers. Use extreme
 caution and avoid production unless approved.
@@ -151,7 +176,7 @@ Notes:
 - Prefer filtering by `legacy_source` and date windows.
 - Do not delete records that were manually resolved unless you intend to reset.
 
-## H) Troubleshooting
+## I) Troubleshooting
 
 Common failures and fixes:
 - Driver not found: install `msodbcsql18` or `msodbcsql17`.
