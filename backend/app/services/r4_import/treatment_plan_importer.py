@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import json
 import os
+import time
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.patient import Patient
@@ -76,11 +78,44 @@ def import_r4_treatment_plans(
     tp_from: int | None = None,
     tp_to: int | None = None,
     limit: int | None = None,
+    batch_size: int = 1000,
+    sleep_ms: int = 0,
+    progress_every: int = 5000,
+    progress_enabled: bool = False,
 ) -> TreatmentPlanImportStats:
     stats = TreatmentPlanImportStats()
-    plans_by_key: dict[tuple[int, int], R4TreatmentPlan] = {}
     patients_by_code: dict[int, Patient | None] = {}
+    started_at = time.monotonic()
+    plans_processed = 0
+    items_processed = 0
+    batch_size = max(1, batch_size)
 
+    def process_plan_batch(batch: list[R4TreatmentPlanPayload]) -> None:
+        nonlocal plans_processed
+        for plan in batch:
+            _upsert_plan(
+                session,
+                plan,
+                actor_id,
+                legacy_source,
+                stats,
+                patients_by_code,
+            )
+            plans_processed += 1
+            _maybe_emit_progress(
+                progress_enabled,
+                progress_every,
+                started_at,
+                stats,
+                "plans",
+                plans_processed,
+                items_processed,
+            )
+        session.flush()
+        session.expunge_all()
+        _maybe_sleep(sleep_ms)
+
+    batch: list[R4TreatmentPlanPayload] = []
     for plan in source.list_treatment_plans(
         patients_from=patients_from,
         patients_to=patients_to,
@@ -88,27 +123,16 @@ def import_r4_treatment_plans(
         tp_to=tp_to,
         limit=limit,
     ):
-        row = _upsert_plan(
-            session,
-            plan,
-            actor_id,
-            legacy_source,
-            stats,
-            patients_by_code,
-        )
-        plans_by_key[(plan.patient_code, plan.tp_number)] = row
+        batch.append(plan)
+        if len(batch) >= batch_size:
+            process_plan_batch(batch)
+            batch = []
+    if batch:
+        process_plan_batch(batch)
 
-    session.flush()
-
-    for item in source.list_treatment_plan_items(
-        patients_from=patients_from,
-        patients_to=patients_to,
-        tp_from=tp_from,
-        tp_to=tp_to,
-        limit=limit,
-    ):
-        plan = plans_by_key.get((item.patient_code, item.tp_number))
-        if plan is None:
+    def process_item_batch(batch: list[R4TreatmentPlanItemPayload]) -> None:
+        nonlocal items_processed
+        for item in batch:
             plan = session.scalar(
                 select(R4TreatmentPlan).where(
                     R4TreatmentPlan.legacy_source == legacy_source,
@@ -116,10 +140,48 @@ def import_r4_treatment_plans(
                     R4TreatmentPlan.legacy_tp_number == item.tp_number,
                 )
             )
-        if plan is None:
-            stats.items_missing_plan_refs += 1
-            continue
-        _upsert_item(session, plan, item, actor_id, legacy_source, stats)
+            if plan is None:
+                stats.items_missing_plan_refs += 1
+                items_processed += 1
+                _maybe_emit_progress(
+                    progress_enabled,
+                    progress_every,
+                    started_at,
+                    stats,
+                    "items",
+                    plans_processed,
+                    items_processed,
+                )
+                continue
+            _upsert_item(session, plan, item, actor_id, legacy_source, stats)
+            items_processed += 1
+            _maybe_emit_progress(
+                progress_enabled,
+                progress_every,
+                started_at,
+                stats,
+                "items",
+                plans_processed,
+                items_processed,
+            )
+        session.flush()
+        session.expunge_all()
+        _maybe_sleep(sleep_ms)
+
+    batch = []
+    for item in source.list_treatment_plan_items(
+        patients_from=patients_from,
+        patients_to=patients_to,
+        tp_from=tp_from,
+        tp_to=tp_to,
+        limit=limit,
+    ):
+        batch.append(item)
+        if len(batch) >= batch_size:
+            process_item_batch(batch)
+            batch = []
+    if batch:
+        process_item_batch(batch)
 
     for review in source.list_treatment_plan_reviews(
         patients_from=patients_from,
@@ -128,21 +190,72 @@ def import_r4_treatment_plans(
         tp_to=tp_to,
         limit=limit,
     ):
-        plan = plans_by_key.get((review.patient_code, review.tp_number))
-        if plan is None:
-            plan = session.scalar(
-                select(R4TreatmentPlan).where(
-                    R4TreatmentPlan.legacy_source == legacy_source,
-                    R4TreatmentPlan.legacy_patient_code == review.patient_code,
-                    R4TreatmentPlan.legacy_tp_number == review.tp_number,
-                )
+        plan = session.scalar(
+            select(R4TreatmentPlan).where(
+                R4TreatmentPlan.legacy_source == legacy_source,
+                R4TreatmentPlan.legacy_patient_code == review.patient_code,
+                R4TreatmentPlan.legacy_tp_number == review.tp_number,
             )
+        )
         if plan is None:
             stats.reviews_missing_plan_refs += 1
             continue
         _upsert_review(session, plan, review, actor_id, stats)
 
     return stats
+
+
+def summarize_r4_treatment_plans(
+    session: Session, legacy_source: str = "r4"
+) -> dict[str, object]:
+    total_plans = session.scalar(
+        select(func.count()).select_from(R4TreatmentPlan).where(
+            R4TreatmentPlan.legacy_source == legacy_source
+        )
+    )
+    total_items = session.scalar(
+        select(func.count()).select_from(R4TreatmentPlanItem).where(
+            R4TreatmentPlanItem.legacy_source == legacy_source
+        )
+    )
+    null_patient = session.scalar(
+        select(func.count()).select_from(R4TreatmentPlan).where(
+            R4TreatmentPlan.legacy_source == legacy_source,
+            R4TreatmentPlan.patient_id.is_(None),
+        )
+    )
+    min_date = session.scalar(
+        select(func.min(R4TreatmentPlan.creation_date)).where(
+            R4TreatmentPlan.legacy_source == legacy_source
+        )
+    )
+    max_date = session.scalar(
+        select(func.max(R4TreatmentPlan.creation_date)).where(
+            R4TreatmentPlan.legacy_source == legacy_source
+        )
+    )
+    top_codes = session.execute(
+        select(R4TreatmentPlanItem.code_id, func.count().label("count"))
+        .where(
+            R4TreatmentPlanItem.legacy_source == legacy_source,
+            R4TreatmentPlanItem.code_id.is_not(None),
+        )
+        .group_by(R4TreatmentPlanItem.code_id)
+        .order_by(func.count().desc())
+        .limit(20)
+    ).all()
+    return {
+        "legacy_source": legacy_source,
+        "plans_total": int(total_plans or 0),
+        "items_total": int(total_items or 0),
+        "plans_with_null_patient_id": int(null_patient or 0),
+        "min_creation_date": min_date.isoformat() if min_date else None,
+        "max_creation_date": max_date.isoformat() if max_date else None,
+        "top_code_ids": [
+            {"code_id": int(code_id), "count": int(count)}
+            for code_id, count in top_codes
+        ],
+    }
 
 
 def _upsert_treatment(
@@ -373,6 +486,48 @@ def _apply_updates(model, updates: dict, debug_label: str | None = None) -> bool
 
 def _debug_diffs_enabled() -> bool:
     return os.getenv("R4_IMPORT_DEBUG_DIFFS") == "1"
+
+
+def _maybe_emit_progress(
+    enabled: bool,
+    progress_every: int,
+    started_at: float,
+    stats: TreatmentPlanImportStats,
+    phase: str,
+    plans_processed: int,
+    items_processed: int,
+) -> None:
+    if not enabled or progress_every <= 0:
+        return
+    if phase == "plans":
+        if plans_processed % progress_every != 0:
+            return
+    else:
+        if items_processed % progress_every != 0:
+            return
+    elapsed = max(time.monotonic() - started_at, 0.001)
+    payload = {
+        "event": "r4_import_progress",
+        "phase": phase,
+        "elapsed_seconds": round(elapsed, 2),
+        "plans_processed": plans_processed,
+        "items_processed": items_processed,
+        "plans_per_second": round(plans_processed / elapsed, 2),
+        "items_per_second": round(items_processed / elapsed, 2),
+        "plans_created": stats.plans_created,
+        "plans_updated": stats.plans_updated,
+        "plans_skipped": stats.plans_skipped,
+        "items_created": stats.items_created,
+        "items_updated": stats.items_updated,
+        "items_skipped": stats.items_skipped,
+    }
+    print(json.dumps(payload, sort_keys=True))
+
+
+def _maybe_sleep(sleep_ms: int) -> None:
+    if sleep_ms <= 0:
+        return
+    time.sleep(sleep_ms / 1000.0)
 
 
 def _normalize_datetime(value: datetime | None) -> datetime | None:

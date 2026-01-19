@@ -1,4 +1,5 @@
 from decimal import Decimal
+import json
 
 from sqlalchemy import delete, func, select
 
@@ -148,5 +149,43 @@ def test_r4_treatment_plans_apply_updates():
         session.commit()
 
         assert stats_second.items_updated == 1
+    finally:
+        session.close()
+
+
+def test_r4_treatment_plans_progress_output(capsys):
+    session = SessionLocal()
+    try:
+        clear_r4_clinical(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        ensure_patient(session, actor_id, patient_code=1001)
+        session.commit()
+
+        source = FixtureSource()
+        import_r4_treatment_plans(
+            session,
+            source,
+            actor_id,
+            batch_size=1,
+            progress_every=1,
+            progress_enabled=True,
+        )
+        session.commit()
+
+        output_lines = [
+            line
+            for line in capsys.readouterr().out.strip().splitlines()
+            if line
+        ]
+        progress_lines = [
+            line for line in output_lines if '"event": "r4_import_progress"' in line
+        ]
+        assert progress_lines
+        payloads = [json.loads(line) for line in progress_lines]
+        assert {payload["event"] for payload in payloads} == {"r4_import_progress"}
+        assert "plans" in {payload["phase"] for payload in payloads}
+        assert "items" in {payload["phase"] for payload in payloads}
     finally:
         session.close()

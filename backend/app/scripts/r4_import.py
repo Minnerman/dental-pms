@@ -14,6 +14,7 @@ from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServ
 from app.services.r4_import.treatment_plan_importer import (
     import_r4_treatment_plans,
     import_r4_treatments,
+    summarize_r4_treatment_plans,
 )
 
 
@@ -39,7 +40,12 @@ def main() -> int:
     parser.add_argument(
         "--entity",
         default="patients_appts",
-        choices=("patients_appts", "treatments", "treatment_plans"),
+        choices=(
+            "patients_appts",
+            "treatments",
+            "treatment_plans",
+            "treatment_plans_summary",
+        ),
         help="Entity to import (default: patients_appts).",
     )
     parser.add_argument(
@@ -62,6 +68,24 @@ def main() -> int:
         type=int,
         default=None,
         help="Limit rows for dry-run samples (or apply if specified).",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1000,
+        help="Batch size for treatment plan imports (default: 1000).",
+    )
+    parser.add_argument(
+        "--sleep-ms",
+        type=int,
+        default=0,
+        help="Optional sleep per batch in milliseconds (default: 0).",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=5000,
+        help="Progress update frequency in items/plans (default: 5000).",
     )
     parser.add_argument(
         "--patients-from",
@@ -107,6 +131,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.entity == "treatment_plans_summary":
+        session = SessionLocal()
+        try:
+            summary = summarize_r4_treatment_plans(session)
+            print(json.dumps(summary, indent=2, sort_keys=True))
+            return 0
+        finally:
+            session.close()
+
     if args.source == "sqlserver":
         if args.apply and args.dry_run:
             print("Choose either --apply or --dry-run (default is dry-run).")
@@ -151,6 +184,10 @@ def main() -> int:
                             tp_from=args.tp_from,
                             tp_to=args.tp_to,
                             limit=args.limit,
+                            batch_size=args.batch_size,
+                            sleep_ms=args.sleep_ms,
+                            progress_every=args.progress_every,
+                            progress_enabled=True,
                         )
                     session.commit()
                 finally:
@@ -201,6 +238,10 @@ def main() -> int:
                 tp_from=args.tp_from,
                 tp_to=args.tp_to,
                 limit=args.limit,
+                batch_size=args.batch_size,
+                sleep_ms=args.sleep_ms,
+                progress_every=args.progress_every,
+                progress_enabled=False,
             )
         session.commit()
         print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))

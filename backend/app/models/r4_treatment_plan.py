@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     SmallInteger,
@@ -91,6 +92,10 @@ class R4TreatmentPlanItem(Base, AuditMixin):
             "treatment_plan_id",
             "legacy_tp_item",
             name="uq_r4_treatment_plan_items_plan_item",
+        ),
+        Index(
+            "ix_r4_treatment_plan_items_plan_id",
+            "treatment_plan_id",
         ),
     )
 
