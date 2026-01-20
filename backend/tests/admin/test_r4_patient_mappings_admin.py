@@ -121,6 +121,7 @@ def test_r4_patient_mapping_backfill_chunked(api_client, auth_headers):
         )
         session.add(patient)
         session.flush()
+        patient_id = patient.id
         mapping = R4PatientMapping(
             legacy_source="r4",
             legacy_patient_code=mapped_code,
@@ -170,8 +171,8 @@ def test_r4_patient_mapping_backfill_chunked(api_client, auth_headers):
         assert refreshed_one is not None
         assert refreshed_two is not None
         assert refreshed_three is not None
-        assert refreshed_one.patient_id == patient.id
-        assert refreshed_two.patient_id == patient.id
+        assert refreshed_one.patient_id == patient_id
+        assert refreshed_two.patient_id == patient_id
         assert refreshed_three.patient_id is None
     finally:
         session.close()
