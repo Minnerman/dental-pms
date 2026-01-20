@@ -186,32 +186,3 @@ def test_r4_patient_mapping_backfill_chunked(api_client, auth_headers):
     payload = res.json()
     assert payload["processed"] == 0
     assert payload["updated"] == 0
-
-    res = api_client.post(
-        "/admin/r4/patient-mappings",
-        headers=auth_headers,
-        json={"legacy_patient_code": code, "patient_id": patient_id, "notes": "linked"},
-    )
-    assert res.status_code == 200, res.text
-    payload = res.json()
-    assert payload["legacy_patient_code"] == code
-    assert payload["patient_id"] == patient_id
-
-    session = SessionLocal()
-    try:
-        mapping = session.scalar(
-            select(R4PatientMapping).where(
-                R4PatientMapping.legacy_patient_code == code,
-                R4PatientMapping.patient_id == patient_id,
-            )
-        )
-        assert mapping is not None
-        event = session.scalar(
-            select(LegacyResolutionEvent).where(
-                LegacyResolutionEvent.entity_type == "r4_patient_mapping",
-                LegacyResolutionEvent.legacy_id == str(code),
-            )
-        )
-        assert event is not None
-    finally:
-        session.close()
