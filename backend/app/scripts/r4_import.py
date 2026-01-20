@@ -10,6 +10,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.importer import import_r4
+from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 from app.services.r4_import.treatment_plan_importer import (
     backfill_r4_treatment_plan_patients,
@@ -42,6 +43,7 @@ def main() -> int:
         "--entity",
         default="patients_appts",
         choices=(
+            "patients",
             "patients_appts",
             "treatments",
             "treatment_plans",
@@ -171,7 +173,17 @@ def main() -> int:
                 session = SessionLocal()
                 try:
                     actor_id = resolve_actor_id(session)
-                    if args.entity == "patients_appts":
+                    if args.entity == "patients":
+                        stats = import_r4_patients(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            patients_from=args.patients_from,
+                            patients_to=args.patients_to,
+                            limit=args.limit,
+                        )
+                    elif args.entity == "patients_appts":
                         stats = import_r4(
                             session,
                             source,
@@ -210,7 +222,13 @@ def main() -> int:
                     session.close()
                 print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
                 return 0
-            if args.entity == "patients_appts":
+            if args.entity == "patients":
+                summary = source.dry_run_summary_patients(
+                    limit=args.limit or 10,
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                )
+            elif args.entity == "patients_appts":
                 summary = source.dry_run_summary(
                     limit=args.limit or 10,
                     date_from=args.appts_from,
@@ -240,7 +258,16 @@ def main() -> int:
     try:
         actor_id = resolve_actor_id(session)
         source = FixtureSource()
-        if args.entity == "patients_appts":
+        if args.entity == "patients":
+            stats = import_r4_patients(
+                session,
+                source,
+                actor_id,
+                patients_from=args.patients_from,
+                patients_to=args.patients_to,
+                limit=args.limit,
+            )
+        elif args.entity == "patients_appts":
             stats = import_r4(session, source, actor_id)
         elif args.entity == "treatments":
             stats = import_r4_treatments(session, source, actor_id)

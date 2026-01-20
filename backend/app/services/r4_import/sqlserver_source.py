@@ -123,6 +123,27 @@ class R4SqlServerSource:
             "sample_treatments": self.sample_treatments(limit=limit),
         }
 
+    def dry_run_summary_patients(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "patients_count": self.count_patients(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_patients": self.sample_patients(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+        }
+
     def dry_run_summary_treatment_plans(
         self,
         limit: int = 10,
@@ -162,8 +183,21 @@ class R4SqlServerSource:
             ),
         }
 
-    def count_patients(self) -> int:
-        rows = self._query("SELECT COUNT(1) AS count FROM dbo.Patients WITH (NOLOCK)")
+    def count_patients(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._require_column("Patients", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        rows = self._query(
+            "SELECT COUNT(1) AS count FROM dbo.Patients WITH (NOLOCK)" + where_clause,
+            params,
+        )
         return int(rows[0]["count"]) if rows else 0
 
     def count_appts(self, date_from: date | None = None, date_to: date | None = None) -> int:
@@ -286,6 +320,47 @@ class R4SqlServerSource:
         )
         return [int(row["PatientCode"]) for row in rows if row.get("PatientCode") is not None]
 
+    def sample_patients(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_code_col = self._require_column("Patients", ["PatientCode"])
+        first_name_col = self._pick_column("Patients", ["FirstName", "Forename"])
+        last_name_col = self._pick_column("Patients", ["LastName", "Surname"])
+        dob_col = self._pick_column("Patients", ["DOB", "DateOfBirth", "BirthDate"])
+        if not first_name_col or not last_name_col:
+            raise RuntimeError("Patients name columns not found; check sys2000.dbo.Patients schema.")
+        select_cols = [
+            f"{patient_code_col} AS patient_code",
+            f"{first_name_col} AS first_name",
+            f"{last_name_col} AS last_name",
+        ]
+        if dob_col:
+            select_cols.append(f"{dob_col} AS date_of_birth")
+        where_clause, params = self._build_range_filter(
+            patient_code_col,
+            patients_from,
+            patients_to,
+        )
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Patients WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {patient_code_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "patient_code": row.get("patient_code"),
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
+                    "date_of_birth": self._format_dt(row.get("date_of_birth")),
+                }
+            )
+        return samples
+
     def sample_appts(self, limit: int = 10) -> list[dict[str, Any]]:
         patient_col = self._require_column("Appts", ["PatientCode"])
         appt_id_col = self._pick_column(
@@ -386,14 +461,26 @@ class R4SqlServerSource:
         return samples
 
     def list_patients(self, limit: int | None = None) -> Iterable[R4Patient]:
+        return self.stream_patients(limit=limit)
+
+    def stream_patients(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4Patient]:
         patient_code_col = self._require_column("Patients", ["PatientCode"])
         first_name_col = self._pick_column("Patients", ["FirstName", "Forename"])
         last_name_col = self._pick_column("Patients", ["LastName", "Surname"])
         dob_col = self._pick_column("Patients", ["DOB", "DateOfBirth", "BirthDate"])
+        title_col = self._pick_column("Patients", ["Title"])
+        sex_col = self._pick_column("Patients", ["Sex", "Gender"])
+        mobile_col = self._pick_column("Patients", ["MobileNo", "Mobile", "MobileNumber"])
+        email_col = self._pick_column("Patients", ["EMail", "Email", "EmailAddress"])
         if not first_name_col or not last_name_col:
             raise RuntimeError("Patients name columns not found; check sys2000.dbo.Patients schema.")
 
-        last_code = 0
+        last_code = (patients_from - 1) if patients_from is not None else 0
         remaining = limit
         batch_size = 500
         while True:
@@ -401,13 +488,39 @@ class R4SqlServerSource:
                 if remaining <= 0:
                     break
                 batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_code_col,
+                patients_from,
+                patients_to,
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            if last_code is not None:
+                where_parts.append(f"{patient_code_col} > ?")
+                params.append(last_code)
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [
+                f"{patient_code_col} AS patient_code",
+                f"{first_name_col} AS first_name",
+                f"{last_name_col} AS last_name",
+            ]
+            if dob_col:
+                select_cols.append(f"{dob_col} AS date_of_birth")
+            if title_col:
+                select_cols.append(f"{title_col} AS title")
+            if sex_col:
+                select_cols.append(f"{sex_col} AS sex")
+            if mobile_col:
+                select_cols.append(f"{mobile_col} AS mobile_no")
+            if email_col:
+                select_cols.append(f"{email_col} AS email")
             rows = self._query(
-                f"SELECT TOP (?) {patient_code_col} AS patient_code, "
-                f"{first_name_col} AS first_name, {last_name_col} AS last_name"
-                + (f", {dob_col} AS date_of_birth" if dob_col else "")
-                + " FROM dbo.Patients WITH (NOLOCK) "
-                f"WHERE {patient_code_col} > ? ORDER BY {patient_code_col} ASC",
-                [batch_size, last_code],
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Patients WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_code_col} ASC",
+                [batch_size, *params],
             )
             if not rows:
                 break
@@ -418,11 +531,18 @@ class R4SqlServerSource:
                 last_code = int(patient_code)
                 first_name = (row.get("first_name") or "").strip()
                 last_name = (row.get("last_name") or "").strip()
+                dob_value = row.get("date_of_birth")
+                if isinstance(dob_value, datetime):
+                    dob_value = dob_value.date()
                 yield R4Patient(
                     patient_code=last_code,
                     first_name=first_name,
                     last_name=last_name,
-                    date_of_birth=row.get("date_of_birth"),
+                    date_of_birth=dob_value,
+                    title=(row.get("title") or "").strip() or None,
+                    sex=(row.get("sex") or "").strip() or None,
+                    mobile_no=(row.get("mobile_no") or "").strip() or None,
+                    email=(row.get("email") or "").strip() or None,
                 )
                 if remaining is not None:
                     remaining -= 1
