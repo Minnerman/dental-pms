@@ -132,6 +132,9 @@ def test_r4_patient_mapping_backfill_chunked(api_client, auth_headers):
         plan_one = seed_r4_plan(session, actor.id, mapped_code, tp_number=1)
         plan_two = seed_r4_plan(session, actor.id, mapped_code, tp_number=2)
         plan_three = seed_r4_plan(session, actor.id, unmapped_code, tp_number=1)
+        plan_one_id = plan_one.id
+        plan_two_id = plan_two.id
+        plan_three_id = plan_three.id
         session.commit()
     finally:
         session.close()
@@ -161,9 +164,9 @@ def test_r4_patient_mapping_backfill_chunked(api_client, auth_headers):
 
     session = SessionLocal()
     try:
-        refreshed_one = session.get(R4TreatmentPlan, plan_one.id)
-        refreshed_two = session.get(R4TreatmentPlan, plan_two.id)
-        refreshed_three = session.get(R4TreatmentPlan, plan_three.id)
+        refreshed_one = session.get(R4TreatmentPlan, plan_one_id)
+        refreshed_two = session.get(R4TreatmentPlan, plan_two_id)
+        refreshed_three = session.get(R4TreatmentPlan, plan_three_id)
         assert refreshed_one is not None
         assert refreshed_two is not None
         assert refreshed_three is not None
