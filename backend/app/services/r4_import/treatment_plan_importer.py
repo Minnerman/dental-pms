@@ -7,7 +7,7 @@ import json
 import os
 import time
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.models.patient import Patient
@@ -64,6 +64,15 @@ class TreatmentPlanBackfillStats:
     def as_dict(self) -> dict[str, int]:
         return asdict(self)
 
+
+@dataclass
+class TreatmentPlanBackfillChunkStats:
+    processed: int = 0
+    updated: int = 0
+    remaining_estimate: int | None = None
+
+    def as_dict(self) -> dict[str, int | None]:
+        return asdict(self)
 
 def import_r4_treatments(
     session: Session,
@@ -314,6 +323,76 @@ def backfill_r4_treatment_plan_patients(
     )
     stats.plans_updated = int(result.rowcount or 0)
     stats.plans_missing_mapping = int(max(total_null - mapped_null, 0))
+    return stats
+
+
+def backfill_r4_treatment_plan_patients_chunked(
+    session: Session,
+    actor_id: int,
+    legacy_source: str = "r4",
+    limit: int = 500,
+    dry_run: bool = True,
+    only_unmapped: bool = True,
+) -> TreatmentPlanBackfillChunkStats:
+    stats = TreatmentPlanBackfillChunkStats()
+    filters = [R4TreatmentPlan.legacy_source == legacy_source]
+    if only_unmapped:
+        filters.append(R4TreatmentPlan.patient_id.is_(None))
+    else:
+        filters.append(
+            or_(
+                R4TreatmentPlan.patient_id.is_(None),
+                R4TreatmentPlan.patient_id != R4PatientMapping.patient_id,
+            )
+        )
+
+    join_clause = (
+        (R4PatientMapping.legacy_source == R4TreatmentPlan.legacy_source)
+        & (R4PatientMapping.legacy_patient_code == R4TreatmentPlan.legacy_patient_code)
+    )
+    total_candidates = session.scalar(
+        select(func.count())
+        .select_from(R4TreatmentPlan)
+        .join(R4PatientMapping, join_clause)
+        .where(*filters)
+    ) or 0
+
+    ids = list(
+        session.scalars(
+            select(R4TreatmentPlan.id)
+            .join(R4PatientMapping, join_clause)
+            .where(*filters)
+            .order_by(R4TreatmentPlan.id.asc())
+            .limit(limit)
+        )
+    )
+    stats.processed = len(ids)
+    stats.remaining_estimate = max(int(total_candidates) - stats.processed, 0)
+
+    if dry_run or not ids:
+        return stats
+
+    result = session.execute(
+        text(
+            """
+        UPDATE r4_treatment_plans AS p
+        SET patient_id = m.patient_id,
+            updated_by_user_id = :actor_id,
+            updated_at = now()
+        FROM r4_patient_mappings AS m
+        WHERE p.id = ANY(:ids)
+          AND p.legacy_source = :legacy_source
+          AND m.legacy_source = p.legacy_source
+          AND m.legacy_patient_code = p.legacy_patient_code
+        """
+        ),
+        {
+            "actor_id": actor_id,
+            "legacy_source": legacy_source,
+            "ids": ids,
+        },
+    )
+    stats.updated = int(result.rowcount or 0)
     return stats
 
 

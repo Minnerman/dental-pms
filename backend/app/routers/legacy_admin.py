@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
@@ -22,15 +23,21 @@ from app.schemas.legacy_admin import (
     UnmappedLegacyAppointmentList,
 )
 from app.schemas.r4_admin import (
+    R4PatientMappingBackfillRequest,
+    R4PatientMappingBackfillResponse,
     R4PatientMappingCreate,
     R4PatientMappingOut,
     R4TreatmentPlanDetail,
     R4TreatmentPlanSummary,
     R4UnmappedPlanPatientCode,
 )
+from app.services.r4_import.treatment_plan_importer import (
+    backfill_r4_treatment_plan_patients_chunked,
+)
 
 router = APIRouter(prefix="/admin/legacy", tags=["legacy-admin"])
 r4_router = APIRouter(prefix="/admin/r4", tags=["r4-admin"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/unmapped-appointments", response_model=UnmappedLegacyAppointmentList)
@@ -300,3 +307,42 @@ def create_r4_patient_mapping(
     db.commit()
     db.refresh(mapping)
     return mapping
+
+
+@r4_router.post(
+    "/patient-mappings/backfill-patient-ids",
+    response_model=R4PatientMappingBackfillResponse,
+)
+def backfill_r4_patient_mapping_ids(
+    payload: R4PatientMappingBackfillRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    stats = backfill_r4_treatment_plan_patients_chunked(
+        db,
+        admin.id,
+        legacy_source="r4",
+        limit=payload.limit,
+        dry_run=payload.dry_run,
+        only_unmapped=payload.only_unmapped,
+    )
+    if not payload.dry_run:
+        db.commit()
+    logger.info(
+        "R4 patient backfill executed",
+        extra={
+            "actor_id": admin.id,
+            "limit": payload.limit,
+            "dry_run": payload.dry_run,
+            "only_unmapped": payload.only_unmapped,
+            "processed": stats.processed,
+            "updated": stats.updated,
+            "remaining_estimate": stats.remaining_estimate,
+        },
+    )
+    return R4PatientMappingBackfillResponse(
+        processed=stats.processed,
+        updated=stats.updated,
+        remaining_estimate=stats.remaining_estimate,
+        dry_run=payload.dry_run,
+    )

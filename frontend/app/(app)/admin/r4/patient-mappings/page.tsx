@@ -18,6 +18,13 @@ type PatientSearch = {
   phone?: string | null;
 };
 
+type BackfillResponse = {
+  processed: number;
+  updated: number;
+  remaining_estimate: number | null;
+  dry_run: boolean;
+};
+
 function formatPatientLabel(patient: PatientSearch) {
   const dob = patient.date_of_birth ? ` (${patient.date_of_birth})` : "";
   return `${patient.last_name}, ${patient.first_name}${dob}`;
@@ -39,6 +46,10 @@ export default function R4PatientMappingsAdminPage() {
   const [selectedPatient, setSelectedPatient] = useState<PatientSearch | null>(null);
   const [mappingNotes, setMappingNotes] = useState("");
   const [mappingError, setMappingError] = useState<string | null>(null);
+  const [backfillLimit, setBackfillLimit] = useState(500);
+  const [backfillResult, setBackfillResult] = useState<BackfillResponse | null>(null);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
+  const [backfillLoading, setBackfillLoading] = useState(false);
   const [showBackfillCommand, setShowBackfillCommand] = useState(false);
   const [backfillNotice, setBackfillNotice] = useState<string | null>(null);
 
@@ -178,7 +189,43 @@ export default function R4PatientMappingsAdminPage() {
   const backfillCommand =
     "docker compose exec -T backend python -m app.scripts.r4_import --entity treatment_plans_backfill_patient_ids --apply --confirm APPLY";
 
-  const handleBackfill = useCallback(() => {
+  const handleBackfill = useCallback(async () => {
+    const apply = backfillResult?.dry_run === true && backfillResult.processed > 0;
+    setBackfillLoading(true);
+    setBackfillError(null);
+    setBackfillNotice(null);
+    try {
+      const res = await apiFetch("/api/admin/r4/patient-mappings/backfill-patient-ids", {
+        method: "POST",
+        body: JSON.stringify({
+          limit: backfillLimit,
+          dry_run: !apply,
+          only_unmapped: true,
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setBackfillError("Only admins can run R4 backfill.");
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Backfill failed (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as BackfillResponse;
+      setBackfillResult(data);
+    } catch (err) {
+      setBackfillError(err instanceof Error ? err.message : "Backfill failed");
+    } finally {
+      setBackfillLoading(false);
+    }
+  }, [backfillLimit, backfillResult, router]);
+
+  const handleBackfillCommand = useCallback(() => {
     setShowBackfillCommand(true);
     setBackfillNotice(null);
     if (navigator.clipboard?.writeText) {
@@ -350,15 +397,54 @@ export default function R4PatientMappingsAdminPage() {
             title="Backfill treatment plans"
             subtitle="Apply mappings to existing R4 treatment plans."
           />
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn-primary" type="button" onClick={handleBackfill}>
-              Run backfill
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={5000}
+              value={backfillLimit}
+              onChange={(e) => setBackfillLimit(Number(e.target.value))}
+              style={{ width: 140 }}
+            />
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={handleBackfill}
+              disabled={backfillLoading}
+            >
+              {backfillLoading
+                ? "Running..."
+                : backfillResult?.dry_run && backfillResult.processed > 0
+                  ? "Apply backfill"
+                  : "Run backfill (dry run)"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={handleBackfillCommand}
+            >
+              Copy CLI command
             </button>
           </div>
+          {backfillResult && (
+            <div className="notice">
+              {backfillResult.dry_run
+                ? `Dry run: would update ${backfillResult.processed} plans.`
+                : `Updated ${backfillResult.updated} plans.`}{" "}
+              {backfillResult.remaining_estimate !== null
+                ? `Remaining estimate: ${backfillResult.remaining_estimate}.`
+                : null}
+            </div>
+          )}
+          {backfillError && <div className="notice">{backfillError}</div>}
           {backfillNotice && <div className="notice">{backfillNotice}</div>}
           {showBackfillCommand && (
             <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{backfillCommand}</pre>
           )}
+          <div style={{ color: "var(--muted)", fontSize: 13 }}>
+            Backfill runs in chunks (default 500). Repeat until remaining estimate is 0.
+          </div>
         </div>
       </div>
     </div>

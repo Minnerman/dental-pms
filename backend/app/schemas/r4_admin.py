@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class R4TreatmentPlanSummary(BaseModel):
@@ -96,3 +96,16 @@ class R4PatientMappingOut(BaseModel):
     legacy_source: str
     legacy_patient_code: int
     patient_id: int
+
+
+class R4PatientMappingBackfillRequest(BaseModel):
+    limit: int = Field(default=500, ge=1, le=5000)
+    dry_run: bool = True
+    only_unmapped: bool = True
+
+
+class R4PatientMappingBackfillResponse(BaseModel):
+    processed: int
+    updated: int
+    remaining_estimate: int | None = None
+    dry_run: bool
