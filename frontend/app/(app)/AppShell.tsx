@@ -263,7 +263,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       ? [{ href: "/admin/legacy/unmapped-appointments", label: "Legacy Queue" }]
       : []),
     ...(isSuperadmin
-      ? [{ href: "/admin/r4/treatment-plans", label: "R4 Plans" }]
+      ? [
+          { href: "/admin/r4/treatment-plans", label: "R4 Plans" },
+          { href: "/admin/r4/patient-mappings", label: "R4 Mappings" },
+        ]
       : []),
     ...(isSuperadmin ? [{ href: "/settings/profile", label: "Practice profile" }] : []),
     ...(isSuperadmin ? [{ href: "/settings/schedule", label: "Schedule" }] : []),
