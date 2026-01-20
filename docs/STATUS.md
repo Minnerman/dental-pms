@@ -62,6 +62,10 @@
 - Stage 105: full sys2000 treatment plan import (batching, progress output, summary report).
 
 ## Recent fixes
+- 2026-01-19: Stage105 completed (full R4 treatments + treatment plans/items import).
+  - Full idempotency verified (0 updates/creates on rerun).
+  - Log: `logs/r4/r4_tp_full_import_retry_20260119T224934Z.log`.
+  - Summary: plans_total=29161, items_total=85502, plans_with_null_patient_id=29160.
 - 2026-01-18: Stage99 completed (R4 dry-run + pilot import runbook).
   - Runbook: `docs/r4/R4_DRY_RUN_AND_PILOT_IMPORT.md` with dry-run and pilot import steps.
   - Added `--confirm APPLY` safety latch for SQL Server imports.
