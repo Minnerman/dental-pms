@@ -97,6 +97,92 @@ def test_r4_patient_mapping_create(api_client, auth_headers):
     finally:
         session.close()
 
+
+def test_r4_patient_mapping_backfill_requires_auth(api_client):
+    res = api_client.post("/admin/r4/patient-mappings/backfill-patient-ids", json={})
+    assert res.status_code == 401, res.text
+
+
+def test_r4_patient_mapping_backfill_chunked(api_client, auth_headers):
+    session = SessionLocal()
+    try:
+        actor = session.scalar(select(User).order_by(User.id.asc()).limit(1))
+        assert actor is not None
+        seed = int(uuid4().hex[:6], 16)
+        mapped_code = 7200000 + seed
+        unmapped_code = mapped_code + 1
+        patient = Patient(
+            legacy_source=None,
+            legacy_id=None,
+            first_name="Backfill",
+            last_name="Target",
+            created_by_user_id=actor.id,
+            updated_by_user_id=actor.id,
+        )
+        session.add(patient)
+        session.flush()
+        mapping = R4PatientMapping(
+            legacy_source="r4",
+            legacy_patient_code=mapped_code,
+            patient_id=patient.id,
+            created_by_user_id=actor.id,
+            updated_by_user_id=actor.id,
+        )
+        session.add(mapping)
+        plan_one = seed_r4_plan(session, actor.id, mapped_code, tp_number=1)
+        plan_two = seed_r4_plan(session, actor.id, mapped_code, tp_number=2)
+        plan_three = seed_r4_plan(session, actor.id, unmapped_code, tp_number=1)
+        session.commit()
+    finally:
+        session.close()
+
+    res = api_client.post(
+        "/admin/r4/patient-mappings/backfill-patient-ids",
+        headers=auth_headers,
+        json={"limit": 1, "dry_run": True},
+    )
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert payload["dry_run"] is True
+    assert payload["processed"] == 1
+    assert payload["updated"] == 0
+    assert payload["remaining_estimate"] >= 1
+
+    res = api_client.post(
+        "/admin/r4/patient-mappings/backfill-patient-ids",
+        headers=auth_headers,
+        json={"limit": 10, "dry_run": False},
+    )
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert payload["dry_run"] is False
+    assert payload["processed"] == 2
+    assert payload["updated"] == 2
+
+    session = SessionLocal()
+    try:
+        refreshed_one = session.get(R4TreatmentPlan, plan_one.id)
+        refreshed_two = session.get(R4TreatmentPlan, plan_two.id)
+        refreshed_three = session.get(R4TreatmentPlan, plan_three.id)
+        assert refreshed_one is not None
+        assert refreshed_two is not None
+        assert refreshed_three is not None
+        assert refreshed_one.patient_id == patient.id
+        assert refreshed_two.patient_id == patient.id
+        assert refreshed_three.patient_id is None
+    finally:
+        session.close()
+
+    res = api_client.post(
+        "/admin/r4/patient-mappings/backfill-patient-ids",
+        headers=auth_headers,
+        json={"limit": 10, "dry_run": False},
+    )
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert payload["processed"] == 0
+    assert payload["updated"] == 0
+
     res = api_client.post(
         "/admin/r4/patient-mappings",
         headers=auth_headers,
