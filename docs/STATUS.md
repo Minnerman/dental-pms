@@ -59,9 +59,14 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 105: full sys2000 treatment plan import (batching, progress output, summary report).
+- Stage 108: patients-only R4 import pilot (mapping + backfill).
 
 ## Recent fixes
+- 2026-01-20: Stage108 completed (patients-only R4 import entity).
+  - Added patients-only streaming + importer + CLI entity + fixtures/tests.
+  - Safety: patients entity avoids appointments import behavior.
+  - Tests: `docker compose exec -T backend pytest tests/r4_import/test_importer.py -q`.
+  - Stage 108 merged (PR #90): patients-only R4 import; CI green.
 - 2026-01-19: Stage105 completed (full R4 treatments + treatment plans/items import).
   - Full idempotency verified (0 updates/creates on rerun).
   - Log: `logs/r4/r4_tp_full_import_retry_20260119T224934Z.log`.
