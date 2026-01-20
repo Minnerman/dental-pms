@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -43,6 +44,26 @@ def _is_nolock_601_error(exc: Exception, sql: str) -> bool:
     return "NOLOCK" in sql.upper()
 
 
+def _check_tcp_connectivity(host: str | None, port: int, timeout_seconds: int) -> None:
+    if not host:
+        raise RuntimeError("R4 SQL Server host is not configured.")
+    sock = socket.socket()
+    sock.settimeout(timeout_seconds)
+    try:
+        sock.connect((host, port))
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot reach SQL Server host/port from backend container: "
+            f"{host}:{port} ({exc}). Check R4 power/network, firewall, VPN/Tailscale, "
+            "and SQL Server port."
+        ) from exc
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+
 @dataclass
 class R4SqlServerConfig:
     enabled: bool
@@ -55,21 +76,29 @@ class R4SqlServerConfig:
     encrypt: bool
     trust_cert: bool
     timeout_seconds: int
+    trust_cert_set: bool | None = None
 
     @classmethod
     def from_env(cls, environ: dict[str, str] | None = None) -> "R4SqlServerConfig":
         env = environ or os.environ
+        database = env.get("R4_SQLSERVER_DATABASE") or env.get("R4_SQLSERVER_DB")
+        trust_cert_raw = env.get("R4_SQLSERVER_TRUST_SERVER_CERT") or env.get(
+            "R4_SQLSERVER_TRUST_CERT"
+        )
         return cls(
             enabled=_parse_bool(env.get("R4_SQLSERVER_ENABLED"), default=False),
             host=env.get("R4_SQLSERVER_HOST"),
             port=int(env.get("R4_SQLSERVER_PORT", "1433")),
-            database=env.get("R4_SQLSERVER_DB"),
+            database=database,
             user=env.get("R4_SQLSERVER_USER"),
             password=env.get("R4_SQLSERVER_PASSWORD"),
             driver=env.get("R4_SQLSERVER_DRIVER"),
             encrypt=_parse_bool(env.get("R4_SQLSERVER_ENCRYPT"), default=True),
-            trust_cert=_parse_bool(env.get("R4_SQLSERVER_TRUST_CERT"), default=False),
+            trust_cert=_parse_bool(trust_cert_raw, default=False)
+            if trust_cert_raw is not None
+            else False,
             timeout_seconds=int(env.get("R4_SQLSERVER_TIMEOUT_SECONDS", "8")),
+            trust_cert_set=trust_cert_raw is not None,
         )
 
     def require_enabled(self) -> None:
@@ -79,20 +108,27 @@ class R4SqlServerConfig:
             name
             for name, value in {
                 "R4_SQLSERVER_HOST": self.host,
-                "R4_SQLSERVER_DB": self.database,
+                "R4_SQLSERVER_DATABASE (or R4_SQLSERVER_DB)": self.database,
                 "R4_SQLSERVER_USER": self.user,
                 "R4_SQLSERVER_PASSWORD": self.password,
             }.items()
             if not value
         ]
+        if self.trust_cert_set is False:
+            missing.append(
+                "R4_SQLSERVER_TRUST_SERVER_CERT (or R4_SQLSERVER_TRUST_CERT)"
+            )
         if missing:
-            raise RuntimeError("Missing required SQL Server env vars: " + ", ".join(missing))
+            raise RuntimeError(
+                "Missing required SQL Server env vars: " + ", ".join(missing)
+            )
 
 
 class R4SqlServerSource:
     def __init__(self, config: R4SqlServerConfig) -> None:
         self._config = config
         self._columns_cache: dict[str, list[str]] = {}
+        self._tcp_checked = False
 
     def dry_run_summary(
         self,
@@ -1050,6 +1086,13 @@ class R4SqlServerSource:
                     remaining -= 1
 
     def _connect(self):
+        if not self._tcp_checked:
+            _check_tcp_connectivity(
+                self._config.host,
+                self._config.port,
+                timeout_seconds=min(self._config.timeout_seconds, 5),
+            )
+            self._tcp_checked = True
         try:
             import pyodbc  # type: ignore
         except ImportError as exc:

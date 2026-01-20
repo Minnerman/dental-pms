@@ -30,6 +30,42 @@ From the repo root:
    - Backend: http://localhost:8100/health
    - Frontend: http://localhost:3100
 
+## R4 imports (safe defaults)
+- Without R4 connectivity, use fixtures: `--source fixtures`.
+- `--dry-run`/`--apply` are supported only with `--source sqlserver`.
+- R4 SQL Server must be reachable from the backend container (host/port routing).
+- Use read-only SQL Server credentials only; no writes or stored procs.
+
+Patients-only pilot (Stage 108):
+```bash
+# Dry-run (read-only, bounded range)
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity patients \
+  --dry-run \
+  --limit 25 \
+  --patients-from <START_CODE> \
+  --patients-to <END_CODE>
+
+# Apply (gated, same range)
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity patients \
+  --apply \
+  --confirm APPLY \
+  --patients-from <START_CODE> \
+  --patients-to <END_CODE>
+
+# Rerun apply to confirm idempotency (expect 0 updates)
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity patients \
+  --apply \
+  --confirm APPLY \
+  --patients-from <START_CODE> \
+  --patients-to <END_CODE>
+```
+
 ## Where it runs
 - http://<server-ip>:3100
 - Tailscale: http://<tailscale-ip>:3100
