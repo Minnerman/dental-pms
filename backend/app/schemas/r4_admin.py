@@ -76,3 +76,23 @@ class R4TreatmentPlanDetail(BaseModel):
     plan: R4TreatmentPlanOut
     items: list[R4TreatmentPlanItemOut]
     reviews: list[R4TreatmentPlanReviewOut]
+
+
+class R4UnmappedPlanPatientCode(BaseModel):
+    legacy_patient_code: int
+    plan_count: int
+
+
+class R4PatientMappingCreate(BaseModel):
+    legacy_patient_code: int
+    patient_id: int
+    notes: str | None = None
+
+
+class R4PatientMappingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    legacy_source: str
+    legacy_patient_code: int
+    patient_id: int

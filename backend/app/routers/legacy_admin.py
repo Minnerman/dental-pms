@@ -9,6 +9,7 @@ from app.deps import require_admin
 from app.models.appointment import Appointment
 from app.models.legacy_resolution_event import LegacyResolutionEvent
 from app.models.patient import Patient
+from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import (
     R4TreatmentPlan,
     R4TreatmentPlanItem,
@@ -21,8 +22,11 @@ from app.schemas.legacy_admin import (
     UnmappedLegacyAppointmentList,
 )
 from app.schemas.r4_admin import (
+    R4PatientMappingCreate,
+    R4PatientMappingOut,
     R4TreatmentPlanDetail,
     R4TreatmentPlanSummary,
+    R4UnmappedPlanPatientCode,
 )
 
 router = APIRouter(prefix="/admin/legacy", tags=["legacy-admin"])
@@ -204,3 +208,95 @@ def get_r4_treatment_plan(
         items=items,
         reviews=reviews,
     )
+
+
+@r4_router.get(
+    "/patient-mappings/unmapped-plans", response_model=list[R4UnmappedPlanPatientCode]
+)
+def list_r4_unmapped_plan_patient_codes(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+    legacy_source: str | None = Query(default="r4"),
+    legacy_patient_code: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    stmt = (
+        select(
+            R4TreatmentPlan.legacy_patient_code,
+            func.count().label("plan_count"),
+        )
+        .where(R4TreatmentPlan.patient_id.is_(None))
+        .group_by(R4TreatmentPlan.legacy_patient_code)
+        .order_by(desc(func.count()), R4TreatmentPlan.legacy_patient_code.asc())
+        .limit(limit)
+    )
+    if legacy_source:
+        stmt = stmt.where(R4TreatmentPlan.legacy_source == legacy_source)
+    if legacy_patient_code is not None:
+        stmt = stmt.where(R4TreatmentPlan.legacy_patient_code == legacy_patient_code)
+    rows = db.execute(stmt).all()
+    return [
+        R4UnmappedPlanPatientCode(
+            legacy_patient_code=int(code),
+            plan_count=int(count),
+        )
+        for code, count in rows
+    ]
+
+
+@r4_router.post("/patient-mappings", response_model=R4PatientMappingOut)
+def create_r4_patient_mapping(
+    payload: R4PatientMappingCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    patient = db.get(Patient, payload.patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    existing = db.scalar(
+        select(R4PatientMapping).where(
+            R4PatientMapping.legacy_source == "r4",
+            R4PatientMapping.legacy_patient_code == payload.legacy_patient_code,
+        )
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="Mapping already exists for legacy patient code"
+        )
+    existing_by_patient = db.scalar(
+        select(R4PatientMapping).where(
+            R4PatientMapping.legacy_source == "r4",
+            R4PatientMapping.patient_id == payload.patient_id,
+        )
+    )
+    if existing_by_patient:
+        raise HTTPException(
+            status_code=409, detail="Mapping already exists for patient"
+        )
+
+    mapping = R4PatientMapping(
+        legacy_source="r4",
+        legacy_patient_code=payload.legacy_patient_code,
+        patient_id=payload.patient_id,
+        created_by_user_id=admin.id,
+        updated_by_user_id=admin.id,
+    )
+    db.add(mapping)
+    db.flush()
+
+    event = LegacyResolutionEvent(
+        actor_user_id=admin.id,
+        entity_type="r4_patient_mapping",
+        entity_id=str(mapping.id),
+        legacy_source="r4",
+        legacy_id=str(payload.legacy_patient_code),
+        action="link_patient",
+        from_patient_id=None,
+        to_patient_id=payload.patient_id,
+        notes=payload.notes,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(mapping)
+    return mapping
