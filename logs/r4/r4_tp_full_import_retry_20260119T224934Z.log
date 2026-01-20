@@ -1,0 +1,43 @@
+time="2026-01-19T22:49:34Z" level=warning msg="No services to build"
+ Container dental_pms_db Running 
+time="2026-01-19T22:49:34Z" level=warning msg="No services to build"
+ Container dental_pms_db Waiting 
+ Container dental_pms_db Healthy 
+ Container dental-pms-r4_import-run-3627fe8c6221 Creating 
+ Container dental-pms-r4_import-run-3627fe8c6221 Created 
+{"elapsed_seconds": 18.87, "event": "r4_import_progress", "items_created": 0, "items_per_second": 0.0, "items_processed": 0, "items_skipped": 0, "items_updated": 0, "phase": "plans", "plans_created": 0, "plans_per_second": 264.92, "plans_processed": 5000, "plans_skipped": 5000, "plans_updated": 0}
+{"elapsed_seconds": 37.17, "event": "r4_import_progress", "items_created": 0, "items_per_second": 0.0, "items_processed": 0, "items_skipped": 0, "items_updated": 0, "phase": "plans", "plans_created": 0, "plans_per_second": 269.04, "plans_processed": 10000, "plans_skipped": 10000, "plans_updated": 0}
+{"elapsed_seconds": 55.95, "event": "r4_import_progress", "items_created": 0, "items_per_second": 0.0, "items_processed": 0, "items_skipped": 0, "items_updated": 0, "phase": "plans", "plans_created": 0, "plans_per_second": 268.11, "plans_processed": 15000, "plans_skipped": 15000, "plans_updated": 0}
+{"elapsed_seconds": 75.02, "event": "r4_import_progress", "items_created": 0, "items_per_second": 0.0, "items_processed": 0, "items_skipped": 0, "items_updated": 0, "phase": "plans", "plans_created": 0, "plans_per_second": 266.6, "plans_processed": 20000, "plans_skipped": 20000, "plans_updated": 0}
+{"elapsed_seconds": 93.99, "event": "r4_import_progress", "items_created": 0, "items_per_second": 0.0, "items_processed": 0, "items_skipped": 0, "items_updated": 0, "phase": "plans", "plans_created": 0, "plans_per_second": 266.0, "plans_processed": 25000, "plans_skipped": 25000, "plans_updated": 0}
+{"elapsed_seconds": 133.78, "event": "r4_import_progress", "items_created": 0, "items_per_second": 37.37, "items_processed": 5000, "items_skipped": 5000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 217.96, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 161.32, "event": "r4_import_progress", "items_created": 0, "items_per_second": 61.99, "items_processed": 10000, "items_skipped": 10000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 180.75, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 183.47, "event": "r4_import_progress", "items_created": 0, "items_per_second": 81.76, "items_processed": 15000, "items_skipped": 15000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 158.93, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 207.56, "event": "r4_import_progress", "items_created": 0, "items_per_second": 96.36, "items_processed": 20000, "items_skipped": 20000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 140.48, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 229.82, "event": "r4_import_progress", "items_created": 0, "items_per_second": 108.78, "items_processed": 25000, "items_skipped": 25000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 126.88, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 252.2, "event": "r4_import_progress", "items_created": 0, "items_per_second": 118.95, "items_processed": 30000, "items_skipped": 30000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 115.62, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 275.31, "event": "r4_import_progress", "items_created": 0, "items_per_second": 127.13, "items_processed": 35000, "items_skipped": 35000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 105.91, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 298.06, "event": "r4_import_progress", "items_created": 0, "items_per_second": 134.2, "items_processed": 40000, "items_skipped": 40000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 97.83, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 320.43, "event": "r4_import_progress", "items_created": 0, "items_per_second": 140.44, "items_processed": 45000, "items_skipped": 45000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 91.0, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 342.88, "event": "r4_import_progress", "items_created": 0, "items_per_second": 145.83, "items_processed": 50000, "items_skipped": 50000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 85.04, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 365.26, "event": "r4_import_progress", "items_created": 0, "items_per_second": 150.58, "items_processed": 55000, "items_skipped": 55000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 79.83, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 388.14, "event": "r4_import_progress", "items_created": 0, "items_per_second": 154.58, "items_processed": 60000, "items_skipped": 60000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 75.12, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 412.61, "event": "r4_import_progress", "items_created": 0, "items_per_second": 157.53, "items_processed": 65000, "items_skipped": 65000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 70.67, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 439.45, "event": "r4_import_progress", "items_created": 0, "items_per_second": 159.29, "items_processed": 70000, "items_skipped": 70000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 66.35, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 466.2, "event": "r4_import_progress", "items_created": 0, "items_per_second": 160.87, "items_processed": 75000, "items_skipped": 75000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 62.55, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 499.11, "event": "r4_import_progress", "items_created": 0, "items_per_second": 160.28, "items_processed": 80000, "items_skipped": 80000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 58.42, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{"elapsed_seconds": 525.74, "event": "r4_import_progress", "items_created": 0, "items_per_second": 161.68, "items_processed": 85000, "items_skipped": 85000, "items_updated": 0, "phase": "items", "plans_created": 0, "plans_per_second": 55.46, "plans_processed": 29159, "plans_skipped": 29159, "plans_updated": 0}
+{
+  "items_created": 0,
+  "items_missing_plan_refs": 0,
+  "items_skipped": 85502,
+  "items_updated": 0,
+  "plans_created": 0,
+  "plans_skipped": 29159,
+  "plans_unmapped_patient_refs": 29159,
+  "plans_updated": 0,
+  "reviews_created": 0,
+  "reviews_missing_plan_refs": 0,
+  "reviews_skipped": 0,
+  "reviews_updated": 0
+}
