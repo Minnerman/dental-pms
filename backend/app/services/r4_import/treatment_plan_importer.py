@@ -7,10 +7,11 @@ import json
 import os
 import time
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.models.patient import Patient
+from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import (
     R4Treatment,
     R4TreatmentPlan,
@@ -50,6 +51,15 @@ class TreatmentPlanImportStats:
     reviews_updated: int = 0
     reviews_skipped: int = 0
     reviews_missing_plan_refs: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return asdict(self)
+
+
+@dataclass
+class TreatmentPlanBackfillStats:
+    plans_updated: int = 0
+    plans_missing_mapping: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return asdict(self)
@@ -256,6 +266,55 @@ def summarize_r4_treatment_plans(
             for code_id, count in top_codes
         ],
     }
+
+
+def backfill_r4_treatment_plan_patients(
+    session: Session,
+    actor_id: int,
+    legacy_source: str = "r4",
+) -> TreatmentPlanBackfillStats:
+    stats = TreatmentPlanBackfillStats()
+    total_null = session.scalar(
+        select(func.count()).select_from(R4TreatmentPlan).where(
+            R4TreatmentPlan.legacy_source == legacy_source,
+            R4TreatmentPlan.patient_id.is_(None),
+        )
+    ) or 0
+    mapped_null = session.scalar(
+        select(func.count())
+        .select_from(R4TreatmentPlan)
+        .join(
+            R4PatientMapping,
+            (R4PatientMapping.legacy_source == R4TreatmentPlan.legacy_source)
+            & (
+                R4PatientMapping.legacy_patient_code
+                == R4TreatmentPlan.legacy_patient_code
+            ),
+        )
+        .where(
+            R4TreatmentPlan.legacy_source == legacy_source,
+            R4TreatmentPlan.patient_id.is_(None),
+        )
+    ) or 0
+    result = session.execute(
+        text(
+            """
+        UPDATE r4_treatment_plans AS p
+        SET patient_id = m.patient_id,
+            updated_by_user_id = :actor_id,
+            updated_at = now()
+        FROM r4_patient_mappings AS m
+        WHERE p.patient_id IS NULL
+          AND p.legacy_source = :legacy_source
+          AND m.legacy_source = p.legacy_source
+          AND m.legacy_patient_code = p.legacy_patient_code
+        """
+        ),
+        {"actor_id": actor_id, "legacy_source": legacy_source},
+    )
+    stats.plans_updated = int(result.rowcount or 0)
+    stats.plans_missing_mapping = int(max(total_null - mapped_null, 0))
+    return stats
 
 
 def _upsert_treatment(

@@ -40,6 +40,7 @@ from app.models.r4_treatment_plan import (
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
 )
+from app.models.r4_patient_mapping import R4PatientMapping
 
 __all__ = [
     "Base",
@@ -97,4 +98,5 @@ __all__ = [
     "R4TreatmentPlan",
     "R4TreatmentPlanItem",
     "R4TreatmentPlanReview",
+    "R4PatientMapping",
 ]

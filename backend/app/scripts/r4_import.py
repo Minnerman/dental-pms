@@ -12,6 +12,7 @@ from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.importer import import_r4
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 from app.services.r4_import.treatment_plan_importer import (
+    backfill_r4_treatment_plan_patients,
     import_r4_treatment_plans,
     import_r4_treatments,
     summarize_r4_treatment_plans,
@@ -45,6 +46,7 @@ def main() -> int:
             "treatments",
             "treatment_plans",
             "treatment_plans_summary",
+            "treatment_plans_backfill_patient_ids",
         ),
         help="Entity to import (default: patients_appts).",
     )
@@ -130,6 +132,20 @@ def main() -> int:
         help="Filter appointments to YYYY-MM-DD (inclusive).",
     )
     args = parser.parse_args()
+
+    if args.entity == "treatment_plans_backfill_patient_ids":
+        if not args.apply or args.confirm != "APPLY":
+            print("Refusing to backfill without --apply --confirm APPLY.")
+            return 2
+        session = SessionLocal()
+        try:
+            actor_id = resolve_actor_id(session)
+            stats = backfill_r4_treatment_plan_patients(session, actor_id)
+            session.commit()
+            print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
+            return 0
+        finally:
+            session.close()
 
     if args.entity == "treatment_plans_summary":
         session = SessionLocal()
