@@ -17,6 +17,14 @@ class R4Source(Protocol):
     def list_patients(self, limit: int | None = None) -> Iterable[R4Patient]:
         raise NotImplementedError
 
+    def stream_patients(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4Patient]:
+        raise NotImplementedError
+
     def list_appts(
         self,
         date_from: date | None = None,

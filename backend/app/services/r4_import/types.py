@@ -9,7 +9,11 @@ class R4Patient(BaseModel):
     patient_code: int = Field(..., ge=1)
     first_name: str
     last_name: str
-    date_of_birth: date | None = None
+    date_of_birth: datetime | date | None = None
+    title: str | None = None
+    sex: str | None = None
+    mobile_no: str | None = None
+    email: str | None = None
 
 
 class R4Appointment(BaseModel):

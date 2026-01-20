@@ -28,6 +28,24 @@ class FixtureSource(R4Source):
             return items
         return items[:limit]
 
+    def stream_patients(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4Patient]:
+        items = self.list_patients(limit=None)
+        filtered: list[R4Patient] = []
+        for item in items:
+            if patients_from is not None and item.patient_code < patients_from:
+                continue
+            if patients_to is not None and item.patient_code > patients_to:
+                continue
+            filtered.append(item)
+        if limit is None:
+            return filtered
+        return filtered[:limit]
+
     def list_appts(
         self,
         date_from: date | None = None,
