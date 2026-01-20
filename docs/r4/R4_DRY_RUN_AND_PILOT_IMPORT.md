@@ -29,7 +29,7 @@ sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
 If SQL Server 2008 R2 fails TLS handshakes with Driver 18, try:
 - driver 17 (`msodbcsql17`)
 - `R4_SQLSERVER_ENCRYPT=false`
-- or `R4_SQLSERVER_TRUST_CERT=true`
+- or `R4_SQLSERVER_TRUST_SERVER_CERT=true`
 
 ### Option 2: pyodbc + Driver 17
 
@@ -45,11 +45,15 @@ Add to `.env` (placeholders only):
 R4_SQLSERVER_ENABLED=true
 R4_SQLSERVER_HOST=sql.example.local
 R4_SQLSERVER_PORT=1433
+R4_SQLSERVER_DATABASE=sys2000
+# Legacy alias (use R4_SQLSERVER_DATABASE instead).
 R4_SQLSERVER_DB=sys2000
 R4_SQLSERVER_USER=readonly_user
 R4_SQLSERVER_PASSWORD=change-me
 R4_SQLSERVER_DRIVER=ODBC Driver 18 for SQL Server
 R4_SQLSERVER_ENCRYPT=true
+R4_SQLSERVER_TRUST_SERVER_CERT=false
+# Legacy alias (use R4_SQLSERVER_TRUST_SERVER_CERT instead).
 R4_SQLSERVER_TRUST_CERT=false
 R4_SQLSERVER_TIMEOUT_SECONDS=8
 ```
@@ -180,6 +184,6 @@ Notes:
 
 Common failures and fixes:
 - Driver not found: install `msodbcsql18` or `msodbcsql17`.
-- TLS handshake failures (SQL 2008 R2): set `R4_SQLSERVER_ENCRYPT=false` or `R4_SQLSERVER_TRUST_CERT=true`.
+- TLS handshake failures (SQL 2008 R2): set `R4_SQLSERVER_ENCRYPT=false` or `R4_SQLSERVER_TRUST_SERVER_CERT=true`.
 - Login failed: confirm user/password and server access.
 - Timeout: increase `R4_SQLSERVER_TIMEOUT_SECONDS` or check network latency.

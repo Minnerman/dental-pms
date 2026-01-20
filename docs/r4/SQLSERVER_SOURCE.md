@@ -15,11 +15,15 @@ stats before enabling any import. It does not write to Postgres.
 R4_SQLSERVER_ENABLED=true
 R4_SQLSERVER_HOST=sql.example.local
 R4_SQLSERVER_PORT=1433
+R4_SQLSERVER_DATABASE=sys2000
+# Legacy aliases (use DATABASE/TRUST_SERVER_CERT instead).
 R4_SQLSERVER_DB=sys2000
 R4_SQLSERVER_USER=readonly_user
 R4_SQLSERVER_PASSWORD=change-me
 R4_SQLSERVER_DRIVER=ODBC Driver 18 for SQL Server
 R4_SQLSERVER_ENCRYPT=true
+R4_SQLSERVER_TRUST_SERVER_CERT=false
+# Legacy alias (use TRUST_SERVER_CERT instead).
 R4_SQLSERVER_TRUST_CERT=false
 R4_SQLSERVER_TIMEOUT_SECONDS=8
 ```

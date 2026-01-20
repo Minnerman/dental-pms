@@ -23,6 +23,7 @@ build/
 
 # backups
 backups/
+*.bak
 
 # OS
 .DS_Store
