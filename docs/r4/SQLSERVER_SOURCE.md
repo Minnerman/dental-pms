@@ -28,6 +28,12 @@ R4_SQLSERVER_TRUST_CERT=false
 R4_SQLSERVER_TIMEOUT_SECONDS=8
 ```
 
+## Legacy TLS note (SQL Server 2008 R2)
+
+Some older SQL Server installs only negotiate TLS 1.0/1.1. The backend container can enable a
+scoped OpenSSL legacy policy (via `OPENSSL_CONF` + `OPENSSL_MODULES`) to allow those protocols
+without changing the host OS or the R4 server.
+
 ## Dry-run command
 
 ```

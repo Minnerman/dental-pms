@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     unixodbc \
     unixodbc-dev \
+    openssl \
     curl \
     gnupg \
     ca-certificates \
@@ -27,7 +28,10 @@ COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 COPY pytest.ini /app/pytest.ini
 COPY tests /app/tests
+COPY openssl-legacy.cnf /app/openssl-legacy.cnf
+
+ENV OPENSSL_CONF=/app/openssl-legacy.cnf
+ENV OPENSSL_MODULES=/usr/lib/x86_64-linux-gnu/ossl-modules
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
