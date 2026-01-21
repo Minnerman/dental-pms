@@ -59,9 +59,14 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 112: treatment transactions import (awaiting R4 pilot run).
+- Stage 113: tbd (treatment transactions pilot complete).
 
 ## Recent fixes
+- 2026-01-21 12:40 UTC: Stage112 pilot run (treatment_transactions, R4 SQL Server).
+  - Patient-code window: 1000101-1005100.
+  - Dry-run: treatment_transactions_count=184505; date range min=1929-02-03 max=2026-01-17; sample 25.
+  - Apply: initial run timed out; Postgres count verified 184505 rows in window.
+  - Rerun: transactions_created=0, transactions_updated=0, transactions_skipped=184505 (idempotent).
 - 2026-01-21 12:25 UTC: Stage112 completed (treatment transactions import from dbo.Transactions).
   - New entity: `treatment_transactions` (sqlserver stream + dry-run + idempotent apply).
   - Postgres table `r4_treatment_transactions` with legacy key, costs, clinician fields, and indexes.
