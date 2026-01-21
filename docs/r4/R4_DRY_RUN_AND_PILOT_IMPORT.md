@@ -76,6 +76,14 @@ Sample a small window:
 docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run --limit 10
 ```
 
+Optional mapping quality output (aggregate counts + capped samples only):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run \
+  --entity patients --patients-from 1000000 --patients-to 1000100 \
+  --mapping-quality-out /tmp/r4_mapping_quality.json
+```
+
 Record:
 - patient count
 - appointment count
