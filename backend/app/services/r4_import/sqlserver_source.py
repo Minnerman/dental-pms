@@ -5,6 +5,7 @@ import socket
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Iterable
 
 from app.services.r4_import.types import (
@@ -579,8 +580,8 @@ class R4SqlServerSource:
                     "performed_at": self._format_dt(row.get("performed_at")),
                     "treatment_code": row.get("treatment_code"),
                     "trans_code": row.get("trans_code"),
-                    "patient_cost": row.get("patient_cost"),
-                    "dpb_cost": row.get("dpb_cost"),
+                    "patient_cost": self._format_money(row.get("patient_cost")),
+                    "dpb_cost": self._format_money(row.get("dpb_cost")),
                     "recorded_by": row.get("recorded_by"),
                     "user_code": row.get("user_code"),
                     "tp_number": row.get("tp_number"),
@@ -1476,3 +1477,11 @@ class R4SqlServerSource:
         if value is None:
             return None
         return str(value)
+
+    @staticmethod
+    def _format_money(value: Any) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, Decimal):
+            return float(value)
+        return float(value)
