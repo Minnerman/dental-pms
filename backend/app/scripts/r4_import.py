@@ -182,6 +182,7 @@ def main() -> int:
                             patients_from=args.patients_from,
                             patients_to=args.patients_to,
                             limit=args.limit,
+                            progress_every=args.progress_every,
                         )
                     elif args.entity == "patients_appts":
                         stats = import_r4(
@@ -266,6 +267,7 @@ def main() -> int:
                 patients_from=args.patients_from,
                 patients_to=args.patients_to,
                 limit=args.limit,
+                progress_every=args.progress_every,
             )
         elif args.entity == "patients_appts":
             stats = import_r4(session, source, actor_id)

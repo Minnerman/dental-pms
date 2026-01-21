@@ -10,10 +10,13 @@ class R4Patient(BaseModel):
     first_name: str
     last_name: str
     date_of_birth: date | None = None
+    nhs_number: str | None = None
     title: str | None = None
     sex: str | None = None
+    phone: str | None = None
     mobile_no: str | None = None
     email: str | None = None
+    postcode: str | None = None
 
 
 class R4Appointment(BaseModel):

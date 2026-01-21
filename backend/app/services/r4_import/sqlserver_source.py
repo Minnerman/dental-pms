@@ -511,8 +511,20 @@ class R4SqlServerSource:
         dob_col = self._pick_column("Patients", ["DOB", "DateOfBirth", "BirthDate"])
         title_col = self._pick_column("Patients", ["Title"])
         sex_col = self._pick_column("Patients", ["Sex", "Gender"])
+        nhs_col = self._pick_column(
+            "Patients",
+            ["NHSNumber", "NHSNo", "NHSNo.", "NHS_Number", "NHS"],
+        )
+        phone_col = self._pick_column(
+            "Patients",
+            ["Phone", "Telephone", "Tel", "HomePhone", "PhoneNumber"],
+        )
         mobile_col = self._pick_column("Patients", ["MobileNo", "Mobile", "MobileNumber"])
         email_col = self._pick_column("Patients", ["EMail", "Email", "EmailAddress"])
+        postcode_col = self._pick_column(
+            "Patients",
+            ["Postcode", "PostCode", "PostalCode", "Zip", "ZipCode"],
+        )
         if not first_name_col or not last_name_col:
             raise RuntimeError("Patients name columns not found; check sys2000.dbo.Patients schema.")
 
@@ -549,10 +561,16 @@ class R4SqlServerSource:
                 select_cols.append(f"{title_col} AS title")
             if sex_col:
                 select_cols.append(f"{sex_col} AS sex")
+            if nhs_col:
+                select_cols.append(f"{nhs_col} AS nhs_number")
+            if phone_col:
+                select_cols.append(f"{phone_col} AS phone")
             if mobile_col:
                 select_cols.append(f"{mobile_col} AS mobile_no")
             if email_col:
                 select_cols.append(f"{email_col} AS email")
+            if postcode_col:
+                select_cols.append(f"{postcode_col} AS postcode")
             rows = self._query(
                 f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Patients WITH (NOLOCK) "
                 f"{where_sql} ORDER BY {patient_code_col} ASC",
@@ -575,10 +593,13 @@ class R4SqlServerSource:
                     first_name=first_name,
                     last_name=last_name,
                     date_of_birth=dob_value,
+                    nhs_number=(str(row.get("nhs_number")) if row.get("nhs_number") is not None else None),
                     title=(row.get("title") or "").strip() or None,
                     sex=(row.get("sex") or "").strip() or None,
+                    phone=(row.get("phone") or "").strip() or None,
                     mobile_no=(row.get("mobile_no") or "").strip() or None,
                     email=(row.get("email") or "").strip() or None,
+                    postcode=(row.get("postcode") or "").strip() or None,
                 )
                 if remaining is not None:
                     remaining -= 1
