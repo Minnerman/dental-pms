@@ -59,9 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 108: patients-only R4 import pilot (mapping + backfill).
+- Stage 112: treatment transactions import (awaiting R4 pilot run).
 
 ## Recent fixes
+- 2026-01-21 12:25 UTC: Stage112 completed (treatment transactions import from dbo.Transactions).
+  - New entity: `treatment_transactions` (sqlserver stream + dry-run + idempotent apply).
+  - Postgres table `r4_treatment_transactions` with legacy key, costs, clinician fields, and indexes.
+  - Tests: `docker compose exec -T backend pytest -q tests/r4_import/ -q`, `bash ops/verify.sh`.
 - 2026-01-21 11:18 UTC: Stage111 completed (Postgres verify + import ergonomics).
   - New `--verify-postgres` for patients windows (SQL Server not required).
   - Checkpoint output includes elapsed seconds + patients/sec + optional remaining count (limit-based).
