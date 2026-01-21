@@ -17,6 +17,9 @@ from app.services.r4_import.mapping_quality import PatientMappingQualityReportBu
 from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.postgres_verify import verify_patients_window
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
+from app.services.r4_import.treatment_transactions_importer import (
+    import_r4_treatment_transactions,
+)
 from app.services.r4_import.treatment_plan_importer import (
     backfill_r4_treatment_plan_patients,
     import_r4_treatment_plans,
@@ -107,6 +110,7 @@ def main() -> int:
             "patients",
             "patients_appts",
             "treatments",
+            "treatment_transactions",
             "treatment_plans",
             "treatment_plans_summary",
             "treatment_plans_backfill_patient_ids",
@@ -305,6 +309,16 @@ def main() -> int:
                             legacy_source="r4",
                             limit=args.limit,
                         )
+                    elif args.entity == "treatment_transactions":
+                        stats = import_r4_treatment_transactions(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            patients_from=args.patients_from,
+                            patients_to=args.patients_to,
+                            limit=args.limit,
+                        )
                     else:
                         stats = import_r4_treatment_plans(
                             session,
@@ -360,6 +374,12 @@ def main() -> int:
                 )
             elif args.entity == "treatments":
                 summary = source.dry_run_summary_treatments(limit=args.limit or 10)
+            elif args.entity == "treatment_transactions":
+                summary = source.dry_run_summary_treatment_transactions(
+                    limit=args.limit or 10,
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                )
             else:
                 summary = source.dry_run_summary_treatment_plans(
                     limit=args.limit or 10,
@@ -396,6 +416,15 @@ def main() -> int:
             stats = import_r4(session, source, actor_id)
         elif args.entity == "treatments":
             stats = import_r4_treatments(session, source, actor_id)
+        elif args.entity == "treatment_transactions":
+            stats = import_r4_treatment_transactions(
+                session,
+                source,
+                actor_id,
+                patients_from=args.patients_from,
+                patients_to=args.patients_to,
+                limit=args.limit,
+            )
         else:
             stats = import_r4_treatment_plans(
                 session,

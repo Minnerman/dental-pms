@@ -7,6 +7,7 @@ from app.services.r4_import.types import (
     R4Appointment,
     R4Patient,
     R4Treatment,
+    R4TreatmentTransaction,
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
@@ -34,6 +35,14 @@ class R4Source(Protocol):
         raise NotImplementedError
 
     def list_treatments(self, limit: int | None = None) -> Iterable[R4Treatment]:
+        raise NotImplementedError
+
+    def stream_treatment_transactions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentTransaction]:
         raise NotImplementedError
 
     def list_treatment_plans(

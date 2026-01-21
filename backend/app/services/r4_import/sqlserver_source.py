@@ -11,6 +11,7 @@ from app.services.r4_import.types import (
     R4Appointment,
     R4Patient,
     R4Treatment,
+    R4TreatmentTransaction,
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
@@ -82,9 +83,9 @@ class R4SqlServerConfig:
     def from_env(cls, environ: dict[str, str] | None = None) -> "R4SqlServerConfig":
         env = environ or os.environ
         database = env.get("R4_SQLSERVER_DATABASE") or env.get("R4_SQLSERVER_DB")
-        trust_cert_raw = env.get("R4_SQLSERVER_TRUST_SERVER_CERT") or env.get(
-            "R4_SQLSERVER_TRUST_CERT"
-        )
+        trust_cert_raw = env.get("R4_SQLSERVER_TRUST_CERT")
+        if trust_cert_raw is None:
+            trust_cert_raw = env.get("R4_SQLSERVER_TRUST_SERVER_CERT")
         return cls(
             enabled=_parse_bool(env.get("R4_SQLSERVER_ENABLED"), default=False),
             host=env.get("R4_SQLSERVER_HOST"),
@@ -157,6 +158,31 @@ class R4SqlServerSource:
             "database": self._config.database,
             "treatments_count": self.count_treatments(),
             "sample_treatments": self.sample_treatments(limit=limit),
+        }
+
+    def dry_run_summary_treatment_transactions(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "treatment_transactions_count": self.count_treatment_transactions(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "treatment_transactions_date_range": self.treatment_transactions_date_range(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_treatment_transactions": self.sample_treatment_transactions(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
         }
 
     def dry_run_summary_patients(
@@ -251,6 +277,47 @@ class R4SqlServerSource:
     def count_treatments(self) -> int:
         rows = self._query("SELECT COUNT(1) AS count FROM dbo.Treatments WITH (NOLOCK)")
         return int(rows[0]["count"]) if rows else 0
+
+    def count_treatment_transactions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._require_column("Transactions", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        rows = self._query(
+            "SELECT COUNT(1) AS count FROM dbo.Transactions WITH (NOLOCK)" + where_clause,
+            params,
+        )
+        return int(rows[0]["count"]) if rows else 0
+
+    def treatment_transactions_date_range(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, str | None]:
+        patient_col = self._require_column("Transactions", ["PatientCode"])
+        date_col = self._require_column("Transactions", ["Date"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        rows = self._query(
+            f"SELECT MIN({date_col}) AS min_date, MAX({date_col}) AS max_date "
+            f"FROM dbo.Transactions WITH (NOLOCK){where_clause}",
+            params,
+        )
+        if not rows:
+            return {"min": None, "max": None}
+        return {
+            "min": self._format_dt(rows[0].get("min_date")),
+            "max": self._format_dt(rows[0].get("max_date")),
+        }
 
     def count_treatment_plans(
         self,
@@ -450,6 +517,74 @@ class R4SqlServerSource:
                     "treatment_code": row.get("treatment_code"),
                     "description": row.get("description"),
                     "short_code": row.get("short_code"),
+                }
+            )
+        return samples
+
+    def sample_treatment_transactions(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_col = self._require_column("Transactions", ["PatientCode"])
+        date_col = self._require_column("Transactions", ["Date"])
+        ref_col = self._require_column("Transactions", ["RefId"])
+        trans_col = self._pick_column("Transactions", ["TransCode"])
+        code_col = self._pick_column("Transactions", ["CodeID"])
+        patient_cost_col = self._pick_column("Transactions", ["PatientCost"])
+        dpb_cost_col = self._pick_column("Transactions", ["DPBCost"])
+        recorded_by_col = self._pick_column("Transactions", ["RecordedBy"])
+        user_code_col = self._pick_column("Transactions", ["UserCode"])
+        tp_number_col = self._pick_column("Transactions", ["TPNumber"])
+        tp_item_col = self._pick_column("Transactions", ["TPItem"])
+
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        select_cols = [
+            f"{ref_col} AS transaction_id",
+            f"{patient_col} AS patient_code",
+            f"{date_col} AS performed_at",
+        ]
+        if code_col:
+            select_cols.append(f"{code_col} AS treatment_code")
+        if trans_col:
+            select_cols.append(f"{trans_col} AS trans_code")
+        if patient_cost_col:
+            select_cols.append(f"{patient_cost_col} AS patient_cost")
+        if dpb_cost_col:
+            select_cols.append(f"{dpb_cost_col} AS dpb_cost")
+        if recorded_by_col:
+            select_cols.append(f"{recorded_by_col} AS recorded_by")
+        if user_code_col:
+            select_cols.append(f"{user_code_col} AS user_code")
+        if tp_number_col:
+            select_cols.append(f"{tp_number_col} AS tp_number")
+        if tp_item_col:
+            select_cols.append(f"{tp_item_col} AS tp_item")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Transactions WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {date_col} DESC",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "transaction_id": row.get("transaction_id"),
+                    "patient_code": row.get("patient_code"),
+                    "performed_at": self._format_dt(row.get("performed_at")),
+                    "treatment_code": row.get("treatment_code"),
+                    "trans_code": row.get("trans_code"),
+                    "patient_cost": row.get("patient_cost"),
+                    "dpb_cost": row.get("dpb_cost"),
+                    "recorded_by": row.get("recorded_by"),
+                    "user_code": row.get("user_code"),
+                    "tp_number": row.get("tp_number"),
+                    "tp_item": row.get("tp_item"),
                 }
             )
         return samples
@@ -765,6 +900,97 @@ class R4SqlServerSource:
                     ),
                     exam=_coerce_bool(row.get("exam"), default=False),
                     patient_required=_coerce_bool(row.get("patient_required"), default=False),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def stream_treatment_transactions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentTransaction]:
+        patient_col = self._require_column("Transactions", ["PatientCode"])
+        date_col = self._require_column("Transactions", ["Date"])
+        ref_col = self._require_column("Transactions", ["RefId"])
+        trans_col = self._pick_column("Transactions", ["TransCode"])
+        code_col = self._pick_column("Transactions", ["CodeID"])
+        patient_cost_col = self._pick_column("Transactions", ["PatientCost"])
+        dpb_cost_col = self._pick_column("Transactions", ["DPBCost"])
+        recorded_by_col = self._pick_column("Transactions", ["RecordedBy"])
+        user_code_col = self._pick_column("Transactions", ["UserCode"])
+        tp_number_col = self._pick_column("Transactions", ["TPNumber"])
+        tp_item_col = self._pick_column("Transactions", ["TPItem"])
+
+        last_ref = 0
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            where_parts.append(f"{ref_col} > ?")
+            params.append(last_ref)
+            where_sql = f"WHERE {' AND '.join(where_parts)}"
+            select_cols = [
+                f"{ref_col} AS transaction_id",
+                f"{patient_col} AS patient_code",
+                f"{date_col} AS performed_at",
+            ]
+            if code_col:
+                select_cols.append(f"{code_col} AS treatment_code")
+            if trans_col:
+                select_cols.append(f"{trans_col} AS trans_code")
+            if patient_cost_col:
+                select_cols.append(f"{patient_cost_col} AS patient_cost")
+            if dpb_cost_col:
+                select_cols.append(f"{dpb_cost_col} AS dpb_cost")
+            if recorded_by_col:
+                select_cols.append(f"{recorded_by_col} AS recorded_by")
+            if user_code_col:
+                select_cols.append(f"{user_code_col} AS user_code")
+            if tp_number_col:
+                select_cols.append(f"{tp_number_col} AS tp_number")
+            if tp_item_col:
+                select_cols.append(f"{tp_item_col} AS tp_item")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Transactions WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {ref_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                ref_id = row.get("transaction_id")
+                if ref_id is None:
+                    continue
+                last_ref = int(ref_id)
+                performed_at = row.get("performed_at")
+                if performed_at is None:
+                    continue
+                yield R4TreatmentTransaction(
+                    transaction_id=last_ref,
+                    patient_code=int(row.get("patient_code")),
+                    performed_at=performed_at,
+                    treatment_code=row.get("treatment_code"),
+                    trans_code=row.get("trans_code"),
+                    patient_cost=row.get("patient_cost"),
+                    dpb_cost=row.get("dpb_cost"),
+                    recorded_by=row.get("recorded_by"),
+                    user_code=row.get("user_code"),
+                    tp_number=row.get("tp_number"),
+                    tp_item=row.get("tp_item"),
                 )
                 if remaining is not None:
                     remaining -= 1
