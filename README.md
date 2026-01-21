@@ -37,6 +37,7 @@ From the repo root:
 - Use read-only SQL Server credentials only; no writes or stored procs.
 - Long imports may exceed shell/CI timeouts; use `r4_import_checkpoint` output plus
   a rerun of `--apply` to confirm completion or resume with `--patients-from`.
+- Postgres-only verification is available via `--verify-postgres` for patients windows.
 
 Patients-only pilot (Stage 108):
 ```bash

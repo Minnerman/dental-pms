@@ -158,6 +158,20 @@ Checkpoint: {"event":"r4_import_checkpoint","last_patient_code":1005100,"process
 Resume: --patients-from 1005101 --patients-to 1005100 (no-op, already complete)
 ```
 
+## E3) Postgres verify command (patients-only, no SQL Server)
+
+Verify a patient-code window without touching SQL Server:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --entity patients \
+  --verify-postgres \
+  --patients-from 1000101 \
+  --patients-to 1005100
+```
+
+Use this after timeouts to confirm row counts and the min/max patient code in Postgres.
+
 ## F) Stage 103: treatments + treatment plans
 
 Run treatments before treatment plans (CodeID enrichment later).
