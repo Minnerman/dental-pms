@@ -42,6 +42,7 @@ def import_r4_patients(
     report = PatientMappingQualityReportBuilder()
     processed = 0
     last_code: int | None = None
+    started_at = time.monotonic()
     for patient in source.stream_patients(
         patients_from=patients_from,
         patients_to=patients_to,
@@ -51,7 +52,13 @@ def import_r4_patients(
         last_code = patient.patient_code
         report.ingest(patient)
         _upsert_patient(session, patient, actor_id, legacy_source, stats)
-        _maybe_emit_checkpoint(processed, last_code, progress_every)
+        _maybe_emit_checkpoint(
+            processed,
+            last_code,
+            progress_every,
+            started_at,
+            limit,
+        )
     stats.mapping_quality = report.finalize()
     return stats
 
@@ -119,16 +126,29 @@ def _apply_updates(model, updates: dict) -> bool:
     return changed
 
 
-def _maybe_emit_checkpoint(processed: int, last_code: int | None, progress_every: int | None) -> None:
+def _maybe_emit_checkpoint(
+    processed: int,
+    last_code: int | None,
+    progress_every: int | None,
+    started_at: float,
+    limit: int | None,
+) -> None:
     if not progress_every or progress_every <= 0 or last_code is None:
         return
     if processed % progress_every != 0:
         return
+    elapsed = max(time.monotonic() - started_at, 0.001)
+    remaining = None
+    if limit is not None:
+        remaining = max(limit - processed, 0)
     payload = {
         "event": "r4_import_checkpoint",
         "entity": "patients",
         "processed": processed,
         "last_patient_code": last_code,
+        "elapsed_seconds": round(elapsed, 2),
+        "patients_per_second": round(processed / elapsed, 2),
+        "estimated_remaining_patients": remaining,
         "timestamp": round(time.time(), 3),
     }
     print(json.dumps(payload, sort_keys=True))

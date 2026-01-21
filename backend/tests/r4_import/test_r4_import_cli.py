@@ -200,3 +200,8 @@ def test_cli_sqlserver_dry_run_patients_no_mapping_quality_out(tmp_path, monkeyp
     )
     assert r4_import_script.main() == 0
     assert not output_path.exists()
+
+
+def test_cli_verify_postgres_requires_patients_entity(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["r4_import.py", "--verify-postgres", "--entity", "treatments"])
+    assert r4_import_script.main() == 2

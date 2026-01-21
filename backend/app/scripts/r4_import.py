@@ -15,6 +15,7 @@ from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.importer import import_r4
 from app.services.r4_import.mapping_quality import PatientMappingQualityReportBuilder
 from app.services.r4_import.patient_importer import import_r4_patients
+from app.services.r4_import.postgres_verify import verify_patients_window
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 from app.services.r4_import.treatment_plan_importer import (
     backfill_r4_treatment_plan_patients,
@@ -158,6 +159,17 @@ def main() -> int:
         help="Write patients mapping quality JSON to PATH (patients entity only).",
     )
     parser.add_argument(
+        "--verify-postgres",
+        action="store_true",
+        help="Verify patients in Postgres for a window (no SQL Server connection).",
+    )
+    parser.add_argument(
+        "--connect-timeout-seconds",
+        type=int,
+        default=None,
+        help="Override SQL Server connection timeout in seconds (sqlserver source only).",
+    )
+    parser.add_argument(
         "--patients-from",
         dest="patients_from",
         type=int,
@@ -204,6 +216,25 @@ def main() -> int:
     if args.mapping_quality_out and args.entity != "patients":
         print("--mapping-quality-out is only supported for --entity patients.")
         return 2
+    if args.verify_postgres and args.entity != "patients":
+        print("--verify-postgres is only supported for --entity patients.")
+        return 2
+    if args.connect_timeout_seconds is not None and args.connect_timeout_seconds <= 0:
+        print("--connect-timeout-seconds must be a positive integer.")
+        return 2
+
+    if args.verify_postgres:
+        session = SessionLocal()
+        try:
+            summary = verify_patients_window(
+                session,
+                patients_from=args.patients_from,
+                patients_to=args.patients_to,
+            )
+            print(json.dumps(summary, indent=2, sort_keys=True))
+            return 0
+        finally:
+            session.close()
 
     if args.entity == "treatment_plans_backfill_patient_ids":
         if not args.apply or args.confirm != "APPLY":
@@ -237,6 +268,8 @@ def main() -> int:
             return 2
         try:
             config = R4SqlServerConfig.from_env()
+            if args.connect_timeout_seconds is not None:
+                config.timeout_seconds = args.connect_timeout_seconds
             config.require_enabled()
             source = R4SqlServerSource(config)
             if args.apply:
