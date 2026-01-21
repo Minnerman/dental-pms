@@ -62,6 +62,13 @@
 - Stage 108: patients-only R4 import pilot (mapping + backfill).
 
 ## Recent fixes
+- 2026-01-21 09:39 UTC: Stage110 larger patients-only pilot run (R4 SQL Server).
+  - Patient-code window: 1000101-1005100 (5000 patients).
+  - Dry-run: patients_count=5000, sample 25 patients.
+  - Apply: initial run timed out at 10s (no output captured); Postgres count confirms 5000 rows imported.
+  - Rerun: patients_created=0, patients_updated=0, patients_skipped=5000 (idempotent).
+  - Mapping quality (rerun): missing email=4992, phone=4801, postcode=5000; invalid phone=8; dup phone=1 (sample `07931978692`).
+  - Checkpoint: `r4_import_checkpoint` last_patient_code=1005100 processed=5000.
 - 2026-01-21 09:35 UTC: Stage109 completed (mapping quality reporting + patient import checkpoints).
   - Mapping quality: missing/invalid fields + duplicate counts with deterministic samples.
   - Checkpoint output: `r4_import_checkpoint` every `--progress-every` patients (last_patient_code).
