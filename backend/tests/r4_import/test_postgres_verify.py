@@ -1,8 +1,33 @@
+from sqlalchemy import delete, func, select, update
+
 from app.db.session import SessionLocal
+from app.models.appointment import Appointment
 from app.models.patient import Patient
+from app.models.r4_patient_mapping import R4PatientMapping
+from app.models.r4_treatment_plan import R4TreatmentPlan
+from app.models.user import User
 from app.services.r4_import.postgres_verify import verify_patients_window
 
-from .test_patient_importer import clear_r4, resolve_actor_id
+
+def resolve_actor_id(session) -> int:
+    actor_id = session.scalar(select(func.min(User.id)))
+    if not actor_id:
+        raise RuntimeError("No users found; cannot attribute R4 imports.")
+    return int(actor_id)
+
+
+def clear_r4(session) -> None:
+    r4_patient_ids = select(Patient.id).where(Patient.legacy_source == "r4")
+    session.execute(
+        update(R4TreatmentPlan)
+        .where(R4TreatmentPlan.patient_id.in_(r4_patient_ids))
+        .values(patient_id=None)
+    )
+    session.execute(
+        delete(R4PatientMapping).where(R4PatientMapping.patient_id.in_(r4_patient_ids))
+    )
+    session.execute(delete(Appointment).where(Appointment.legacy_source == "r4"))
+    session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
 
 
 def test_verify_patients_window_counts_and_range():
