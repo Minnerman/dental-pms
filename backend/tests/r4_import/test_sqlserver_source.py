@@ -1,6 +1,8 @@
+from datetime import date, datetime
+
 import pytest
 
-from app.services.r4_import.sqlserver_source import R4SqlServerConfig
+from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
 
 def test_sqlserver_config_disabled_by_default(monkeypatch):
@@ -61,3 +63,36 @@ def test_sqlserver_config_accepts_legacy_aliases(monkeypatch):
     assert config.database == "sys2000"
     assert config.trust_cert is False
     assert config.trust_cert_set is True
+
+
+def test_treatment_transactions_date_range_date_floor(monkeypatch):
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.example.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    source = R4SqlServerSource(config)
+
+    def fake_require_column(_table, candidates):
+        return "Date" if "Date" in candidates else "PatientCode"
+
+    def fake_query(_sql, params=None):
+        if params and any(isinstance(param, datetime) for param in params):
+            return [{"min_date": datetime(2000, 1, 1), "max_date": datetime(2001, 1, 1)}]
+        return [{"min_date": datetime(1929, 2, 3), "max_date": datetime(2001, 1, 1)}]
+
+    monkeypatch.setattr(source, "_require_column", fake_require_column)
+    monkeypatch.setattr(source, "_query", fake_query)
+
+    raw = source.treatment_transactions_date_range()
+    sane = source.treatment_transactions_date_range(date_floor=date(1950, 1, 1))
+
+    assert raw["min"].startswith("1929")
+    assert sane["min"].startswith("2000")
