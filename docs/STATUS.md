@@ -62,6 +62,12 @@
 - Stage 108: patients-only R4 import pilot (mapping + backfill).
 
 ## Recent fixes
+- 2026-01-21 09:35 UTC: Stage109 completed (mapping quality reporting + patient import checkpoints).
+  - Mapping quality: missing/invalid fields + duplicate counts with deterministic samples.
+  - Checkpoint output: `r4_import_checkpoint` every `--progress-every` patients (last_patient_code).
+  - Tests: `docker compose exec -T backend pytest -q tests/r4_import/test_mapping_quality_report.py -q`,
+    `docker compose exec -T backend pytest -q tests/r4_import/test_patient_importer.py -q`,
+    `bash ops/verify.sh`.
 - 2026-01-21 09:04 UTC: Stage108 pilot run (patients-only, R4 SQL Server).
   - Patient-code window: 1000000-1000100.
   - Dry-run: patients_count=101, sample 25 patients.
