@@ -34,6 +34,9 @@ Some older SQL Server installs only negotiate TLS 1.0/1.1. The backend container
 scoped OpenSSL legacy policy (via `OPENSSL_CONF` + `OPENSSL_MODULES`) to allow those protocols
 without changing the host OS or the R4 server.
 
+Note: `openssl s_client` probes against SQL Server/TDS endpoints can be inconclusive. The
+authoritative check is a successful `pyodbc` connection plus a `--dry-run` or bounded import.
+
 ## Dry-run command
 
 ```
