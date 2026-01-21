@@ -166,7 +166,17 @@ class R4SqlServerSource:
         limit: int = 10,
         patients_from: int | None = None,
         patients_to: int | None = None,
+        date_floor: date | None = None,
     ) -> dict[str, Any]:
+        raw_range = self.treatment_transactions_date_range(
+            patients_from=patients_from,
+            patients_to=patients_to,
+        )
+        sane_range = self.treatment_transactions_date_range(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            date_floor=date_floor,
+        )
         return {
             "source": "sqlserver",
             "server": f"{self._config.host}:{self._config.port}",
@@ -175,10 +185,9 @@ class R4SqlServerSource:
                 patients_from=patients_from,
                 patients_to=patients_to,
             ),
-            "treatment_transactions_date_range": self.treatment_transactions_date_range(
-                patients_from=patients_from,
-                patients_to=patients_to,
-            ),
+            "treatment_transactions_date_range": raw_range,
+            "treatment_transactions_date_range_raw": raw_range,
+            "treatment_transactions_date_range_sane": sane_range,
             "sample_treatment_transactions": self.sample_treatment_transactions(
                 limit=limit,
                 patients_from=patients_from,
@@ -300,6 +309,7 @@ class R4SqlServerSource:
         self,
         patients_from: int | None = None,
         patients_to: int | None = None,
+        date_floor: date | None = None,
     ) -> dict[str, str | None]:
         patient_col = self._require_column("Transactions", ["PatientCode"])
         date_col = self._require_column("Transactions", ["Date"])
@@ -308,6 +318,13 @@ class R4SqlServerSource:
             patients_from,
             patients_to,
         )
+        if date_floor is not None:
+            floor_dt = datetime.combine(date_floor, datetime.min.time())
+            if where_clause:
+                where_clause = f"{where_clause} AND {date_col} >= ?"
+            else:
+                where_clause = f"WHERE {date_col} >= ?"
+            params.append(floor_dt)
         rows = self._query(
             f"SELECT MIN({date_col}) AS min_date, MAX({date_col}) AS max_date "
             f"FROM dbo.Transactions WITH (NOLOCK){where_clause}",

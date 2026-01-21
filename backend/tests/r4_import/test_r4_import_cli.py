@@ -1,5 +1,6 @@
 import json
 import sys
+from datetime import date
 
 from app.services.r4_import.types import R4Patient
 
@@ -216,8 +217,9 @@ def test_cli_sqlserver_dry_run_treatment_transactions(monkeypatch):
             raise AssertionError("dry_run_summary should not run for treatment_transactions")
 
         def dry_run_summary_treatment_transactions(
-            self, limit=10, patients_from=None, patients_to=None
+            self, limit=10, patients_from=None, patients_to=None, date_floor=None
         ):
+            assert date_floor == date(2000, 1, 1)
             return {
                 "ok": True,
                 "limit": limit,
@@ -255,6 +257,66 @@ def test_cli_sqlserver_dry_run_treatment_transactions(monkeypatch):
             "100",
             "--patients-to",
             "200",
+            "--date-floor",
+            "2000-01-01",
         ],
     )
     assert r4_import_script.main() == 0
+
+
+def test_cli_sqlserver_apply_stats_out(tmp_path, monkeypatch):
+    class DummySession:
+        def commit(self):
+            return None
+
+        def close(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+    class DummyStats:
+        mapping_quality = None
+
+        def as_dict(self):
+            return {"patients_created": 1, "patients_updated": 0, "patients_skipped": 0}
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    output_path = tmp_path / "stats.json"
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", DummySource)
+    monkeypatch.setattr(r4_import_script, "SessionLocal", lambda: DummySession())
+    monkeypatch.setattr(r4_import_script, "resolve_actor_id", lambda _session: 1)
+    monkeypatch.setattr(r4_import_script, "import_r4_patients", lambda *args, **kwargs: DummyStats())
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--source",
+            "sqlserver",
+            "--apply",
+            "--confirm",
+            "APPLY",
+            "--entity",
+            "patients",
+            "--stats-out",
+            str(output_path),
+        ],
+    )
+    assert r4_import_script.main() == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["entity"] == "patients"
+    assert payload["stats"]["patients_created"] == 1

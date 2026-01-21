@@ -73,6 +73,24 @@ def _write_mapping_quality_file(path: str, payload: dict[str, object]) -> None:
     os.replace(tmp_path, target)
 
 
+def _write_stats_file(path: str, payload: dict[str, object]) -> None:
+    target = Path(path)
+    parent = target.parent
+    if parent and not parent.exists():
+        raise RuntimeError(f"Stats output directory does not exist: {parent}")
+    data = json.dumps(payload, indent=2, sort_keys=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        delete=False,
+        dir=str(parent) if parent else None,
+    ) as handle:
+        handle.write(data)
+        handle.write("\n")
+        tmp_path = handle.name
+    os.replace(tmp_path, target)
+
+
 def _maybe_write_mapping_quality(
     path: str | None,
     mapping_quality: dict[str, object] | None,
@@ -93,6 +111,27 @@ def _maybe_write_mapping_quality(
         "mapping_quality": mapping_quality,
     }
     _write_mapping_quality_file(path, payload)
+
+
+def _maybe_write_stats(
+    path: str | None,
+    entity: str,
+    stats: dict[str, object],
+    patients_from: int | None,
+    patients_to: int | None,
+) -> None:
+    if not path:
+        return
+    payload = {
+        "entity": entity,
+        "window": {
+            "patients_from": patients_from,
+            "patients_to": patients_to,
+        },
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "stats": stats,
+    }
+    _write_stats_file(path, payload)
 
 
 def main() -> int:
@@ -139,6 +178,12 @@ def main() -> int:
         help="Limit rows for dry-run samples (or apply if specified).",
     )
     parser.add_argument(
+        "--date-floor",
+        type=_parse_date_arg,
+        default=None,
+        help="Exclude dates before this floor when reporting dry-run date ranges.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -161,6 +206,12 @@ def main() -> int:
         dest="mapping_quality_out",
         default=None,
         help="Write patients mapping quality JSON to PATH (patients entity only).",
+    )
+    parser.add_argument(
+        "--stats-out",
+        dest="stats_out",
+        default=None,
+        help="Write final import stats JSON to PATH (apply/fixture runs).",
     )
     parser.add_argument(
         "--verify-postgres",
@@ -318,6 +369,7 @@ def main() -> int:
                             patients_from=args.patients_from,
                             patients_to=args.patients_to,
                             limit=args.limit,
+                            progress_every=args.progress_every,
                         )
                     else:
                         stats = import_r4_treatment_plans(
@@ -345,6 +397,13 @@ def main() -> int:
                         args.patients_from,
                         args.patients_to,
                     )
+                _maybe_write_stats(
+                    args.stats_out,
+                    args.entity,
+                    stats.as_dict(),
+                    args.patients_from,
+                    args.patients_to,
+                )
                 print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
                 return 0
             if args.entity == "patients":
@@ -379,6 +438,7 @@ def main() -> int:
                     limit=args.limit or 10,
                     patients_from=args.patients_from,
                     patients_to=args.patients_to,
+                    date_floor=args.date_floor,
                 )
             else:
                 summary = source.dry_run_summary_treatment_plans(
@@ -424,6 +484,7 @@ def main() -> int:
                 patients_from=args.patients_from,
                 patients_to=args.patients_to,
                 limit=args.limit,
+                progress_every=args.progress_every,
             )
         else:
             stats = import_r4_treatment_plans(
@@ -448,6 +509,13 @@ def main() -> int:
                 args.patients_from,
                 args.patients_to,
             )
+        _maybe_write_stats(
+            args.stats_out,
+            args.entity,
+            stats.as_dict(),
+            args.patients_from,
+            args.patients_to,
+        )
         print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
         return 0
     except Exception:

@@ -84,6 +84,14 @@ docker compose exec -T backend python -m app.scripts.r4_import --source sqlserve
   --mapping-quality-out /tmp/r4_mapping_quality.json
 ```
 
+Optional date floor for treatment transactions (reporting only; does not affect imports):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --dry-run \
+  --entity treatment_transactions --patients-from 1000101 --patients-to 1005100 \
+  --date-floor 1970-01-01
+```
+
 Record:
 - patient count
 - appointment count
@@ -97,6 +105,14 @@ Start with a 1–2 day window:
 ```bash
 docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --apply --confirm APPLY \
   --appts-from 2026-01-01 --appts-to 2026-01-03
+```
+
+If the terminal may time out, write final stats to disk:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import --source sqlserver --apply --confirm APPLY \
+  --entity patients --patients-from 1000000 --patients-to 1000100 \
+  --stats-out /tmp/r4_import_stats.json
 ```
 
 Verify:

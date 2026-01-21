@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import json
+import time
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,14 +32,27 @@ def import_r4_treatment_transactions(
     patients_from: int | None = None,
     patients_to: int | None = None,
     limit: int | None = None,
+    progress_every: int | None = None,
 ) -> TreatmentTransactionImportStats:
     stats = TreatmentTransactionImportStats()
+    processed = 0
+    last_transaction_id: int | None = None
+    started_at = time.monotonic()
     for tx in source.stream_treatment_transactions(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
     ):
+        processed += 1
+        last_transaction_id = tx.transaction_id
         _upsert_transaction(session, tx, actor_id, legacy_source, stats)
+        _maybe_emit_checkpoint(
+            processed,
+            last_transaction_id,
+            progress_every,
+            started_at,
+            limit,
+        )
     return stats
 
 
@@ -111,3 +126,31 @@ def _apply_updates(model, updates: dict) -> bool:
             setattr(model, field, value)
             changed = True
     return changed
+
+
+def _maybe_emit_checkpoint(
+    processed: int,
+    last_transaction_id: int | None,
+    progress_every: int | None,
+    started_at: float,
+    limit: int | None,
+) -> None:
+    if not progress_every or progress_every <= 0 or last_transaction_id is None:
+        return
+    if processed % progress_every != 0:
+        return
+    elapsed = max(time.monotonic() - started_at, 0.001)
+    remaining = None
+    if limit is not None:
+        remaining = max(limit - processed, 0)
+    payload = {
+        "event": "r4_import_checkpoint",
+        "entity": "treatment_transactions",
+        "processed": processed,
+        "last_transaction_id": last_transaction_id,
+        "elapsed_seconds": round(elapsed, 2),
+        "transactions_per_second": round(processed / elapsed, 2),
+        "estimated_remaining_transactions": remaining,
+        "timestamp": round(time.time(), 3),
+    }
+    print(json.dumps(payload, sort_keys=True))
