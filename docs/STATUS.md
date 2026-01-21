@@ -62,6 +62,11 @@
 - Stage 108: patients-only R4 import pilot (mapping + backfill).
 
 ## Recent fixes
+- 2026-01-21 09:04 UTC: Stage108 pilot run (patients-only, R4 SQL Server).
+  - Patient-code window: 1000000-1000100.
+  - Dry-run: patients_count=101, sample 25 patients.
+  - Apply: patients_created=101, patients_updated=0, patients_skipped=0.
+  - Rerun: patients_created=0, patients_updated=0, patients_skipped=101 (idempotent).
 - 2026-01-20: Stage108 completed (patients-only R4 import entity).
   - Added patients-only streaming + importer + CLI entity + fixtures/tests.
   - Safety: patients entity avoids appointments import behavior.
