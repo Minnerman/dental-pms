@@ -205,3 +205,56 @@ def test_cli_sqlserver_dry_run_patients_no_mapping_quality_out(tmp_path, monkeyp
 def test_cli_verify_postgres_requires_patients_entity(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["r4_import.py", "--verify-postgres", "--entity", "treatments"])
     assert r4_import_script.main() == 2
+
+
+def test_cli_sqlserver_dry_run_treatment_transactions(monkeypatch):
+    class TreatmentTransactionsSqlServerSource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def dry_run_summary(self, *args, **kwargs):
+            raise AssertionError("dry_run_summary should not run for treatment_transactions")
+
+        def dry_run_summary_treatment_transactions(
+            self, limit=10, patients_from=None, patients_to=None
+        ):
+            return {
+                "ok": True,
+                "limit": limit,
+                "patients_from": patients_from,
+                "patients_to": patients_to,
+            }
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(
+        r4_import_script, "R4SqlServerSource", TreatmentTransactionsSqlServerSource
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--source",
+            "sqlserver",
+            "--dry-run",
+            "--entity",
+            "treatment_transactions",
+            "--patients-from",
+            "100",
+            "--patients-to",
+            "200",
+        ],
+    )
+    assert r4_import_script.main() == 0

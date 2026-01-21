@@ -40,6 +40,20 @@ class R4Treatment(BaseModel):
     patient_required: bool = False
 
 
+class R4TreatmentTransaction(BaseModel):
+    transaction_id: int = Field(..., ge=1)
+    patient_code: int = Field(..., ge=1)
+    performed_at: datetime
+    treatment_code: int | None = None
+    trans_code: int | None = None
+    patient_cost: float | None = None
+    dpb_cost: float | None = None
+    recorded_by: int | None = None
+    user_code: int | None = None
+    tp_number: int | None = None
+    tp_item: int | None = None
+
+
 class R4TreatmentPlan(BaseModel):
     patient_code: int = Field(..., ge=1)
     tp_number: int = Field(..., ge=1)

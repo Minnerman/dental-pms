@@ -1,0 +1,28 @@
+[
+  {
+    "transaction_id": 9001,
+    "patient_code": 1001,
+    "performed_at": "2026-01-02T10:00:00",
+    "treatment_code": 2001,
+    "trans_code": 10,
+    "patient_cost": 75.5,
+    "dpb_cost": 0,
+    "recorded_by": 101,
+    "user_code": 201,
+    "tp_number": 1,
+    "tp_item": 1
+  },
+  {
+    "transaction_id": 9002,
+    "patient_code": 1001,
+    "performed_at": "2026-01-03T09:30:00",
+    "treatment_code": 2002,
+    "trans_code": 20,
+    "patient_cost": 120,
+    "dpb_cost": 10,
+    "recorded_by": 102,
+    "user_code": 202,
+    "tp_number": 1,
+    "tp_item": 2
+  }
+]

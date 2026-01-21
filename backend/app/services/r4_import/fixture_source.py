@@ -9,6 +9,7 @@ from app.services.r4_import.types import (
     R4Appointment,
     R4Patient,
     R4Treatment,
+    R4TreatmentTransaction,
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
@@ -82,6 +83,37 @@ class FixtureSource(R4Source):
         if limit is None:
             return items
         return items[:limit]
+
+    def list_treatment_transactions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TreatmentTransaction]:
+        data = self._load_json("treatment_transactions.json")
+        items = [R4TreatmentTransaction.model_validate(item) for item in data]
+        filtered: list[R4TreatmentTransaction] = []
+        for item in items:
+            if patients_from is not None and item.patient_code < patients_from:
+                continue
+            if patients_to is not None and item.patient_code > patients_to:
+                continue
+            filtered.append(item)
+        if limit is None:
+            return filtered
+        return filtered[:limit]
+
+    def stream_treatment_transactions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TreatmentTransaction]:
+        return self.list_treatment_transactions(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            limit=limit,
+        )
 
     def list_treatment_plans(
         self,
