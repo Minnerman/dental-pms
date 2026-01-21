@@ -96,6 +96,60 @@ Verify:
 - unmapped legacy queue: `/admin/legacy/unmapped-appointments`
 - conflict stats (if any)
 
+## E2) Resume after timeout or interrupted run (patients-only)
+
+Long-running imports can exceed shell timeouts even though the backend keeps running.
+Use checkpoint output plus idempotency to confirm completion or resume safely.
+
+Decision tree:
+
+1) Output cut off / timeout:
+   - Check Postgres counts for the window.
+   - Rerun the same apply command to confirm `created=0, updated=0`.
+
+2) Partial import suspected:
+   - Use last checkpoint `last_patient_code=X` and resume with `--patients-from X+1`.
+   - Keep the same `--patients-to` and rerun idempotency at the end.
+
+Postgres count query:
+
+```bash
+docker compose exec -T db psql -U dental_pms -d dental_pms -c \\
+  "select count(*) from patients where legacy_source='r4' and legacy_id ~ '^[0-9]+$' and legacy_id::int between <START> and <END>;"
+```
+
+Idempotency rerun (same window):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \\
+  --source sqlserver \\
+  --entity patients \\
+  --apply \\
+  --confirm APPLY \\
+  --patients-from <START> \\
+  --patients-to <END>
+```
+
+Resume using a checkpoint:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \\
+  --source sqlserver \\
+  --entity patients \\
+  --apply \\
+  --confirm APPLY \\
+  --patients-from <LAST_PATIENT_CODE_PLUS_1> \\
+  --patients-to <END>
+```
+
+Example (real pilot window, no patient data):
+
+```
+Window: 1000101-1005100
+Checkpoint: {"event":"r4_import_checkpoint","last_patient_code":1005100,"processed":5000}
+Resume: --patients-from 1005101 --patients-to 1005100 (no-op, already complete)
+```
+
 ## F) Stage 103: treatments + treatment plans
 
 Run treatments before treatment plans (CodeID enrichment later).

@@ -35,6 +35,8 @@ From the repo root:
 - `--dry-run`/`--apply` are supported only with `--source sqlserver`.
 - R4 SQL Server must be reachable from the backend container (host/port routing).
 - Use read-only SQL Server credentials only; no writes or stored procs.
+- Long imports may exceed shell/CI timeouts; use `r4_import_checkpoint` output plus
+  a rerun of `--apply` to confirm completion or resume with `--patients-from`.
 
 Patients-only pilot (Stage 108):
 ```bash
