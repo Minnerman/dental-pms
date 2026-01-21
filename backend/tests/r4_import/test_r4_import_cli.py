@@ -1,4 +1,7 @@
+import json
 import sys
+
+from app.services.r4_import.types import R4Patient
 
 from app.scripts import r4_import as r4_import_script
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig
@@ -95,3 +98,105 @@ def test_cli_sqlserver_dry_run_patients(monkeypatch):
     )
     monkeypatch.setattr(sys, "argv", ["r4_import.py", "--source", "sqlserver", "--dry-run", "--entity", "patients"])
     assert r4_import_script.main() == 0
+
+
+def test_cli_sqlserver_dry_run_patients_mapping_quality_out(tmp_path, monkeypatch):
+    class PatientsOnlySqlServerSource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def dry_run_summary(self, *args, **kwargs):
+            raise AssertionError("dry_run_summary should not run for patients entity")
+
+        def dry_run_summary_patients(self, limit=10, patients_from=None, patients_to=None):
+            return {"ok": True, "limit": limit, "entity": "patients"}
+
+        def stream_patients(self, patients_from=None, patients_to=None, limit=None):
+            return [
+                R4Patient(
+                    patient_code=1,
+                    first_name="A",
+                    last_name="Patient",
+                    email="A@Example.com",
+                ),
+                R4Patient(
+                    patient_code=2,
+                    first_name="B",
+                    last_name="Patient",
+                    email="a@example.com",
+                ),
+            ]
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    output_path = tmp_path / "mapping_quality.json"
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", PatientsOnlySqlServerSource)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--source",
+            "sqlserver",
+            "--dry-run",
+            "--entity",
+            "patients",
+            "--mapping-quality-out",
+            str(output_path),
+        ],
+    )
+    assert r4_import_script.main() == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["entity"] == "patients"
+    assert payload["window"] == {"patients_from": None, "patients_to": None}
+    assert payload["mapping_quality"]["duplicates"]["email"]["count"] == 1
+    assert payload["mapping_quality"]["duplicates"]["email"]["sample"] == ["a@example.com"]
+
+
+def test_cli_sqlserver_dry_run_patients_no_mapping_quality_out(tmp_path, monkeypatch):
+    class PatientsOnlySqlServerSource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def dry_run_summary(self, *args, **kwargs):
+            raise AssertionError("dry_run_summary should not run for patients entity")
+
+        def dry_run_summary_patients(self, limit=10, patients_from=None, patients_to=None):
+            return {"ok": True, "limit": limit, "entity": "patients"}
+
+        def stream_patients(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    output_path = tmp_path / "mapping_quality.json"
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", PatientsOnlySqlServerSource)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["r4_import.py", "--source", "sqlserver", "--dry-run", "--entity", "patients"],
+    )
+    assert r4_import_script.main() == 0
+    assert not output_path.exists()

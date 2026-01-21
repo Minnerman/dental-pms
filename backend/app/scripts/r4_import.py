@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date
+import os
+import tempfile
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import func, select
 
@@ -10,6 +13,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.importer import import_r4
+from app.services.r4_import.mapping_quality import PatientMappingQualityReportBuilder
 from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 from app.services.r4_import.treatment_plan_importer import (
@@ -29,6 +33,62 @@ def resolve_actor_id(session) -> int:
 
 def _parse_date_arg(value: str) -> date:
     return date.fromisoformat(value)
+
+
+def _build_patients_mapping_quality(
+    source,
+    patients_from: int | None,
+    patients_to: int | None,
+    limit: int | None,
+) -> dict[str, object]:
+    report = PatientMappingQualityReportBuilder()
+    for patient in source.stream_patients(
+        patients_from=patients_from,
+        patients_to=patients_to,
+        limit=limit,
+    ):
+        report.ingest(patient)
+    return report.finalize()
+
+
+def _write_mapping_quality_file(path: str, payload: dict[str, object]) -> None:
+    target = Path(path)
+    parent = target.parent
+    if parent and not parent.exists():
+        raise RuntimeError(f"Mapping quality output directory does not exist: {parent}")
+    data = json.dumps(payload, indent=2, sort_keys=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        delete=False,
+        dir=str(parent) if parent else None,
+    ) as handle:
+        handle.write(data)
+        handle.write("\n")
+        tmp_path = handle.name
+    os.replace(tmp_path, target)
+
+
+def _maybe_write_mapping_quality(
+    path: str | None,
+    mapping_quality: dict[str, object] | None,
+    patients_from: int | None,
+    patients_to: int | None,
+) -> None:
+    if not path:
+        return
+    if mapping_quality is None:
+        raise RuntimeError("Mapping quality output requested, but no report was generated.")
+    payload = {
+        "entity": "patients",
+        "window": {
+            "patients_from": patients_from,
+            "patients_to": patients_to,
+        },
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "mapping_quality": mapping_quality,
+    }
+    _write_mapping_quality_file(path, payload)
 
 
 def main() -> int:
@@ -92,6 +152,12 @@ def main() -> int:
         help="Progress update frequency in items/plans (default: 5000).",
     )
     parser.add_argument(
+        "--mapping-quality-out",
+        dest="mapping_quality_out",
+        default=None,
+        help="Write patients mapping quality JSON to PATH (patients entity only).",
+    )
+    parser.add_argument(
         "--patients-from",
         dest="patients_from",
         type=int,
@@ -134,6 +200,10 @@ def main() -> int:
         help="Filter appointments to YYYY-MM-DD (inclusive).",
     )
     args = parser.parse_args()
+
+    if args.mapping_quality_out and args.entity != "patients":
+        print("--mapping-quality-out is only supported for --entity patients.")
+        return 2
 
     if args.entity == "treatment_plans_backfill_patient_ids":
         if not args.apply or args.confirm != "APPLY":
@@ -221,6 +291,13 @@ def main() -> int:
                     session.commit()
                 finally:
                     session.close()
+                if args.entity == "patients":
+                    _maybe_write_mapping_quality(
+                        args.mapping_quality_out,
+                        stats.mapping_quality,
+                        args.patients_from,
+                        args.patients_to,
+                    )
                 print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
                 return 0
             if args.entity == "patients":
@@ -229,6 +306,19 @@ def main() -> int:
                     patients_from=args.patients_from,
                     patients_to=args.patients_to,
                 )
+                if args.mapping_quality_out:
+                    mapping_quality = _build_patients_mapping_quality(
+                        source,
+                        patients_from=args.patients_from,
+                        patients_to=args.patients_to,
+                        limit=None,
+                    )
+                    _maybe_write_mapping_quality(
+                        args.mapping_quality_out,
+                        mapping_quality,
+                        args.patients_from,
+                        args.patients_to,
+                    )
             elif args.entity == "patients_appts":
                 summary = source.dry_run_summary(
                     limit=args.limit or 10,
@@ -289,6 +379,13 @@ def main() -> int:
                 progress_enabled=False,
             )
         session.commit()
+        if args.entity == "patients":
+            _maybe_write_mapping_quality(
+                args.mapping_quality_out,
+                stats.mapping_quality,
+                args.patients_from,
+                args.patients_to,
+            )
         print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
         return 0
     except Exception:
