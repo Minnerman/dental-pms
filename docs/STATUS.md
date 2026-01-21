@@ -62,6 +62,12 @@
 - Stage 108: patients-only R4 import pilot (mapping + backfill).
 
 ## Recent fixes
+- 2026-01-21 11:18 UTC: Stage111 completed (Postgres verify + import ergonomics).
+  - New `--verify-postgres` for patients windows (SQL Server not required).
+  - Checkpoint output includes elapsed seconds + patients/sec + optional remaining count (limit-based).
+  - `--connect-timeout-seconds` overrides SQL Server connect timeout.
+  - Tests: `docker compose exec -T backend pytest -q tests/r4_import/test_postgres_verify.py -vv`,
+    `bash ops/verify.sh`.
 - 2026-01-21 09:39 UTC: Stage110 larger patients-only pilot run (R4 SQL Server).
   - Patient-code window: 1000101-1005100 (5000 patients).
   - Dry-run: patients_count=5000, sample 25 patients.
