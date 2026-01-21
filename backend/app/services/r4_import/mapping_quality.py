@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 
 from app.services.r4_import.types import R4Patient
 
-_EMAIL_RE = re.compile(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
-_POSTCODE_RE = re.compile(r"^[A-Z]{1,2}\\d{1,2}[A-Z]?\\d[A-Z]{2}$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_POSTCODE_RE = re.compile(r"^[A-Z]{1,2}\d{1,2}[A-Z]?\d[A-Z]{2}$")
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -27,7 +27,7 @@ def _normalize_phone(value: str | None) -> str | None:
     cleaned = _normalize_text(value)
     if not cleaned:
         return None
-    digits = re.sub(r"\\D", "", cleaned)
+    digits = re.sub(r"\D", "", cleaned)
     if not digits:
         return None
     if digits.startswith("44") and len(digits) == 12:
@@ -39,7 +39,7 @@ def _normalize_postcode(value: str | None) -> str | None:
     cleaned = _normalize_text(value)
     if not cleaned:
         return None
-    compact = re.sub(r"\\s+", "", cleaned).upper()
+    compact = re.sub(r"\s+", "", cleaned).upper()
     return compact or None
 
 
@@ -49,7 +49,7 @@ def _normalize_nhs_number(value: str | int | None) -> str | None:
     raw = str(value).strip()
     if not raw:
         return None
-    digits = re.sub(r"\\D", "", raw)
+    digits = re.sub(r"\D", "", raw)
     if len(digits) != 10:
         return None
     return digits
@@ -89,18 +89,20 @@ class PatientMappingQualityReportBuilder:
 
     def ingest(self, patient: R4Patient) -> None:
         self.patients_total += 1
-        if not _normalize_text(patient.last_name):
+        last_name = _normalize_text(getattr(patient, "last_name", None))
+        if not last_name:
             self.missing_fields["surname"] += 1
-        if patient.date_of_birth is None:
+        if getattr(patient, "date_of_birth", None) is None:
             self.missing_fields["dob"] += 1
 
-        postcode = _normalize_postcode(patient.postcode)
+        postcode_raw = getattr(patient, "postcode", None)
+        postcode = _normalize_postcode(postcode_raw)
         if postcode is None:
             self.missing_fields["postcode"] += 1
         elif not _is_valid_postcode(postcode):
             self.invalid_fields["postcode"] += 1
 
-        phone_raw = patient.phone or patient.mobile_no
+        phone_raw = getattr(patient, "phone", None) or getattr(patient, "mobile_no", None)
         phone = _normalize_phone(phone_raw)
         if phone is None:
             self.missing_fields["phone"] += 1
@@ -109,7 +111,8 @@ class PatientMappingQualityReportBuilder:
         else:
             self._track_duplicate("phone", phone)
 
-        email = _normalize_email(patient.email)
+        email_raw = getattr(patient, "email", None)
+        email = _normalize_email(email_raw)
         if email is None:
             self.missing_fields["email"] += 1
         elif not _is_valid_email(email):
@@ -117,7 +120,8 @@ class PatientMappingQualityReportBuilder:
         else:
             self._track_duplicate("email", email)
 
-        nhs_number = _normalize_nhs_number(patient.nhs_number)
+        nhs_raw = getattr(patient, "nhs_number", None)
+        nhs_number = _normalize_nhs_number(nhs_raw)
         if nhs_number is not None:
             self._track_duplicate("nhs_number", nhs_number)
 
