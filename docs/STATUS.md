@@ -59,9 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 116: tbd.
+- Stage 116: complete (patient transactions tab, read-only).
 
 ## Recent fixes
+- 2026-01-22 12:09 UTC: Stage116 completed (patient transactions tab, read-only).
+  - Backend: `GET /api/patients/{id}/treatment-transactions` (cursor paging + filters).
+  - Frontend: new Transactions tab with date range + cost-only filters and load more.
+  - Tests: `bash ops/health.sh`, `bash ops/verify.sh`.
 - 2026-01-22 11:20 UTC: Stage115B completed (updated IDs sample scoped to run).
   - Fix: updated_transaction_ids_sample now collects only updates from the current stream.
   - Verification rerun: transactions_created=0, transactions_updated=0, transactions_skipped=184505.
