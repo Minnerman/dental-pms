@@ -59,9 +59,12 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 123: complete (R4 appointments discovery).
+- Stage 124: appointments importer merged; pilot run pending.
 
 ## Recent fixes
+- 2026-01-22 22:10 UTC: Stage124 merged (appointments import scaffolding).
+  - New r4_appointments table + importer + CLI entity (vwAppointmentDetails).
+  - Fixtures/tests + pilot runbook updates added.
 - 2026-01-22 21:52 UTC: Stage123 completed (appointments discovery notes).
   - Candidate tables/views mapped; primary source `vwAppointmentDetails` documented.
   - Key, date range, patient null counts captured.
