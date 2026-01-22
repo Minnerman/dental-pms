@@ -59,9 +59,14 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 117: complete (R4 users lookup + clinician names).
+- Stage 118: users import pilot run; API join verification pending (no patient with legacy_id + transactions found).
 
 ## Recent fixes
+- 2026-01-22 19:12 UTC: Stage118 pilot (users import).
+  - Dry-run: users_count=77 (sample shows FullName/Forename/Surname).
+  - Apply stats: users_created=74, users_updated=1, users_skipped=2 (`/tmp/stage118_users_stats.json`).
+  - Postgres: users_total=77 in `r4_users`.
+  - API check: no patient found with `legacy_id` matching `r4_treatment_transactions.patient_code`; `/api/patients/1000101/treatment-transactions` returned 404.
 - 2026-01-22 13:04 UTC: Stage117 completed (R4 users lookup + clinician names).
   - Importer: `--entity users` (dbo.Users) with display_name.
   - API/UI: transactions include recorded_by_name/user_name with fallbacks.
