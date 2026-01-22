@@ -59,9 +59,15 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 113: tbd (treatment transactions pilot complete).
+- Stage 115: tbd.
 
 ## Recent fixes
+- 2026-01-22 09:02 UTC: Stage114 rerun (treatment_transactions, stats-out + date-floor).
+  - Patient-code window: 1000101-1005100.
+  - Dry-run: date_range_raw min=1929-02-03 max=2026-01-17; date_range_sane min=1980-01-01 max=2026-01-17.
+  - Apply (stats-out): transactions_created=184503, transactions_updated=2, transactions_skipped=0.
+  - Postgres count: tx_count=184505 in window.
+  - Rerun (stats-out): transactions_created=0, transactions_updated=0, transactions_skipped=184505.
 - 2026-01-21 12:40 UTC: Stage112 pilot run (treatment_transactions, R4 SQL Server).
   - Patient-code window: 1000101-1005100.
   - Dry-run: treatment_transactions_count=184505; date range min=1929-02-03 max=2026-01-17; sample 25.
