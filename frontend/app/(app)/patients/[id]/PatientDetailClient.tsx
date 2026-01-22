@@ -254,6 +254,22 @@ type LedgerEntry = {
   created_by: Actor;
 };
 
+type TreatmentTransaction = {
+  legacy_transaction_id: number;
+  performed_at: string;
+  treatment_code?: number | null;
+  trans_code?: number | null;
+  patient_cost?: number | null;
+  dpb_cost?: number | null;
+  recorded_by?: number | null;
+  user_code?: number | null;
+};
+
+type TreatmentTransactionResponse = {
+  items: TreatmentTransaction[];
+  next_cursor: string | null;
+};
+
 type ClinicalToothNote = {
   id: number;
   patient_id: number;
@@ -449,6 +465,7 @@ type PatientTab =
   | "invoices"
   | "estimates"
   | "ledger"
+  | "transactions"
   | "recalls"
   | "documents"
   | "attachments";
@@ -545,6 +562,14 @@ export default function PatientDetailClient({
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerBalance, setLedgerBalance] = useState<number>(0);
+  const [transactions, setTransactions] = useState<TreatmentTransaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [transactionsError, setTransactionsError] = useState<string | null>(null);
+  const [transactionsNextCursor, setTransactionsNextCursor] = useState<string | null>(null);
+  const [transactionsLoaded, setTransactionsLoaded] = useState(false);
+  const [transactionsFrom, setTransactionsFrom] = useState("");
+  const [transactionsTo, setTransactionsTo] = useState("");
+  const [transactionsCostOnly, setTransactionsCostOnly] = useState(false);
   const [financeSummary, setFinanceSummary] = useState<FinanceSummary | null>(null);
   const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
   const [financeSummaryError, setFinanceSummaryError] = useState<string | null>(null);
@@ -752,6 +777,60 @@ export default function PatientDetailClient({
       setLedgerBalance(data.balance_pence ?? 0);
     } catch {
       setLedgerBalance(0);
+    }
+  }
+
+  async function loadTransactions(options?: {
+    reset?: boolean;
+    overrides?: { from?: string; to?: string; costOnly?: boolean };
+  }) {
+    if (!isValidPatientId) return;
+    const reset = options?.reset ?? false;
+    if (!reset && !transactionsNextCursor) return;
+    setTransactionsLoading(true);
+    setTransactionsError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      const fromValue = options?.overrides?.from ?? transactionsFrom;
+      const toValue = options?.overrides?.to ?? transactionsTo;
+      const costOnlyValue = options?.overrides?.costOnly ?? transactionsCostOnly;
+      if (fromValue) {
+        params.set("from", fromValue);
+      }
+      if (toValue) {
+        params.set("to", toValue);
+      }
+      if (costOnlyValue) {
+        params.set("cost_only", "true");
+      }
+      if (!reset && transactionsNextCursor) {
+        params.set("cursor", transactionsNextCursor);
+      }
+      const res = await apiFetch(
+        `/api/patients/${patientId}/treatment-transactions?${params.toString()}`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to load transactions (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as TreatmentTransactionResponse;
+      setTransactions((prev) => (reset ? data.items : [...prev, ...data.items]));
+      setTransactionsNextCursor(data.next_cursor);
+      setTransactionsLoaded(true);
+    } catch (err) {
+      setTransactionsError(err instanceof Error ? err.message : "Failed to load transactions");
+      if (reset) {
+        setTransactions([]);
+        setTransactionsNextCursor(null);
+      }
+    } finally {
+      setTransactionsLoading(false);
     }
   }
 
@@ -1649,6 +1728,12 @@ export default function PatientDetailClient({
   }, [isValidPatientId, patientId]);
 
   useEffect(() => {
+    setTransactions([]);
+    setTransactionsNextCursor(null);
+    setTransactionsLoaded(false);
+  }, [patientId]);
+
+  useEffect(() => {
     if (!initialTab) return;
     setTab(initialTab);
   }, [initialTab]);
@@ -1661,6 +1746,12 @@ export default function PatientDetailClient({
       setNotesTooth(upperTeeth[0]);
     }
   }, [tab, patientId]);
+
+  useEffect(() => {
+    if (tab !== "transactions") return;
+    if (transactionsLoaded) return;
+    void loadTransactions({ reset: true });
+  }, [tab, transactionsLoaded, patientId]);
 
   useEffect(() => {
     if (tab !== "clinical" || !selectedTooth) return;
@@ -1862,6 +1953,17 @@ export default function PatientDetailClient({
       currency: "GBP",
       minimumFractionDigits: 2,
     }).format(pence / 100);
+  }
+
+  function formatPounds(value?: number | null) {
+    if (value === null || value === undefined) return "—";
+    const amount = Number(value);
+    if (Number.isNaN(amount)) return "—";
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      minimumFractionDigits: 2,
+    }).format(amount);
   }
 
   function formatSignedCurrency(pence: number) {
@@ -2926,6 +3028,14 @@ export default function PatientDetailClient({
                   aria-current={tab === "ledger" ? "page" : undefined}
                 >
                   Ledger ({ledgerEntries.length})
+                </button>
+                <button
+                  style={tabStyle(tab === "transactions")}
+                  onClick={() => setTab("transactions")}
+                  type="button"
+                  aria-current={tab === "transactions" ? "page" : undefined}
+                >
+                  Transactions ({transactions.length})
                 </button>
                 <button
                   style={tabStyle(tab === "recalls")}
@@ -4712,6 +4822,101 @@ export default function PatientDetailClient({
                         ))}
                       </tbody>
                     </table>
+                  )}
+                </div>
+              ) : tab === "transactions" ? (
+                <div className="stack">
+                  <div className="row">
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div className="stack" style={{ gap: 6 }}>
+                        <label className="label">From</label>
+                        <input
+                          className="input"
+                          type="date"
+                          value={transactionsFrom}
+                          onChange={(e) => setTransactionsFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="stack" style={{ gap: 6 }}>
+                        <label className="label">To</label>
+                        <input
+                          className="input"
+                          type="date"
+                          value={transactionsTo}
+                          onChange={(e) => setTransactionsTo(e.target.value)}
+                        />
+                      </div>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={transactionsCostOnly}
+                          onChange={(e) => setTransactionsCostOnly(e.target.checked)}
+                        />
+                        Cost only
+                      </label>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => void loadTransactions({ reset: true })}
+                        disabled={transactionsLoading}
+                      >
+                        {transactionsLoading ? "Loading..." : "Apply filters"}
+                      </button>
+                    </div>
+                  </div>
+                  {transactionsError && <div className="notice">{transactionsError}</div>}
+                  {transactionsLoading && transactions.length === 0 ? (
+                    <div className="badge">Loading transactions…</div>
+                  ) : transactions.length === 0 ? (
+                    <div className="notice">No transactions found.</div>
+                  ) : (
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>CodeID</th>
+                          <th>TransCode</th>
+                          <th>Patient cost</th>
+                          <th>DPB cost</th>
+                          <th>Recorded by / User code</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transactions.map((transaction) => {
+                          const recorded = transaction.recorded_by ?? "—";
+                          const userCode = transaction.user_code ?? "—";
+                          return (
+                            <tr key={transaction.legacy_transaction_id}>
+                              <td>{formatDateTime(transaction.performed_at)}</td>
+                              <td>{transaction.treatment_code ?? "—"}</td>
+                              <td>{transaction.trans_code ?? "—"}</td>
+                              <td>{formatPounds(transaction.patient_cost)}</td>
+                              <td>{formatPounds(transaction.dpb_cost)}</td>
+                              <td>
+                                {recorded} / {userCode}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                  {transactionsNextCursor && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={() => void loadTransactions()}
+                      disabled={transactionsLoading}
+                    >
+                      {transactionsLoading ? "Loading..." : "Load more"}
+                    </button>
                   )}
                 </div>
               ) : tab === "recalls" ? (
