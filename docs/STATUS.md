@@ -59,9 +59,12 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 115: tbd.
+- Stage 115B: tbd.
 
 ## Recent fixes
+- 2026-01-22 09:10 UTC: Stage115A completed (updated IDs sample in stats-out).
+  - treatment_transactions stats now include `updated_transaction_ids_sample` (capped) when updates occur.
+  - Tests: `docker compose exec -T backend pytest -q tests/r4_import/ -q`.
 - 2026-01-22 09:02 UTC: Stage114 rerun (treatment_transactions, stats-out + date-floor).
   - Patient-code window: 1000101-1005100.
   - Dry-run: date_range_raw min=1929-02-03 max=2026-01-17; date_range_sane min=1980-01-01 max=2026-01-17.
