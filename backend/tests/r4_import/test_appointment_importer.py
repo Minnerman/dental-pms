@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date, datetime, timezone
 
 from sqlalchemy import delete, select
@@ -24,6 +25,13 @@ def test_r4_appointments_idempotent():
         assert stats_first.appointments_created == 4
         assert stats_first.appointments_updated == 0
         assert stats_first.appointments_skipped == 0
+        assert stats_first.status_distribution == Counter(
+            {
+                "booked": 1,
+                "complete": 1,
+                "cancelled": 1,
+            }
+        )
 
         stats_second = import_r4_appointments(session, source, actor.id)
         session.commit()

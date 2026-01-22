@@ -58,10 +58,22 @@
 - V1 finish line: `docs/V1_FINISH_LINE.md`
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
--## In progress
-- None (awaiting next stage assignment).
+## In progress
+- Stage 125: incremental appointments rollout + status distribution.
+  - Stats: the appointments importer now reports `status_distribution` with normalized strings so each window can be validated for the default statuses (Pending/Checked-in/Arrived/DNA) plus the full catalog.
+  - Pilots completed for the requested windows with dry-run/apply/rerun plus Postgres verification.
+  - Sample window data:
+    - 2024-10-01→2024-10-31: 117 rows, 1 null; distribution = complete/pending/cancelled/waiting.
+    - 2024-11-01→2024-11-30: 158 rows, 12 nulls; distribution includes complete/pending/cancelled/deleted/in surgery/waiting.
+    - 2024-12-01→2024-12-31: 86 rows, 11 nulls; distribution includes complete/pending/cancelled/in surgery.
+    - 2025-01-01→2025-01-31: 104 rows, 12 nulls; distribution includes complete/pending/cancelled/left surgery/deleted.
+    - 2025-02-01→2025-02-28: 72 rows, 4 nulls; distribution includes complete/pending/cancelled/left surgery/did not attend/in surgery/waiting.
+    - 2025-03-01→2025-03-31: 117 rows, 5 nulls; distribution includes complete/pending/cancelled.
+    - 2023-quarters (Q1=404 rows, Q2=315, Q3=320, Q4=280; nulls 0–3) show dominant statuses of complete/pending/left surgery plus cancelled/in surgery/waiting/did not attend/deleted.
+  - Postgres verification (counts + nulls per window) confirmed the imported rows for every batch.
+  - Next: Stage 126 (read-only calendar API + UI) followed by Stage 127 (manual linking of unlinked appointments).
 
--## Recent fixes
+## Recent fixes
 - 2026-01-22 22:29 UTC: Stage124 pilot (appointments import, Jan 2025 window; Stage124.1 fixes).
   - Dry-run honours `--appts-from/--appts-to`: filtered count=104, range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`, null patients=12.
   - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): created=104, updated=0, skipped=0; rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) yielded created=0, updated=0, skipped=104.
