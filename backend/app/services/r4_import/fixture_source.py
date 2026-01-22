@@ -7,6 +7,7 @@ from pathlib import Path
 from app.services.r4_import.source import R4Source
 from app.services.r4_import.types import (
     R4Appointment,
+    R4AppointmentRecord,
     R4Patient,
     R4Treatment,
     R4TreatmentTransaction,
@@ -69,6 +70,36 @@ class FixtureSource(R4Source):
         if limit is None:
             return items
         return items[:limit]
+
+    def list_appointments(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> list[R4AppointmentRecord]:
+        data = self._load_json("appointments.json")
+        items = [R4AppointmentRecord.model_validate(item) for item in data]
+        if date_from or date_to:
+            filtered: list[R4AppointmentRecord] = []
+            for item in items:
+                starts_at = item.starts_at.date()
+                if date_from and starts_at < date_from:
+                    continue
+                if date_to and starts_at > date_to:
+                    continue
+                filtered.append(item)
+            items = filtered
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def stream_appointments(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> list[R4AppointmentRecord]:
+        return self.list_appointments(date_from=date_from, date_to=date_to, limit=limit)
 
     def _load_json(self, filename: str) -> list[dict]:
         path = self.base_path / filename

@@ -13,6 +13,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.importer import import_r4
+from app.services.r4_import.appointment_importer import import_r4_appointments
 from app.services.r4_import.mapping_quality import PatientMappingQualityReportBuilder
 from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.postgres_verify import verify_patients_window
@@ -120,15 +121,24 @@ def _maybe_write_stats(
     stats: dict[str, object],
     patients_from: int | None,
     patients_to: int | None,
+    appts_from: date | None = None,
+    appts_to: date | None = None,
 ) -> None:
     if not path:
         return
-    payload = {
-        "entity": entity,
-        "window": {
+    if entity == "appointments":
+        window = {
+            "appts_from": appts_from,
+            "appts_to": appts_to,
+        }
+    else:
+        window = {
             "patients_from": patients_from,
             "patients_to": patients_to,
-        },
+        }
+    payload = {
+        "entity": entity,
+        "window": window,
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "stats": stats,
     }
@@ -149,6 +159,7 @@ def main() -> int:
         choices=(
             "patients",
             "patients_appts",
+            "appointments",
             "treatments",
             "treatment_transactions",
             "users",
@@ -354,6 +365,16 @@ def main() -> int:
                             appts_to=args.appts_to,
                             limit=None,
                         )
+                    elif args.entity == "appointments":
+                        stats = import_r4_appointments(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            date_from=args.appts_from,
+                            date_to=args.appts_to,
+                            limit=args.limit,
+                        )
                     elif args.entity == "treatments":
                         stats = import_r4_treatments(
                             session,
@@ -413,6 +434,8 @@ def main() -> int:
                     stats.as_dict(),
                     args.patients_from,
                     args.patients_to,
+                    args.appts_from,
+                    args.appts_to,
                 )
                 print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
                 return 0
@@ -437,6 +460,12 @@ def main() -> int:
                     )
             elif args.entity == "patients_appts":
                 summary = source.dry_run_summary(
+                    limit=args.limit or 10,
+                    date_from=args.appts_from,
+                    date_to=args.appts_to,
+                )
+            elif args.entity == "appointments":
+                summary = source.dry_run_summary_appointments(
                     limit=args.limit or 10,
                     date_from=args.appts_from,
                     date_to=args.appts_to,
@@ -486,6 +515,15 @@ def main() -> int:
             )
         elif args.entity == "patients_appts":
             stats = import_r4(session, source, actor_id)
+        elif args.entity == "appointments":
+            stats = import_r4_appointments(
+                session,
+                source,
+                actor_id,
+                date_from=args.appts_from,
+                date_to=args.appts_to,
+                limit=args.limit,
+            )
         elif args.entity == "treatments":
             stats = import_r4_treatments(session, source, actor_id)
         elif args.entity == "users":
@@ -529,6 +567,8 @@ def main() -> int:
             stats.as_dict(),
             args.patients_from,
             args.patients_to,
+            args.appts_from,
+            args.appts_to,
         )
         print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
         return 0

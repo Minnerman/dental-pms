@@ -1,0 +1,62 @@
+[
+  {
+    "appointment_id": 10,
+    "patient_code": 1000001,
+    "starts_at": "2024-01-02T09:00:00Z",
+    "ends_at": "2024-01-02T09:30:00Z",
+    "duration_minutes": 30,
+    "clinician_code": 10000003,
+    "status": "Booked",
+    "cancelled": false,
+    "clinic_code": 1,
+    "treatment_code": 55,
+    "appointment_type": "Exam",
+    "notes": "Routine",
+    "appt_flag": 1
+  },
+  {
+    "appointment_id": 11,
+    "patient_code": 1000002,
+    "starts_at": "2024-01-05T14:00:00Z",
+    "ends_at": "2024-01-05T14:10:00Z",
+    "duration_minutes": 10,
+    "clinician_code": 10000003,
+    "status": "Complete",
+    "cancelled": false,
+    "clinic_code": 1,
+    "treatment_code": 56,
+    "appointment_type": "Follow-up",
+    "notes": null,
+    "appt_flag": 1
+  },
+  {
+    "appointment_id": 12,
+    "patient_code": null,
+    "starts_at": "2024-02-01T11:15:00Z",
+    "ends_at": "2024-02-01T11:45:00Z",
+    "duration_minutes": 30,
+    "clinician_code": 10000004,
+    "status": "Cancelled",
+    "cancelled": true,
+    "clinic_code": 2,
+    "treatment_code": 47,
+    "appointment_type": "Emergency",
+    "notes": "Late cancel",
+    "appt_flag": 2
+  },
+  {
+    "appointment_id": 13,
+    "patient_code": 1000003,
+    "starts_at": "2024-03-10T16:00:00Z",
+    "ends_at": "2024-03-10T16:20:00Z",
+    "duration_minutes": 20,
+    "clinician_code": 10000005,
+    "status": null,
+    "cancelled": null,
+    "clinic_code": null,
+    "treatment_code": null,
+    "appointment_type": null,
+    "notes": "",
+    "appt_flag": null
+  }
+]
