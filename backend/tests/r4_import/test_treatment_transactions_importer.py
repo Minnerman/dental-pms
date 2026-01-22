@@ -10,6 +10,7 @@ from app.services.r4_import.treatment_transactions_importer import (
     import_r4_treatment_transactions,
     TreatmentTransactionImportStats,
 )
+from app.services.r4_import.types import R4TreatmentTransaction as R4TreatmentTransactionPayload
 
 
 def resolve_actor_id(session) -> int:
@@ -62,7 +63,69 @@ def test_r4_treatment_transactions_idempotent_and_updates():
 
 def test_treatment_transactions_updated_ids_sample_capped():
     stats = TreatmentTransactionImportStats()
-    for legacy_id in range(1, 30):
-        stats.record_updated_id(legacy_id)
+    stats.updated_transaction_ids = set(range(1, 30))
     sample = stats.as_dict()["updated_transaction_ids_sample"]
     assert sample == list(range(1, 21))
+
+
+def test_treatment_transactions_updated_ids_scoped_to_run():
+    session = SessionLocal()
+    try:
+        clear_r4_transactions(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+
+        class OneUpdateSource:
+            def stream_treatment_transactions(self, **_kwargs):
+                return [
+                    R4TreatmentTransactionPayload(
+                        transaction_id=1,
+                        patient_code=1000101,
+                        performed_at="2026-01-02T00:00:00",
+                        treatment_code=None,
+                        trans_code=1,
+                        patient_cost=0,
+                        dpb_cost=0,
+                    )
+                ]
+
+        class NoUpdateSource:
+            def stream_treatment_transactions(self, **_kwargs):
+                return [
+                    R4TreatmentTransactionPayload(
+                        transaction_id=1,
+                        patient_code=1000101,
+                        performed_at="2026-01-02T00:00:00",
+                        treatment_code=None,
+                        trans_code=1,
+                        patient_cost=0,
+                        dpb_cost=0,
+                    )
+                ]
+
+        stats_first = import_r4_treatment_transactions(session, OneUpdateSource(), actor_id)
+        session.commit()
+        assert stats_first.transactions_created == 1
+
+        # Force an update by changing the stored cost.
+        tx = session.scalar(
+            select(R4TreatmentTransaction).where(
+                R4TreatmentTransaction.legacy_transaction_id == 1
+            )
+        )
+        tx.patient_cost = Decimal("10.00")
+        tx.updated_by_user_id = actor_id
+        session.commit()
+
+        stats_update = import_r4_treatment_transactions(session, OneUpdateSource(), actor_id)
+        session.commit()
+        assert stats_update.transactions_updated == 1
+        assert stats_update.as_dict()["updated_transaction_ids_sample"] == [1]
+
+        stats_second = import_r4_treatment_transactions(session, NoUpdateSource(), actor_id)
+        session.commit()
+        assert stats_second.transactions_updated == 0
+        assert "updated_transaction_ids_sample" not in stats_second.as_dict()
+    finally:
+        session.close()
