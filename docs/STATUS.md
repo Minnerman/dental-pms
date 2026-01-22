@@ -62,6 +62,8 @@
 - Stage 116: complete (patient transactions tab, read-only).
 
 ## Recent fixes
+- 2026-01-22 12:31 UTC: Stage116.1 completed (Playwright transactions tab coverage).
+  - Test: `frontend/tests/patients/transactions-tab.spec.ts` (mocked API).
 - 2026-01-22 12:09 UTC: Stage116 completed (patient transactions tab, read-only).
   - Backend: `GET /api/patients/{id}/treatment-transactions` (cursor paging + filters).
   - Frontend: new Transactions tab with date range + cost-only filters and load more.
