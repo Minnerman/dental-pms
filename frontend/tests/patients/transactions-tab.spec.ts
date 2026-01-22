@@ -25,6 +25,10 @@ test("patient transactions tab renders, paginates, and filters", async ({
       user_code: 12,
       recorded_by_name: "Dr Ada Lovelace",
       user_name: "Mr Sam Clerk",
+      recorded_by_is_current: true,
+      user_is_current: false,
+      recorded_by_role: "Dentist",
+      user_role: "Nurse",
     },
     {
       legacy_transaction_id: 100,
@@ -38,6 +42,10 @@ test("patient transactions tab renders, paginates, and filters", async ({
       user_code: 12,
       recorded_by_name: "Dr Ada Lovelace",
       user_name: "Mr Sam Clerk",
+      recorded_by_is_current: true,
+      user_is_current: false,
+      recorded_by_role: "Dentist",
+      user_role: null,
     },
   ];
   const pageTwo = [
@@ -53,6 +61,10 @@ test("patient transactions tab renders, paginates, and filters", async ({
       user_code: 14,
       recorded_by_name: "Dr Ada Lovelace",
       user_name: "Mr Sam Clerk",
+      recorded_by_is_current: null,
+      user_is_current: true,
+      recorded_by_role: null,
+      user_role: "Hygienist",
     },
   ];
 
@@ -69,6 +81,10 @@ test("patient transactions tab renders, paginates, and filters", async ({
       user_code: number | null;
       recorded_by_name?: string | null;
       user_name?: string | null;
+      recorded_by_is_current?: boolean | null;
+      user_is_current?: boolean | null;
+      recorded_by_role?: string | null;
+      user_role?: string | null;
     }>;
     next_cursor: string | null;
   };
@@ -111,6 +127,8 @@ test("patient transactions tab renders, paginates, and filters", async ({
   const rows = table.locator("tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(table).toContainText("Dr Ada Lovelace");
+  await expect(table).toContainText("Dentist");
+  await expect(table).toContainText("Current");
   await expect(table).toContainText("Comprehensive exam");
 
   const loadMore = page.getByTestId("transactions-load-more");

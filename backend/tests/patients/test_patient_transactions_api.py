@@ -44,6 +44,7 @@ def _seed_patient_with_transactions():
                 initials="AL",
                 display_name="Dr Ada Lovelace",
                 is_current=True,
+                role="Dentist",
                 created_by_user_id=actor.id,
                 updated_by_user_id=actor.id,
             ),
@@ -57,6 +58,7 @@ def _seed_patient_with_transactions():
                 initials="SC",
                 display_name="Mr Sam Clerk",
                 is_current=True,
+                role="Hygienist",
                 created_by_user_id=actor.id,
                 updated_by_user_id=actor.id,
             ),
@@ -185,6 +187,10 @@ def test_patient_transactions_order_and_pagination(api_client, auth_headers):
         assert payload["items"][1]["legacy_transaction_id"] == tx_ids[0]
         assert payload["items"][0]["recorded_by_name"] == "Dr Ada Lovelace"
         assert payload["items"][0]["user_name"] == "Mr Sam Clerk"
+        assert payload["items"][0]["recorded_by_is_current"] is True
+        assert payload["items"][0]["user_is_current"] is True
+        assert payload["items"][0]["recorded_by_role"] == "Dentist"
+        assert payload["items"][0]["user_role"] == "Hygienist"
         assert payload["items"][0]["treatment_name"] == "Comprehensive exam"
         assert payload["items"][0]["treatment_code"] == treatment_code
         assert payload["next_cursor"]

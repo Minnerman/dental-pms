@@ -26,3 +26,4 @@ class R4User(Base, AuditMixin):
     initials: Mapped[str | None] = mapped_column(String(40), nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    role: Mapped[str | None] = mapped_column(String(120), nullable=True)

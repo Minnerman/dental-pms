@@ -62,6 +62,7 @@ class R4User(BaseModel):
     surname: str | None = None
     initials: str | None = None
     is_current: bool = False
+    role: str | None = None
 
 
 class R4TreatmentPlan(BaseModel):

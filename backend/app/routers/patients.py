@@ -543,6 +543,10 @@ def list_patient_treatment_transactions(
             recorded_user.display_name.label("recorded_by_name"),
             entry_user.display_name.label("user_name"),
             treatment.description.label("treatment_name"),
+            recorded_user.is_current.label("recorded_by_is_current"),
+            entry_user.is_current.label("user_is_current"),
+            recorded_user.role.label("recorded_by_role"),
+            entry_user.role.label("user_role"),
         )
         .where(R4TreatmentTransaction.patient_code == patient_code)
         .outerjoin(
@@ -606,7 +610,16 @@ def list_patient_treatment_transactions(
         last_tx = items[-1][0]
         next_cursor = _encode_tx_cursor(last_tx.performed_at, last_tx.legacy_transaction_id)
     payload_items: list[dict[str, object]] = []
-    for tx, recorded_name, user_name, treatment_name in items:
+    for (
+        tx,
+        recorded_name,
+        user_name,
+        treatment_name,
+        recorded_is_current,
+        user_is_current,
+        recorded_role,
+        user_role,
+    ) in items:
         payload_items.append(
             {
                 "legacy_transaction_id": tx.legacy_transaction_id,
@@ -620,6 +633,10 @@ def list_patient_treatment_transactions(
                 "user_code": tx.user_code,
                 "recorded_by_name": recorded_name,
                 "user_name": user_name,
+                "recorded_by_is_current": recorded_is_current,
+                "user_is_current": user_is_current,
+                "recorded_by_role": recorded_role,
+                "user_role": user_role,
             }
         )
     return {

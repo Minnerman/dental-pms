@@ -35,6 +35,37 @@ def _coerce_bool(value: Any | None, default: bool = False) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _format_role_value(value: Any | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return f"Type {int(value)}"
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return f"Type {text}"
+    return text
+
+
+def _build_user_role(
+    *,
+    role_value: Any | None,
+    is_extended_duty_nurse: Any | None,
+    is_oral_health_promoter: Any | None,
+    is_clinic_admin_super_user: Any | None,
+) -> str | None:
+    if _coerce_bool(is_extended_duty_nurse, default=False):
+        return "Extended duty nurse"
+    if _coerce_bool(is_oral_health_promoter, default=False):
+        return "Oral health promoter"
+    if _coerce_bool(is_clinic_admin_super_user, default=False):
+        return "Clinic admin"
+    return _format_role_value(role_value)
+
+
 NOLOCK_RETRY_MAX = 6
 NOLOCK_RETRY_BASE_SLEEP = 0.5
 NOLOCK_RETRY_MAX_SLEEP = 8.0
@@ -561,6 +592,13 @@ class R4SqlServerSource:
         surname_col = self._pick_column("Users", ["Surname", "LastName"])
         initials_col = self._pick_column("Users", ["Initials"])
         current_col = self._pick_column("Users", ["Current", "IsCurrent"])
+        role_col = self._pick_column(
+            "Users",
+            ["Role", "UserType", "GradingUserType", "Grade", "Group", "AccessLevel"],
+        )
+        extended_nurse_col = self._pick_column("Users", ["IsExtendedDutyNurse"])
+        promoter_col = self._pick_column("Users", ["IsOralHealthPromoter"])
+        clinic_admin_col = self._pick_column("Users", ["IsClinicAdminSuperUser"])
         select_cols = [f"{user_code_col} AS user_code"]
         if full_name_col:
             select_cols.append(f"{full_name_col} AS full_name")
@@ -575,6 +613,19 @@ class R4SqlServerSource:
         if current_col:
             current_expr = f"[{current_col}]" if current_col.lower() == "current" else current_col
             select_cols.append(f"{current_expr} AS is_current")
+        if role_col:
+            role_expr = (
+                f"[{role_col}]"
+                if role_col.lower() in {"role", "group"}
+                else role_col
+            )
+            select_cols.append(f"{role_expr} AS role_value")
+        if extended_nurse_col:
+            select_cols.append(f"{extended_nurse_col} AS is_extended_duty_nurse")
+        if promoter_col:
+            select_cols.append(f"{promoter_col} AS is_oral_health_promoter")
+        if clinic_admin_col:
+            select_cols.append(f"{clinic_admin_col} AS is_clinic_admin_super_user")
         rows = self._query(
             f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Users WITH (NOLOCK) "
             f"ORDER BY {user_code_col} ASC",
@@ -591,6 +642,12 @@ class R4SqlServerSource:
                     "surname": row.get("surname"),
                     "initials": row.get("initials"),
                     "is_current": _coerce_bool(row.get("is_current"), default=False),
+                    "role": _build_user_role(
+                        role_value=row.get("role_value"),
+                        is_extended_duty_nurse=row.get("is_extended_duty_nurse"),
+                        is_oral_health_promoter=row.get("is_oral_health_promoter"),
+                        is_clinic_admin_super_user=row.get("is_clinic_admin_super_user"),
+                    ),
                 }
             )
         return samples
@@ -989,6 +1046,13 @@ class R4SqlServerSource:
         surname_col = self._pick_column("Users", ["Surname", "LastName"])
         initials_col = self._pick_column("Users", ["Initials"])
         current_col = self._pick_column("Users", ["Current", "IsCurrent"])
+        role_col = self._pick_column(
+            "Users",
+            ["Role", "UserType", "GradingUserType", "Grade", "Group", "AccessLevel"],
+        )
+        extended_nurse_col = self._pick_column("Users", ["IsExtendedDutyNurse"])
+        promoter_col = self._pick_column("Users", ["IsOralHealthPromoter"])
+        clinic_admin_col = self._pick_column("Users", ["IsClinicAdminSuperUser"])
 
         last_code = 0
         remaining = limit
@@ -1012,6 +1076,19 @@ class R4SqlServerSource:
             if current_col:
                 current_expr = f"[{current_col}]" if current_col.lower() == "current" else current_col
                 select_cols.append(f"{current_expr} AS is_current")
+            if role_col:
+                role_expr = (
+                    f"[{role_col}]"
+                    if role_col.lower() in {"role", "group"}
+                    else role_col
+                )
+                select_cols.append(f"{role_expr} AS role_value")
+            if extended_nurse_col:
+                select_cols.append(f"{extended_nurse_col} AS is_extended_duty_nurse")
+            if promoter_col:
+                select_cols.append(f"{promoter_col} AS is_oral_health_promoter")
+            if clinic_admin_col:
+                select_cols.append(f"{clinic_admin_col} AS is_clinic_admin_super_user")
             rows = self._query(
                 f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Users WITH (NOLOCK) "
                 f"WHERE {user_code_col} > ? ORDER BY {user_code_col}",
@@ -1032,6 +1109,12 @@ class R4SqlServerSource:
                     surname=(row.get("surname") or "").strip() or None,
                     initials=(row.get("initials") or "").strip() or None,
                     is_current=_coerce_bool(row.get("is_current"), default=False),
+                    role=_build_user_role(
+                        role_value=row.get("role_value"),
+                        is_extended_duty_nurse=row.get("is_extended_duty_nurse"),
+                        is_oral_health_promoter=row.get("is_oral_health_promoter"),
+                        is_clinic_admin_super_user=row.get("is_clinic_admin_super_user"),
+                    ),
                 )
                 if remaining is not None:
                     remaining -= 1

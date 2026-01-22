@@ -18,6 +18,10 @@ class R4TreatmentTransactionOut(BaseModel):
     user_code: int | None = None
     recorded_by_name: str | None = None
     user_name: str | None = None
+    recorded_by_is_current: bool | None = None
+    user_is_current: bool | None = None
+    recorded_by_role: str | None = None
+    user_role: str | None = None
 
 
 class R4TreatmentTransactionListOut(BaseModel):
