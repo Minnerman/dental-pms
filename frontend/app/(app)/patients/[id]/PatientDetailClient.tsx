@@ -263,6 +263,8 @@ type TreatmentTransaction = {
   dpb_cost?: number | null;
   recorded_by?: number | null;
   user_code?: number | null;
+  recorded_by_name?: string | null;
+  user_name?: string | null;
 };
 
 type TreatmentTransactionResponse = {
@@ -4894,13 +4896,18 @@ export default function PatientDetailClient({
                           <th>TransCode</th>
                           <th>Patient cost</th>
                           <th>DPB cost</th>
-                          <th>Recorded by / User code</th>
+                          <th>Recorded by</th>
+                          <th>User</th>
                         </tr>
                       </thead>
                       <tbody>
                         {transactions.map((transaction) => {
-                          const recorded = transaction.recorded_by ?? "—";
-                          const userCode = transaction.user_code ?? "—";
+                          const recorded =
+                            transaction.recorded_by_name ??
+                            transaction.recorded_by ??
+                            "—";
+                          const userCode =
+                            transaction.user_name ?? transaction.user_code ?? "—";
                           return (
                             <tr key={transaction.legacy_transaction_id}>
                               <td>{formatDateTime(transaction.performed_at)}</td>
@@ -4908,9 +4915,8 @@ export default function PatientDetailClient({
                               <td>{transaction.trans_code ?? "—"}</td>
                               <td>{formatPounds(transaction.patient_cost)}</td>
                               <td>{formatPounds(transaction.dpb_cost)}</td>
-                              <td>
-                                {recorded} / {userCode}
-                              </td>
+                              <td>{recorded}</td>
+                              <td>{userCode}</td>
                             </tr>
                           );
                         })}

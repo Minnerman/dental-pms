@@ -13,6 +13,7 @@ from app.services.r4_import.types import (
     R4Patient,
     R4Treatment,
     R4TreatmentTransaction,
+    R4User,
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
@@ -161,6 +162,15 @@ class R4SqlServerSource:
             "sample_treatments": self.sample_treatments(limit=limit),
         }
 
+    def dry_run_summary_users(self, limit: int = 10) -> dict[str, Any]:
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "users_count": self.count_users(),
+            "sample_users": self.sample_users(limit=limit),
+        }
+
     def dry_run_summary_treatment_transactions(
         self,
         limit: int = 10,
@@ -286,6 +296,10 @@ class R4SqlServerSource:
 
     def count_treatments(self) -> int:
         rows = self._query("SELECT COUNT(1) AS count FROM dbo.Treatments WITH (NOLOCK)")
+        return int(rows[0]["count"]) if rows else 0
+
+    def count_users(self) -> int:
+        rows = self._query("SELECT COUNT(1) AS count FROM dbo.Users WITH (NOLOCK)")
         return int(rows[0]["count"]) if rows else 0
 
     def count_treatment_transactions(
@@ -535,6 +549,48 @@ class R4SqlServerSource:
                     "treatment_code": row.get("treatment_code"),
                     "description": row.get("description"),
                     "short_code": row.get("short_code"),
+                }
+            )
+        return samples
+
+    def sample_users(self, limit: int = 10) -> list[dict[str, Any]]:
+        user_code_col = self._require_column("Users", ["UserCode"])
+        full_name_col = self._pick_column("Users", ["FullName"])
+        title_col = self._pick_column("Users", ["Title"])
+        forename_col = self._pick_column("Users", ["Forename", "FirstName"])
+        surname_col = self._pick_column("Users", ["Surname", "LastName"])
+        initials_col = self._pick_column("Users", ["Initials"])
+        current_col = self._pick_column("Users", ["Current", "IsCurrent"])
+        select_cols = [f"{user_code_col} AS user_code"]
+        if full_name_col:
+            select_cols.append(f"{full_name_col} AS full_name")
+        if title_col:
+            select_cols.append(f"{title_col} AS title")
+        if forename_col:
+            select_cols.append(f"{forename_col} AS forename")
+        if surname_col:
+            select_cols.append(f"{surname_col} AS surname")
+        if initials_col:
+            select_cols.append(f"{initials_col} AS initials")
+        if current_col:
+            current_expr = f"[{current_col}]" if current_col.lower() == "current" else current_col
+            select_cols.append(f"{current_expr} AS is_current")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Users WITH (NOLOCK) "
+            f"ORDER BY {user_code_col} ASC",
+            [limit],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "user_code": row.get("user_code"),
+                    "full_name": row.get("full_name"),
+                    "title": row.get("title"),
+                    "forename": row.get("forename"),
+                    "surname": row.get("surname"),
+                    "initials": row.get("initials"),
+                    "is_current": _coerce_bool(row.get("is_current"), default=False),
                 }
             )
         return samples
@@ -918,6 +974,64 @@ class R4SqlServerSource:
                     ),
                     exam=_coerce_bool(row.get("exam"), default=False),
                     patient_required=_coerce_bool(row.get("patient_required"), default=False),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_users(self, limit: int | None = None) -> Iterable[R4User]:
+        return self.stream_users(limit=limit)
+
+    def stream_users(self, limit: int | None = None) -> Iterable[R4User]:
+        user_code_col = self._require_column("Users", ["UserCode"])
+        full_name_col = self._pick_column("Users", ["FullName"])
+        title_col = self._pick_column("Users", ["Title"])
+        forename_col = self._pick_column("Users", ["Forename", "FirstName"])
+        surname_col = self._pick_column("Users", ["Surname", "LastName"])
+        initials_col = self._pick_column("Users", ["Initials"])
+        current_col = self._pick_column("Users", ["Current", "IsCurrent"])
+
+        last_code = 0
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            select_cols = [f"{user_code_col} AS user_code"]
+            if full_name_col:
+                select_cols.append(f"{full_name_col} AS full_name")
+            if title_col:
+                select_cols.append(f"{title_col} AS title")
+            if forename_col:
+                select_cols.append(f"{forename_col} AS forename")
+            if surname_col:
+                select_cols.append(f"{surname_col} AS surname")
+            if initials_col:
+                select_cols.append(f"{initials_col} AS initials")
+            if current_col:
+                current_expr = f"[{current_col}]" if current_col.lower() == "current" else current_col
+                select_cols.append(f"{current_expr} AS is_current")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.Users WITH (NOLOCK) "
+                f"WHERE {user_code_col} > ? ORDER BY {user_code_col}",
+                [batch_size, last_code],
+            )
+            if not rows:
+                break
+            for row in rows:
+                user_code = row.get("user_code")
+                if user_code is None:
+                    continue
+                last_code = int(user_code)
+                yield R4User(
+                    user_code=last_code,
+                    full_name=(row.get("full_name") or "").strip() or None,
+                    title=(row.get("title") or "").strip() or None,
+                    forename=(row.get("forename") or "").strip() or None,
+                    surname=(row.get("surname") or "").strip() or None,
+                    initials=(row.get("initials") or "").strip() or None,
+                    is_current=_coerce_bool(row.get("is_current"), default=False),
                 )
                 if remaining is not None:
                     remaining -= 1
