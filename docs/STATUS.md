@@ -59,9 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 118: complete (users import pilot + patient window sync + API join verified).
+- Stage 119: complete (treatment names in transactions tab).
 
 ## Recent fixes
+- 2026-01-22 19:30 UTC: Stage119 completed (transactions show treatment names).
+  - Backend: join transactions on treatments to return `treatment_name`.
+  - Frontend: added Treatment column with name fallback to CodeID.
+  - Tests: `bash ops/health.sh`, `bash ops/verify.sh` (react-hooks/exhaustive-deps warnings only).
 - 2026-01-22 19:22 UTC: Stage118 follow-up (patients window sync).
   - Baseline: patients_total=138, tx_total=1, overlap=0.
   - Patients import (window 1000101-1005100): patients_created=5000, updated=0, skipped=0; mapping quality captured in stats-out.
