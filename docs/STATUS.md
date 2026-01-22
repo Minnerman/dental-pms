@@ -59,17 +59,9 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 126: build the read-only calendar API + UI (filtering by date/clinician/status/unlinked, default-visible statuses pending/checked-in/arrived/dna, persistent filters, clinician badges, and the “Read-only: R4 remains the live diary” banner). Stage 127 will follow once the calendar is stable so reception staff can manually link unlinked appointments via the new `r4_appointment_patient_links` table.
+- None (awaiting next stage assignment).
 
 ## Recent fixes
-- 2026-01-22 23:12 UTC: Stage125 completed (incremental appointments rollout + status distribution).
-  - Imported windows: Oct 2024 (117 rows/1 null), Nov 2024 (158/12), Dec 2024 (86/11), Jan 2025 (104/12), Feb 2025 (72/4), Mar 2025 (117/5), plus 2023 Q1–Q4 (404,315,320,280 rows with 0–3 nulls).
-  - Stats include `status_distribution` (normalised) so we can verify default-visible statuses (pending/checked-in/arrived/dna) while the rest remain hidden by default.
-  - Postgres verification confirmed each window’s counts/nulls.
-- 2026-01-22 22:29 UTC: Stage124 pilot (appointments import, Jan 2025 window; Stage124.1 fixes).
-  - Dry-run honours `--appts-from/--appts-to`: filtered count=104, range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`, null patients=12.
-  - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): created=104, updated=0, skipped=0; rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) yielded created=0, updated=0, skipped=104.
-  - Postgres verification (DB user from compose env): `r4_appointments` total=104, window count=104, window range `2025-01-02 09:00:00+00` → `2025-01-31 16:00:00+00`, patient_code nulls=12, sample rows show clinicians=10000047 with Pending/Complete statuses.
 - 2026-01-22 22:10 UTC: Stage124 merged (appointments import scaffolding).
   - New r4_appointments table + importer + CLI entity (vwAppointmentDetails).
   - Fixtures/tests + pilot runbook updates added.
@@ -77,6 +69,10 @@
   - Candidate tables/views mapped; primary source `vwAppointmentDetails` documented.
   - Key, date range, patient null counts captured.
   - Doc: `docs/r4/R4_APPOINTMENTS_DISCOVERY.md`.
+- 2026-01-22 22:19 UTC: Stage124 pilot (appointments import, Jan 2025 window).
+  - Dry-run: `appointments_count=104`, `appointments_patient_null=12`, `appointments_date_range` spanned `2001-10-27T11:15:00` → `2026-11-18T09:00:00` and sample appointments looked sane.
+  - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): `created=0`, `updated=104`, `skipped=0`, `patient_null=12`, date range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`. Idempotency rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) reported the same counts (updates re-apply even though no new rows).
+  - Postgres verification (DB user from compose env): `r4_appointments` total `104`, window count `104`, window range `min_start=2025-01-02 09:00:00+00`, `max_start=2025-01-31 16:00:00+00`, `patient_code_nulls=12`. Sample rows (most recent first) show `legacy_appointment_id` values `99703`, `99781`, `99810`, `99822`, `99800`, `99823`, `99794`, `99805`, `99183`, `99813` with `clinician_code=10000047` and statuses such as `Pending`/`Complete`.
 - 2026-01-22 21:36 UTC: Stage121 completed (transactions performance + UX).
   - Backend: cursor-friendly index + optional `include_total`.
   - UI: filters persist in URL, reset button, loading row during pagination.
