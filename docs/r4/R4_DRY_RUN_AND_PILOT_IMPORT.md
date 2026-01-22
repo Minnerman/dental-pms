@@ -115,6 +115,9 @@ docker compose exec -T backend python -m app.scripts.r4_import --source sqlserve
   --stats-out /tmp/r4_import_stats.json
 ```
 
+Note: when `treatment_transactions` updates existing rows, the stats JSON includes
+`updated_transaction_ids_sample` (capped to 20 IDs). It is omitted when there are no updates.
+
 Verify:
 - importer summary counts
 - unmapped legacy queue: `/admin/legacy/unmapped-appointments`
