@@ -3034,6 +3034,7 @@ export default function PatientDetailClient({
                   onClick={() => setTab("transactions")}
                   type="button"
                   aria-current={tab === "transactions" ? "page" : undefined}
+                  data-testid="patient-tab-transactions"
                 >
                   Transactions ({transactions.length})
                 </button>
@@ -4842,6 +4843,7 @@ export default function PatientDetailClient({
                           type="date"
                           value={transactionsFrom}
                           onChange={(e) => setTransactionsFrom(e.target.value)}
+                          data-testid="transactions-filter-from"
                         />
                       </div>
                       <div className="stack" style={{ gap: 6 }}>
@@ -4851,9 +4853,13 @@ export default function PatientDetailClient({
                           type="date"
                           value={transactionsTo}
                           onChange={(e) => setTransactionsTo(e.target.value)}
+                          data-testid="transactions-filter-to"
                         />
                       </div>
-                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <label
+                        style={{ display: "flex", gap: 8, alignItems: "center" }}
+                        data-testid="transactions-filter-cost-only"
+                      >
                         <input
                           type="checkbox"
                           checked={transactionsCostOnly}
@@ -4866,6 +4872,7 @@ export default function PatientDetailClient({
                         type="button"
                         onClick={() => void loadTransactions({ reset: true })}
                         disabled={transactionsLoading}
+                        data-testid="transactions-apply-filters"
                       >
                         {transactionsLoading ? "Loading..." : "Apply filters"}
                       </button>
@@ -4875,9 +4882,11 @@ export default function PatientDetailClient({
                   {transactionsLoading && transactions.length === 0 ? (
                     <div className="badge">Loading transactions…</div>
                   ) : transactions.length === 0 ? (
-                    <div className="notice">No transactions found.</div>
+                    <div className="notice" data-testid="transactions-empty">
+                      No transactions found.
+                    </div>
                   ) : (
-                    <table className="table">
+                    <table className="table" data-testid="transactions-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -4914,6 +4923,7 @@ export default function PatientDetailClient({
                       type="button"
                       onClick={() => void loadTransactions()}
                       disabled={transactionsLoading}
+                      data-testid="transactions-load-more"
                     >
                       {transactionsLoading ? "Loading..." : "Load more"}
                     </button>
