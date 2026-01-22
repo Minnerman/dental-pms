@@ -21,9 +21,6 @@ class TreatmentTransactionImportStats:
     transactions_skipped: int = 0
     updated_transaction_ids: set[int] = field(default_factory=set, repr=False)
 
-    def record_updated_id(self, legacy_id: int) -> None:
-        self.updated_transaction_ids.add(legacy_id)
-
     def as_dict(self) -> dict[str, object]:
         data: dict[str, object] = {
             "transactions_created": self.transactions_created,
@@ -47,6 +44,7 @@ def import_r4_treatment_transactions(
     progress_every: int | None = None,
 ) -> TreatmentTransactionImportStats:
     stats = TreatmentTransactionImportStats()
+    updated_ids: set[int] = set()
     processed = 0
     last_transaction_id: int | None = None
     started_at = time.monotonic()
@@ -57,7 +55,9 @@ def import_r4_treatment_transactions(
     ):
         processed += 1
         last_transaction_id = tx.transaction_id
-        _upsert_transaction(session, tx, actor_id, legacy_source, stats)
+        updated = _upsert_transaction(session, tx, actor_id, legacy_source, stats)
+        if updated:
+            updated_ids.add(tx.transaction_id)
         _maybe_emit_checkpoint(
             processed,
             last_transaction_id,
@@ -65,6 +65,7 @@ def import_r4_treatment_transactions(
             started_at,
             limit,
         )
+    stats.updated_transaction_ids = updated_ids
     return stats
 
 
@@ -74,7 +75,7 @@ def _upsert_transaction(
     actor_id: int,
     legacy_source: str,
     stats: TreatmentTransactionImportStats,
-) -> R4TreatmentTransaction:
+) -> bool:
     legacy_id = tx.transaction_id
     existing = session.scalar(
         select(R4TreatmentTransaction).where(
@@ -99,10 +100,10 @@ def _upsert_transaction(
         updated = _apply_updates(existing, updates)
         if updated:
             stats.transactions_updated += 1
-            stats.record_updated_id(legacy_id)
+            return True
         else:
             stats.transactions_skipped += 1
-        return existing
+        return False
 
     row = R4TreatmentTransaction(
         legacy_source=legacy_source,
@@ -112,7 +113,7 @@ def _upsert_transaction(
     )
     session.add(row)
     stats.transactions_created += 1
-    return row
+    return False
 
 
 def _normalize_datetime(value: datetime) -> datetime:
