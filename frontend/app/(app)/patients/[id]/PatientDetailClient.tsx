@@ -275,6 +275,7 @@ type TreatmentTransaction = {
 type TreatmentTransactionResponse = {
   items: TreatmentTransaction[];
   next_cursor: string | null;
+  total_count?: number | null;
 };
 
 type ClinicalToothNote = {
@@ -1757,8 +1758,16 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (tab !== "transactions") return;
     if (transactionsLoaded) return;
-    void loadTransactions({ reset: true });
-  }, [tab, transactionsLoaded, patientId]);
+    const fromUrl = getTransactionFiltersFromParams(searchParams);
+    void loadTransactions({ reset: true, overrides: fromUrl });
+  }, [tab, transactionsLoaded, patientId, searchParams]);
+
+  useEffect(() => {
+    const fromUrl = getTransactionFiltersFromParams(searchParams);
+    setTransactionsFrom(fromUrl.from);
+    setTransactionsTo(fromUrl.to);
+    setTransactionsCostOnly(fromUrl.costOnly);
+  }, [searchParams]);
 
   useEffect(() => {
     if (tab !== "clinical" || !selectedTooth) return;
@@ -1805,6 +1814,61 @@ export default function PatientDetailClient({
 
   function normalizeToothCode(code?: string | null) {
     return code ? code.trim().toUpperCase() : null;
+  }
+
+  function getTransactionFiltersFromParams(
+    params: ReturnType<typeof useSearchParams>
+  ) {
+    return {
+      from: params?.get("tx_from") ?? "",
+      to: params?.get("tx_to") ?? "",
+      costOnly: params?.get("tx_cost") === "1",
+    };
+  }
+
+  function updateTransactionFiltersInUrl(next: {
+    from: string;
+    to: string;
+    costOnly: boolean;
+  }) {
+    if (!pathname) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (next.from) {
+      params.set("tx_from", next.from);
+    } else {
+      params.delete("tx_from");
+    }
+    if (next.to) {
+      params.set("tx_to", next.to);
+    } else {
+      params.delete("tx_to");
+    }
+    if (next.costOnly) {
+      params.set("tx_cost", "1");
+    } else {
+      params.delete("tx_cost");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  function applyTransactionFilters() {
+    const next = {
+      from: transactionsFrom,
+      to: transactionsTo,
+      costOnly: transactionsCostOnly,
+    };
+    updateTransactionFiltersInUrl(next);
+    void loadTransactions({ reset: true, overrides: next });
+  }
+
+  function resetTransactionFilters() {
+    const next = { from: "", to: "", costOnly: false };
+    setTransactionsFrom("");
+    setTransactionsTo("");
+    setTransactionsCostOnly(false);
+    updateTransactionFiltersInUrl(next);
+    void loadTransactions({ reset: true, overrides: next });
   }
 
   useEffect(() => {
@@ -4877,11 +4941,20 @@ export default function PatientDetailClient({
                       <button
                         className="btn btn-secondary"
                         type="button"
-                        onClick={() => void loadTransactions({ reset: true })}
+                        onClick={applyTransactionFilters}
                         disabled={transactionsLoading}
                         data-testid="transactions-apply-filters"
                       >
                         {transactionsLoading ? "Loading..." : "Apply filters"}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={resetTransactionFilters}
+                        disabled={transactionsLoading}
+                        data-testid="transactions-reset-filters"
+                      >
+                        Reset filters
                       </button>
                     </div>
                   </div>
@@ -4973,6 +5046,13 @@ export default function PatientDetailClient({
                             </tr>
                           );
                         })}
+                        {transactionsLoading && (
+                          <tr data-testid="transactions-loading-row">
+                            <td colSpan={8} style={{ color: "var(--muted)" }}>
+                              Loading…
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   )}

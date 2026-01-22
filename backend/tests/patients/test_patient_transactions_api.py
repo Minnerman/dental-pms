@@ -195,6 +195,15 @@ def test_patient_transactions_order_and_pagination(api_client, auth_headers):
         assert payload["items"][0]["treatment_code"] == treatment_code
         assert payload["next_cursor"]
 
+        res_total = api_client.get(
+            f"/patients/{patient_id}/treatment-transactions",
+            headers=auth_headers,
+            params={"include_total": "true"},
+        )
+        assert res_total.status_code == 200, res_total.text
+        payload_total = res_total.json()
+        assert payload_total["total_count"] == 4
+
         res_next = api_client.get(
             f"/patients/{patient_id}/treatment-transactions",
             headers=auth_headers,
