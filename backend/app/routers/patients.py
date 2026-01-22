@@ -14,6 +14,7 @@ from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.models.patient_recall import PatientRecall, PatientRecallStatus
+from app.models.r4_treatment_plan import R4Treatment
 from app.models.r4_treatment_transaction import R4TreatmentTransaction
 from app.models.patient_recall_communication import (
     PatientRecallCommunication,
@@ -535,11 +536,13 @@ def list_patient_treatment_transactions(
 
     recorded_user = aliased(R4User)
     entry_user = aliased(R4User)
+    treatment = aliased(R4Treatment)
     stmt = (
         select(
             R4TreatmentTransaction,
             recorded_user.display_name.label("recorded_by_name"),
             entry_user.display_name.label("user_name"),
+            treatment.description.label("treatment_name"),
         )
         .where(R4TreatmentTransaction.patient_code == patient_code)
         .outerjoin(
@@ -554,6 +557,13 @@ def list_patient_treatment_transactions(
             and_(
                 entry_user.legacy_source == R4TreatmentTransaction.legacy_source,
                 entry_user.legacy_user_code == R4TreatmentTransaction.user_code,
+            ),
+        )
+        .outerjoin(
+            treatment,
+            and_(
+                treatment.legacy_source == R4TreatmentTransaction.legacy_source,
+                treatment.legacy_treatment_code == R4TreatmentTransaction.treatment_code,
             ),
         )
     )
@@ -596,7 +606,7 @@ def list_patient_treatment_transactions(
         last_tx = items[-1][0]
         next_cursor = _encode_tx_cursor(last_tx.performed_at, last_tx.legacy_transaction_id)
     payload_items: list[dict[str, object]] = []
-    for tx, recorded_name, user_name in items:
+    for tx, recorded_name, user_name, treatment_name in items:
         payload_items.append(
             {
                 "legacy_transaction_id": tx.legacy_transaction_id,
@@ -605,6 +615,7 @@ def list_patient_treatment_transactions(
                 "trans_code": tx.trans_code,
                 "patient_cost": tx.patient_cost,
                 "dpb_cost": tx.dpb_cost,
+                "treatment_name": treatment_name,
                 "recorded_by": tx.recorded_by,
                 "user_code": tx.user_code,
                 "recorded_by_name": recorded_name,

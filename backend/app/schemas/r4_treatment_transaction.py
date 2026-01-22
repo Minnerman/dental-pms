@@ -13,6 +13,7 @@ class R4TreatmentTransactionOut(BaseModel):
     trans_code: int | None = None
     patient_cost: Decimal | None = None
     dpb_cost: Decimal | None = None
+    treatment_name: str | None = None
     recorded_by: int | None = None
     user_code: int | None = None
     recorded_by_name: str | None = None

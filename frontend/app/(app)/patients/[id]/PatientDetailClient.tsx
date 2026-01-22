@@ -258,6 +258,7 @@ type TreatmentTransaction = {
   legacy_transaction_id: number;
   performed_at: string;
   treatment_code?: number | null;
+  treatment_name?: string | null;
   trans_code?: number | null;
   patient_cost?: number | null;
   dpb_cost?: number | null;
@@ -4892,6 +4893,7 @@ export default function PatientDetailClient({
                       <thead>
                         <tr>
                           <th>Date</th>
+                          <th>Treatment</th>
                           <th>CodeID</th>
                           <th>TransCode</th>
                           <th>Patient cost</th>
@@ -4908,9 +4910,14 @@ export default function PatientDetailClient({
                             "—";
                           const userCode =
                             transaction.user_name ?? transaction.user_code ?? "—";
+                          const treatmentLabel =
+                            transaction.treatment_name ??
+                            transaction.treatment_code ??
+                            "—";
                           return (
                             <tr key={transaction.legacy_transaction_id}>
                               <td>{formatDateTime(transaction.performed_at)}</td>
+                              <td>{treatmentLabel}</td>
                               <td>{transaction.treatment_code ?? "—"}</td>
                               <td>{transaction.trans_code ?? "—"}</td>
                               <td>{formatPounds(transaction.patient_cost)}</td>
