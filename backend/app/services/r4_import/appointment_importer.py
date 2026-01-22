@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -80,8 +80,8 @@ def _upsert_appointment(
     updates = {
         "legacy_appointment_id": appt.appointment_id,
         "patient_code": appt.patient_code,
-        "starts_at": appt.starts_at,
-        "ends_at": appt.ends_at,
+        "starts_at": _ensure_timezone(appt.starts_at),
+        "ends_at": _ensure_timezone(appt.ends_at),
         "duration_minutes": appt.duration_minutes,
         "clinician_code": appt.clinician_code,
         "status": _clean_text(appt.status),
@@ -124,3 +124,11 @@ def _apply_updates(model, updates: dict[str, object]) -> bool:
             setattr(model, field, value)
             changed = True
     return changed
+
+
+def _ensure_timezone(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)

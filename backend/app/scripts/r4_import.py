@@ -62,7 +62,7 @@ def _write_mapping_quality_file(path: str, payload: dict[str, object]) -> None:
     parent = target.parent
     if parent and not parent.exists():
         raise RuntimeError(f"Mapping quality output directory does not exist: {parent}")
-    data = json.dumps(payload, indent=2, sort_keys=True)
+    data = json.dumps(payload, indent=2, sort_keys=True, default=str)
     with tempfile.NamedTemporaryFile(
         "w",
         encoding="utf-8",
@@ -128,8 +128,8 @@ def _maybe_write_stats(
         return
     if entity == "appointments":
         window = {
-            "appts_from": appts_from,
-            "appts_to": appts_to,
+            "appts_from": appts_from.isoformat() if appts_from else None,
+            "appts_to": appts_to.isoformat() if appts_to else None,
         }
     else:
         window = {
