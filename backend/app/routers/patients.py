@@ -1,8 +1,10 @@
 from calendar import monthrange
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+import base64
+import json
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, nullslast, or_, select
+from sqlalchemy import and_, func, nullslast, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -12,6 +14,7 @@ from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
 from app.models.patient_recall import PatientRecall, PatientRecallStatus
+from app.models.r4_treatment_transaction import R4TreatmentTransaction
 from app.models.patient_recall_communication import (
     PatientRecallCommunication,
     PatientRecallCommunicationChannel,
@@ -39,6 +42,7 @@ from app.schemas.recall_communication import (
     RecallCommunicationOut,
 )
 from app.schemas.ledger import LedgerChargeCreate, LedgerEntryOut, LedgerPaymentCreate
+from app.schemas.r4_treatment_transaction import R4TreatmentTransactionListOut
 from app.models.user import User
 from app.services.recall_communications import log_recall_communication
 from app.routers.recalls import bump_export_count_cache_epoch
@@ -62,6 +66,26 @@ def _stringify(value: object | None) -> str:
     if hasattr(value, "value"):
         return value.value
     return str(value)
+
+
+def _encode_tx_cursor(performed_at: datetime, legacy_transaction_id: int) -> str:
+    payload = {
+        "performed_at": performed_at.isoformat(),
+        "legacy_transaction_id": legacy_transaction_id,
+    }
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    return encoded
+
+
+def _decode_tx_cursor(cursor: str) -> tuple[datetime, int]:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+        payload = json.loads(raw)
+        performed_at = datetime.fromisoformat(payload["performed_at"])
+        legacy_transaction_id = int(payload["legacy_transaction_id"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid cursor.") from exc
+    return performed_at, legacy_transaction_id
 
 
 def _log_recall_timeline(
@@ -482,6 +506,77 @@ def list_patient_ledger(
         .offset(offset)
     )
     return list(db.scalars(stmt))
+
+
+@router.get(
+    "/{patient_id}/treatment-transactions",
+    response_model=R4TreatmentTransactionListOut,
+)
+def list_patient_treatment_transactions(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    cost_only: bool = Query(default=False),
+):
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    if not patient.legacy_id:
+        return {"items": [], "next_cursor": None}
+    try:
+        patient_code = int(patient.legacy_id)
+    except ValueError:
+        return {"items": [], "next_cursor": None}
+
+    stmt = select(R4TreatmentTransaction).where(
+        R4TreatmentTransaction.patient_code == patient_code
+    )
+    if cost_only:
+        stmt = stmt.where(
+            or_(
+                R4TreatmentTransaction.patient_cost > 0,
+                R4TreatmentTransaction.dpb_cost > 0,
+            )
+        )
+    if date_from is not None:
+        start = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+        stmt = stmt.where(R4TreatmentTransaction.performed_at >= start)
+    if date_to is not None:
+        end = datetime.combine(date_to, datetime.min.time()).replace(
+            tzinfo=timezone.utc
+        ) + timedelta(days=1)
+        stmt = stmt.where(R4TreatmentTransaction.performed_at < end)
+    if cursor:
+        cursor_dt, cursor_id = _decode_tx_cursor(cursor)
+        stmt = stmt.where(
+            or_(
+                R4TreatmentTransaction.performed_at < cursor_dt,
+                and_(
+                    R4TreatmentTransaction.performed_at == cursor_dt,
+                    R4TreatmentTransaction.legacy_transaction_id < cursor_id,
+                ),
+            )
+        )
+
+    stmt = stmt.order_by(
+        R4TreatmentTransaction.performed_at.desc(),
+        R4TreatmentTransaction.legacy_transaction_id.desc(),
+    ).limit(limit + 1)
+    rows = list(db.scalars(stmt))
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        next_cursor = _encode_tx_cursor(last.performed_at, last.legacy_transaction_id)
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
+    }
 
 
 @router.get("/{patient_id}/balance")
