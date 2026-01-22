@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import delete, select
 
@@ -7,6 +7,7 @@ from app.models.r4_appointment import R4Appointment
 from app.models.user import User
 from app.services.r4_import.appointment_importer import import_r4_appointments
 from app.services.r4_import.fixture_source import FixtureSource
+from app.services.r4_import import appointment_importer
 
 
 def test_r4_appointments_idempotent():
@@ -58,3 +59,11 @@ def test_r4_appointments_date_filter():
         session.execute(delete(R4Appointment))
         session.commit()
         session.close()
+
+
+def test_ensure_timezone_idempotent():
+    naive = datetime(2025, 1, 1, 9, 30)
+    first = appointment_importer._ensure_timezone(naive)
+    second = appointment_importer._ensure_timezone(first)
+    assert first == second
+    assert first.tzinfo == timezone.utc
