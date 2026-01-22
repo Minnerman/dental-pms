@@ -27,3 +27,4 @@ class R4TreatmentTransactionOut(BaseModel):
 class R4TreatmentTransactionListOut(BaseModel):
     items: list[R4TreatmentTransactionOut]
     next_cursor: str | None = None
+    total_count: int | None = None

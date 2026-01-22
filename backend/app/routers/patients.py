@@ -523,20 +523,45 @@ def list_patient_treatment_transactions(
     date_from: date | None = Query(default=None, alias="from"),
     date_to: date | None = Query(default=None, alias="to"),
     cost_only: bool = Query(default=False),
+    include_total: bool = Query(default=False),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if not patient.legacy_id:
-        return {"items": [], "next_cursor": None}
+        return {
+            "items": [],
+            "next_cursor": None,
+            "total_count": 0 if include_total else None,
+        }
     try:
         patient_code = int(patient.legacy_id)
     except ValueError:
-        return {"items": [], "next_cursor": None}
+        return {
+            "items": [],
+            "next_cursor": None,
+            "total_count": 0 if include_total else None,
+        }
 
     recorded_user = aliased(R4User)
     entry_user = aliased(R4User)
     treatment = aliased(R4Treatment)
+    filters = [R4TreatmentTransaction.patient_code == patient_code]
+    if cost_only:
+        filters.append(
+            or_(
+                R4TreatmentTransaction.patient_cost > 0,
+                R4TreatmentTransaction.dpb_cost > 0,
+            )
+        )
+    if date_from is not None:
+        start = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+        filters.append(R4TreatmentTransaction.performed_at >= start)
+    if date_to is not None:
+        end = datetime.combine(date_to, datetime.min.time()).replace(
+            tzinfo=timezone.utc
+        ) + timedelta(days=1)
+        filters.append(R4TreatmentTransaction.performed_at < end)
     stmt = (
         select(
             R4TreatmentTransaction,
@@ -548,7 +573,7 @@ def list_patient_treatment_transactions(
             recorded_user.role.label("recorded_by_role"),
             entry_user.role.label("user_role"),
         )
-        .where(R4TreatmentTransaction.patient_code == patient_code)
+        .where(*filters)
         .outerjoin(
             recorded_user,
             and_(
@@ -571,21 +596,6 @@ def list_patient_treatment_transactions(
             ),
         )
     )
-    if cost_only:
-        stmt = stmt.where(
-            or_(
-                R4TreatmentTransaction.patient_cost > 0,
-                R4TreatmentTransaction.dpb_cost > 0,
-            )
-        )
-    if date_from is not None:
-        start = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
-        stmt = stmt.where(R4TreatmentTransaction.performed_at >= start)
-    if date_to is not None:
-        end = datetime.combine(date_to, datetime.min.time()).replace(
-            tzinfo=timezone.utc
-        ) + timedelta(days=1)
-        stmt = stmt.where(R4TreatmentTransaction.performed_at < end)
     if cursor:
         cursor_dt, cursor_id = _decode_tx_cursor(cursor)
         stmt = stmt.where(
@@ -609,6 +619,16 @@ def list_patient_treatment_transactions(
     if has_more and items:
         last_tx = items[-1][0]
         next_cursor = _encode_tx_cursor(last_tx.performed_at, last_tx.legacy_transaction_id)
+    total_count = None
+    if include_total:
+        total_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(R4TreatmentTransaction)
+                .where(*filters)
+            )
+            or 0
+        )
     payload_items: list[dict[str, object]] = []
     for (
         tx,
@@ -642,6 +662,7 @@ def list_patient_treatment_transactions(
     return {
         "items": payload_items,
         "next_cursor": next_cursor,
+        "total_count": total_count,
     }
 
 

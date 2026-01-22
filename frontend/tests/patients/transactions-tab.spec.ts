@@ -102,6 +102,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
     } else if (costOnly) {
       payload = { items: [pageOne[0]], next_cursor: null };
     } else if (cursor === "cursor-1") {
+      await new Promise((resolve) => setTimeout(resolve, 200));
       payload = { items: pageTwo, next_cursor: null };
     } else {
       payload = { items: pageOne, next_cursor: "cursor-1" };
@@ -134,15 +135,21 @@ test("patient transactions tab renders, paginates, and filters", async ({
   const loadMore = page.getByTestId("transactions-load-more");
   await expect(loadMore).toBeVisible();
   await loadMore.click();
+  await expect(page.getByTestId("transactions-loading-row")).toBeVisible();
   await expect(rows).toHaveCount(3);
 
   await page.getByTestId("transactions-filter-cost-only").locator("input").check();
   await page.getByTestId("transactions-apply-filters").click();
+  await expect(page).toHaveURL(/tx_cost=1/);
   await expect(rows).toHaveCount(1);
 
   await page.getByTestId("transactions-filter-cost-only").locator("input").uncheck();
   await page.getByTestId("transactions-filter-from").fill("2026-01-01");
   await page.getByTestId("transactions-filter-to").fill("2026-01-01");
   await page.getByTestId("transactions-apply-filters").click();
+  await expect(page).toHaveURL(/tx_from=2026-01-01/);
   await expect(page.getByTestId("transactions-empty")).toBeVisible();
+
+  await page.getByTestId("transactions-reset-filters").click();
+  await expect(page).not.toHaveURL(/tx_from=|tx_to=|tx_cost=/);
 });
