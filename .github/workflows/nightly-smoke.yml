@@ -45,6 +45,20 @@ jobs:
           RESET_TOKEN_EXPIRE_MINUTES=60
           EOF
 
+      - name: Load R4 env file if present
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENV_FILE="/home/amir/secrets/dental-pms-r4.env"
+          if [[ -f "$ENV_FILE" ]]; then
+            echo "Loading R4 env file: $ENV_FILE"
+            grep -vE '^\s*#' "$ENV_FILE" | grep -vE '^\s*$' >> "$GITHUB_ENV"
+          else
+            echo "R4 env file not found on this runner ($ENV_FILE). Running smoke without R4."
+            mkdir -p "$(dirname "$ENV_FILE")"
+            : > "$ENV_FILE"
+          fi
+
       - name: Start database
         run: docker compose up -d db
 
