@@ -66,6 +66,7 @@ def _upsert_user(
         "initials": _clean_text(user.initials),
         "display_name": display_name,
         "is_current": bool(user.is_current),
+        "role": _clean_text(user.role),
         "updated_by_user_id": actor_id,
     }
     if existing:

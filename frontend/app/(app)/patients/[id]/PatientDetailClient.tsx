@@ -266,6 +266,10 @@ type TreatmentTransaction = {
   user_code?: number | null;
   recorded_by_name?: string | null;
   user_name?: string | null;
+  recorded_by_is_current?: boolean | null;
+  user_is_current?: boolean | null;
+  recorded_by_role?: string | null;
+  user_role?: string | null;
 };
 
 type TreatmentTransactionResponse = {
@@ -4914,6 +4918,38 @@ export default function PatientDetailClient({
                             transaction.treatment_name ??
                             transaction.treatment_code ??
                             "—";
+                          const recordedMetaParts: string[] = [];
+                          if (transaction.recorded_by_role) {
+                            recordedMetaParts.push(transaction.recorded_by_role);
+                          }
+                          if (
+                            transaction.recorded_by_is_current !== null &&
+                            transaction.recorded_by_is_current !== undefined
+                          ) {
+                            recordedMetaParts.push(
+                              transaction.recorded_by_is_current ? "Current" : "Inactive"
+                            );
+                          }
+                          const recordedMeta =
+                            recorded !== "—" && recordedMetaParts.length
+                              ? ` (${recordedMetaParts.join(" · ")})`
+                              : "";
+                          const userMetaParts: string[] = [];
+                          if (transaction.user_role) {
+                            userMetaParts.push(transaction.user_role);
+                          }
+                          if (
+                            transaction.user_is_current !== null &&
+                            transaction.user_is_current !== undefined
+                          ) {
+                            userMetaParts.push(
+                              transaction.user_is_current ? "Current" : "Inactive"
+                            );
+                          }
+                          const userMeta =
+                            userCode !== "—" && userMetaParts.length
+                              ? ` (${userMetaParts.join(" · ")})`
+                              : "";
                           return (
                             <tr key={transaction.legacy_transaction_id}>
                               <td>{formatDateTime(transaction.performed_at)}</td>
@@ -4922,8 +4958,18 @@ export default function PatientDetailClient({
                               <td>{transaction.trans_code ?? "—"}</td>
                               <td>{formatPounds(transaction.patient_cost)}</td>
                               <td>{formatPounds(transaction.dpb_cost)}</td>
-                              <td>{recorded}</td>
-                              <td>{userCode}</td>
+                              <td>
+                                {recorded}
+                                {recordedMeta && (
+                                  <span style={{ color: "var(--muted)" }}>{recordedMeta}</span>
+                                )}
+                              </td>
+                              <td>
+                                {userCode}
+                                {userMeta && (
+                                  <span style={{ color: "var(--muted)" }}>{userMeta}</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
