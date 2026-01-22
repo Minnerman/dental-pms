@@ -59,9 +59,14 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 119: complete (treatment names in transactions tab).
+- Stage 120: complete (clinician status/role in transactions).
 
 ## Recent fixes
+- 2026-01-22 19:57 UTC: Stage120 completed (clinician status/role in transactions).
+  - Importer: users capture role hints (extended duty nurse/oral health promoter/clinic admin/type).
+  - API: transactions include recorded/user current status + role fields.
+  - UI: clinician names display role/status meta in Transactions tab.
+  - Tests: `bash ops/health.sh`, `bash ops/verify.sh` (react-hooks/exhaustive-deps warnings only).
 - 2026-01-22 19:30 UTC: Stage119 completed (transactions show treatment names).
   - Backend: join transactions on treatments to return `treatment_name`.
   - Frontend: added Treatment column with name fallback to CodeID.
