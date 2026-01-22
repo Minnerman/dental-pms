@@ -264,6 +264,39 @@ def test_cli_sqlserver_dry_run_treatment_transactions(monkeypatch):
     assert r4_import_script.main() == 0
 
 
+def test_cli_sqlserver_dry_run_users(monkeypatch):
+    class UsersSqlServerSource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def dry_run_summary(self, *args, **kwargs):
+            raise AssertionError("dry_run_summary should not run for users entity")
+
+        def dry_run_summary_users(self, limit=10):
+            return {"ok": True, "limit": limit, "entity": "users"}
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", UsersSqlServerSource)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["r4_import.py", "--source", "sqlserver", "--dry-run", "--entity", "users"],
+    )
+    assert r4_import_script.main() == 0
+
+
 def test_cli_sqlserver_apply_stats_out(tmp_path, monkeypatch):
     class DummySession:
         def commit(self):

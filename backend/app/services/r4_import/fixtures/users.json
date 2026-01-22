@@ -1,0 +1,29 @@
+[
+  {
+    "user_code": 10000001,
+    "full_name": "Administrator",
+    "title": "The",
+    "forename": "System",
+    "surname": "Administrator",
+    "initials": "Adm0",
+    "is_current": true
+  },
+  {
+    "user_code": 10000002,
+    "full_name": "Arthur Dentist",
+    "title": "Mr",
+    "forename": "Arthur",
+    "surname": "Dentist",
+    "initials": "AD",
+    "is_current": false
+  },
+  {
+    "user_code": 10000003,
+    "full_name": "Amir Mostofi",
+    "title": "Mr",
+    "forename": "Amir",
+    "surname": "Mostofi",
+    "initials": "AM",
+    "is_current": true
+  }
+]

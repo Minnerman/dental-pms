@@ -15,6 +15,8 @@ class R4TreatmentTransactionOut(BaseModel):
     dpb_cost: Decimal | None = None
     recorded_by: int | None = None
     user_code: int | None = None
+    recorded_by_name: str | None = None
+    user_name: str | None = None
 
 
 class R4TreatmentTransactionListOut(BaseModel):

@@ -54,6 +54,16 @@ class R4TreatmentTransaction(BaseModel):
     tp_item: int | None = None
 
 
+class R4User(BaseModel):
+    user_code: int = Field(..., ge=1)
+    full_name: str | None = None
+    title: str | None = None
+    forename: str | None = None
+    surname: str | None = None
+    initials: str | None = None
+    is_current: bool = False
+
+
 class R4TreatmentPlan(BaseModel):
     patient_code: int = Field(..., ge=1)
     tp_number: int = Field(..., ge=1)

@@ -17,6 +17,7 @@ from app.services.r4_import.mapping_quality import PatientMappingQualityReportBu
 from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.postgres_verify import verify_patients_window
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
+from app.services.r4_import.r4_user_importer import import_r4_users
 from app.services.r4_import.treatment_transactions_importer import (
     import_r4_treatment_transactions,
 )
@@ -150,6 +151,7 @@ def main() -> int:
             "patients_appts",
             "treatments",
             "treatment_transactions",
+            "users",
             "treatment_plans",
             "treatment_plans_summary",
             "treatment_plans_backfill_patient_ids",
@@ -360,6 +362,14 @@ def main() -> int:
                             legacy_source="r4",
                             limit=args.limit,
                         )
+                    elif args.entity == "users":
+                        stats = import_r4_users(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            limit=args.limit,
+                        )
                     elif args.entity == "treatment_transactions":
                         stats = import_r4_treatment_transactions(
                             session,
@@ -433,6 +443,8 @@ def main() -> int:
                 )
             elif args.entity == "treatments":
                 summary = source.dry_run_summary_treatments(limit=args.limit or 10)
+            elif args.entity == "users":
+                summary = source.dry_run_summary_users(limit=args.limit or 10)
             elif args.entity == "treatment_transactions":
                 summary = source.dry_run_summary_treatment_transactions(
                     limit=args.limit or 10,
@@ -476,6 +488,8 @@ def main() -> int:
             stats = import_r4(session, source, actor_id)
         elif args.entity == "treatments":
             stats = import_r4_treatments(session, source, actor_id)
+        elif args.entity == "users":
+            stats = import_r4_users(session, source, actor_id)
         elif args.entity == "treatment_transactions":
             stats = import_r4_treatment_transactions(
                 session,

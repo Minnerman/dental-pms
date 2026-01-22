@@ -5,7 +5,7 @@ import json
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import and_, func, nullslast, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.db.session import get_db
 from app.deps import get_current_user
@@ -21,6 +21,7 @@ from app.models.patient_recall_communication import (
     PatientRecallCommunicationDirection,
     PatientRecallCommunicationStatus,
 )
+from app.models.r4_user import R4User
 from app.services.audit import log_event, snapshot_model
 from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recalls import resolve_recall_status
@@ -532,8 +533,29 @@ def list_patient_treatment_transactions(
     except ValueError:
         return {"items": [], "next_cursor": None}
 
-    stmt = select(R4TreatmentTransaction).where(
-        R4TreatmentTransaction.patient_code == patient_code
+    recorded_user = aliased(R4User)
+    entry_user = aliased(R4User)
+    stmt = (
+        select(
+            R4TreatmentTransaction,
+            recorded_user.display_name.label("recorded_by_name"),
+            entry_user.display_name.label("user_name"),
+        )
+        .where(R4TreatmentTransaction.patient_code == patient_code)
+        .outerjoin(
+            recorded_user,
+            and_(
+                recorded_user.legacy_source == R4TreatmentTransaction.legacy_source,
+                recorded_user.legacy_user_code == R4TreatmentTransaction.recorded_by,
+            ),
+        )
+        .outerjoin(
+            entry_user,
+            and_(
+                entry_user.legacy_source == R4TreatmentTransaction.legacy_source,
+                entry_user.legacy_user_code == R4TreatmentTransaction.user_code,
+            ),
+        )
     )
     if cost_only:
         stmt = stmt.where(
@@ -566,15 +588,31 @@ def list_patient_treatment_transactions(
         R4TreatmentTransaction.performed_at.desc(),
         R4TreatmentTransaction.legacy_transaction_id.desc(),
     ).limit(limit + 1)
-    rows = list(db.scalars(stmt))
+    rows = list(db.execute(stmt).all())
     has_more = len(rows) > limit
     items = rows[:limit]
     next_cursor = None
     if has_more and items:
-        last = items[-1]
-        next_cursor = _encode_tx_cursor(last.performed_at, last.legacy_transaction_id)
+        last_tx = items[-1][0]
+        next_cursor = _encode_tx_cursor(last_tx.performed_at, last_tx.legacy_transaction_id)
+    payload_items: list[dict[str, object]] = []
+    for tx, recorded_name, user_name in items:
+        payload_items.append(
+            {
+                "legacy_transaction_id": tx.legacy_transaction_id,
+                "performed_at": tx.performed_at,
+                "treatment_code": tx.treatment_code,
+                "trans_code": tx.trans_code,
+                "patient_cost": tx.patient_cost,
+                "dpb_cost": tx.dpb_cost,
+                "recorded_by": tx.recorded_by,
+                "user_code": tx.user_code,
+                "recorded_by_name": recorded_name,
+                "user_name": user_name,
+            }
+        )
     return {
-        "items": items,
+        "items": payload_items,
         "next_cursor": next_cursor,
     }
 

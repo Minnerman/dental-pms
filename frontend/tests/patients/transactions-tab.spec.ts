@@ -22,6 +22,8 @@ test("patient transactions tab renders, paginates, and filters", async ({
       dpb_cost: 0.0,
       recorded_by: 2,
       user_code: 12,
+      recorded_by_name: "Dr Ada Lovelace",
+      user_name: "Mr Sam Clerk",
     },
     {
       legacy_transaction_id: 100,
@@ -32,6 +34,8 @@ test("patient transactions tab renders, paginates, and filters", async ({
       dpb_cost: 20.0,
       recorded_by: 2,
       user_code: 12,
+      recorded_by_name: "Dr Ada Lovelace",
+      user_name: "Mr Sam Clerk",
     },
   ];
   const pageTwo = [
@@ -44,6 +48,8 @@ test("patient transactions tab renders, paginates, and filters", async ({
       dpb_cost: 0.0,
       recorded_by: 3,
       user_code: 14,
+      recorded_by_name: "Dr Ada Lovelace",
+      user_name: "Mr Sam Clerk",
     },
   ];
 
@@ -57,6 +63,8 @@ test("patient transactions tab renders, paginates, and filters", async ({
       dpb_cost: number | null;
       recorded_by: number | null;
       user_code: number | null;
+      recorded_by_name?: string | null;
+      user_name?: string | null;
     }>;
     next_cursor: string | null;
   };
@@ -98,6 +106,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
 
   const rows = table.locator("tbody tr");
   await expect(rows).toHaveCount(2);
+  await expect(table).toContainText("Dr Ada Lovelace");
 
   const loadMore = page.getByTestId("transactions-load-more");
   await expect(loadMore).toBeVisible();

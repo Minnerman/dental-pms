@@ -41,6 +41,7 @@ from app.models.r4_treatment_plan import (
     R4TreatmentPlanReview,
 )
 from app.models.r4_treatment_transaction import R4TreatmentTransaction
+from app.models.r4_user import R4User
 from app.models.r4_patient_mapping import R4PatientMapping
 
 __all__ = [
@@ -97,6 +98,7 @@ __all__ = [
     "LegacyResolutionEvent",
     "R4Treatment",
     "R4TreatmentTransaction",
+    "R4User",
     "R4TreatmentPlan",
     "R4TreatmentPlanItem",
     "R4TreatmentPlanReview",
