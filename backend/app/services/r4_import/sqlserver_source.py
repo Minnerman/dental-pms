@@ -192,7 +192,7 @@ class R4SqlServerSource:
         date_to: date | None = None,
     ) -> dict[str, Any]:
         appts_count = self.count_appointments(date_from=date_from, date_to=date_to)
-        appt_range = self.appointment_date_range()
+        appt_range = self.appointment_date_range(date_from=date_from, date_to=date_to)
         null_patients = self.appointment_patient_null_count(
             date_from=date_from,
             date_to=date_to,
@@ -514,13 +514,19 @@ class R4SqlServerSource:
             "max": self._format_dt(max_date),
         }
 
-    def appointment_date_range(self) -> dict[str, str] | None:
+    def appointment_date_range(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict[str, str] | None:
         starts_col = self._pick_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
         if not starts_col:
             return None
+        where_clause, params = self._build_date_filter(starts_col, date_from, date_to)
         rows = self._query(
             f"SELECT MIN({starts_col}) AS min_date, MAX({starts_col}) AS max_date "
-            "FROM dbo.vwAppointmentDetails WITH (NOLOCK)"
+            f"FROM dbo.vwAppointmentDetails WITH (NOLOCK){where_clause}",
+            params,
         )
         if not rows:
             return None

@@ -1,4 +1,5 @@
-from datetime import date
+from collections import Counter
+from datetime import date, datetime, timezone
 
 from sqlalchemy import delete, select
 
@@ -7,6 +8,7 @@ from app.models.r4_appointment import R4Appointment
 from app.models.user import User
 from app.services.r4_import.appointment_importer import import_r4_appointments
 from app.services.r4_import.fixture_source import FixtureSource
+from app.services.r4_import import appointment_importer
 
 
 def test_r4_appointments_idempotent():
@@ -23,6 +25,13 @@ def test_r4_appointments_idempotent():
         assert stats_first.appointments_created == 4
         assert stats_first.appointments_updated == 0
         assert stats_first.appointments_skipped == 0
+        assert stats_first.status_distribution == Counter(
+            {
+                "booked": 1,
+                "complete": 1,
+                "cancelled": 1,
+            }
+        )
 
         stats_second = import_r4_appointments(session, source, actor.id)
         session.commit()
@@ -58,3 +67,11 @@ def test_r4_appointments_date_filter():
         session.execute(delete(R4Appointment))
         session.commit()
         session.close()
+
+
+def test_ensure_timezone_idempotent():
+    naive = datetime(2025, 1, 1, 9, 30)
+    first = appointment_importer._ensure_timezone(naive)
+    second = appointment_importer._ensure_timezone(first)
+    assert first == second
+    assert first.tzinfo == timezone.utc

@@ -141,6 +141,70 @@ def test_cli_sqlserver_dry_run_appointments(monkeypatch):
     assert r4_import_script.main() == 0
 
 
+def test_cli_sqlserver_dry_run_appointments_respects_filters(monkeypatch):
+    recorded = {}
+
+    class FilteredAppointmentsSource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def dry_run_summary_appointments(
+            self,
+            limit: int = 10,
+            date_from: date | None = None,
+            date_to: date | None = None,
+        ):
+            recorded["limit"] = limit
+            recorded["date_from"] = date_from
+            recorded["date_to"] = date_to
+            return {
+                "source": "sqlserver",
+                "server": "example:1433",
+                "database": "sys2000",
+                "appointments_count": 7,
+                "appointments_date_range": {"min": "2025-01-02", "max": "2025-01-31"},
+                "appointments_patient_null": 1,
+                "sample_appointments": [],
+            }
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", FilteredAppointmentsSource)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--source",
+            "sqlserver",
+            "--dry-run",
+            "--entity",
+            "appointments",
+            "--appts-from",
+            "2025-01-01",
+            "--appts-to",
+            "2025-01-31",
+            "--limit",
+            "5",
+        ],
+    )
+    assert r4_import_script.main() == 0
+    assert recorded["date_from"] == date(2025, 1, 1)
+    assert recorded["date_to"] == date(2025, 1, 31)
+    assert recorded["limit"] == 5
+
+
 def test_cli_sqlserver_dry_run_patients_mapping_quality_out(tmp_path, monkeypatch):
     class PatientsOnlySqlServerSource:
         def __init__(self, _config):

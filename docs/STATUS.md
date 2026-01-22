@@ -59,9 +59,25 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 124: appointments importer merged; pilot run pending.
+- Stage 125: incremental appointments rollout + status distribution.
+  - Stats: the appointments importer now reports `status_distribution` with normalized strings so each window can be validated for the default statuses (Pending/Checked-in/Arrived/DNA) plus the full catalog.
+  - Pilots completed for the requested windows with dry-run/apply/rerun plus Postgres verification.
+  - Sample window data:
+    - 2024-10-01→2024-10-31: 117 rows, 1 null; distribution = complete/pending/cancelled/waiting.
+    - 2024-11-01→2024-11-30: 158 rows, 12 nulls; distribution includes complete/pending/cancelled/deleted/in surgery/waiting.
+    - 2024-12-01→2024-12-31: 86 rows, 11 nulls; distribution includes complete/pending/cancelled/in surgery.
+    - 2025-01-01→2025-01-31: 104 rows, 12 nulls; distribution includes complete/pending/cancelled/left surgery/deleted.
+    - 2025-02-01→2025-02-28: 72 rows, 4 nulls; distribution includes complete/pending/cancelled/left surgery/did not attend/in surgery/waiting.
+    - 2025-03-01→2025-03-31: 117 rows, 5 nulls; distribution includes complete/pending/cancelled.
+    - 2023-quarters (Q1=404 rows, Q2=315, Q3=320, Q4=280; nulls 0–3) show dominant statuses of complete/pending/left surgery plus cancelled/in surgery/waiting/did not attend/deleted.
+  - Postgres verification (counts + nulls per window) confirmed the imported rows for every batch.
+  - Next: Stage 126 (read-only calendar API + UI) followed by Stage 127 (manual linking of unlinked appointments).
 
 ## Recent fixes
+- 2026-01-22 22:29 UTC: Stage124 pilot (appointments import, Jan 2025 window; Stage124.1 fixes).
+  - Dry-run honours `--appts-from/--appts-to`: filtered count=104, range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`, null patients=12.
+  - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): created=104, updated=0, skipped=0; rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) yielded created=0, updated=0, skipped=104.
+  - Postgres verification (DB user from compose env): `r4_appointments` total=104, window count=104, window range `2025-01-02 09:00:00+00` → `2025-01-31 16:00:00+00`, patient_code nulls=12, sample rows show clinicians=10000047 with Pending/Complete statuses.
 - 2026-01-22 22:10 UTC: Stage124 merged (appointments import scaffolding).
   - New r4_appointments table + importer + CLI entity (vwAppointmentDetails).
   - Fixtures/tests + pilot runbook updates added.
