@@ -59,9 +59,12 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 115B: tbd.
+- Stage 116: tbd.
 
 ## Recent fixes
+- 2026-01-22 11:20 UTC: Stage115B completed (updated IDs sample scoped to run).
+  - Fix: updated_transaction_ids_sample now collects only updates from the current stream.
+  - Verification rerun: transactions_created=0, transactions_updated=0, transactions_skipped=184505.
 - 2026-01-22 09:10 UTC: Stage115A completed (updated IDs sample in stats-out).
   - treatment_transactions stats now include `updated_transaction_ids_sample` (capped) when updates occur.
   - Tests: `docker compose exec -T backend pytest -q tests/r4_import/ -q`.
