@@ -58,10 +58,14 @@
 - V1 finish line: `docs/V1_FINISH_LINE.md`
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
-## In progress
+-## In progress
 - None (awaiting next stage assignment).
 
-## Recent fixes
+-## Recent fixes
+- 2026-01-22 22:29 UTC: Stage124 pilot (appointments import, Jan 2025 window; Stage124.1 fixes).
+  - Dry-run honours `--appts-from/--appts-to`: filtered count=104, range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`, null patients=12.
+  - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): created=104, updated=0, skipped=0; rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) yielded created=0, updated=0, skipped=104.
+  - Postgres verification (DB user from compose env): `r4_appointments` total=104, window count=104, window range `2025-01-02 09:00:00+00` → `2025-01-31 16:00:00+00`, patient_code nulls=12, sample rows show clinicians=10000047 with Pending/Complete statuses.
 - 2026-01-22 22:10 UTC: Stage124 merged (appointments import scaffolding).
   - New r4_appointments table + importer + CLI entity (vwAppointmentDetails).
   - Fixtures/tests + pilot runbook updates added.

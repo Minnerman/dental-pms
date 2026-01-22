@@ -1,5 +1,5 @@
-from collections import Counter
 from datetime import date, datetime, timezone
+from collections import Counter
 
 from sqlalchemy import delete, select
 
