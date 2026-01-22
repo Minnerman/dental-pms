@@ -59,9 +59,14 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 118: users import pilot run; API join verification pending (no patient with legacy_id + transactions found).
+- Stage 118: complete (users import pilot + patient window sync + API join verified).
 
 ## Recent fixes
+- 2026-01-22 19:22 UTC: Stage118 follow-up (patients window sync).
+  - Baseline: patients_total=138, tx_total=1, overlap=0.
+  - Patients import (window 1000101-1005100): patients_created=5000, updated=0, skipped=0; mapping quality captured in stats-out.
+  - Post-import: patients_in_window=5001; overlap=1.
+  - API check: `/patients/56315/treatment-transactions` returned 200 with recorded_by_name/user_name fields (nulls OK).
 - 2026-01-22 19:12 UTC: Stage118 pilot (users import).
   - Dry-run: users_count=77 (sample shows FullName/Forename/Surname).
   - Apply stats: users_created=74, users_updated=1, users_skipped=2 (`/tmp/stage118_users_stats.json`).
