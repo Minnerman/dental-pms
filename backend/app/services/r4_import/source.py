@@ -5,6 +5,7 @@ from typing import Iterable, Protocol
 
 from app.services.r4_import.types import (
     R4Appointment,
+    R4AppointmentRecord,
     R4Patient,
     R4Treatment,
     R4TreatmentTransaction,
@@ -42,6 +43,14 @@ class R4Source(Protocol):
         raise NotImplementedError
 
     def stream_users(self, limit: int | None = None) -> Iterable[R4User]:
+        raise NotImplementedError
+
+    def stream_appointments(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4AppointmentRecord]:
         raise NotImplementedError
 
     def stream_treatment_transactions(

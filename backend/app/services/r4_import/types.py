@@ -31,6 +31,22 @@ class R4Appointment(BaseModel):
     status: str | None = None
 
 
+class R4AppointmentRecord(BaseModel):
+    appointment_id: int = Field(..., ge=1)
+    patient_code: int | None = None
+    starts_at: datetime
+    ends_at: datetime | None = None
+    duration_minutes: int | None = None
+    clinician_code: int | None = None
+    status: str | None = None
+    cancelled: bool | None = None
+    clinic_code: int | None = None
+    treatment_code: int | None = None
+    appointment_type: str | None = None
+    notes: str | None = None
+    appt_flag: int | None = None
+
+
 class R4Treatment(BaseModel):
     treatment_code: int = Field(..., ge=1)
     description: str | None = None

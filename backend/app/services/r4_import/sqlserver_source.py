@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 from app.services.r4_import.types import (
     R4Appointment,
+    R4AppointmentRecord,
     R4Patient,
     R4Treatment,
     R4TreatmentTransaction,
@@ -184,6 +185,28 @@ class R4SqlServerSource:
             "sample_appointments": self.sample_appts(limit=limit),
         }
 
+    def dry_run_summary_appointments(
+        self,
+        limit: int = 10,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict[str, Any]:
+        appts_count = self.count_appointments(date_from=date_from, date_to=date_to)
+        appt_range = self.appointment_date_range()
+        null_patients = self.appointment_patient_null_count(
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "appointments_count": appts_count,
+            "appointments_date_range": appt_range,
+            "appointments_patient_null": null_patients,
+            "sample_appointments": self.sample_appointments(limit=limit),
+        }
+
     def dry_run_summary_treatments(self, limit: int = 10) -> dict[str, Any]:
         return {
             "source": "sqlserver",
@@ -321,6 +344,19 @@ class R4SqlServerSource:
         where_clause, params = self._build_date_filter(starts_col, date_from, date_to)
         rows = self._query(
             f"SELECT COUNT(1) AS count FROM dbo.Appts WITH (NOLOCK){where_clause}",
+            params,
+        )
+        return int(rows[0]["count"]) if rows else 0
+
+    def count_appointments(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> int:
+        starts_col = self._require_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
+        where_clause, params = self._build_date_filter(starts_col, date_from, date_to)
+        rows = self._query(
+            f"SELECT COUNT(1) AS count FROM dbo.vwAppointmentDetails WITH (NOLOCK){where_clause}",
             params,
         )
         return int(rows[0]["count"]) if rows else 0
@@ -478,6 +514,41 @@ class R4SqlServerSource:
             "max": self._format_dt(max_date),
         }
 
+    def appointment_date_range(self) -> dict[str, str] | None:
+        starts_col = self._pick_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
+        if not starts_col:
+            return None
+        rows = self._query(
+            f"SELECT MIN({starts_col}) AS min_date, MAX({starts_col}) AS max_date "
+            "FROM dbo.vwAppointmentDetails WITH (NOLOCK)"
+        )
+        if not rows:
+            return None
+        min_date = rows[0].get("min_date")
+        max_date = rows[0].get("max_date")
+        return {
+            "min": self._format_dt(min_date),
+            "max": self._format_dt(max_date),
+        }
+
+    def appointment_patient_null_count(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> int:
+        patient_col = self._require_column("vwAppointmentDetails", ["patientcode"])
+        starts_col = self._require_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
+        where_clause, params = self._build_date_filter(starts_col, date_from, date_to)
+        rows = self._query(
+            "SELECT SUM(CASE WHEN {0} IS NULL THEN 1 ELSE 0 END) AS null_count "
+            "FROM dbo.vwAppointmentDetails WITH (NOLOCK){1}".format(
+                patient_col,
+                where_clause,
+            ),
+            params,
+        )
+        return int(rows[0]["null_count"] or 0) if rows else 0
+
     def sample_patient_codes(self, limit: int = 10) -> list[int]:
         rows = self._query(
             "SELECT TOP (?) PatientCode FROM dbo.Patients WITH (NOLOCK) "
@@ -552,6 +623,68 @@ class R4SqlServerSource:
                     "legacy_id": row.get("legacy_id"),
                     "patient_code": row.get("patient_code"),
                     "starts_at": self._format_dt(row.get("starts_at")),
+                }
+            )
+        return samples
+
+    def sample_appointments(self, limit: int = 10) -> list[dict[str, Any]]:
+        appt_id_col = self._require_column("vwAppointmentDetails", ["apptid"])
+        starts_col = self._require_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
+        duration_col = self._pick_column("vwAppointmentDetails", ["duration"])
+        patient_col = self._pick_column("vwAppointmentDetails", ["patientcode"])
+        provider_col = self._pick_column("vwAppointmentDetails", ["providerCode"])
+        status_col = self._pick_column("vwAppointmentDetails", ["status"])
+        cancelled_col = self._pick_column("vwAppointmentDetails", ["cancelled"])
+        clinic_col = self._pick_column("vwAppointmentDetails", ["cliniccode"])
+        treatment_col = self._pick_column("vwAppointmentDetails", ["treatmentcode"])
+        type_col = self._pick_column("vwAppointmentDetails", ["appointmentType"])
+        notes_col = self._pick_column("vwAppointmentDetails", ["notes"])
+        flag_col = self._pick_column("vwAppointmentDetails", ["apptflag"])
+        select_cols = [
+            f"{appt_id_col} AS appointment_id",
+            f"{starts_col} AS starts_at",
+        ]
+        if duration_col:
+            select_cols.append(f"{duration_col} AS duration_minutes")
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if provider_col:
+            select_cols.append(f"{provider_col} AS clinician_code")
+        if status_col:
+            select_cols.append(f"{status_col} AS status")
+        if cancelled_col:
+            select_cols.append(f"{cancelled_col} AS cancelled")
+        if clinic_col:
+            select_cols.append(f"{clinic_col} AS clinic_code")
+        if treatment_col:
+            select_cols.append(f"{treatment_col} AS treatment_code")
+        if type_col:
+            select_cols.append(f"{type_col} AS appointment_type")
+        if notes_col:
+            select_cols.append(f"{notes_col} AS notes")
+        if flag_col:
+            select_cols.append(f"{flag_col} AS appt_flag")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.vwAppointmentDetails WITH (NOLOCK) "
+            f"ORDER BY {appt_id_col} ASC",
+            [limit],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "appointment_id": row.get("appointment_id"),
+                    "starts_at": self._format_dt(row.get("starts_at")),
+                    "duration_minutes": row.get("duration_minutes"),
+                    "patient_code": row.get("patient_code"),
+                    "clinician_code": row.get("clinician_code"),
+                    "status": row.get("status"),
+                    "cancelled": row.get("cancelled"),
+                    "clinic_code": row.get("clinic_code"),
+                    "treatment_code": row.get("treatment_code"),
+                    "appointment_type": row.get("appointment_type"),
+                    "notes": row.get("notes"),
+                    "appt_flag": row.get("appt_flag"),
                 }
             )
         return samples
@@ -964,6 +1097,117 @@ class R4SqlServerSource:
                     location=(row.get("location") or "").strip() or None,
                     appointment_type=(row.get("appointment_type") or "").strip() or None,
                     status=(row.get("status") or "").strip() or None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def stream_appointments(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4AppointmentRecord]:
+        appt_id_col = self._require_column("vwAppointmentDetails", ["apptid"])
+        starts_col = self._require_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
+        duration_col = self._pick_column("vwAppointmentDetails", ["duration"])
+        patient_col = self._pick_column("vwAppointmentDetails", ["patientcode"])
+        provider_col = self._pick_column("vwAppointmentDetails", ["providerCode"])
+        status_col = self._pick_column("vwAppointmentDetails", ["status"])
+        cancelled_col = self._pick_column("vwAppointmentDetails", ["cancelled"])
+        clinic_col = self._pick_column("vwAppointmentDetails", ["cliniccode"])
+        treatment_col = self._pick_column("vwAppointmentDetails", ["treatmentcode"])
+        type_col = self._pick_column("vwAppointmentDetails", ["appointmentType"])
+        notes_col = self._pick_column("vwAppointmentDetails", ["notes"])
+        flag_col = self._pick_column("vwAppointmentDetails", ["apptflag"])
+
+        last_id = 0
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            date_clause, date_params = self._build_date_filter(starts_col, date_from, date_to)
+            if date_clause:
+                where_parts.append(date_clause.replace("WHERE", "").strip())
+                params.extend(date_params)
+            if last_id:
+                where_parts.append(f"{appt_id_col} > ?")
+                params.append(last_id)
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [
+                f"{appt_id_col} AS appointment_id",
+                f"{starts_col} AS starts_at",
+            ]
+            if duration_col:
+                select_cols.append(f"{duration_col} AS duration_minutes")
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if provider_col:
+                select_cols.append(f"{provider_col} AS clinician_code")
+            if status_col:
+                select_cols.append(f"{status_col} AS status")
+            if cancelled_col:
+                select_cols.append(f"{cancelled_col} AS cancelled")
+            if clinic_col:
+                select_cols.append(f"{clinic_col} AS clinic_code")
+            if treatment_col:
+                select_cols.append(f"{treatment_col} AS treatment_code")
+            if type_col:
+                select_cols.append(f"{type_col} AS appointment_type")
+            if notes_col:
+                select_cols.append(f"{notes_col} AS notes")
+            if flag_col:
+                select_cols.append(f"{flag_col} AS appt_flag")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.vwAppointmentDetails WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {appt_id_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                appointment_id = row.get("appointment_id")
+                if appointment_id is None:
+                    continue
+                starts_at = row.get("starts_at")
+                if starts_at is None:
+                    continue
+                last_id = int(appointment_id)
+                duration_raw = row.get("duration_minutes")
+                try:
+                    duration_minutes = int(duration_raw) if duration_raw is not None else None
+                except (TypeError, ValueError):
+                    duration_minutes = None
+                ends_at = (
+                    starts_at + timedelta(minutes=duration_minutes)
+                    if duration_minutes is not None
+                    else None
+                )
+                patient_code = row.get("patient_code")
+                clinician_code = row.get("clinician_code")
+                clinic_code = row.get("clinic_code")
+                treatment_code = row.get("treatment_code")
+                appt_flag = row.get("appt_flag")
+                yield R4AppointmentRecord(
+                    appointment_id=int(appointment_id),
+                    patient_code=int(patient_code) if patient_code is not None else None,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    duration_minutes=duration_minutes,
+                    clinician_code=int(clinician_code) if clinician_code is not None else None,
+                    status=(row.get("status") or "").strip() or None,
+                    cancelled=_coerce_bool(row.get("cancelled"), default=False)
+                    if row.get("cancelled") is not None
+                    else None,
+                    clinic_code=int(clinic_code) if clinic_code is not None else None,
+                    treatment_code=int(treatment_code) if treatment_code is not None else None,
+                    appointment_type=(row.get("appointment_type") or "").strip() or None,
+                    notes=(row.get("notes") or "").strip() or None,
+                    appt_flag=int(appt_flag) if appt_flag is not None else None,
                 )
                 if remaining is not None:
                     remaining -= 1

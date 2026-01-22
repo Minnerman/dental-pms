@@ -189,6 +189,46 @@ docker compose exec -T backend python -m app.scripts.r4_import \
   --patients-to 1005100
 ```
 
+## E4) Appointments pilot run (vwAppointmentDetails)
+
+Dry-run (bounded by date window):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity appointments \
+  --dry-run \
+  --appts-from 2025-01-01 \
+  --appts-to 2025-01-31 \
+  --limit 25
+```
+
+Apply (bounded window + stats-out):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity appointments \
+  --apply \
+  --confirm APPLY \
+  --appts-from 2025-01-01 \
+  --appts-to 2025-01-31 \
+  --stats-out /tmp/stage124_appts_2025-01_stats.json
+```
+
+Idempotency rerun:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity appointments \
+  --apply \
+  --confirm APPLY \
+  --appts-from 2025-01-01 \
+  --appts-to 2025-01-31 \
+  --stats-out /tmp/stage124_appts_2025-01_rerun_stats.json
+```
+
 Use this after timeouts to confirm row counts and the min/max patient code in Postgres.
 
 ## F) Stage 103: treatments + treatment plans
