@@ -59,9 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 120: complete (clinician status/role in transactions).
+- Stage 121: complete (transactions tab performance + UX polish).
 
 ## Recent fixes
+- 2026-01-22 21:36 UTC: Stage121 completed (transactions performance + UX).
+  - Backend: cursor-friendly index + optional `include_total`.
+  - UI: filters persist in URL, reset button, loading row during pagination.
+  - Tests: `bash ops/health.sh`, `bash ops/verify.sh` (react-hooks/exhaustive-deps warnings only).
 - 2026-01-22 20:03 UTC: Stage120 follow-up (users backfill after role column).
   - Alembic stamp: 0037 -> 0038, upgrade to 0039 (role column applied).
   - Users backfill stats: users_updated=28, users_skipped=49, users_created=0 (`/tmp/stage120_users_backfill_stats.json`).
