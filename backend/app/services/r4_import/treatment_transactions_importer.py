@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import json
@@ -19,9 +19,21 @@ class TreatmentTransactionImportStats:
     transactions_created: int = 0
     transactions_updated: int = 0
     transactions_skipped: int = 0
+    updated_transaction_ids: set[int] = field(default_factory=set, repr=False)
 
-    def as_dict(self) -> dict[str, int]:
-        return asdict(self)
+    def record_updated_id(self, legacy_id: int) -> None:
+        self.updated_transaction_ids.add(legacy_id)
+
+    def as_dict(self) -> dict[str, object]:
+        data: dict[str, object] = {
+            "transactions_created": self.transactions_created,
+            "transactions_updated": self.transactions_updated,
+            "transactions_skipped": self.transactions_skipped,
+        }
+        if self.updated_transaction_ids:
+            sample = sorted(self.updated_transaction_ids)[:20]
+            data["updated_transaction_ids_sample"] = sample
+        return data
 
 
 def import_r4_treatment_transactions(
@@ -87,6 +99,7 @@ def _upsert_transaction(
         updated = _apply_updates(existing, updates)
         if updated:
             stats.transactions_updated += 1
+            stats.record_updated_id(legacy_id)
         else:
             stats.transactions_skipped += 1
         return existing

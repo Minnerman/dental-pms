@@ -8,6 +8,7 @@ from app.models.user import User
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.treatment_transactions_importer import (
     import_r4_treatment_transactions,
+    TreatmentTransactionImportStats,
 )
 
 
@@ -36,6 +37,7 @@ def test_r4_treatment_transactions_idempotent_and_updates():
 
         assert stats_first.transactions_created == 2
         assert stats_first.transactions_updated == 0
+        assert "updated_transaction_ids_sample" not in stats_first.as_dict()
 
         tx = session.scalar(
             select(R4TreatmentTransaction).where(
@@ -53,5 +55,14 @@ def test_r4_treatment_transactions_idempotent_and_updates():
         assert stats_second.transactions_created == 0
         assert stats_second.transactions_updated == 1
         assert stats_second.transactions_skipped == 1
+        assert stats_second.as_dict()["updated_transaction_ids_sample"] == [9001]
     finally:
         session.close()
+
+
+def test_treatment_transactions_updated_ids_sample_capped():
+    stats = TreatmentTransactionImportStats()
+    for legacy_id in range(1, 30):
+        stats.record_updated_id(legacy_id)
+    sample = stats.as_dict()["updated_transaction_ids_sample"]
+    assert sample == list(range(1, 21))
