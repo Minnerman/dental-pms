@@ -138,7 +138,7 @@ Decision tree:
    - Use last checkpoint `last_patient_code=X` and resume with `--patients-from X+1`.
    - Keep the same `--patients-to` and rerun idempotency at the end.
 
-Postgres count query:
+Postgres count query (use the DB user from compose env, default `dental_pms`):
 
 ```bash
 docker compose exec -T db psql -U dental_pms -d dental_pms -c \\

@@ -16,6 +16,7 @@
 ## Database access
 - Open psql:
   - `docker compose exec db psql -U dental_pms -d dental_pms`
+  - Use the DB user from your compose env (`POSTGRES_USER`), not `postgres` if that role doesn't exist.
 - List tables:
   - `\\dt`
 
