@@ -5,6 +5,7 @@ from sqlalchemy import delete, select
 
 from app.db.session import SessionLocal
 from app.models.patient import Patient
+from app.models.r4_treatment_plan import R4Treatment
 from app.models.r4_treatment_transaction import R4TreatmentTransaction
 from app.models.r4_user import R4User
 from app.models.user import User
@@ -17,6 +18,7 @@ def _seed_patient_with_transactions():
     tx_base = 500000 + seed * 10
     recorded_code = 9000000 + seed
     entry_code = recorded_code + 1
+    treatment_code = 1201 + seed
     try:
         actor = session.scalar(select(User).order_by(User.id.asc()).limit(1))
         assert actor is not None
@@ -61,6 +63,20 @@ def _seed_patient_with_transactions():
         ]
         session.add_all(users)
 
+        session.add(
+            R4Treatment(
+                legacy_source="r4",
+                legacy_treatment_code=treatment_code,
+                description="Comprehensive exam",
+                short_code="EXAM",
+                default_time=30,
+                exam=True,
+                patient_required=True,
+                created_by_user_id=actor.id,
+                updated_by_user_id=actor.id,
+            )
+        )
+
         txs = [
             R4TreatmentTransaction(
                 legacy_source="r4",
@@ -81,7 +97,7 @@ def _seed_patient_with_transactions():
                 legacy_transaction_id=tx_base + 2,
                 patient_code=patient_code,
                 performed_at=datetime(2024, 1, 2, 10, 0, tzinfo=timezone.utc),
-                treatment_code=None,
+                treatment_code=treatment_code,
                 trans_code=2,
                 patient_cost=0,
                 dpb_cost=0,
@@ -122,13 +138,14 @@ def _seed_patient_with_transactions():
             "patient_code": patient_code,
             "tx_ids": [tx.legacy_transaction_id for tx in txs],
             "user_codes": [recorded_code, entry_code],
+            "treatment_code": treatment_code,
         }
     finally:
         session.close()
 
 
 def _cleanup_patient_transactions(
-    patient_id: int, tx_ids: list[int], user_codes: list[int]
+    patient_id: int, tx_ids: list[int], user_codes: list[int], treatment_code: int
 ) -> None:
     session = SessionLocal()
     try:
@@ -139,6 +156,9 @@ def _cleanup_patient_transactions(
         )
         session.execute(
             delete(R4User).where(R4User.legacy_user_code.in_(user_codes))
+        )
+        session.execute(
+            delete(R4Treatment).where(R4Treatment.legacy_treatment_code == treatment_code)
         )
         session.execute(delete(Patient).where(Patient.id == patient_id))
         session.commit()
@@ -151,6 +171,7 @@ def test_patient_transactions_order_and_pagination(api_client, auth_headers):
     patient_id = seed["patient_id"]
     tx_ids = seed["tx_ids"]
     user_codes = seed["user_codes"]
+    treatment_code = seed["treatment_code"]
     try:
         res = api_client.get(
             f"/patients/{patient_id}/treatment-transactions",
@@ -164,6 +185,8 @@ def test_patient_transactions_order_and_pagination(api_client, auth_headers):
         assert payload["items"][1]["legacy_transaction_id"] == tx_ids[0]
         assert payload["items"][0]["recorded_by_name"] == "Dr Ada Lovelace"
         assert payload["items"][0]["user_name"] == "Mr Sam Clerk"
+        assert payload["items"][0]["treatment_name"] == "Comprehensive exam"
+        assert payload["items"][0]["treatment_code"] == treatment_code
         assert payload["next_cursor"]
 
         res_next = api_client.get(
@@ -178,7 +201,7 @@ def test_patient_transactions_order_and_pagination(api_client, auth_headers):
             tx_ids[3],
         ]
     finally:
-        _cleanup_patient_transactions(patient_id, tx_ids, user_codes)
+        _cleanup_patient_transactions(patient_id, tx_ids, user_codes, treatment_code)
 
 
 def test_patient_transactions_filters(api_client, auth_headers):
@@ -186,6 +209,7 @@ def test_patient_transactions_filters(api_client, auth_headers):
     patient_id = seed["patient_id"]
     tx_ids = seed["tx_ids"]
     user_codes = seed["user_codes"]
+    treatment_code = seed["treatment_code"]
     try:
         res = api_client.get(
             f"/patients/{patient_id}/treatment-transactions",
@@ -211,4 +235,4 @@ def test_patient_transactions_filters(api_client, auth_headers):
             tx_ids[3],
         ]
     finally:
-        _cleanup_patient_transactions(patient_id, tx_ids, user_codes)
+        _cleanup_patient_transactions(patient_id, tx_ids, user_codes, treatment_code)

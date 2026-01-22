@@ -17,6 +17,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
       legacy_transaction_id: 101,
       performed_at: "2026-01-20T10:00:00Z",
       treatment_code: 12,
+      treatment_name: "Comprehensive exam",
       trans_code: 5,
       patient_cost: 45.0,
       dpb_cost: 0.0,
@@ -29,6 +30,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
       legacy_transaction_id: 100,
       performed_at: "2026-01-19T09:00:00Z",
       treatment_code: 10,
+      treatment_name: null,
       trans_code: 3,
       patient_cost: 0.0,
       dpb_cost: 20.0,
@@ -43,6 +45,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
       legacy_transaction_id: 99,
       performed_at: "2026-01-18T08:00:00Z",
       treatment_code: 8,
+      treatment_name: "Fluoride varnish",
       trans_code: 2,
       patient_cost: 15.0,
       dpb_cost: 0.0,
@@ -58,6 +61,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
       legacy_transaction_id: number;
       performed_at: string;
       treatment_code: number | null;
+      treatment_name?: string | null;
       trans_code: number | null;
       patient_cost: number | null;
       dpb_cost: number | null;
@@ -107,6 +111,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
   const rows = table.locator("tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(table).toContainText("Dr Ada Lovelace");
+  await expect(table).toContainText("Comprehensive exam");
 
   const loadMore = page.getByTestId("transactions-load-more");
   await expect(loadMore).toBeVisible();
