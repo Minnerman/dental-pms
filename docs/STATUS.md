@@ -59,9 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 121: complete (transactions tab performance + UX polish).
+- Stage 123: complete (R4 appointments discovery).
 
 ## Recent fixes
+- 2026-01-22 21:52 UTC: Stage123 completed (appointments discovery notes).
+  - Candidate tables/views mapped; primary source `vwAppointmentDetails` documented.
+  - Key, date range, patient null counts captured.
+  - Doc: `docs/r4/R4_APPOINTMENTS_DISCOVERY.md`.
 - 2026-01-22 21:36 UTC: Stage121 completed (transactions performance + UX).
   - Backend: cursor-friendly index + optional `include_total`.
   - UI: filters persist in URL, reset button, loading row during pagination.
