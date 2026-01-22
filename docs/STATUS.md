@@ -62,6 +62,9 @@
 - Stage 120: complete (clinician status/role in transactions).
 
 ## Recent fixes
+- 2026-01-22 20:03 UTC: Stage120 follow-up (users backfill after role column).
+  - Alembic stamp: 0037 -> 0038, upgrade to 0039 (role column applied).
+  - Users backfill stats: users_updated=28, users_skipped=49, users_created=0 (`/tmp/stage120_users_backfill_stats.json`).
 - 2026-01-22 19:57 UTC: Stage120 completed (clinician status/role in transactions).
   - Importer: users capture role hints (extended duty nurse/oral health promoter/clinic admin/type).
   - API: transactions include recorded/user current status + role fields.
