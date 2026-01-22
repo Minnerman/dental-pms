@@ -59,9 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## In progress
-- Stage 116: complete (patient transactions tab, read-only).
+- Stage 117: complete (R4 users lookup + clinician names).
 
 ## Recent fixes
+- 2026-01-22 13:04 UTC: Stage117 completed (R4 users lookup + clinician names).
+  - Importer: `--entity users` (dbo.Users) with display_name.
+  - API/UI: transactions include recorded_by_name/user_name with fallbacks.
+  - Tests: `bash ops/health.sh`, `bash ops/verify.sh`, `docker compose exec -T backend pytest -q tests/r4_import/ -q`.
 - 2026-01-22 12:31 UTC: Stage116.1 completed (Playwright transactions tab coverage).
   - Test: `frontend/tests/patients/transactions-tab.spec.ts` (mocked API).
 - 2026-01-22 12:09 UTC: Stage116 completed (patient transactions tab, read-only).
