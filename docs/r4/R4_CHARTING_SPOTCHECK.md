@@ -16,6 +16,9 @@ Use two patients for spot-checks:
 
 ## Preconditions
 
+Patient mappings must exist before spot-checking. If missing, run patients import
+or pass `--ensure-mapping` to auto-create mappings for the target patient.
+
 Import the patients and charting rows (bounded):
 
 ```bash
@@ -32,7 +35,7 @@ from `BPE.RefId` (fallback for `BPE.BPEID`) and `Transactions.RefId`, respective
 
 ## Spot-check tool (SQL Server + Postgres)
 
-Generate a JSON side-by-side comparison:
+Generate a JSON side-by-side comparison (fails fast if mapping is missing):
 
 ```bash
 docker compose exec -T backend python -m app.scripts.r4_charting_spotcheck --patient-code 1000000 --limit 20 > /tmp/stage131/spotcheck_1000000.json
@@ -44,6 +47,25 @@ The output includes:
 - SQL Server BPEFurcation rows via `BPE.RefId`/`BPEID` join.
 - SQL Server PerioProbe rows via `Transactions.RefId` join.
 - Postgres rows for the imported tables, using the same keys.
+
+To auto-create missing mappings on demand:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_charting_spotcheck --patient-code 1000000 --ensure-mapping --limit 20 > /tmp/stage131/spotcheck_1000000.json
+```
+
+## PerioProbe dedupe semantics
+
+PerioProbe rows are de-duplicated on import by the legacy key:
+`trans_id + tooth + probing_point`.
+
+The CSV `index.csv` includes both sample counts and full totals for PerioProbe:
+
+- `sqlserver_count`: sample rows written to CSV (honors `--limit`)
+- `sqlserver_total`: total rows for the patient after linkage
+- `sqlserver_unique_count` / `sqlserver_duplicate_count`: unique/deduped split
+- `postgres_count`: sample rows written to CSV (honors `--limit`)
+- `postgres_total`: total imported rows for the patient
 
 If the backend container does not mount the repo, write to container `/tmp` and copy out:
 
@@ -59,6 +81,8 @@ Explain the PerioProbe linkage pipeline for a single patient:
 ```bash
 docker compose exec -T backend python -m app.scripts.r4_charting_link_explain --patient-code 1000000 --entity perio_probes > /tmp/stage135/perio_probe_explain_1000000.json
 ```
+
+Add `--ensure-mapping` to auto-create the patient mapping if missing.
 
 ## Manual SQL (optional)
 

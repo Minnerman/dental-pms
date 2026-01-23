@@ -22,6 +22,10 @@ from app.models.r4_charting import (
     R4TreatmentNote,
 )
 from app.models.r4_patient_mapping import R4PatientMapping
+from app.services.r4_import.mapping_preflight import (
+    ensure_mappings_for_range,
+    mapping_exists,
+)
 from app.services.r4_import.source import R4Source
 from app.services.r4_import.types import (
     R4BPEEntry as R4BPEEntryPayload,
@@ -116,8 +120,28 @@ def import_r4_charting(
     patients_from: int | None = None,
     patients_to: int | None = None,
     limit: int | None = None,
+    ensure_patient_mappings: bool = True,
 ) -> ChartingImportStats:
     stats = ChartingImportStats()
+    if ensure_patient_mappings:
+        ensure_mappings_for_range(
+            session,
+            source,
+            actor_id,
+            patients_from,
+            patients_to,
+            legacy_source=legacy_source,
+        )
+        if (
+            patients_from is not None
+            and patients_to is not None
+            and patients_from == patients_to
+            and not mapping_exists(session, legacy_source, patients_from)
+        ):
+            raise RuntimeError(
+                "Missing patient mapping for patient_code "
+                f"{patients_from}. Run patients import first."
+            )
     mapped_patient_cache: dict[int, bool] = {}
     seen_perio_probe_keys: set[str] = set()
 

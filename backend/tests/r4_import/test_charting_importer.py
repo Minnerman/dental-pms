@@ -82,6 +82,45 @@ def ensure_patient_mapping(session, actor_id: int, legacy_patient_code: int) -> 
     session.add(mapping)
 
 
+def clear_patient_mapping(session, legacy_patient_code: int) -> None:
+    session.execute(
+        delete(R4PatientMapping).where(
+            R4PatientMapping.legacy_source == "r4",
+            R4PatientMapping.legacy_patient_code == legacy_patient_code,
+        )
+    )
+
+
+def test_r4_charting_import_preflight_creates_mapping():
+    session = SessionLocal()
+    try:
+        clear_r4_charting(session)
+        clear_patient_mapping(session, 1001)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = FixtureSource()
+
+        import_r4_charting(
+            session,
+            source,
+            actor_id,
+            patients_from=1001,
+            patients_to=1001,
+        )
+        session.commit()
+
+        mapping = session.scalar(
+            select(R4PatientMapping).where(
+                R4PatientMapping.legacy_source == "r4",
+                R4PatientMapping.legacy_patient_code == 1001,
+            )
+        )
+        assert mapping is not None
+    finally:
+        session.close()
+
+
 def test_r4_charting_import_idempotent_and_updates():
     session = SessionLocal()
     try:
