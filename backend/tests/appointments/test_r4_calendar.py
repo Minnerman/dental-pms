@@ -66,6 +66,13 @@ def _unique_legacy_id() -> str:
     return str(uuid.uuid4().int % 10000000)
 
 
+def _cleanup(session):
+    session.execute(delete(R4Appointment).where(R4Appointment.legacy_source == "r4"))
+    session.execute(delete(R4User).where(R4User.legacy_source == "r4"))
+    session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
+    session.commit()
+
+
 @pytest.fixture
 def db_session():
     session = SessionLocal()
@@ -97,6 +104,14 @@ def test_r4_calendar_status_filters(api_client, auth_headers, db_session):
         status="Complete",
         starts_at=datetime(2025, 1, 6, 10, 0, tzinfo=timezone.utc),
     )
+    hidden_cancelled = _create_appointment(
+        db_session,
+        legacy_id=5003,
+        patient_code=int(patient.legacy_id),
+        clinician_code=clinician.legacy_user_code,
+        status="Cancelled",
+        starts_at=datetime(2025, 1, 6, 11, 0, tzinfo=timezone.utc),
+    )
     db_session.commit()
 
     params = {"from": "2025-01-04", "to": "2025-01-07"}
@@ -104,7 +119,7 @@ def test_r4_calendar_status_filters(api_client, auth_headers, db_session):
     assert res.status_code == 200, res.text
     items = res.json()["items"]
     assert any(item["legacy_appointment_id"] == default_appt.legacy_appointment_id for item in items)
-    assert all(item["status"] in DEFAULT_STATUSSET for item in items)
+    assert all(item["status_normalised"] in DEFAULT_STATUSSET for item in items)
 
     res_hidden = api_client.get(
         "/api/appointments",
@@ -114,11 +129,12 @@ def test_r4_calendar_status_filters(api_client, auth_headers, db_session):
     assert res_hidden.status_code == 200, res_hidden.text
     items_hidden = res_hidden.json()["items"]
     assert any(item["legacy_appointment_id"] == hidden_appt.legacy_appointment_id for item in items_hidden)
+    assert any(
+        item["legacy_appointment_id"] == hidden_cancelled.legacy_appointment_id
+        for item in items_hidden
+    )
 
-    db_session.execute(delete(R4Appointment).where(R4Appointment.legacy_source == "r4"))
-    db_session.execute(delete(R4User).where(R4User.legacy_source == "r4"))
-    db_session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
-    db_session.commit()
+    _cleanup(db_session)
 
 
 def test_r4_calendar_unlinked_and_total(api_client, auth_headers, db_session):
@@ -150,7 +166,12 @@ def test_r4_calendar_unlinked_and_total(api_client, auth_headers, db_session):
 
     res_unlinked = api_client.get(
         "/api/appointments",
-        params={"from": "2025-02-09", "to": "2025-02-12", "show_unlinked": "true", "include_total": "true"},
+        params={
+            "from": "2025-02-09",
+            "to": "2025-02-12",
+            "show_unlinked": "true",
+            "include_total": "true",
+        },
         headers=auth_headers,
     )
     assert res_unlinked.status_code == 200, res_unlinked.text
@@ -159,7 +180,125 @@ def test_r4_calendar_unlinked_and_total(api_client, auth_headers, db_session):
     assert any(item["legacy_appointment_id"] == unlinked.legacy_appointment_id for item in body["items"])
     assert any(item["is_unlinked"] for item in body["items"])
 
-    db_session.execute(delete(R4Appointment).where(R4Appointment.legacy_source == "r4"))
-    db_session.execute(delete(R4User).where(R4User.legacy_source == "r4"))
-    db_session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
+    _cleanup(db_session)
+
+
+def test_r4_calendar_clinician_filter(api_client, auth_headers, db_session):
+    patient = _create_patient(db_session, _unique_legacy_id())
+    clinician_a = _create_user(db_session, legacy_code=100700, full_name="Dr Alpha")
+    clinician_b = _create_user(db_session, legacy_code=100701, full_name="Dr Beta")
+    appt_a = _create_appointment(
+        db_session,
+        legacy_id=7001,
+        patient_code=int(patient.legacy_id),
+        clinician_code=clinician_a.legacy_user_code,
+        status="Pending",
+        starts_at=datetime(2025, 3, 3, 9, 0, tzinfo=timezone.utc),
+    )
+    _create_appointment(
+        db_session,
+        legacy_id=7002,
+        patient_code=int(patient.legacy_id),
+        clinician_code=clinician_b.legacy_user_code,
+        status="Pending",
+        starts_at=datetime(2025, 3, 3, 10, 0, tzinfo=timezone.utc),
+    )
     db_session.commit()
+
+    res = api_client.get(
+        "/api/appointments",
+        params={
+            "from": "2025-03-02",
+            "to": "2025-03-04",
+            "clinician_code": str(clinician_a.legacy_user_code),
+        },
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    items = res.json()["items"]
+    assert items
+    assert all(item["clinician_code"] == clinician_a.legacy_user_code for item in items)
+    assert any(item["legacy_appointment_id"] == appt_a.legacy_appointment_id for item in items)
+
+    _cleanup(db_session)
+
+
+def test_r4_calendar_linked_unlinked_toggles(api_client, auth_headers, db_session):
+    patient = _create_patient(db_session, _unique_legacy_id())
+    clinician = _create_user(db_session, legacy_code=100800, full_name="Dr Toggle")
+    linked = _create_appointment(
+        db_session,
+        legacy_id=8001,
+        patient_code=int(patient.legacy_id),
+        clinician_code=clinician.legacy_user_code,
+        status="Pending",
+        starts_at=datetime(2025, 4, 1, 9, 0, tzinfo=timezone.utc),
+    )
+    unlinked = _create_appointment(
+        db_session,
+        legacy_id=8002,
+        patient_code=None,
+        clinician_code=clinician.legacy_user_code,
+        status="Pending",
+        starts_at=datetime(2025, 4, 1, 10, 0, tzinfo=timezone.utc),
+    )
+    db_session.commit()
+
+    res_linked = api_client.get(
+        "/api/appointments",
+        params={"from": "2025-03-31", "to": "2025-04-02", "linked_only": "true"},
+        headers=auth_headers,
+    )
+    assert res_linked.status_code == 200, res_linked.text
+    items_linked = res_linked.json()["items"]
+    assert items_linked
+    assert all(item["is_unlinked"] is False for item in items_linked)
+    assert any(item["legacy_appointment_id"] == linked.legacy_appointment_id for item in items_linked)
+
+    res_unlinked = api_client.get(
+        "/api/appointments",
+        params={"from": "2025-03-31", "to": "2025-04-02", "unlinked_only": "true"},
+        headers=auth_headers,
+    )
+    assert res_unlinked.status_code == 200, res_unlinked.text
+    items_unlinked = res_unlinked.json()["items"]
+    assert items_unlinked
+    assert all(item["is_unlinked"] is True for item in items_unlinked)
+    assert any(item["legacy_appointment_id"] == unlinked.legacy_appointment_id for item in items_unlinked)
+
+    _cleanup(db_session)
+
+
+def test_r4_calendar_ordering_stability(api_client, auth_headers, db_session):
+    patient = _create_patient(db_session, _unique_legacy_id())
+    clinician = _create_user(db_session, legacy_code=100900, full_name="Dr Order")
+    starts_at = datetime(2025, 5, 2, 9, 0, tzinfo=timezone.utc)
+    appt_low = _create_appointment(
+        db_session,
+        legacy_id=9001,
+        patient_code=int(patient.legacy_id),
+        clinician_code=clinician.legacy_user_code,
+        status="Pending",
+        starts_at=starts_at,
+    )
+    appt_high = _create_appointment(
+        db_session,
+        legacy_id=9002,
+        patient_code=int(patient.legacy_id),
+        clinician_code=clinician.legacy_user_code,
+        status="Pending",
+        starts_at=starts_at,
+    )
+    db_session.commit()
+
+    res = api_client.get(
+        "/api/appointments",
+        params={"from": "2025-05-01", "to": "2025-05-03", "show_unlinked": "true"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    items = res.json()["items"]
+    ids = [item["legacy_appointment_id"] for item in items]
+    assert ids.index(appt_low.legacy_appointment_id) < ids.index(appt_high.legacy_appointment_id)
+
+    _cleanup(db_session)
