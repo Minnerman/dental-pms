@@ -283,7 +283,12 @@ export default function R4CalendarPage() {
                 ))}
               </select>
             </label>
-            <label className="row" style={{ gap: 8, alignItems: "center" }}>
+            <label
+              className="row"
+              style={{ gap: 8, alignItems: "center" }}
+              data-testid="r4-filter-show-hidden-toggle"
+              onClick={() => setShowHidden((prev) => !prev)}
+            >
               <input
                 type="checkbox"
                 checked={showHidden}
