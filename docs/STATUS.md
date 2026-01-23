@@ -62,6 +62,10 @@
 - None (awaiting next stage assignment).
 
 -## Recent fixes
+- 2026-01-23: Stage127 complete (link unlinked R4 appointments to patients).
+  - PR #112, merge SHA `d4ff741`. https://github.com/Minnerman/dental-pms/pull/112
+  - Precedence: link table -> patient_code -> unlinked.
+  - Note: Playwright passed in CI (local run blocked by missing libatk).
 - 2026-01-23: Stage126 complete (read-only R4 calendar in Postgres/UI).
   - PR #111, merge SHA `be1ef8b`.
   - Commands: `bash ops/health.sh`, `bash ops/verify.sh`; CI ran backend pytest + Playwright smoke.
