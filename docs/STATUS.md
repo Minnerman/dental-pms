@@ -66,6 +66,8 @@
   - Docs updated: discovery + spot-check linkage notes.
   - Parity evidence (patient 1000000): `tmp/stage135/link_explain_1000000_perio.json`, `tmp/stage135/patient_1000000/`.
   - PerioProbe parity (patient 1000000): SQL=20, PG=0 (index.csv).
+  - After patient import (1000000): `tmp/stage135b/link_explain_1000000_perio.json`, `tmp/stage135b/patient_1000000/`.
+  - PerioProbe parity (patient 1000000): SQL=20, PG=20 (index.csv).
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
