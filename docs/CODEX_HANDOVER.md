@@ -73,6 +73,8 @@ If you want, paste the exact `r4_import.py --help` output and I will write the e
 ## Session summary (2026-01-23)
 
 ### Completed today
+- Stage 126 completed: PR #111 merged (SHA `be1ef8b`).
+- Tests/verification: `bash ops/health.sh`, `bash ops/verify.sh`; CI ran backend pytest + Playwright smoke.
 - Merged PR #109 (`stage124-fix`) after rebasing it on `master` and fixing the status distribution stats so recalls checks pass.
 - Verified `bash ops/health.sh` and `bash ops/verify.sh` to ensure the merged baseline is healthy.
 

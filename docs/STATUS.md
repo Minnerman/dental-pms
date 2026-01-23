@@ -62,6 +62,12 @@
 - None (awaiting next stage assignment).
 
 -## Recent fixes
+- 2026-01-23: Stage126 complete (read-only R4 calendar in Postgres/UI).
+  - PR #111, merge SHA `be1ef8b`.
+  - Commands: `bash ops/health.sh`, `bash ops/verify.sh`; CI ran backend pytest + Playwright smoke.
+  - Note: calendar filters now URL-driven (`show_hidden`, `show_unlinked`) to avoid state races.
+- 2026-01-23: Stage125 complete (appointments rollout).
+  - PR #110 merged; commands: `bash ops/health.sh`, `bash ops/verify.sh` (CI checks green).
 - 2026-01-22 22:29 UTC: Stage124 pilot (appointments import, Jan 2025 window; Stage124.1 fixes).
   - Dry-run honours `--appts-from/--appts-to`: filtered count=104, range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`, null patients=12.
   - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): created=104, updated=0, skipped=0; rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) yielded created=0, updated=0, skipped=104.
