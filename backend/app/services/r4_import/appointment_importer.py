@@ -3,13 +3,13 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.r4_appointment import R4Appointment
 from app.services.r4_import.source import R4Source
+from app.services.r4_import.status import normalize_status
 from app.services.r4_import.types import R4AppointmentRecord
 
 
@@ -66,7 +66,7 @@ def _track_stats(stats: R4AppointmentImportStats, appt: R4AppointmentRecord) -> 
         stats.appointments_min_start = appt.starts_at
     if stats.appointments_max_start is None or appt.starts_at > stats.appointments_max_start:
         stats.appointments_max_start = appt.starts_at
-    normalized_status = _normalize_status(appt.status)
+    normalized_status = normalize_status(appt.status)
     if normalized_status:
         stats.status_distribution[normalized_status] += 1
 
@@ -139,12 +139,3 @@ def _ensure_timezone(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
-
-
-def _normalize_status(value: str | None) -> str | None:
-    if not value:
-        return None
-    cleaned = re.sub(r"\s+", " ", value.strip())
-    if not cleaned:
-        return None
-    return cleaned.lower()
