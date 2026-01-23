@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Calendar, dateFnsLocalizer } from "react-big-calendar";
 import {
   addMinutes,
@@ -111,44 +111,51 @@ function AppointmentEvent({ event }: { event: CalendarEvent }) {
 export default function R4CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const defaults = useMemo(() => buildDefaultRange(), []);
   const [fromDate, setFromDate] = useState(defaults.from);
   const [toDate, setToDate] = useState(defaults.to);
   const [clinicianCode, setClinicianCode] = useState("");
-  const [showHidden, setShowHidden] = useState(false);
   const [showUnlinked, setShowUnlinked] = useState(false);
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const showHiddenParam = searchParams.get("show_hidden");
+  const showHidden = showHiddenParam === "1" || showHiddenParam === "true";
 
   useEffect(() => {
     const nextFrom = searchParams.get("from") ?? defaults.from;
     const nextTo = searchParams.get("to") ?? defaults.to;
     const nextClinician = searchParams.get("clinician_code") ?? "";
-    const nextShowHidden = searchParams.get("show_hidden") === "true";
     const nextShowUnlinked = searchParams.get("show_unlinked") === "true";
     if (nextFrom !== fromDate) setFromDate(nextFrom);
     if (nextTo !== toDate) setToDate(nextTo);
     if (nextClinician !== clinicianCode) setClinicianCode(nextClinician);
-    if (nextShowHidden !== showHidden) setShowHidden(nextShowHidden);
     if (nextShowUnlinked !== showUnlinked) setShowUnlinked(nextShowUnlinked);
-  }, [
-    searchParams,
-    defaults,
-    fromDate,
-    toDate,
-    clinicianCode,
-    showHidden,
-    showUnlinked,
-  ]);
+  }, [searchParams, defaults, fromDate, toDate, clinicianCode, showUnlinked]);
+
+  const setParam = useCallback(
+    (key: string, value: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === null) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+      const next = params.toString();
+      const nextUrl = next ? `${pathname}?${next}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     params.set("from", fromDate);
     params.set("to", toDate);
     if (clinicianCode) params.set("clinician_code", clinicianCode);
-    if (showHidden) params.set("show_hidden", "true");
+    if (showHidden) params.set("show_hidden", "1");
     if (showUnlinked) params.set("show_unlinked", "true");
     return params.toString();
   }, [fromDate, toDate, clinicianCode, showHidden, showUnlinked]);
@@ -285,17 +292,15 @@ export default function R4CalendarPage() {
             </label>
             <button
               type="button"
-              className="row"
+              className="btn btn-secondary"
               style={{
                 gap: 8,
+                display: "inline-flex",
                 alignItems: "center",
-                background: "none",
-                border: "none",
-                padding: 0,
                 cursor: "pointer",
               }}
               data-testid="r4-filter-show-hidden-toggle"
-              onClick={() => setShowHidden((prev) => !prev)}
+              onClick={() => setParam("show_hidden", showHidden ? null : "1")}
             >
               <input
                 type="checkbox"
