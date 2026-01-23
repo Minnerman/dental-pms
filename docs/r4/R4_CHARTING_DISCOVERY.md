@@ -75,7 +75,8 @@ These are likely sources based on `sys2000` schema names and prior mapping notes
 - `TreatmentPlanItems.Surface` -> `SurfaceTreatment.SurfaceNo`
 - `TreatmentPlanItems.Material` -> `MaterialTreatment.MaterialCode`
 - `ChartHealingActions.PatientCode` -> `Patients.PatientCode`
-- Perio tables -> patient linkage (explicit `PatientCode` or via a visit/transaction table)
+- Perio tables -> patient linkage via `Transactions.RefId` (confirmed for this dataset)
+- BPEFurcation -> BPE via `BPEID` (confirmed for this dataset)
 
 ## Code systems to capture
 
@@ -134,6 +135,58 @@ SELECT TOP (200)
   TransId, Tooth, ProbingPoint, Depth
 FROM dbo.PerioProbe
 WHERE TransId = <TRANS_ID>;
+
+-- Stage 132: PerioProbe -> Transactions.RefId linkage proof
+-- 1) Probes with a transaction
+SELECT COUNT(1) AS probes_with_transaction
+FROM dbo.PerioProbe pp
+WHERE EXISTS (
+  SELECT 1 FROM dbo.Transactions t WHERE t.RefId = pp.TransId
+);
+
+-- 2) Probes with a patient
+SELECT COUNT(1) AS probes_with_patient
+FROM dbo.PerioProbe pp
+WHERE EXISTS (
+  SELECT 1 FROM dbo.Transactions t
+  WHERE t.RefId = pp.TransId AND t.PatientCode IS NOT NULL
+);
+
+-- 3) Ambiguous RefId -> multiple patients (should be 0)
+SELECT COUNT(1) AS ambiguous_ref_ids
+FROM (
+  SELECT pp.TransId, COUNT(DISTINCT t.PatientCode) AS patient_count
+  FROM dbo.PerioProbe pp
+  JOIN dbo.Transactions t ON t.RefId = pp.TransId
+  WHERE t.PatientCode IS NOT NULL
+  GROUP BY pp.TransId
+  HAVING COUNT(DISTINCT t.PatientCode) > 1
+) q;
+
+-- Stage 132: BPEFurcation -> BPE linkage proof
+-- 1) Furcations linked to a BPE entry
+SELECT COUNT(1) AS furcations_with_bpe
+FROM dbo.BPEFurcation bf
+WHERE EXISTS (
+  SELECT 1 FROM dbo.BPE b WHERE b.BPEID = bf.BPEID
+);
+
+-- 2) Furcations linked to a patient (via BPE)
+SELECT COUNT(1) AS furcations_with_patient
+FROM dbo.BPEFurcation bf
+WHERE EXISTS (
+  SELECT 1 FROM dbo.BPE b WHERE b.BPEID = bf.BPEID AND b.PatientCode IS NOT NULL
+);
+
+-- 3) BPEID reused across patients (should be 0)
+SELECT COUNT(1) AS ambiguous_bpe_ids
+FROM (
+  SELECT b.BPEID, COUNT(DISTINCT b.PatientCode) AS patient_count
+  FROM dbo.BPE b
+  WHERE b.PatientCode IS NOT NULL
+  GROUP BY b.BPEID
+  HAVING COUNT(DISTINCT b.PatientCode) > 1
+) q;
 ```
 
 ## Mapping notes into PMS entities

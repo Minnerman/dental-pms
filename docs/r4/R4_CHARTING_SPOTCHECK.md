@@ -6,9 +6,9 @@ Goal: compare SQL Server charting rows and Postgres imports for a single patient
 
 In this R4 instance:
 - `dbo.BPEFurcation` and `dbo.PerioProbe` do not expose `PatientCode`.
-- BPE entries exist for patient codes (e.g. 1000035), while PerioProbe rows can only be linked
-  via `Transactions.RefId -> PerioProbe.TransId`, which currently surfaces patient 1000000.
-- No single patient code appears in both sets with the current linkage.
+- Linkage is confirmed via `BPE.BPEID` and `Transactions.RefId`, respectively.
+- No single patient code appears in both sets with the current linkage, so two patients
+  are used for spot-checks.
 
 Until the patient linkage for `PerioProbe`/`BPEFurcation` is confirmed and encoded, use two
 patients for spot-checks:
