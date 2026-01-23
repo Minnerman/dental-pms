@@ -59,6 +59,10 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## Recent fixes
+- 2026-01-23: Stage131 spot-check tooling (patient-level R4 charting fidelity).
+  - Doc: `docs/r4/R4_CHARTING_SPOTCHECK.md`.
+  - Patient 1000000: PerioProbe via Transactions.RefId join; patient 1000035: BPE/BPEFurcation via BPEID join.
+  - Note: PerioProbe/BPEFurcation lack PatientCode in SQL Server for this dataset; patient linkage remains inferred.
 - 2026-01-23: Stage130 pilot (R4 charting import validation; no UI yet).
   - Window A: patients_from=8245690, patients_to=8341935; apply was idempotent (data already present).
   - Orphan investigation: SQL Server `BPEFurcation`/`PerioProbe` tables do not expose `PatientCode`; patient linkage is pending (via `BPEID`/`TransId`).
