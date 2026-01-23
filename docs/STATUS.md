@@ -59,8 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## Recent fixes
+- 2026-01-24: Stage135 charting mismatch fixes (PerioProbe + BPEFurcation).
+  - PerioProbe linkage now creates patient mappings during patients import; pipeline counters and explain script added.
+  - PerioProbe imports no longer drop patient 1000000 (skipped duplicates are counted and sampled).
+  - BPEFurcation linkage supports schema variant using `BPE.RefId` fallback (with updated summaries/tests).
+  - Docs updated: discovery + spot-check linkage notes.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
-  - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.BPEID -> PatientCode`.
+  - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
   - Importer skips probe/furcation rows when patient linkage is missing or ambiguous.
   - Updated discovery + spot-check docs with proof queries and linkage notes.
@@ -71,11 +76,11 @@
   - Example run (local, not committed): `tmp/stage133/patient_1000000/`, `tmp/stage133/patient_1000035/`.
 - 2026-01-23: Stage134 clinical CSV review loop.
   - Cohort: 1000000 (perio+edge), 1011978 (BPE-heavy), 1012056 (notes-heavy), 1013684 (BPE-heavy).
-  - Summary: BPE and notes matched for selected patients; PerioProbe mismatch for patient 1000000; BPEFurcation linkage unsupported (schema lacks `BPEID` on BPE).
+  - Summary: BPE and notes matched for selected patients; PerioProbe mismatch for patient 1000000; BPEFurcation linkage required schema variant support.
   - Details: `docs/r4/R4_CHARTING_CSV_REVIEW.md`.
 - 2026-01-23: Stage131 spot-check tooling (patient-level R4 charting fidelity).
   - Doc: `docs/r4/R4_CHARTING_SPOTCHECK.md`.
-  - Patient 1000000: PerioProbe via Transactions.RefId join; patient 1000035: BPE/BPEFurcation via BPEID join.
+  - Patient 1000000: PerioProbe via Transactions.RefId join; patient 1000035: BPE/BPEFurcation via BPE.RefId/BPEID join.
   - Note: PerioProbe/BPEFurcation lack PatientCode in SQL Server for this dataset; patient linkage remains inferred.
 - 2026-01-23: Stage130 pilot (R4 charting import validation; no UI yet).
   - Window A: patients_from=8245690, patients_to=8341935; apply was idempotent (data already present).

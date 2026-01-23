@@ -34,6 +34,18 @@ def clear_r4(session) -> None:
     session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
 
 
+def count_r4_mappings(session) -> int:
+    r4_patient_ids = select(Patient.id).where(Patient.legacy_source == "r4")
+    return int(
+        session.scalar(
+            select(func.count(R4PatientMapping.id)).where(
+                R4PatientMapping.patient_id.in_(r4_patient_ids)
+            )
+        )
+        or 0
+    )
+
+
 def test_r4_patient_import_idempotent():
     session = SessionLocal()
     try:
@@ -49,6 +61,7 @@ def test_r4_patient_import_idempotent():
         assert stats_first.patients_created == 2
         assert stats_first.patients_updated == 0
         assert stats_first.patients_skipped == 0
+        assert count_r4_mappings(session) == 2
 
         stats_second = import_r4_patients(session, source, actor_id)
         session.commit()
@@ -56,6 +69,7 @@ def test_r4_patient_import_idempotent():
         assert stats_second.patients_created == 0
         assert stats_second.patients_updated == 0
         assert stats_second.patients_skipped == 2
+        assert count_r4_mappings(session) == 2
     finally:
         session.close()
 
@@ -135,5 +149,13 @@ def test_r4_patient_import_normalizes_fields():
         assert patient.first_name == "Jane"
         assert patient.last_name == "Doe"
         assert patient.date_of_birth == date(1985, 5, 1)
+        mapping = session.scalar(
+            select(R4PatientMapping).where(
+                R4PatientMapping.legacy_source == "r4",
+                R4PatientMapping.legacy_patient_code == 2001,
+            )
+        )
+        assert mapping is not None
+        assert mapping.patient_id == patient.id
     finally:
         session.close()

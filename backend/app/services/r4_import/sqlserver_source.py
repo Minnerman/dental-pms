@@ -404,6 +404,10 @@ class R4SqlServerSource:
             ),
             "bpe_furcation_linkage": self.bpe_furcation_linkage_summary(),
             "perio_probe_linkage": self.perio_probe_linkage_summary(),
+            "perio_probe_pipeline": self.perio_probe_pipeline_summary(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
             "sample_tooth_systems": self.sample_tooth_systems(limit=limit),
             "sample_tooth_surfaces": self.sample_tooth_surfaces(limit=limit),
             "sample_chart_healing_actions": self.sample_chart_healing_actions(
@@ -475,6 +479,14 @@ class R4SqlServerSource:
             f" WHERE EXISTS (/*perio_probe_with_patient*/ SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
             f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col} AND t.{patient_col} IS NOT NULL)",
         )
+        with_unique_patient = self._count_table(
+            "PerioProbe",
+            f" WHERE EXISTS (/*perio_probe_with_unique_patient*/ SELECT 1 FROM ("
+            f"SELECT {trans_ref_col} AS ref_id FROM dbo.Transactions WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL "
+            f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {patient_col}) = 1"
+            f") t WHERE t.ref_id = dbo.PerioProbe.{trans_col})",
+        )
         ambiguous = self._query(
             "/*perio_probe_ambiguous_count*/ "
             "SELECT COUNT(1) AS count FROM ("
@@ -517,6 +529,7 @@ class R4SqlServerSource:
             "total_probes": total,
             "probes_with_transaction": with_transaction,
             "probes_with_patient": with_patient,
+            "probes_with_unique_patient": with_unique_patient,
             "probes_without_transaction": max(total - with_transaction, 0),
             "ambiguous_trans_ids": int(ambiguous[0]["count"]) if ambiguous else 0,
             "sample_ambiguous_trans_ids": [row["trans_id"] for row in sample_ambiguous],
@@ -524,14 +537,122 @@ class R4SqlServerSource:
             "sample_unlinked_patient_trans_ids": [row["trans_id"] for row in sample_unlinked_patient],
         }
 
+    def perio_probe_pipeline_summary(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int = 5,
+    ) -> dict[str, Any]:
+        trans_col = self._pick_column("PerioProbe", ["TransId", "TransID"])
+        trans_ref_col = self._pick_column("Transactions", ["RefId"])
+        patient_col = self._pick_column("Transactions", ["PatientCode"])
+        if not trans_col or not trans_ref_col or not patient_col:
+            return {
+                "status": "unsupported",
+                "reason": "Missing PerioProbe.TransId or Transactions.RefId/PatientCode.",
+            }
+        total = self._count_table("PerioProbe")
+        with_transaction = self._count_table(
+            "PerioProbe",
+            f" WHERE EXISTS (/*perio_probe_pipeline_with_transaction*/ SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col})",
+        )
+        with_patient = self._count_table(
+            "PerioProbe",
+            f" WHERE EXISTS (/*perio_probe_pipeline_with_patient*/ SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col} AND t.{patient_col} IS NOT NULL)",
+        )
+        with_unique_patient = self._count_table(
+            "PerioProbe",
+            f" WHERE EXISTS (/*perio_probe_pipeline_with_unique*/ SELECT 1 FROM ("
+            f"SELECT {trans_ref_col} AS ref_id, MIN({patient_col}) AS patient_code "
+            f"FROM dbo.Transactions WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL "
+            f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {patient_col}) = 1"
+            f") t WHERE t.ref_id = dbo.PerioProbe.{trans_col})",
+        )
+        ambiguous = self._query(
+            "/*perio_probe_pipeline_ambiguous_count*/ "
+            "SELECT COUNT(1) AS count FROM ("
+            f"SELECT dbo.PerioProbe.{trans_col} AS trans_id, COUNT(DISTINCT t.{patient_col}) AS patient_count "
+            "FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"JOIN dbo.Transactions t WITH (NOLOCK) ON t.{trans_ref_col} = dbo.PerioProbe.{trans_col} "
+            f"WHERE t.{patient_col} IS NOT NULL "
+            f"GROUP BY dbo.PerioProbe.{trans_col} HAVING COUNT(DISTINCT t.{patient_col}) > 1"
+            ") AS q"
+        )
+        sample_ambiguous = self._query(
+            "/*perio_probe_pipeline_sample_ambiguous*/ "
+            f"SELECT TOP ({limit}) dbo.PerioProbe.{trans_col} AS trans_id "
+            "FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"JOIN dbo.Transactions t WITH (NOLOCK) ON t.{trans_ref_col} = dbo.PerioProbe.{trans_col} "
+            f"WHERE t.{patient_col} IS NOT NULL "
+            f"GROUP BY dbo.PerioProbe.{trans_col} HAVING COUNT(DISTINCT t.{patient_col}) > 1 "
+            f"ORDER BY dbo.PerioProbe.{trans_col}"
+        )
+        range_clause, range_params = self._build_range_filter(
+            "t.patient_code",
+            patients_from,
+            patients_to,
+        )
+        range_filter = range_clause.replace("WHERE", "").strip()
+        filtered_where = f"WHERE {range_filter}" if range_filter else ""
+        filtered = self._query(
+            "/*perio_probe_pipeline_after_filters*/ "
+            "SELECT COUNT(1) AS count FROM dbo.PerioProbe pp WITH (NOLOCK) "
+            "JOIN ("
+            f"SELECT {trans_ref_col} AS ref_id, MIN({patient_col}) AS patient_code "
+            "FROM dbo.Transactions WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL "
+            f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {patient_col}) = 1"
+            ") t ON t.ref_id = pp."
+            f"{trans_col} {filtered_where}",
+            range_params,
+        )
+        sample_filtered = self._query(
+            "/*perio_probe_pipeline_sample_filtered*/ "
+            f"SELECT TOP ({limit}) pp.{trans_col} AS trans_id, t.patient_code "
+            "FROM dbo.PerioProbe pp WITH (NOLOCK) "
+            "JOIN ("
+            f"SELECT {trans_ref_col} AS ref_id, MIN({patient_col}) AS patient_code "
+            "FROM dbo.Transactions WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL "
+            f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {patient_col}) = 1"
+            ") t ON t.ref_id = pp."
+            f"{trans_col} {filtered_where} "
+            f"ORDER BY pp.{trans_col}",
+            range_params,
+        )
+        after_filters_count = int(filtered[0]["count"]) if filtered else 0
+        return {
+            "status": "ok",
+            "perio_probes_total_source": total,
+            "perio_probes_after_join_transactions": with_transaction,
+            "perio_probes_after_patient_link": with_unique_patient,
+            "perio_probes_after_filters": after_filters_count,
+            "perio_probes_skipped_filtered": max(with_unique_patient - after_filters_count, 0),
+            "perio_probes_ambiguous_trans_ids": int(ambiguous[0]["count"]) if ambiguous else 0,
+            "perio_probes_ambiguous_sample": [
+                row["trans_id"]
+                for row in sample_ambiguous
+                if "trans_id" in row
+            ],
+            "perio_probes_with_patient": with_patient,
+            "sample_filtered_trans_ids": [
+                row["trans_id"]
+                for row in sample_filtered
+                if "trans_id" in row
+            ],
+        }
+
     def bpe_furcation_linkage_summary(self) -> dict[str, Any]:
-        bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+        bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID", "RefId", "RefID"])
         bpe_patient_col = self._pick_column("BPE", ["PatientCode"])
         furcation_bpe_col = self._pick_column("BPEFurcation", ["BPEID", "BPEId"])
         if not bpe_id_col or not bpe_patient_col or not furcation_bpe_col:
             return {
                 "status": "unsupported",
-                "reason": "Missing BPE.BPEID/PatientCode or BPEFurcation.BPEID.",
+                "reason": "Missing BPE.BPEID/RefId/PatientCode or BPEFurcation.BPEID.",
             }
         total = self._count_table("BPEFurcation")
         with_bpe = self._count_table(
@@ -1610,46 +1731,22 @@ class R4SqlServerSource:
         patients_from: int | None = None,
         patients_to: int | None = None,
     ) -> list[dict[str, Any]]:
-        trans_col = self._pick_column("PerioProbe", ["TransId", "TransID"])
-        patient_col = self._pick_column("PerioProbe", ["PatientCode"])
-        tooth_col = self._pick_column("PerioProbe", ["Tooth"])
-        point_col = self._pick_column("PerioProbe", ["ProbingPoint", "Point"])
-        depth_col = self._pick_column("PerioProbe", ["Depth", "ProbeDepth"])
-        select_cols = []
-        if trans_col:
-            select_cols.append(f"{trans_col} AS trans_id")
-        if patient_col:
-            select_cols.append(f"{patient_col} AS patient_code")
-        if tooth_col:
-            select_cols.append(f"{tooth_col} AS tooth")
-        if point_col:
-            select_cols.append(f"{point_col} AS probing_point")
-        if depth_col:
-            select_cols.append(f"{depth_col} AS depth")
-        if not select_cols:
-            return []
-        where_clause, params = ("", [])
-        if patient_col:
-            where_clause, params = self._build_range_filter(
-                patient_col,
-                patients_from,
-                patients_to,
+        rows = list(
+            self.list_perio_probes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
             )
-        order_col = trans_col or patient_col
-        rows = self._query(
-            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioProbe WITH (NOLOCK) "
-            f"{where_clause} ORDER BY {order_col}",
-            [limit, *params],
         )
         samples: list[dict[str, Any]] = []
         for row in rows:
             samples.append(
                 {
-                    "trans_id": row.get("trans_id"),
-                    "patient_code": row.get("patient_code"),
-                    "tooth": row.get("tooth"),
-                    "probing_point": row.get("probing_point"),
-                    "depth": row.get("depth"),
+                    "trans_id": row.trans_id,
+                    "patient_code": row.patient_code,
+                    "tooth": row.tooth,
+                    "probing_point": row.probing_point,
+                    "depth": row.depth,
                 }
             )
         return samples
@@ -3129,7 +3226,7 @@ class R4SqlServerSource:
         patient_expr = None
         if not patient_col and bpe_id_col:
             bpe_patient_col = self._pick_column("BPE", ["PatientCode"])
-            bpe_id_join_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+            bpe_id_join_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID", "RefId", "RefID"])
             if bpe_patient_col and bpe_id_join_col:
                 join_sql = (
                     "JOIN ("

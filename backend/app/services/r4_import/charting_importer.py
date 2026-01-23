@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -62,10 +62,17 @@ class ChartingImportStats:
     bpe_furcations_updated: int = 0
     bpe_furcations_skipped: int = 0
     bpe_furcations_unlinked_patients: int = 0
+    perio_probes_seen: int = 0
     perio_probes_created: int = 0
     perio_probes_updated: int = 0
     perio_probes_skipped: int = 0
     perio_probes_unlinked_patients: int = 0
+    perio_probes_null_patients: int = 0
+    perio_probes_unmapped_patients: int = 0
+    perio_probes_skipped_duplicate: int = 0
+    perio_probes_sample_unlinked: list[str] = field(default_factory=list)
+    perio_probes_sample_unmapped: list[str] = field(default_factory=list)
+    perio_probes_sample_duplicate: list[str] = field(default_factory=list)
     perio_plaque_created: int = 0
     perio_plaque_updated: int = 0
     perio_plaque_skipped: int = 0
@@ -156,10 +163,13 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        stats.perio_probes_seen += 1
         if probe.patient_code is None:
+            stats.perio_probes_null_patients += 1
             stats.perio_probes_unlinked_patients += 1
             stats.perio_probes_skipped += 1
             _log_unlinked_patient("perio_probes", probe.trans_id, "null")
+            _append_sample(stats.perio_probes_sample_unlinked, _build_perio_probe_key(probe))
             continue
         if probe.patient_code is not None and not _is_patient_mapped(
             session,
@@ -167,13 +177,17 @@ def import_r4_charting(
             probe.patient_code,
             mapped_patient_cache,
         ):
+            stats.perio_probes_unmapped_patients += 1
             stats.perio_probes_unlinked_patients += 1
             stats.perio_probes_skipped += 1
             _log_unlinked_patient("perio_probes", probe.trans_id, probe.patient_code)
+            _append_sample(stats.perio_probes_sample_unmapped, _build_perio_probe_key(probe))
             continue
         legacy_key = _build_perio_probe_key(probe)
         if legacy_key in seen_perio_probe_keys:
+            stats.perio_probes_skipped_duplicate += 1
             stats.perio_probes_skipped += 1
+            _append_sample(stats.perio_probes_sample_duplicate, legacy_key)
             continue
         seen_perio_probe_keys.add(legacy_key)
         _upsert_perio_probe(session, probe, actor_id, legacy_source, stats)
@@ -817,6 +831,14 @@ def _log_unlinked_patient(entity: str, legacy_key: int | str | None, patient_cod
         "r4_import_skip_unlinked_patient "
         f"entity={entity} legacy_key={legacy_key} patient_code={patient_code}"
     )
+
+
+def _append_sample(bucket: list[str], value: str | None, limit: int = 5) -> None:
+    if value is None:
+        return
+    if len(bucket) >= limit:
+        return
+    bucket.append(str(value))
 
 
 def _build_old_patient_note_key(note: R4OldPatientNotePayload) -> str:

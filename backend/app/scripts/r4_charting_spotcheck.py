@@ -150,7 +150,7 @@ def _sqlserver_bpe_entries(source: R4SqlServerSource, patient_code: int, limit: 
 
 def _sqlserver_bpe_furcations(source: R4SqlServerSource, patient_code: int, limit: int):
     bpe_patient_col = source._pick_column("BPE", ["PatientCode"])
-    bpe_id_col = source._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+    bpe_id_col = source._pick_column("BPE", ["BPEID", "BPEId", "ID", "RefId", "RefID"])
     furcation_bpe_col = source._pick_column("BPEFurcation", ["BPEID", "BPEId"])
     bpe_furcation_patient_col = source._pick_column("BPEFurcation", ["PatientCode"])
     furcation_date_col = source._pick_column(

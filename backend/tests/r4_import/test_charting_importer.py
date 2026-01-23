@@ -201,6 +201,8 @@ def test_r4_charting_import_skips_duplicate_perio_probes():
 
         assert stats.perio_probes_created == 1
         assert stats.perio_probes_skipped == 1
+        assert stats.perio_probes_skipped_duplicate == 1
+        assert len(stats.perio_probes_sample_duplicate) == 1
         assert stats.perio_probes_unlinked_patients == 0
     finally:
         session.close()
@@ -222,6 +224,8 @@ def test_r4_charting_import_skips_unlinked_patients():
         assert stats.bpe_furcations_unlinked_patients == 1
         assert stats.perio_probes_created == 0
         assert stats.perio_probes_unlinked_patients == 1
+        assert stats.perio_probes_unmapped_patients == 1
+        assert len(stats.perio_probes_sample_unmapped) == 1
     finally:
         session.close()
 
@@ -242,5 +246,7 @@ def test_r4_charting_import_skips_null_patients():
         assert stats.bpe_furcations_unlinked_patients == 1
         assert stats.perio_probes_created == 0
         assert stats.perio_probes_unlinked_patients == 1
+        assert stats.perio_probes_null_patients == 1
+        assert len(stats.perio_probes_sample_unlinked) == 1
     finally:
         session.close()
