@@ -59,7 +59,8 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## In progress
-- None (awaiting next stage assignment).
+- Stage129 PR open (charting import model + canonical schema; no UI yet).
+  - PR #114: https://github.com/Minnerman/dental-pms/pull/114
 
 -## Recent fixes
 - 2026-01-23: Stage128 discovery complete (R4 charting notes).
