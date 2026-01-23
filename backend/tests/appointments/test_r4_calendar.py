@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from app.db.session import SessionLocal
 from app.models.patient import Patient
 from app.models.r4_appointment import R4Appointment
+from app.models.r4_appointment_patient_link import R4AppointmentPatientLink
 from app.models.r4_user import R4User
 from app.models.user import User
 from app.services.users import ensure_admin_user
@@ -88,6 +89,11 @@ def _unique_legacy_id() -> str:
 
 def _cleanup(session, patient_ids: list[int] | None = None):
     session.execute(delete(R4Appointment).where(R4Appointment.legacy_source == "r4"))
+    session.execute(
+        delete(R4AppointmentPatientLink).where(
+            R4AppointmentPatientLink.legacy_source == "r4"
+        )
+    )
     session.execute(delete(R4User).where(R4User.legacy_source == "r4"))
     if patient_ids:
         session.execute(delete(Patient).where(Patient.id.in_(patient_ids)))
@@ -323,3 +329,102 @@ def test_r4_calendar_ordering_stability(api_client, auth_headers, db_session):
     assert ids.index(appt_low.legacy_appointment_id) < ids.index(appt_high.legacy_appointment_id)
 
     _cleanup(db_session, [patient.id])
+
+
+def test_r4_calendar_link_endpoint_precedence(api_client, auth_headers, db_session):
+    patient_code = _create_patient(db_session, _unique_legacy_id())
+    linked_patient = _create_patient(db_session, _unique_legacy_id())
+    clinician = _create_user(db_session, legacy_code=101000, full_name="Dr Link")
+    appt = _create_appointment(
+        db_session,
+        legacy_id=10001,
+        patient_code=int(patient_code.legacy_id),
+        clinician_code=clinician.legacy_user_code,
+        status="Pending",
+        starts_at=datetime(2025, 6, 1, 9, 0, tzinfo=timezone.utc),
+    )
+    db_session.commit()
+
+    res_link = api_client.post(
+        f"/api/appointments/{appt.legacy_appointment_id}/link",
+        json={"patient_id": linked_patient.id},
+        headers=auth_headers,
+    )
+    assert res_link.status_code == 200, res_link.text
+
+    res = api_client.get(
+        "/api/appointments",
+        params={"from": "2025-06-01", "to": "2025-06-02"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    items = res.json()["items"]
+    linked_item = next(
+        item for item in items if item["legacy_appointment_id"] == appt.legacy_appointment_id
+    )
+    assert linked_item["patient_id"] == linked_patient.id
+    assert linked_item["is_unlinked"] is False
+
+    _cleanup(db_session, [patient_code.id, linked_patient.id])
+
+
+def test_r4_calendar_link_endpoint_idempotent_and_update(api_client, auth_headers, db_session):
+    patient_a = _create_patient(db_session, _unique_legacy_id())
+    patient_b = _create_patient(db_session, _unique_legacy_id())
+    appt = _create_appointment(
+        db_session,
+        legacy_id=10002,
+        patient_code=None,
+        clinician_code=None,
+        status="Pending",
+        starts_at=datetime(2025, 6, 2, 9, 0, tzinfo=timezone.utc),
+    )
+    db_session.commit()
+
+    res_first = api_client.post(
+        f"/api/appointments/{appt.legacy_appointment_id}/link",
+        json={"patient_id": patient_a.id},
+        headers=auth_headers,
+    )
+    assert res_first.status_code == 200, res_first.text
+    link_id = res_first.json()["id"]
+
+    res_same = api_client.post(
+        f"/api/appointments/{appt.legacy_appointment_id}/link",
+        json={"patient_id": patient_a.id},
+        headers=auth_headers,
+    )
+    assert res_same.status_code == 200, res_same.text
+    assert res_same.json()["id"] == link_id
+
+    res_update = api_client.post(
+        f"/api/appointments/{appt.legacy_appointment_id}/link",
+        json={"patient_id": patient_b.id},
+        headers=auth_headers,
+    )
+    assert res_update.status_code == 200, res_update.text
+    assert res_update.json()["id"] == link_id
+    assert res_update.json()["patient_id"] == patient_b.id
+
+    _cleanup(db_session, [patient_a.id, patient_b.id])
+
+
+def test_r4_calendar_link_endpoint_invalid_patient(api_client, auth_headers, db_session):
+    appt = _create_appointment(
+        db_session,
+        legacy_id=10003,
+        patient_code=None,
+        clinician_code=None,
+        status="Pending",
+        starts_at=datetime(2025, 6, 3, 9, 0, tzinfo=timezone.utc),
+    )
+    db_session.commit()
+
+    res = api_client.post(
+        f"/api/appointments/{appt.legacy_appointment_id}/link",
+        json={"patient_id": 999999999},
+        headers=auth_headers,
+    )
+    assert res.status_code == 404, res.text
+
+    _cleanup(db_session)

@@ -109,3 +109,85 @@ test("r4 calendar read-only filters and rendering", async ({ page, request }) =>
   await expect(page.getByTestId("r4-filter-show-unlinked")).toBeChecked();
   await expect(page.getByTestId("r4-unlinked-badge")).toBeVisible();
 });
+
+test("r4 calendar links unlinked appointment to patient", async ({ page, request }) => {
+  await primePageAuth(page, request);
+
+  let linked = false;
+  const unlinkedItem: AppointmentItem = {
+    legacy_appointment_id: 103,
+    starts_at: "2025-01-02T11:00:00.000Z",
+    ends_at: "2025-01-02T11:30:00.000Z",
+    status_normalised: "pending",
+    status_raw: "Pending",
+    clinician_code: 1003,
+    clinician_name: "Dr Unlinked",
+    clinician_role: "Dentist",
+    clinician_is_current: true,
+    patient_id: null,
+    patient_display_name: "Unlinked",
+    is_unlinked: true,
+    title: "Walk-in",
+    notes: "Needs mapping",
+  };
+  const linkedItem: AppointmentItem = {
+    ...unlinkedItem,
+    patient_id: 901,
+    patient_display_name: "Linked Patient",
+    is_unlinked: false,
+  };
+
+  await page.route("**/api/api/appointments**", async (route) => {
+    const items = linked ? [linkedItem] : [unlinkedItem];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items, total_count: items.length }),
+    });
+  });
+
+  await page.route("**/api/patients/search**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: 901,
+          first_name: "Linked",
+          last_name: "Patient",
+          date_of_birth: "1990-01-01",
+        },
+      ]),
+    });
+  });
+
+  await page.route("**/api/appointments/103/link", async (route) => {
+    linked = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 1,
+        legacy_source: "r4",
+        legacy_appointment_id: 103,
+        patient_id: 901,
+        linked_by_user_id: 1,
+        linked_at: "2025-01-02T12:00:00.000Z",
+      }),
+    });
+  });
+
+  const baseUrl = getBaseUrl();
+  await page.goto(`${baseUrl}/r4-calendar?from=2025-01-01&to=2025-01-07&show_unlinked=1`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await expect(page.getByTestId("r4-unlinked-badge")).toBeVisible();
+  await page.getByTestId("r4-link-appointment-103").click();
+  await expect(page.getByTestId("r4-link-modal")).toBeVisible();
+  await page.getByTestId("r4-link-search").fill("Linked");
+  await page.getByTestId("r4-link-patient-901").click();
+  await page.getByTestId("r4-link-save").click();
+  await expect(page.getByText("Linked Patient")).toBeVisible();
+  await expect(page.getByTestId("r4-unlinked-badge")).toHaveCount(0);
+});
