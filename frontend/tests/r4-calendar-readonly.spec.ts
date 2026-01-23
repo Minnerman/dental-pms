@@ -95,7 +95,10 @@ test("r4 calendar read-only filters and rendering", async ({ page, request }) =>
   await expect(page.getByText("Hidden Patient")).toHaveCount(0);
   await expect(page.getByTestId("r4-unlinked-badge")).toHaveCount(0);
 
-  await page.getByTestId("r4-filter-show-hidden").check();
+  const showHidden = page.getByTestId("r4-filter-show-hidden");
+  await expect(showHidden).toBeVisible();
+  await showHidden.setChecked(true);
+  await expect(showHidden).toBeChecked();
   await expect(page.getByText("Hidden Patient")).toBeVisible();
 
   await page.getByTestId("r4-filter-show-unlinked").check();
