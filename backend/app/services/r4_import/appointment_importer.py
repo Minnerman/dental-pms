@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +21,7 @@ class R4AppointmentImportStats:
     appointments_patient_null: int = 0
     appointments_min_start: datetime | None = None
     appointments_max_start: datetime | None = None
+    status_distribution: Counter[str] = field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -30,6 +33,7 @@ class R4AppointmentImportStats:
                 "min": self._format_dt(self.appointments_min_start),
                 "max": self._format_dt(self.appointments_max_start),
             },
+            "status_distribution": dict(self.status_distribution),
         }
 
     @staticmethod
@@ -62,6 +66,9 @@ def _track_stats(stats: R4AppointmentImportStats, appt: R4AppointmentRecord) -> 
         stats.appointments_min_start = appt.starts_at
     if stats.appointments_max_start is None or appt.starts_at > stats.appointments_max_start:
         stats.appointments_max_start = appt.starts_at
+    normalized_status = _normalize_status(appt.status)
+    if normalized_status:
+        stats.status_distribution[normalized_status] += 1
 
 
 def _upsert_appointment(
@@ -132,3 +139,12 @@ def _ensure_timezone(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _normalize_status(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = re.sub(r"\s+", " ", value.strip())
+    if not cleaned:
+        return None
+    return cleaned.lower()
