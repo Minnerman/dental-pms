@@ -1,0 +1,165 @@
+# R4 charting discovery (Stage 128)
+
+Status: discovery-only. No UI or import changes in this stage. All R4 access is SELECT-only.
+
+Goal: identify the exact R4 tables/views, keys, code systems, and rendering rules needed to match the R4 odontogram and related clinical charting behaviors.
+
+## Candidate tables/views (from schema reconnaissance)
+
+These are likely sources based on `sys2000` schema names and prior mapping notes. Confirm with SELECT-only queries before any import or UI work.
+
+### Patient anchor
+- `dbo.Patients`
+  - Key: `PatientCode` (patient linkage)
+
+### Charting foundations (odontogram)
+- `dbo.ToothSurfaces`
+  - Key: (`ToothId`, `SurfaceNo`)
+  - Use: surface labels per tooth.
+- `dbo.ToothSystems`
+  - Key: `ToothSystemId`
+  - Use: tooth numbering system definitions (FDI, Palmer, etc.).
+- `dbo.ChartHealingActions`
+  - Key: `ID`
+  - Use: chart action history and possible links to treatment/appointments.
+
+### Planned/completed work (likely drives chart overlays)
+- `dbo.TreatmentPlans`
+  - Key: (`PatientCode`, `TPNumber`) (+ `Index` if used for versions)
+- `dbo.TreatmentPlanItems`
+  - Key: `TPItemKey` (if globally unique) or (`PatientCode`, `TPNumber`, `TPItem`)
+  - Fields: `Tooth`, `Surface`, `CodeID`, `Status`, `Date*`, `Material` (confirm).
+- `dbo.TreatmentPlanReviews`
+  - Key: (`PatientCode`, `TPNumber`)
+  - Use: accepted/rejected status.
+- `dbo.Treatments`
+  - Key: `TreatmentCode`
+  - Use: code descriptions, defaults.
+- `dbo.SurfaceTreatment`
+  - Key: (`SurfaceNo`, `CodeID`)
+  - Use: allowed surfaces per treatment code.
+- `dbo.MaterialTreatment`
+  - Key: (`CodeID`, `MaterialCode`)
+  - Use: materials per treatment code.
+
+### Perio/BPE (chart overlay layer)
+- `dbo.BPE`
+  - Key: (`PatientCode`, `Date`) or identity column (confirm).
+- `dbo.BPEFurcation`
+  - Key: `pKey` with `BPEID` (confirm).
+- `dbo.PerioProbe`
+  - Key: (`TransId`, `Tooth`, `ProbingPoint`) (confirm).
+- `dbo.PerioPlaque`
+  - Key: (`TransID`, `Tooth`) (confirm).
+
+### Notes tied to charting
+- `dbo.PatientNotes`
+  - Key: (`PatientCode`, `NoteNumber`) or (`PatientCode`, `Date`, `NoteNumber`) (confirm).
+  - Fields to confirm: tooth/surface indicators, note category codes.
+- `dbo.FixedNotes`
+  - Key: `FixedNoteCode`
+- `dbo.NoteCategories`
+  - Key: `CategoryNumber`
+- `dbo.TreatmentNotes`
+  - Key: `NoteID`
+  - Use: notes per plan item.
+- `dbo.TemporaryNotes`
+  - Key: `PatientCode`
+- `dbo.OldPatientNotes`
+  - Key: (`PatientCode`, `NoteNumber`, `Date`)
+
+## Key linkages to confirm
+
+- `TreatmentPlanItems.PatientCode` -> `Patients.PatientCode`
+- `TreatmentPlanItems.CodeID` -> `Treatments.TreatmentCode`
+- `TreatmentPlanItems.Surface` -> `SurfaceTreatment.SurfaceNo`
+- `TreatmentPlanItems.Material` -> `MaterialTreatment.MaterialCode`
+- `ChartHealingActions.PatientCode` -> `Patients.PatientCode`
+- Perio tables -> patient linkage (explicit `PatientCode` or via a visit/transaction table)
+
+## Code systems to capture
+
+- Tooth numbering system in active use (FDI/Palmer/Universal), and how stored (`ToothId`/`Tooth` values).
+- Surface codes and labels (e.g., M/O/D/B/L/I/P or numeric).
+- Treatment code mapping (treatment code -> chart overlay type/color/icon).
+- Status enums for planned/completed/cancelled/observed.
+- Material codes and display names.
+- Special tooth states: missing, extracted, deciduous, implant, crown, RCT, bridge, partial denture, etc.
+
+## Sample SELECT-only queries
+
+Replace placeholders (`<PATIENT_CODE>`) and run with read-only credentials.
+
+```sql
+-- Identify tooth numbering systems
+SELECT TOP (50) * FROM dbo.ToothSystems;
+
+-- Surface labels per tooth
+SELECT TOP (200) * FROM dbo.ToothSurfaces ORDER BY ToothId, SurfaceNo;
+
+-- Planned treatment items for a patient
+SELECT TOP (200)
+  PatientCode, TPNumber, TPItem, TPItemKey, Tooth, Surface, CodeID, Status, Material, DateCreated, DateCompleted
+FROM dbo.TreatmentPlanItems
+WHERE PatientCode = <PATIENT_CODE>
+ORDER BY TPNumber, TPItem;
+
+-- Treatment plan headers
+SELECT TOP (50)
+  PatientCode, TPNumber, Status, DateCreated, DateAccepted
+FROM dbo.TreatmentPlans
+WHERE PatientCode = <PATIENT_CODE>
+ORDER BY TPNumber DESC;
+
+-- Treatment code metadata
+SELECT TOP (50)
+  TreatmentCode, TreatmentDesc, ShortDesc
+FROM dbo.Treatments;
+
+-- Surface mappings for a treatment code
+SELECT TOP (50)
+  CodeID, SurfaceNo
+FROM dbo.SurfaceTreatment
+WHERE CodeID = <TREATMENT_CODE>;
+
+-- Perio/BPE summary for a patient
+SELECT TOP (50)
+  PatientCode, Date, Sextant1, Sextant2, Sextant3, Sextant4, Sextant5, Sextant6
+FROM dbo.BPE
+WHERE PatientCode = <PATIENT_CODE>
+ORDER BY Date DESC;
+
+-- Perio probing/presence
+SELECT TOP (200)
+  TransId, Tooth, ProbingPoint, Depth
+FROM dbo.PerioProbe
+WHERE TransId = <TRANS_ID>;
+```
+
+## Mapping notes into PMS entities
+
+- Planned work: `TreatmentPlanItems` map to planned chart overlays, keyed by patient + tooth + surface + treatment code.
+- Completed work: determine whether completed items come from `TreatmentPlanItems` status or a separate transactions table.
+- Tooth history: use `TreatmentNotes` and `PatientNotes` with tooth/surface metadata.
+- Perio: map BPE and probing data to chart overlays (dates + sextant/point positions).
+
+## Rendering rules checklist (must match R4 exactly)
+
+- Tooth numbering system and order (upper/lower, left/right, permanent/deciduous).
+- Surface labeling and draw order (e.g., occlusal vs mesial overlays).
+- Planned vs completed vs historical color/shape rules.
+- Material and restoration types (fillings, crowns, inlays, onlays, veneers, RCT, implants, bridges).
+- Missing/extracted/unerupted/deciduous indicators.
+- Perio marks: BPE sextant scores, probing depths, bleeding/plaque marks.
+- Chart note markers and hover/detail behavior.
+- How multiple items on the same tooth/surface stack (priority rules).
+- Date-based filtering rules (current vs historical view).
+- Any R4-specific iconography, legends, or status badges.
+
+## Open questions / next discovery steps
+
+- Confirm the exact R4 chart data tables and fields (verify candidates above).
+- Identify the table that records completed procedures if not in `TreatmentPlanItems`.
+- Confirm surface code encoding and tooth numbering system in production data.
+- Capture at least one real patient chart end-to-end into Postgres to validate mapping.
+- Gather screenshots of R4 chart states to codify rendering rules.
