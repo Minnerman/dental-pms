@@ -116,7 +116,8 @@ export default function R4CalendarPage() {
   const [fromDate, setFromDate] = useState(defaults.from);
   const [toDate, setToDate] = useState(defaults.to);
   const [clinicianCode, setClinicianCode] = useState("");
-  const [showUnlinked, setShowUnlinked] = useState(false);
+  const showUnlinkedParam = searchParams.get("show_unlinked");
+  const showUnlinked = showUnlinkedParam === "1" || showUnlinkedParam === "true";
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -128,12 +129,10 @@ export default function R4CalendarPage() {
     const nextFrom = searchParams.get("from") ?? defaults.from;
     const nextTo = searchParams.get("to") ?? defaults.to;
     const nextClinician = searchParams.get("clinician_code") ?? "";
-    const nextShowUnlinked = searchParams.get("show_unlinked") === "true";
     if (nextFrom !== fromDate) setFromDate(nextFrom);
     if (nextTo !== toDate) setToDate(nextTo);
     if (nextClinician !== clinicianCode) setClinicianCode(nextClinician);
-    if (nextShowUnlinked !== showUnlinked) setShowUnlinked(nextShowUnlinked);
-  }, [searchParams, defaults, fromDate, toDate, clinicianCode, showUnlinked]);
+  }, [searchParams, defaults, fromDate, toDate, clinicianCode]);
 
   const setParam = useCallback(
     (key: string, value: string | null) => {
@@ -156,7 +155,7 @@ export default function R4CalendarPage() {
     params.set("to", toDate);
     if (clinicianCode) params.set("clinician_code", clinicianCode);
     if (showHidden) params.set("show_hidden", "1");
-    if (showUnlinked) params.set("show_unlinked", "true");
+    if (showUnlinked) params.set("show_unlinked", "1");
     return params.toString();
   }, [fromDate, toDate, clinicianCode, showHidden, showUnlinked]);
 
@@ -177,7 +176,7 @@ export default function R4CalendarPage() {
       });
       if (clinicianCode) params.set("clinician_code", clinicianCode);
       if (showHidden) params.set("show_hidden", "true");
-      if (showUnlinked) params.set("show_unlinked", "true");
+      if (showUnlinked) params.set("show_unlinked", "1");
       const res = await apiFetch(`${r4AppointmentsProxyPath}?${params.toString()}`);
       if (res.status === 401) {
         clearToken();
@@ -310,15 +309,26 @@ export default function R4CalendarPage() {
               />
               <span>Show hidden statuses</span>
             </button>
-            <label className="row" style={{ gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{
+                gap: 8,
+                display: "inline-flex",
+                alignItems: "center",
+                cursor: "pointer",
+              }}
+              data-testid="r4-filter-show-unlinked-toggle"
+              onClick={() => setParam("show_unlinked", showUnlinked ? null : "1")}
+            >
               <input
                 type="checkbox"
                 checked={showUnlinked}
-                onChange={(e) => setShowUnlinked(e.target.checked)}
+                readOnly
                 data-testid="r4-filter-show-unlinked"
               />
               <span>Show unlinked</span>
-            </label>
+            </button>
             <button className="btn btn-secondary" onClick={loadAppointments} disabled={loading}>
               Refresh
             </button>

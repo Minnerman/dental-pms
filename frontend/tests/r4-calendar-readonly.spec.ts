@@ -72,8 +72,10 @@ test("r4 calendar read-only filters and rendering", async ({ page, request }) =>
 
   await page.route("**/api/api/appointments**", async (route) => {
     const url = new URL(route.request().url());
-    const showHidden = url.searchParams.get("show_hidden") === "true";
-    const showUnlinked = url.searchParams.get("show_unlinked") === "true";
+    const showHiddenParam = url.searchParams.get("show_hidden");
+    const showUnlinkedParam = url.searchParams.get("show_unlinked");
+    const showHidden = showHiddenParam === "true" || showHiddenParam === "1";
+    const showUnlinked = showUnlinkedParam === "true" || showUnlinkedParam === "1";
     const items = [baseItem];
     if (showHidden) items.push(hiddenItem);
     if (showUnlinked) items.push(unlinkedItem);
@@ -101,6 +103,9 @@ test("r4 calendar read-only filters and rendering", async ({ page, request }) =>
   await expect(page.getByTestId("r4-filter-show-hidden")).toBeChecked();
   await expect(page.getByText("Hidden Patient")).toBeVisible();
 
-  await page.getByTestId("r4-filter-show-unlinked").check();
+  const showUnlinkedToggle = page.getByRole("button", { name: /show unlinked/i });
+  await showUnlinkedToggle.click();
+  await expect(page).toHaveURL(/(\?|&)show_unlinked=1(&|$)/, { timeout: 5000 });
+  await expect(page.getByTestId("r4-filter-show-unlinked")).toBeChecked();
   await expect(page.getByTestId("r4-unlinked-badge")).toBeVisible();
 });
