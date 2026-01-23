@@ -59,6 +59,13 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## Recent fixes
+- 2026-01-23: Stage130 pilot (R4 charting import validation; no UI yet).
+  - Window: patients_from=8245690, patients_to=8341935.
+  - Dry-run counts: bpe_furcations=2180, perio_probes=166, tooth_surfaces=11700, tooth_systems=3, fixed_notes=147, note_categories=12.
+  - Apply-1 stats: created=0, updated=0, skipped=2180 bpe_furcations/166 perio_probes/11700 tooth_surfaces/147 fixed_notes/12 note_categories.
+  - Apply-2 idempotency: same stats as apply-1.
+  - Postgres sanity: r4_perio_probes=118, r4_bpe_furcations=2181; duplicate probe keys=0; orphaned legacy_patient_code=1 in probes/bpe_furcations.
+  - Importer note: skip duplicate perio probe legacy keys within a single run (source duplicates observed).
 - 2026-01-23: Stage129 complete (charting import model + canonical schema; no UI yet).
   - PR #114, merge SHA `1c0e077`. https://github.com/Minnerman/dental-pms/pull/114
 - 2026-01-23: Stage128 discovery complete (R4 charting notes).

@@ -108,6 +108,7 @@ def import_r4_charting(
     limit: int | None = None,
 ) -> ChartingImportStats:
     stats = ChartingImportStats()
+    seen_perio_probe_keys: set[str] = set()
 
     for system in source.list_tooth_systems(limit=limit):
         _upsert_tooth_system(session, system, actor_id, legacy_source, stats)
@@ -136,6 +137,11 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        legacy_key = _build_perio_probe_key(probe)
+        if legacy_key in seen_perio_probe_keys:
+            stats.perio_probes_skipped += 1
+            continue
+        seen_perio_probe_keys.add(legacy_key)
         _upsert_perio_probe(session, probe, actor_id, legacy_source, stats)
     for plaque in source.list_perio_plaque(
         patients_from=patients_from,
