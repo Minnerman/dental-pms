@@ -30,3 +30,4 @@ backups/
 .DS_Store
 frontend/tsconfig.tsbuildinfo
 *.tsbuildinfo
+tmp/
