@@ -1,4 +1,5 @@
 # R4 SQL Server READ-ONLY WARNING
+- R4 SQL Server is STRICTLY READ-ONLY (SELECT-only; no writes/procs/DDL; all --apply writes must be Postgres-only).
 - R4 SQL Server is strictly READ-ONLY.
 - Do not change, amend, delete, update, insert, create, or run stored procedures on R4.
 - Use SELECT-only queries and read-only credentials only.
@@ -79,8 +80,10 @@ If you want, paste the exact `r4_import.py --help` output and I will write the e
 - `stage126-calendar-readonly` branch has WIP changes (also stored in `wip/local-dirty-20260123-004630` at commit `6201864`) that contain the beginnings of the appointments calendar backend + UI.
 
 ### Next session steps
-1. `git checkout stage126-calendar-readonly && git pull --ff-only`
-2. `git rebase master` (or `git merge master` if rebase conflicts persist)
-3. `git cherry-pick 6201864` (or merge the `wip/local-dirty-20260123-004630` branch) to recover the Calendar work
+1. `git status --porcelain`
+2. `git log -1 --oneline`
+3. `git checkout stage126-calendar-readonly && git pull --ff-only`
+4. `git rebase master` (or `git merge master` if rebase conflicts persist)
+5. `git cherry-pick 6201864` (or merge the `wip/local-dirty-20260123-004630` branch) to recover the Calendar work
 4. Finish Stage 126: implement `/api/appointments` filters/joins/total flag + calendar UI + Playwright spec; include the Stage 125 completion note in `docs/STATUS.md` and run verify/test commands before opening the PR.
 5. After Stage 126 merges, begin Stage 127 (link table + API + modal + tests).
