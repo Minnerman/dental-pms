@@ -2,7 +2,7 @@
   {
     "patient_code": 1001,
     "note": "Temp note",
-    "updated_at": "2026-01-07T12:00:00Z",
+    "legacy_updated_at": "2026-01-07T12:00:00Z",
     "user_code": 700
   }
 ]

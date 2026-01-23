@@ -438,7 +438,7 @@ def upgrade() -> None:
         ),
         sa.Column("legacy_patient_code", sa.Integer(), nullable=False),
         sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("legacy_updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("user_code", sa.Integer(), nullable=True),
         sa.Column(
             "created_at",

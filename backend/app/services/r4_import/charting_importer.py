@@ -655,7 +655,7 @@ def _upsert_temporary_note(
     )
     updates = {
         "note": _clean_text(note.note),
-        "updated_at": _normalize_datetime(note.updated_at),
+        "legacy_updated_at": _normalize_datetime(note.legacy_updated_at),
         "user_code": note.user_code,
         "updated_by_user_id": actor_id,
     }

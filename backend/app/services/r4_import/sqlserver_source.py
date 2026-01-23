@@ -1715,7 +1715,7 @@ class R4SqlServerSource:
         if note_col:
             select_cols.append(f"{note_col} AS note")
         if updated_col:
-            select_cols.append(f"{updated_col} AS updated_at")
+            select_cols.append(f"{updated_col} AS legacy_updated_at")
         where_clause, params = self._build_range_filter(
             patient_col,
             patients_from,
@@ -1732,7 +1732,7 @@ class R4SqlServerSource:
                 {
                     "patient_code": row.get("patient_code"),
                     "note": row.get("note"),
-                    "updated_at": self._format_dt(row.get("updated_at")),
+                    "legacy_updated_at": self._format_dt(row.get("legacy_updated_at")),
                 }
             )
         return samples
@@ -3523,7 +3523,7 @@ class R4SqlServerSource:
             if note_col:
                 select_cols.append(f"{note_col} AS note")
             if date_col:
-                select_cols.append(f"{date_col} AS updated_at")
+                select_cols.append(f"{date_col} AS legacy_updated_at")
             if user_col:
                 select_cols.append(f"{user_col} AS user_code")
             rows = self._query(
@@ -3541,7 +3541,7 @@ class R4SqlServerSource:
                 yield R4TemporaryNote(
                     patient_code=last_patient,
                     note=(row.get("note") or "").strip() or None,
-                    updated_at=row.get("updated_at"),
+                    legacy_updated_at=row.get("legacy_updated_at"),
                     user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
                 )
                 if remaining is not None:

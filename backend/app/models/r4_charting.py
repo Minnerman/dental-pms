@@ -311,7 +311,9 @@ class R4TemporaryNote(Base, AuditMixin):
     legacy_source: Mapped[str] = mapped_column(String(120), nullable=False, default="r4")
     legacy_patient_code: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    legacy_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     user_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
