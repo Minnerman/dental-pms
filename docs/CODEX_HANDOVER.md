@@ -68,3 +68,19 @@ Stage 109 should be a small, low-risk follow-up. Suggested options:
 - Add better resume support for long imports (keyset paging checkpoints logged).
 
 If you want, paste the exact `r4_import.py --help` output and I will write the exact pilot commands for your current CLI flags (still keeping R4 read-only).
+
+## Session summary (2026-01-23)
+
+### Completed today
+- Merged PR #109 (`stage124-fix`) after rebasing it on `master` and fixing the status distribution stats so recalls checks pass.
+- Verified `bash ops/health.sh` and `bash ops/verify.sh` to ensure the merged baseline is healthy.
+
+### Parked work
+- `stage126-calendar-readonly` branch has WIP changes (also stored in `wip/local-dirty-20260123-004630` at commit `6201864`) that contain the beginnings of the appointments calendar backend + UI.
+
+### Next session steps
+1. `git checkout stage126-calendar-readonly && git pull --ff-only`
+2. `git rebase master` (or `git merge master` if rebase conflicts persist)
+3. `git cherry-pick 6201864` (or merge the `wip/local-dirty-20260123-004630` branch) to recover the Calendar work
+4. Finish Stage 126: implement `/api/appointments` filters/joins/total flag + calendar UI + Playwright spec; include the Stage 125 completion note in `docs/STATUS.md` and run verify/test commands before opening the PR.
+5. After Stage 126 merges, begin Stage 127 (link table + API + modal + tests).
