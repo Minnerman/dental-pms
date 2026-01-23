@@ -135,6 +135,11 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        if furcation.patient_code is None:
+            stats.bpe_furcations_unlinked_patients += 1
+            stats.bpe_furcations_skipped += 1
+            _log_unlinked_patient("bpe_furcations", furcation.furcation_id, "null")
+            continue
         if furcation.patient_code is not None and not _is_patient_mapped(
             session,
             legacy_source,
@@ -151,6 +156,11 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        if probe.patient_code is None:
+            stats.perio_probes_unlinked_patients += 1
+            stats.perio_probes_skipped += 1
+            _log_unlinked_patient("perio_probes", probe.trans_id, "null")
+            continue
         if probe.patient_code is not None and not _is_patient_mapped(
             session,
             legacy_source,
@@ -802,7 +812,7 @@ def _is_patient_mapped(
     return mapped
 
 
-def _log_unlinked_patient(entity: str, legacy_key: int | str | None, patient_code: int) -> None:
+def _log_unlinked_patient(entity: str, legacy_key: int | str | None, patient_code: int | str) -> None:
     print(
         "r4_import_skip_unlinked_patient "
         f"entity={entity} legacy_key={legacy_key} patient_code={patient_code}"

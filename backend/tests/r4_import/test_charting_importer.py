@@ -161,6 +161,30 @@ class UnlinkedPerioSource(FixtureSource):
         return items
 
 
+class NullPerioSource(FixtureSource):
+    def list_bpe_furcations(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ):
+        items = super().list_bpe_furcations(patients_from, patients_to, limit)
+        for item in items:
+            item.patient_code = None
+        return items
+
+    def list_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ):
+        items = super().list_perio_probes(patients_from, patients_to, limit)
+        for item in items:
+            item.patient_code = None
+        return items
+
+
 def test_r4_charting_import_skips_duplicate_perio_probes():
     session = SessionLocal()
     try:
@@ -190,6 +214,26 @@ def test_r4_charting_import_skips_unlinked_patients():
 
         actor_id = resolve_actor_id(session)
         source = UnlinkedPerioSource()
+
+        stats = import_r4_charting(session, source, actor_id)
+        session.commit()
+
+        assert stats.bpe_furcations_created == 0
+        assert stats.bpe_furcations_unlinked_patients == 1
+        assert stats.perio_probes_created == 0
+        assert stats.perio_probes_unlinked_patients == 1
+    finally:
+        session.close()
+
+
+def test_r4_charting_import_skips_null_patients():
+    session = SessionLocal()
+    try:
+        clear_r4_charting(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = NullPerioSource()
 
         stats = import_r4_charting(session, source, actor_id)
         session.commit()

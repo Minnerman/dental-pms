@@ -402,6 +402,8 @@ class R4SqlServerSource:
                 patients_from=patients_from,
                 patients_to=patients_to,
             ),
+            "bpe_furcation_linkage": self.bpe_furcation_linkage_summary(),
+            "perio_probe_linkage": self.perio_probe_linkage_summary(),
             "sample_tooth_systems": self.sample_tooth_systems(limit=limit),
             "sample_tooth_surfaces": self.sample_tooth_surfaces(limit=limit),
             "sample_chart_healing_actions": self.sample_chart_healing_actions(
@@ -451,6 +453,131 @@ class R4SqlServerSource:
                 patients_from=patients_from,
                 patients_to=patients_to,
             ),
+        }
+
+    def perio_probe_linkage_summary(self) -> dict[str, Any]:
+        trans_col = self._pick_column("PerioProbe", ["TransId", "TransID"])
+        trans_ref_col = self._pick_column("Transactions", ["RefId"])
+        patient_col = self._pick_column("Transactions", ["PatientCode"])
+        if not trans_col or not trans_ref_col or not patient_col:
+            return {
+                "status": "unsupported",
+                "reason": "Missing PerioProbe.TransId or Transactions.RefId/PatientCode.",
+            }
+        total = self._count_table("PerioProbe")
+        with_transaction = self._count_table(
+            "PerioProbe",
+            f" WHERE EXISTS (/*perio_probe_with_transaction*/ SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col})",
+        )
+        with_patient = self._count_table(
+            "PerioProbe",
+            f" WHERE EXISTS (/*perio_probe_with_patient*/ SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col} AND t.{patient_col} IS NOT NULL)",
+        )
+        ambiguous = self._query(
+            "/*perio_probe_ambiguous_count*/ "
+            "SELECT COUNT(1) AS count FROM ("
+            f"SELECT dbo.PerioProbe.{trans_col} AS trans_id, COUNT(DISTINCT t.{patient_col}) AS patient_count "
+            "FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"JOIN dbo.Transactions t WITH (NOLOCK) ON t.{trans_ref_col} = dbo.PerioProbe.{trans_col} "
+            f"WHERE t.{patient_col} IS NOT NULL "
+            f"GROUP BY dbo.PerioProbe.{trans_col} HAVING COUNT(DISTINCT t.{patient_col}) > 1"
+            ") AS q"
+        )
+        sample_ambiguous = self._query(
+            "/*perio_probe_sample_ambiguous*/ "
+            f"SELECT TOP (5) dbo.PerioProbe.{trans_col} AS trans_id "
+            "FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"JOIN dbo.Transactions t WITH (NOLOCK) ON t.{trans_ref_col} = dbo.PerioProbe.{trans_col} "
+            f"WHERE t.{patient_col} IS NOT NULL "
+            f"GROUP BY dbo.PerioProbe.{trans_col} HAVING COUNT(DISTINCT t.{patient_col}) > 1 "
+            f"ORDER BY dbo.PerioProbe.{trans_col}"
+        )
+        sample_unlinked_trans = self._query(
+            "/*perio_probe_sample_unlinked_trans*/ "
+            f"SELECT TOP (5) dbo.PerioProbe.{trans_col} AS trans_id "
+            "FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"WHERE NOT EXISTS (SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col}) "
+            f"ORDER BY dbo.PerioProbe.{trans_col}"
+        )
+        sample_unlinked_patient = self._query(
+            "/*perio_probe_sample_unlinked_patient*/ "
+            f"SELECT TOP (5) dbo.PerioProbe.{trans_col} AS trans_id "
+            "FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"WHERE EXISTS (SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col}) "
+            f"AND NOT EXISTS (SELECT 1 FROM dbo.Transactions t WITH (NOLOCK) "
+            f"WHERE t.{trans_ref_col} = dbo.PerioProbe.{trans_col} AND t.{patient_col} IS NOT NULL) "
+            f"ORDER BY dbo.PerioProbe.{trans_col}"
+        )
+        return {
+            "status": "ok",
+            "total_probes": total,
+            "probes_with_transaction": with_transaction,
+            "probes_with_patient": with_patient,
+            "probes_without_transaction": max(total - with_transaction, 0),
+            "ambiguous_trans_ids": int(ambiguous[0]["count"]) if ambiguous else 0,
+            "sample_ambiguous_trans_ids": [row["trans_id"] for row in sample_ambiguous],
+            "sample_unlinked_trans_ids": [row["trans_id"] for row in sample_unlinked_trans],
+            "sample_unlinked_patient_trans_ids": [row["trans_id"] for row in sample_unlinked_patient],
+        }
+
+    def bpe_furcation_linkage_summary(self) -> dict[str, Any]:
+        bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+        bpe_patient_col = self._pick_column("BPE", ["PatientCode"])
+        furcation_bpe_col = self._pick_column("BPEFurcation", ["BPEID", "BPEId"])
+        if not bpe_id_col or not bpe_patient_col or not furcation_bpe_col:
+            return {
+                "status": "unsupported",
+                "reason": "Missing BPE.BPEID/PatientCode or BPEFurcation.BPEID.",
+            }
+        total = self._count_table("BPEFurcation")
+        with_bpe = self._count_table(
+            "BPEFurcation",
+            f" WHERE EXISTS (/*bpe_furcation_with_bpe*/ SELECT 1 FROM dbo.BPE b WITH (NOLOCK) "
+            f"WHERE b.{bpe_id_col} = dbo.BPEFurcation.{furcation_bpe_col})",
+        )
+        with_patient = self._count_table(
+            "BPEFurcation",
+            f" WHERE EXISTS (/*bpe_furcation_with_patient*/ SELECT 1 FROM dbo.BPE b WITH (NOLOCK) "
+            f"WHERE b.{bpe_id_col} = dbo.BPEFurcation.{furcation_bpe_col} AND b.{bpe_patient_col} IS NOT NULL)",
+        )
+        ambiguous = self._query(
+            "/*bpe_furcation_ambiguous_count*/ "
+            "SELECT COUNT(1) AS count FROM ("
+            f"SELECT b.{bpe_id_col} AS bpe_id, COUNT(DISTINCT b.{bpe_patient_col}) AS patient_count "
+            "FROM dbo.BPE b WITH (NOLOCK) "
+            f"WHERE b.{bpe_patient_col} IS NOT NULL "
+            f"GROUP BY b.{bpe_id_col} HAVING COUNT(DISTINCT b.{bpe_patient_col}) > 1"
+            ") AS q"
+        )
+        sample_ambiguous = self._query(
+            "/*bpe_furcation_sample_ambiguous*/ "
+            f"SELECT TOP (5) b.{bpe_id_col} AS bpe_id "
+            "FROM dbo.BPE b WITH (NOLOCK) "
+            f"WHERE b.{bpe_patient_col} IS NOT NULL "
+            f"GROUP BY b.{bpe_id_col} HAVING COUNT(DISTINCT b.{bpe_patient_col}) > 1 "
+            f"ORDER BY b.{bpe_id_col}"
+        )
+        sample_unlinked = self._query(
+            "/*bpe_furcation_sample_unlinked*/ "
+            f"SELECT TOP (5) dbo.BPEFurcation.{furcation_bpe_col} AS bpe_id "
+            "FROM dbo.BPEFurcation WITH (NOLOCK) "
+            f"WHERE NOT EXISTS (SELECT 1 FROM dbo.BPE b WITH (NOLOCK) "
+            f"WHERE b.{bpe_id_col} = dbo.BPEFurcation.{furcation_bpe_col}) "
+            f"ORDER BY dbo.BPEFurcation.{furcation_bpe_col}"
+        )
+        return {
+            "status": "ok",
+            "total_furcations": total,
+            "furcations_with_bpe": with_bpe,
+            "furcations_with_patient": with_patient,
+            "furcations_without_bpe": max(total - with_bpe, 0),
+            "ambiguous_bpe_ids": int(ambiguous[0]["count"]) if ambiguous else 0,
+            "sample_ambiguous_bpe_ids": [row["bpe_id"] for row in sample_ambiguous],
+            "sample_unlinked_bpe_ids": [row["bpe_id"] for row in sample_unlinked],
         }
 
     def count_patients(
@@ -2996,6 +3123,24 @@ class R4SqlServerSource:
         bpe_id_col = self._pick_column("BPEFurcation", ["BPEID", "BPEId"])
         tooth_col = self._pick_column("BPEFurcation", ["Tooth"])
         furcation_col = self._pick_column("BPEFurcation", ["Furcation", "FurcationScore"])
+        bpe_patient_col = None
+        bpe_id_join_col = None
+        join_sql = ""
+        patient_expr = None
+        if not patient_col and bpe_id_col:
+            bpe_patient_col = self._pick_column("BPE", ["PatientCode"])
+            bpe_id_join_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+            if bpe_patient_col and bpe_id_join_col:
+                join_sql = (
+                    "JOIN ("
+                    f"SELECT {bpe_id_join_col} AS bpe_id, MIN({bpe_patient_col}) AS patient_code "
+                    "FROM dbo.BPE WITH (NOLOCK) "
+                    f"WHERE {bpe_patient_col} IS NOT NULL "
+                    f"GROUP BY {bpe_id_join_col} HAVING COUNT(DISTINCT {bpe_patient_col}) = 1"
+                    ") b ON b.bpe_id = bf."
+                    + bpe_id_col
+                )
+                patient_expr = "b.patient_code"
         if not id_col and not bpe_id_col:
             raise RuntimeError("BPEFurcation missing key columns; cannot keyset stream.")
         if not id_col and (not tooth_col or not furcation_col):
@@ -3014,8 +3159,10 @@ class R4SqlServerSource:
             where_parts: list[str] = []
             params: list[Any] = []
             if patient_col:
+                patient_expr = f"bf.{patient_col}"
+            if patient_expr:
                 range_clause, range_params = self._build_range_filter(
-                    patient_col,
+                    patient_expr,
                     patients_from,
                     patients_to,
                 )
@@ -3036,18 +3183,18 @@ class R4SqlServerSource:
             where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
             select_cols = []
             if id_col:
-                select_cols.append(f"{id_col} AS furcation_id")
-            if patient_col:
-                select_cols.append(f"{patient_col} AS patient_code")
+                select_cols.append(f"bf.{id_col} AS furcation_id")
+            if patient_expr:
+                select_cols.append(f"{patient_expr} AS patient_code")
             if bpe_id_col:
-                select_cols.append(f"{bpe_id_col} AS bpe_id")
+                select_cols.append(f"bf.{bpe_id_col} AS bpe_id")
             if tooth_col:
-                select_cols.append(f"{tooth_col} AS tooth")
+                select_cols.append(f"bf.{tooth_col} AS tooth")
             if furcation_col:
-                select_cols.append(f"{furcation_col} AS furcation")
+                select_cols.append(f"bf.{furcation_col} AS furcation")
             rows = self._query(
-                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPEFurcation WITH (NOLOCK) "
-                f"{where_sql} ORDER BY {id_col or bpe_id_col} ASC",
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPEFurcation bf WITH (NOLOCK) "
+                f"{join_sql} {where_sql} ORDER BY bf.{id_col or bpe_id_col} ASC",
                 [batch_size, *params],
             )
             if not rows:
@@ -3087,6 +3234,24 @@ class R4SqlServerSource:
         bleed_col = self._pick_column("PerioProbe", ["Bleeding", "BleedingScore"])
         plaque_col = self._pick_column("PerioProbe", ["Plaque", "PlaqueScore"])
         date_col = self._pick_column("PerioProbe", ["Date", "RecordedDate", "ProbeDate"])
+        join_sql = ""
+        patient_expr = None
+        if patient_col:
+            patient_expr = f"pp.{patient_col}"
+        else:
+            trans_ref_col = self._pick_column("Transactions", ["RefId"])
+            trans_patient_col = self._pick_column("Transactions", ["PatientCode"])
+            if trans_ref_col and trans_patient_col:
+                join_sql = (
+                    "JOIN ("
+                    f"SELECT {trans_ref_col} AS ref_id, MIN({trans_patient_col}) AS patient_code "
+                    "FROM dbo.Transactions WITH (NOLOCK) "
+                    f"WHERE {trans_patient_col} IS NOT NULL "
+                    f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {trans_patient_col}) = 1"
+                    ") t ON t.ref_id = pp."
+                    + trans_col
+                )
+                patient_expr = "t.patient_code"
         last_trans: int | None = None
         last_tooth: int | None = None
         last_point: int | None = None
@@ -3099,9 +3264,9 @@ class R4SqlServerSource:
                 batch_size = min(batch_size, remaining)
             where_parts: list[str] = []
             params: list[Any] = []
-            if patient_col:
+            if patient_expr:
                 range_clause, range_params = self._build_range_filter(
-                    patient_col,
+                    patient_expr,
                     patients_from,
                     patients_to,
                 )
@@ -3116,23 +3281,23 @@ class R4SqlServerSource:
                 params.extend([last_trans, last_trans, last_tooth, last_tooth, last_point])
             where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
             select_cols = [
-                f"{trans_col} AS trans_id",
-                f"{tooth_col} AS tooth",
-                f"{point_col} AS probing_point",
+                f"pp.{trans_col} AS trans_id",
+                f"pp.{tooth_col} AS tooth",
+                f"pp.{point_col} AS probing_point",
             ]
-            if patient_col:
-                select_cols.append(f"{patient_col} AS patient_code")
+            if patient_expr:
+                select_cols.append(f"{patient_expr} AS patient_code")
             if depth_col:
-                select_cols.append(f"{depth_col} AS depth")
+                select_cols.append(f"pp.{depth_col} AS depth")
             if bleed_col:
-                select_cols.append(f"{bleed_col} AS bleeding")
+                select_cols.append(f"pp.{bleed_col} AS bleeding")
             if plaque_col:
-                select_cols.append(f"{plaque_col} AS plaque")
+                select_cols.append(f"pp.{plaque_col} AS plaque")
             if date_col:
-                select_cols.append(f"{date_col} AS recorded_at")
+                select_cols.append(f"pp.{date_col} AS recorded_at")
             rows = self._query(
-                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioProbe WITH (NOLOCK) "
-                f"{where_sql} ORDER BY {trans_col} ASC, {tooth_col} ASC, {point_col} ASC",
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioProbe pp WITH (NOLOCK) "
+                f"{join_sql} {where_sql} ORDER BY pp.{trans_col} ASC, pp.{tooth_col} ASC, pp.{point_col} ASC",
                 [batch_size, *params],
             )
             if not rows:

@@ -59,6 +59,11 @@
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## Recent fixes
+- 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
+  - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.BPEID -> PatientCode`.
+  - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
+  - Importer skips probe/furcation rows when patient linkage is missing or ambiguous.
+  - Updated discovery + spot-check docs with proof queries and linkage notes.
 - 2026-01-23: Stage131 spot-check tooling (patient-level R4 charting fidelity).
   - Doc: `docs/r4/R4_CHARTING_SPOTCHECK.md`.
   - Patient 1000000: PerioProbe via Transactions.RefId join; patient 1000035: BPE/BPEFurcation via BPEID join.
