@@ -16,6 +16,8 @@ from app.models.r4_charting import (
     R4ToothSystem,
     R4TreatmentNote,
 )
+from app.models.r4_patient_mapping import R4PatientMapping
+from app.models.patient import Patient
 from app.models.user import User
 from app.services.r4_import.charting_importer import import_r4_charting
 from app.services.r4_import.fixture_source import FixtureSource
@@ -44,6 +46,42 @@ def clear_r4_charting(session) -> None:
     session.execute(delete(R4ToothSystem))
 
 
+def ensure_patient_mapping(session, actor_id: int, legacy_patient_code: int) -> None:
+    existing = session.scalar(
+        select(R4PatientMapping).where(
+            R4PatientMapping.legacy_source == "r4",
+            R4PatientMapping.legacy_patient_code == legacy_patient_code,
+        )
+    )
+    if existing:
+        return
+    patient = session.scalar(
+        select(Patient).where(
+            Patient.legacy_source == "r4",
+            Patient.legacy_id == str(legacy_patient_code),
+        )
+    )
+    if patient is None:
+        patient = Patient(
+            legacy_source="r4",
+            legacy_id=str(legacy_patient_code),
+            first_name="Chart",
+            last_name="Fixture",
+            created_by_user_id=actor_id,
+            updated_by_user_id=actor_id,
+        )
+        session.add(patient)
+        session.flush()
+    mapping = R4PatientMapping(
+        legacy_source="r4",
+        legacy_patient_code=legacy_patient_code,
+        patient_id=patient.id,
+        created_by_user_id=actor_id,
+        updated_by_user_id=actor_id,
+    )
+    session.add(mapping)
+
+
 def test_r4_charting_import_idempotent_and_updates():
     session = SessionLocal()
     try:
@@ -52,6 +90,8 @@ def test_r4_charting_import_idempotent_and_updates():
 
         actor_id = resolve_actor_id(session)
         source = FixtureSource()
+        ensure_patient_mapping(session, actor_id, 1001)
+        session.commit()
 
         stats_first = import_r4_charting(session, source, actor_id)
         session.commit()
@@ -78,6 +118,8 @@ def test_r4_charting_import_idempotent_and_updates():
 
         assert stats_second.tooth_systems_updated == 1
         assert stats_second.tooth_systems_created == 0
+        assert stats_second.bpe_furcations_unlinked_patients == 0
+        assert stats_second.perio_probes_unlinked_patients == 0
     finally:
         session.close()
 
@@ -95,6 +137,30 @@ class DuplicatePerioProbeSource(FixtureSource):
         return items
 
 
+class UnlinkedPerioSource(FixtureSource):
+    def list_bpe_furcations(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ):
+        items = super().list_bpe_furcations(patients_from, patients_to, limit)
+        for item in items:
+            item.patient_code = 9999
+        return items
+
+    def list_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ):
+        items = super().list_perio_probes(patients_from, patients_to, limit)
+        for item in items:
+            item.patient_code = 9999
+        return items
+
+
 def test_r4_charting_import_skips_duplicate_perio_probes():
     session = SessionLocal()
     try:
@@ -103,11 +169,34 @@ def test_r4_charting_import_skips_duplicate_perio_probes():
 
         actor_id = resolve_actor_id(session)
         source = DuplicatePerioProbeSource()
+        ensure_patient_mapping(session, actor_id, 1001)
+        session.commit()
 
         stats = import_r4_charting(session, source, actor_id)
         session.commit()
 
         assert stats.perio_probes_created == 1
         assert stats.perio_probes_skipped == 1
+        assert stats.perio_probes_unlinked_patients == 0
+    finally:
+        session.close()
+
+
+def test_r4_charting_import_skips_unlinked_patients():
+    session = SessionLocal()
+    try:
+        clear_r4_charting(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = UnlinkedPerioSource()
+
+        stats = import_r4_charting(session, source, actor_id)
+        session.commit()
+
+        assert stats.bpe_furcations_created == 0
+        assert stats.bpe_furcations_unlinked_patients == 1
+        assert stats.perio_probes_created == 0
+        assert stats.perio_probes_unlinked_patients == 1
     finally:
         session.close()

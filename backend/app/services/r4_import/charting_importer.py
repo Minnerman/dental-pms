@@ -21,6 +21,7 @@ from app.models.r4_charting import (
     R4ToothSystem,
     R4TreatmentNote,
 )
+from app.models.r4_patient_mapping import R4PatientMapping
 from app.services.r4_import.source import R4Source
 from app.services.r4_import.types import (
     R4BPEEntry as R4BPEEntryPayload,
@@ -60,9 +61,11 @@ class ChartingImportStats:
     bpe_furcations_created: int = 0
     bpe_furcations_updated: int = 0
     bpe_furcations_skipped: int = 0
+    bpe_furcations_unlinked_patients: int = 0
     perio_probes_created: int = 0
     perio_probes_updated: int = 0
     perio_probes_skipped: int = 0
+    perio_probes_unlinked_patients: int = 0
     perio_plaque_created: int = 0
     perio_plaque_updated: int = 0
     perio_plaque_skipped: int = 0
@@ -108,6 +111,7 @@ def import_r4_charting(
     limit: int | None = None,
 ) -> ChartingImportStats:
     stats = ChartingImportStats()
+    mapped_patient_cache: dict[int, bool] = {}
     seen_perio_probe_keys: set[str] = set()
 
     for system in source.list_tooth_systems(limit=limit):
@@ -131,12 +135,32 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        if furcation.patient_code is not None and not _is_patient_mapped(
+            session,
+            legacy_source,
+            furcation.patient_code,
+            mapped_patient_cache,
+        ):
+            stats.bpe_furcations_unlinked_patients += 1
+            stats.bpe_furcations_skipped += 1
+            _log_unlinked_patient("bpe_furcations", furcation.furcation_id, furcation.patient_code)
+            continue
         _upsert_bpe_furcation(session, furcation, actor_id, legacy_source, stats)
     for probe in source.list_perio_probes(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
     ):
+        if probe.patient_code is not None and not _is_patient_mapped(
+            session,
+            legacy_source,
+            probe.patient_code,
+            mapped_patient_cache,
+        ):
+            stats.perio_probes_unlinked_patients += 1
+            stats.perio_probes_skipped += 1
+            _log_unlinked_patient("perio_probes", probe.trans_id, probe.patient_code)
+            continue
         legacy_key = _build_perio_probe_key(probe)
         if legacy_key in seen_perio_probe_keys:
             stats.perio_probes_skipped += 1
@@ -754,6 +778,35 @@ def _build_patient_note_key(note: R4PatientNotePayload) -> str:
     if note.note_number is not None:
         return _build_legacy_key(note.patient_code, note.note_number)
     return _build_legacy_key(note.patient_code, note.note_date)
+
+
+def _is_patient_mapped(
+    session: Session,
+    legacy_source: str,
+    patient_code: int,
+    cache: dict[int, bool],
+) -> bool:
+    cached = cache.get(patient_code)
+    if cached is not None:
+        return cached
+    mapped = (
+        session.scalar(
+            select(R4PatientMapping.id).where(
+                R4PatientMapping.legacy_source == legacy_source,
+                R4PatientMapping.legacy_patient_code == patient_code,
+            )
+        )
+        is not None
+    )
+    cache[patient_code] = mapped
+    return mapped
+
+
+def _log_unlinked_patient(entity: str, legacy_key: int | str | None, patient_code: int) -> None:
+    print(
+        "r4_import_skip_unlinked_patient "
+        f"entity={entity} legacy_key={legacy_key} patient_code={patient_code}"
+    )
 
 
 def _build_old_patient_note_key(note: R4OldPatientNotePayload) -> str:
