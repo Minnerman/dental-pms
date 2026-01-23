@@ -72,6 +72,11 @@
   - Charting import preflight ensures patient mappings for patient-scoped runs; missing mapping fails fast for single codes.
   - Spotcheck/link-explain fail fast without mappings (or `--ensure-mapping` to auto-create).
   - PerioProbe dedupe key and total/unique counts surfaced in spotcheck index CSV.
+- 2026-01-24: Stage137 clinical review refresh (Stage 136 tooling).
+  - Cohort: 1000000, 1011978, 1013684, 1012056, 1000035.
+  - Artefacts: `tmp/stage137/patient_<code>/` (per patient).
+  - Summary: all reviewed entities matched; no punch list items.
+  - Note: `r4_fixed_notes` is not patient-linked in this schema; excluded from patient counts.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
