@@ -95,6 +95,24 @@ def test_perio_probe_pipeline_summary_ok():
     assert summary["sample_filtered_trans_ids"] == [2, 3]
 
 
+def test_perio_probe_patient_summary_ok():
+    columns = {
+        "PerioProbe": ["TransId", "Tooth", "ProbingPoint"],
+        "Transactions": ["RefId", "PatientCode"],
+    }
+    samples = {
+        "perio_probe_patient_total": [{"count": 12}],
+        "perio_probe_patient_unique": [{"count": 10}],
+    }
+    source = FakeSqlServerSource(columns, counts={}, samples=samples)
+    summary = source.perio_probe_patient_summary(patients_from=1000, patients_to=1000)
+
+    assert summary["status"] == "ok"
+    assert summary["total_rows"] == 12
+    assert summary["unique_rows"] == 10
+    assert summary["duplicate_rows"] == 2
+
+
 def test_bpe_furcation_linkage_summary_unsupported():
     source = FakeSqlServerSource(columns={}, counts={}, samples={})
     summary = source.bpe_furcation_linkage_summary()

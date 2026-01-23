@@ -645,6 +645,78 @@ class R4SqlServerSource:
             ],
         }
 
+    def perio_probe_patient_summary(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, Any]:
+        trans_col = self._pick_column("PerioProbe", ["TransId", "TransID"])
+        tooth_col = self._pick_column("PerioProbe", ["Tooth"])
+        point_col = self._pick_column("PerioProbe", ["ProbingPoint", "Point"])
+        if not trans_col or not tooth_col or not point_col:
+            return {
+                "status": "unsupported",
+                "reason": "Missing PerioProbe.TransId/Tooth/ProbingPoint.",
+            }
+        patient_col = self._pick_column("PerioProbe", ["PatientCode"])
+        join_sql = ""
+        patient_expr = None
+        if patient_col:
+            patient_expr = f"pp.{patient_col}"
+        else:
+            trans_ref_col = self._pick_column("Transactions", ["RefId"])
+            trans_patient_col = self._pick_column("Transactions", ["PatientCode"])
+            if trans_ref_col and trans_patient_col:
+                join_sql = (
+                    "JOIN ("
+                    f"SELECT {trans_ref_col} AS ref_id, MIN({trans_patient_col}) AS patient_code "
+                    "FROM dbo.Transactions WITH (NOLOCK) "
+                    f"WHERE {trans_patient_col} IS NOT NULL "
+                    f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {trans_patient_col}) = 1"
+                    ") t ON t.ref_id = pp."
+                    + trans_col
+                )
+                patient_expr = "t.patient_code"
+        if not patient_expr:
+            return {
+                "status": "unsupported",
+                "reason": "Missing patient linkage for PerioProbe.",
+            }
+
+        range_clause, range_params = self._build_range_filter(
+            patient_expr,
+            patients_from,
+            patients_to,
+        )
+        range_filter = range_clause.replace("WHERE", "").strip()
+        filtered_where = f"WHERE {range_filter}" if range_filter else ""
+        total_rows = self._query(
+            "/*perio_probe_patient_total*/ "
+            "SELECT COUNT(1) AS count "
+            "FROM dbo.PerioProbe pp WITH (NOLOCK) "
+            f"{join_sql} {filtered_where}",
+            range_params,
+        )
+        unique_rows = self._query(
+            "/*perio_probe_patient_unique*/ "
+            "SELECT COUNT(1) AS count FROM ("
+            f"SELECT pp.{trans_col} AS trans_id, pp.{tooth_col} AS tooth, "
+            f"pp.{point_col} AS probing_point "
+            "FROM dbo.PerioProbe pp WITH (NOLOCK) "
+            f"{join_sql} {filtered_where} "
+            f"GROUP BY pp.{trans_col}, pp.{tooth_col}, pp.{point_col}"
+            ") AS q",
+            range_params,
+        )
+        total = int(total_rows[0]["count"]) if total_rows else 0
+        unique = int(unique_rows[0]["count"]) if unique_rows else 0
+        return {
+            "status": "ok",
+            "total_rows": total,
+            "unique_rows": unique,
+            "duplicate_rows": max(total - unique, 0),
+        }
+
     def bpe_furcation_linkage_summary(self) -> dict[str, Any]:
         bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID", "RefId", "RefID"])
         bpe_patient_col = self._pick_column("BPE", ["PatientCode"])

@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -21,6 +22,9 @@ from app.models.r4_charting import (
     R4ToothSurface,
     R4TreatmentNote,
 )
+from app.models.r4_patient_mapping import R4PatientMapping
+from app.models.user import User
+from app.services.r4_import.mapping_preflight import ensure_mapping_for_patient, mapping_exists
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
 
@@ -124,6 +128,13 @@ def _coerce_int(value) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _resolve_actor_id(session: Session) -> int:
+    actor_id = session.scalar(select(func.min(User.id)))
+    if not actor_id:
+        raise RuntimeError("No users found; cannot attribute R4 imports.")
+    return int(actor_id)
 
 
 def _sqlserver_patient_notes(source: R4SqlServerSource, patient_code: int, limit: int):
@@ -492,6 +503,11 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--format", choices=["json", "csv"], default="json")
     parser.add_argument("--entities", type=str)
+    parser.add_argument(
+        "--ensure-mapping",
+        action="store_true",
+        help="Auto-create missing patient mapping before spot-checking.",
+    )
     args = parser.parse_args()
 
     entities = _parse_entities(args.entities, ENTITY_ALIASES)
@@ -503,10 +519,36 @@ def main() -> int:
     source = R4SqlServerSource(config)
 
     sqlserver: dict[str, object] = {}
+    entity_summaries: dict[str, dict[str, object]] = {}
 
     session = SessionLocal()
     try:
         patient_code = args.patient_code
+        if not mapping_exists(session, "r4", patient_code):
+            if args.ensure_mapping:
+                actor_id = _resolve_actor_id(session)
+                mapping_ready = ensure_mapping_for_patient(
+                    session,
+                    source,
+                    actor_id,
+                    patient_code,
+                    legacy_source="r4",
+                )
+                session.commit()
+                if not mapping_ready:
+                    print(
+                        "Missing patient mapping for patient_code "
+                        f"{patient_code} after ensure-mapping.",
+                        file=sys.stderr,
+                    )
+                    return 2
+            else:
+                print(
+                    "Missing patient mapping for patient_code "
+                    f"{patient_code}. Run patients import first or pass --ensure-mapping.",
+                    file=sys.stderr,
+                )
+                return 2
         postgres: dict[str, object] = {}
         sqlserver_patient_notes = None
         postgres_patient_notes = None
@@ -614,27 +656,41 @@ def main() -> int:
 
         if "perio_probes" in entities:
             sqlserver["perio_probes"] = _sqlserver_perio_probes(source, patient_code, args.limit)
-            postgres["perio_probes"] = []
-            sqlserver_probes, _ = _extract_rows(sqlserver["perio_probes"])
-            trans_ids_raw = [row.get("trans_id") for row in sqlserver_probes]
-            trans_ids = [_coerce_int(value) for value in trans_ids_raw]
-            trans_ids = [value for value in trans_ids if value is not None]
-            if trans_ids:
-                postgres["perio_probes"] = _pg_rows(
-                    session,
-                    select(
-                        R4PerioProbe.legacy_patient_code.label("patient_code"),
-                        R4PerioProbe.legacy_probe_key.label("legacy_probe_key"),
-                        R4PerioProbe.legacy_trans_id.label("legacy_trans_id"),
-                        R4PerioProbe.recorded_at.label("recorded_at"),
-                        R4PerioProbe.tooth.label("tooth"),
-                        R4PerioProbe.probing_point.label("probing_point"),
-                        R4PerioProbe.depth.label("depth"),
-                        R4PerioProbe.bleeding.label("bleeding"),
-                        R4PerioProbe.plaque.label("plaque"),
-                    ).where(R4PerioProbe.legacy_trans_id.in_(trans_ids)),
-                    args.limit,
+            postgres["perio_probes"] = _pg_rows(
+                session,
+                select(
+                    R4PerioProbe.legacy_patient_code.label("patient_code"),
+                    R4PerioProbe.legacy_probe_key.label("legacy_probe_key"),
+                    R4PerioProbe.legacy_trans_id.label("legacy_trans_id"),
+                    R4PerioProbe.recorded_at.label("recorded_at"),
+                    R4PerioProbe.tooth.label("tooth"),
+                    R4PerioProbe.probing_point.label("probing_point"),
+                    R4PerioProbe.depth.label("depth"),
+                    R4PerioProbe.bleeding.label("bleeding"),
+                    R4PerioProbe.plaque.label("plaque"),
+                ).where(R4PerioProbe.legacy_patient_code == patient_code),
+                args.limit,
+            )
+            summary = source.perio_probe_patient_summary(
+                patients_from=patient_code,
+                patients_to=patient_code,
+            )
+            postgres_total = (
+                session.scalar(
+                    select(func.count(R4PerioProbe.id)).where(
+                        R4PerioProbe.legacy_patient_code == patient_code
+                    )
                 )
+                or 0
+            )
+            entity_summaries["perio_probes"] = {
+                "sqlserver_total": summary.get("total_rows"),
+                "sqlserver_unique_count": summary.get("unique_rows"),
+                "sqlserver_duplicate_count": summary.get("duplicate_rows"),
+                "postgres_total": postgres_total,
+                "postgres_unique_count": postgres_total,
+                "postgres_duplicate_count": 0,
+            }
 
         if "tooth_surfaces" in entities:
             sqlserver["tooth_surfaces"] = _sqlserver_tooth_surfaces(source, args.limit)
@@ -704,6 +760,7 @@ def main() -> int:
             )
             sqlserver_min, sqlserver_max = _date_range(sqlserver_rows, ENTITY_DATE_FIELDS.get(entity, []))
             postgres_min, postgres_max = _date_range(postgres_rows, ENTITY_DATE_FIELDS.get(entity, []))
+            summary = entity_summaries.get(entity, {})
             index_rows.append(
                 {
                     "entity": entity,
@@ -711,9 +768,15 @@ def main() -> int:
                     "sqlserver_status": sqlserver_meta.get("status"),
                     "sqlserver_reason": sqlserver_meta.get("reason"),
                     "sqlserver_count": len(sqlserver_rows),
+                    "sqlserver_total": summary.get("sqlserver_total"),
+                    "sqlserver_unique_count": summary.get("sqlserver_unique_count"),
+                    "sqlserver_duplicate_count": summary.get("sqlserver_duplicate_count"),
                     "sqlserver_date_min": sqlserver_min,
                     "sqlserver_date_max": sqlserver_max,
                     "postgres_count": len(postgres_rows),
+                    "postgres_total": summary.get("postgres_total"),
+                    "postgres_unique_count": summary.get("postgres_unique_count"),
+                    "postgres_duplicate_count": summary.get("postgres_duplicate_count"),
                     "postgres_date_min": postgres_min,
                     "postgres_date_max": postgres_max,
                 }
@@ -724,9 +787,15 @@ def main() -> int:
             "sqlserver_status",
             "sqlserver_reason",
             "sqlserver_count",
+            "sqlserver_total",
+            "sqlserver_unique_count",
+            "sqlserver_duplicate_count",
             "sqlserver_date_min",
             "sqlserver_date_max",
             "postgres_count",
+            "postgres_total",
+            "postgres_unique_count",
+            "postgres_duplicate_count",
             "postgres_date_min",
             "postgres_date_max",
         ]
