@@ -58,11 +58,9 @@
 - V1 finish line: `docs/V1_FINISH_LINE.md`
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
--## In progress
-- Stage129 PR open (charting import model + canonical schema; no UI yet).
-  - PR #114: https://github.com/Minnerman/dental-pms/pull/114
-
 -## Recent fixes
+- 2026-01-23: Stage129 complete (charting import model + canonical schema; no UI yet).
+  - PR #114, merge SHA `1c0e077`. https://github.com/Minnerman/dental-pms/pull/114
 - 2026-01-23: Stage128 discovery complete (R4 charting notes).
   - PR #113, merge SHA `12e4af5`.
   - Implementation not started; charting must match R4 exactly.
