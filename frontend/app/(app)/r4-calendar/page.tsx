@@ -96,7 +96,11 @@ function AppointmentEvent({ event }: { event: CalendarEvent }) {
     <div className="stack" style={{ gap: 2 }}>
       <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         <strong>{item.patient_display_name ?? "Unlinked"}</strong>
-        {item.is_unlinked && <span className="badge">Unlinked</span>}
+        {item.is_unlinked && (
+          <span className="badge" data-testid="r4-unlinked-badge">
+            Unlinked
+          </span>
+        )}
       </div>
       {item.is_unlinked && unlinkedDetail && <div>{unlinkedDetail}</div>}
       {clinician && <div className="muted">{clinician}</div>}
