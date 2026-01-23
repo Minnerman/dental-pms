@@ -6,12 +6,11 @@ Goal: compare SQL Server charting rows and Postgres imports for a single patient
 
 In this R4 instance:
 - `dbo.BPEFurcation` and `dbo.PerioProbe` do not expose `PatientCode`.
-- Linkage is confirmed via `BPE.BPEID` and `Transactions.RefId`, respectively.
-- No single patient code appears in both sets with the current linkage, so two patients
-  are used for spot-checks.
+- Linkage is confirmed via `BPE.RefId` (fallback for `BPE.BPEID`) and `Transactions.RefId`,
+  respectively.
+- Two patients are used for spot-checks to cover both linkage paths.
 
-Until the patient linkage for `PerioProbe`/`BPEFurcation` is confirmed and encoded, use two
-patients for spot-checks:
+Use two patients for spot-checks:
 - Patient 1000000: PerioProbe evidence.
 - Patient 1000035: BPE entry + BPEFurcation evidence.
 
@@ -29,7 +28,7 @@ docker compose exec -T backend python -m app.scripts.r4_import --source sqlserve
 
 Note: The `--patients-from/--patients-to` filter does not scope `BPEFurcation` or `PerioProbe`
 in this dataset because those tables do not expose `PatientCode`. Their linkage is derived
-from `BPE.BPEID` and `Transactions.RefId`, respectively.
+from `BPE.RefId` (fallback for `BPE.BPEID`) and `Transactions.RefId`, respectively.
 
 ## Spot-check tool (SQL Server + Postgres)
 
@@ -42,9 +41,24 @@ docker compose exec -T backend python -m app.scripts.r4_charting_spotcheck --pat
 
 The output includes:
 - SQL Server rows for patient-scoped entities (notes, temporary notes, BPE entries).
-- SQL Server BPEFurcation rows via `BPEID` join.
+- SQL Server BPEFurcation rows via `BPE.RefId`/`BPEID` join.
 - SQL Server PerioProbe rows via `Transactions.RefId` join.
 - Postgres rows for the imported tables, using the same keys.
+
+If the backend container does not mount the repo, write to container `/tmp` and copy out:
+
+```bash
+docker compose cp backend:/tmp/stage131/spotcheck_1000000.json /tmp/stage131/spotcheck_1000000.json
+docker compose cp backend:/tmp/stage131/spotcheck_1000035.json /tmp/stage131/spotcheck_1000035.json
+```
+
+## Link explain tool (PerioProbe)
+
+Explain the PerioProbe linkage pipeline for a single patient:
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_charting_link_explain --patient-code 1000000 --entity perio_probes > /tmp/stage135/perio_probe_explain_1000000.json
+```
 
 ## Manual SQL (optional)
 
@@ -58,7 +72,7 @@ ORDER BY b.Date;
 
 SELECT TOP (20) bf.pKey, bf.BPEID, bf.Furcation1, bf.Furcation2, bf.Furcation3, bf.Furcation4, bf.Furcation5, bf.Furcation6
 FROM dbo.BPEFurcation bf WITH (NOLOCK)
-JOIN dbo.BPE b WITH (NOLOCK) ON b.BPEID = bf.BPEID
+JOIN dbo.BPE b WITH (NOLOCK) ON COALESCE(b.BPEID, b.RefId) = bf.BPEID
 WHERE b.PatientCode = 1000035
 ORDER BY bf.BPEID;
 ```

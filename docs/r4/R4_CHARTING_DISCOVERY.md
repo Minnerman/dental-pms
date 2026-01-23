@@ -44,9 +44,9 @@ These are likely sources based on `sys2000` schema names and prior mapping notes
 
 ### Perio/BPE (chart overlay layer)
 - `dbo.BPE`
-  - Key: (`PatientCode`, `Date`) or identity column (confirm).
+  - Key: (`PatientCode`, `Date`) or identity column; `RefId` is present in this schema.
 - `dbo.BPEFurcation`
-  - Key: `pKey` with `BPEID` (confirm).
+  - Key: `pKey` with `BPEID` (confirm). In this schema, `BPEID` links to `BPE.RefId`.
 - `dbo.PerioProbe`
   - Key: (`TransId`, `Tooth`, `ProbingPoint`) (confirm).
 - `dbo.PerioPlaque`
@@ -76,7 +76,7 @@ These are likely sources based on `sys2000` schema names and prior mapping notes
 - `TreatmentPlanItems.Material` -> `MaterialTreatment.MaterialCode`
 - `ChartHealingActions.PatientCode` -> `Patients.PatientCode`
 - Perio tables -> patient linkage via `Transactions.RefId` (confirmed for this dataset)
-- BPEFurcation -> BPE via `BPEID` (confirmed for this dataset)
+- BPEFurcation -> BPE via `BPEID`; use `BPE.RefId` when `BPE.BPEID` is absent (schema variant).
 
 ## Code systems to capture
 
@@ -163,28 +163,31 @@ FROM (
   HAVING COUNT(DISTINCT t.PatientCode) > 1
 ) q;
 
--- Stage 132: BPEFurcation -> BPE linkage proof
+-- Stage 132: BPEFurcation -> BPE linkage proof (schema variant uses BPE.RefId)
 -- 1) Furcations linked to a BPE entry
 SELECT COUNT(1) AS furcations_with_bpe
 FROM dbo.BPEFurcation bf
 WHERE EXISTS (
-  SELECT 1 FROM dbo.BPE b WHERE b.BPEID = bf.BPEID
+  SELECT 1 FROM dbo.BPE b WHERE COALESCE(b.BPEID, b.RefId) = bf.BPEID
 );
 
 -- 2) Furcations linked to a patient (via BPE)
 SELECT COUNT(1) AS furcations_with_patient
 FROM dbo.BPEFurcation bf
 WHERE EXISTS (
-  SELECT 1 FROM dbo.BPE b WHERE b.BPEID = bf.BPEID AND b.PatientCode IS NOT NULL
+  SELECT 1 FROM dbo.BPE b
+  WHERE COALESCE(b.BPEID, b.RefId) = bf.BPEID
+    AND b.PatientCode IS NOT NULL
 );
 
 -- 3) BPEID reused across patients (should be 0)
 SELECT COUNT(1) AS ambiguous_bpe_ids
 FROM (
-  SELECT b.BPEID, COUNT(DISTINCT b.PatientCode) AS patient_count
+  SELECT COALESCE(b.BPEID, b.RefId) AS bpe_link_id,
+         COUNT(DISTINCT b.PatientCode) AS patient_count
   FROM dbo.BPE b
   WHERE b.PatientCode IS NOT NULL
-  GROUP BY b.BPEID
+  GROUP BY COALESCE(b.BPEID, b.RefId)
   HAVING COUNT(DISTINCT b.PatientCode) > 1
 ) q;
 ```

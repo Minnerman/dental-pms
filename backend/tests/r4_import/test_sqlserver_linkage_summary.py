@@ -66,7 +66,57 @@ def test_perio_probe_linkage_summary_ok():
     assert summary["sample_ambiguous_trans_ids"] == [101]
 
 
+def test_perio_probe_pipeline_summary_ok():
+    columns = {
+        "PerioProbe": ["TransId"],
+        "Transactions": ["RefId", "PatientCode"],
+    }
+    counts = {
+        "PerioProbe": 20,
+        "PerioProbe:perio_probe_pipeline_with_transaction": 20,
+        "PerioProbe:perio_probe_pipeline_with_patient": 18,
+        "PerioProbe:perio_probe_pipeline_with_unique": 15,
+    }
+    samples = {
+        "perio_probe_pipeline_after_filters": [{"count": 5}],
+        "perio_probe_pipeline_sample_filtered": [
+            {"trans_id": 2, "patient_code": 1000},
+            {"trans_id": 3, "patient_code": 1000},
+        ],
+    }
+    source = FakeSqlServerSource(columns, counts, samples)
+    summary = source.perio_probe_pipeline_summary(patients_from=1000, patients_to=1000, limit=5)
+
+    assert summary["status"] == "ok"
+    assert summary["perio_probes_total_source"] == 20
+    assert summary["perio_probes_after_join_transactions"] == 20
+    assert summary["perio_probes_after_patient_link"] == 15
+    assert summary["perio_probes_after_filters"] == 5
+    assert summary["sample_filtered_trans_ids"] == [2, 3]
+
+
 def test_bpe_furcation_linkage_summary_unsupported():
     source = FakeSqlServerSource(columns={}, counts={}, samples={})
     summary = source.bpe_furcation_linkage_summary()
     assert summary["status"] == "unsupported"
+
+
+def test_bpe_furcation_linkage_summary_refid_supported():
+    columns = {
+        "BPE": ["RefId", "PatientCode"],
+        "BPEFurcation": ["BPEID"],
+    }
+    counts = {
+        "BPEFurcation": 3,
+        "BPEFurcation:bpe_furcation_with_bpe": 3,
+        "BPEFurcation:bpe_furcation_with_patient": 3,
+        "/*bpe_furcation_ambiguous_count*/": 0,
+    }
+    samples = {
+        "bpe_furcation_sample_unlinked": [],
+        "bpe_furcation_sample_ambiguous": [],
+    }
+    source = FakeSqlServerSource(columns, counts, samples)
+    summary = source.bpe_furcation_linkage_summary()
+    assert summary["status"] == "ok"
+    assert summary["total_furcations"] == 3

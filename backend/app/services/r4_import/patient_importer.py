@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.patient import Patient
+from app.models.r4_patient_mapping import R4PatientMapping
 from app.services.r4_import.mapping_quality import PatientMappingQualityReportBuilder
 from app.services.r4_import.source import R4Source
 from app.services.r4_import.types import R4Patient
@@ -51,7 +52,10 @@ def import_r4_patients(
         processed += 1
         last_code = patient.patient_code
         report.ingest(patient)
-        _upsert_patient(session, patient, actor_id, legacy_source, stats)
+        stored = _upsert_patient(session, patient, actor_id, legacy_source, stats)
+        if stored.id is None:
+            session.flush()
+        _ensure_patient_mapping(session, legacy_source, patient.patient_code, stored.id, actor_id)
         _maybe_emit_checkpoint(
             processed,
             last_code,
@@ -100,6 +104,32 @@ def _upsert_patient(
     session.add(row)
     stats.patients_created += 1
     return row
+
+
+def _ensure_patient_mapping(
+    session: Session,
+    legacy_source: str,
+    patient_code: int,
+    patient_id: int | None,
+    actor_id: int,
+) -> None:
+    if patient_id is None:
+        return
+    existing = session.scalar(
+        select(R4PatientMapping).where(
+            R4PatientMapping.legacy_source == legacy_source,
+            R4PatientMapping.legacy_patient_code == patient_code,
+        )
+    )
+    if existing is not None:
+        return
+    mapping = R4PatientMapping(
+        legacy_source=legacy_source,
+        legacy_patient_code=patient_code,
+        patient_id=patient_id,
+        created_by_user_id=actor_id,
+    )
+    session.add(mapping)
 
 
 def _normalize_string(value: str | None) -> str | None:
