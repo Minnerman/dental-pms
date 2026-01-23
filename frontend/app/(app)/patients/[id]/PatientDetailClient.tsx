@@ -340,6 +340,81 @@ type ToothHistory = {
   procedures: Procedure[];
 };
 
+type R4PerioProbe = {
+  legacy_source: string;
+  legacy_probe_key: string;
+  legacy_trans_id?: number | null;
+  legacy_patient_code?: number | null;
+  tooth?: number | null;
+  probing_point?: number | null;
+  depth?: number | null;
+  bleeding?: number | null;
+  plaque?: number | null;
+  recorded_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type R4BPEEntry = {
+  legacy_source: string;
+  legacy_bpe_key: string;
+  legacy_bpe_id?: number | null;
+  legacy_patient_code?: number | null;
+  recorded_at?: string | null;
+  sextant_1?: number | null;
+  sextant_2?: number | null;
+  sextant_3?: number | null;
+  sextant_4?: number | null;
+  sextant_5?: number | null;
+  sextant_6?: number | null;
+  notes?: string | null;
+  user_code?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type R4BPEFurcation = {
+  legacy_source: string;
+  legacy_bpe_furcation_key: string;
+  legacy_bpe_id?: number | null;
+  legacy_patient_code?: number | null;
+  tooth?: number | null;
+  furcation?: number | null;
+  sextant?: number | null;
+  recorded_at?: string | null;
+  notes?: string | null;
+  user_code?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type R4PatientNote = {
+  legacy_source: string;
+  legacy_note_key: string;
+  legacy_patient_code?: number | null;
+  legacy_note_number?: number | null;
+  note_date?: string | null;
+  note?: string | null;
+  tooth?: number | null;
+  surface?: number | null;
+  category_number?: number | null;
+  fixed_note_code?: number | null;
+  user_code?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type R4ToothSurface = {
+  legacy_source: string;
+  legacy_tooth_id: number;
+  legacy_surface_no: number;
+  label?: string | null;
+  short_label?: string | null;
+  sort_order?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
   DOMICILIARY_PRIVATE: "Domiciliary (Private)",
@@ -464,10 +539,12 @@ const lowerTeeth = [
 
 const allTeeth = [...upperTeeth, ...lowerTeeth];
 const bpeSextants = ["UR", "UA", "UL", "LL", "LA", "LR"];
+const chartingViewerEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
 
 
 type PatientTab =
   | "summary"
+  | "charting"
   | "clinical"
   | "notes"
   | "invoices"
@@ -649,6 +726,17 @@ export default function PatientDetailClient({
   const [clinicalViewMode, setClinicalViewMode] = useState<
     "current" | "planned" | "history"
   >("current");
+  const [chartingLoaded, setChartingLoaded] = useState(false);
+  const [chartingLoading, setChartingLoading] = useState(false);
+  const [chartingError, setChartingError] = useState<string | null>(null);
+  const [perioProbes, setPerioProbes] = useState<R4PerioProbe[]>([]);
+  const [bpeEntries, setBpeEntries] = useState<R4BPEEntry[]>([]);
+  const [bpeFurcations, setBpeFurcations] = useState<R4BPEFurcation[]>([]);
+  const [chartingNotes, setChartingNotes] = useState<R4PatientNote[]>([]);
+  const [toothSurfaces, setToothSurfaces] = useState<R4ToothSurface[]>([]);
+  const [chartingMetaOpen, setChartingMetaOpen] = useState<Record<string, boolean>>(
+    {}
+  );
 
   async function loadPatient() {
     setLoading(true);
@@ -1293,6 +1381,73 @@ export default function PatientDetailClient({
     }
   }
 
+  async function loadCharting() {
+    if (!chartingViewerEnabled) return;
+    setChartingLoading(true);
+    setChartingError(null);
+    try {
+      const [
+        perioRes,
+        bpeRes,
+        bpeFurcationsRes,
+        notesRes,
+        surfacesRes,
+      ] = await Promise.all([
+        apiFetch(`/api/patients/${patientId}/charting/perio-probes`),
+        apiFetch(`/api/patients/${patientId}/charting/bpe`),
+        apiFetch(`/api/patients/${patientId}/charting/bpe-furcations`),
+        apiFetch(`/api/patients/${patientId}/charting/notes`),
+        apiFetch(`/api/patients/${patientId}/charting/tooth-surfaces`),
+      ]);
+
+      if (
+        perioRes.status === 401 ||
+        bpeRes.status === 401 ||
+        bpeFurcationsRes.status === 401 ||
+        notesRes.status === 401 ||
+        surfacesRes.status === 401
+      ) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+
+      if (
+        !perioRes.ok ||
+        !bpeRes.ok ||
+        !bpeFurcationsRes.ok ||
+        !notesRes.ok ||
+        !surfacesRes.ok
+      ) {
+        throw new Error("Failed to load charting data");
+      }
+
+      const [
+        perioData,
+        bpeData,
+        bpeFurcationsData,
+        notesData,
+        surfacesData,
+      ] = await Promise.all([
+        perioRes.json(),
+        bpeRes.json(),
+        bpeFurcationsRes.json(),
+        notesRes.json(),
+        surfacesRes.json(),
+      ]);
+      setPerioProbes(perioData as R4PerioProbe[]);
+      setBpeEntries(bpeData as R4BPEEntry[]);
+      setBpeFurcations(bpeFurcationsData as R4BPEFurcation[]);
+      setChartingNotes(notesData as R4PatientNote[]);
+      setToothSurfaces(surfacesData as R4ToothSurface[]);
+      setChartingLoaded(true);
+    } catch (err) {
+      setChartingError(err instanceof Error ? err.message : "Failed to load charting");
+    } finally {
+      setChartingLoading(false);
+    }
+  }
+
   async function loadToothHistory(tooth: string) {
     setToothHistoryLoading(true);
     try {
@@ -1742,7 +1897,21 @@ export default function PatientDetailClient({
   }, [patientId]);
 
   useEffect(() => {
+    setChartingLoaded(false);
+    setPerioProbes([]);
+    setBpeEntries([]);
+    setBpeFurcations([]);
+    setChartingNotes([]);
+    setToothSurfaces([]);
+    setChartingError(null);
+  }, [patientId]);
+
+  useEffect(() => {
     if (!initialTab) return;
+    if (initialTab === "charting" && !chartingViewerEnabled) {
+      setTab("summary");
+      return;
+    }
     setTab(initialTab);
   }, [initialTab]);
 
@@ -1761,6 +1930,12 @@ export default function PatientDetailClient({
     const fromUrl = getTransactionFiltersFromParams(searchParams);
     void loadTransactions({ reset: true, overrides: fromUrl });
   }, [tab, transactionsLoaded, patientId, searchParams]);
+
+  useEffect(() => {
+    if (tab !== "charting") return;
+    if (chartingLoaded) return;
+    void loadCharting();
+  }, [tab, chartingLoaded, patientId]);
 
   useEffect(() => {
     const fromUrl = getTransactionFiltersFromParams(searchParams);
@@ -1814,6 +1989,10 @@ export default function PatientDetailClient({
 
   function normalizeToothCode(code?: string | null) {
     return code ? code.trim().toUpperCase() : null;
+  }
+
+  function toggleChartingMeta(section: string) {
+    setChartingMetaOpen((prev) => ({ ...prev, [section]: !prev[section] }));
   }
 
   function getTransactionFiltersFromParams(
@@ -2993,6 +3172,15 @@ export default function PatientDetailClient({
                   >
                     Clinical
                   </Link>
+                  {chartingViewerEnabled && (
+                    <Link
+                      style={tabStyle(tab === "charting", true)}
+                      href={`/patients/${patientId}/charting`}
+                      aria-current={tab === "charting" ? "page" : undefined}
+                    >
+                      Charting
+                    </Link>
+                  )}
                   <Link
                     style={tabStyle(tab === "documents", true)}
                     href={`/patients/${patientId}/documents`}
@@ -3062,6 +3250,16 @@ export default function PatientDetailClient({
                 >
                   Clinical
                 </Link>
+                {chartingViewerEnabled && (
+                  <Link
+                    style={tabStyle(tab === "charting")}
+                    href={`/patients/${patientId}/charting`}
+                    aria-current={tab === "charting" ? "page" : undefined}
+                    data-testid="patient-tab-charting"
+                  >
+                    Charting
+                  </Link>
+                )}
                 <Link
                   style={tabStyle(tab === "documents")}
                   href={`/patients/${patientId}/documents`}
@@ -4026,6 +4224,439 @@ export default function PatientDetailClient({
                   </form>
                 </div>
               </details>
+                </div>
+              ) : tab === "charting" ? (
+                <div className="stack" data-testid="charting-viewer">
+                  {!chartingViewerEnabled ? (
+                    <div className="notice">Charting viewer is disabled.</div>
+                  ) : (
+                    <>
+                      <div
+                        className="row"
+                        style={{
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div className="stack" style={{ gap: 4 }}>
+                          <div className="label">R4 charting viewer</div>
+                          <div style={{ color: "var(--muted)" }}>
+                            Read-only parity view of imported charting data.
+                          </div>
+                        </div>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={loadCharting}
+                          disabled={chartingLoading}
+                        >
+                          {chartingLoading ? "Refreshing..." : "Refresh"}
+                        </button>
+                      </div>
+
+                      {chartingError && (
+                        <div className="notice">
+                          <div
+                            className="row"
+                            style={{
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: 12,
+                            }}
+                          >
+                            <span>{chartingError}</span>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={loadCharting}
+                              disabled={chartingLoading}
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {chartingLoading ? (
+                        <div className="badge">Loading charting...</div>
+                      ) : (
+                        <div className="stack">
+                          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                            <span className="badge">Perio probes: {perioProbes.length}</span>
+                            <span className="badge">BPE entries: {bpeEntries.length}</span>
+                            <span className="badge">
+                              BPE furcations: {bpeFurcations.length}
+                            </span>
+                            <span className="badge">Patient notes: {chartingNotes.length}</span>
+                            <span className="badge">Tooth surfaces: {toothSurfaces.length}</span>
+                          </div>
+
+                          {chartingLoaded &&
+                            perioProbes.length === 0 &&
+                            bpeEntries.length === 0 &&
+                            bpeFurcations.length === 0 &&
+                            chartingNotes.length === 0 &&
+                            toothSurfaces.length === 0 && (
+                              <div className="notice">No charting data yet.</div>
+                            )}
+
+                          <Panel title="Perio probes">
+                            <div className="stack" style={{ gap: 12 }}>
+                              <div
+                                className="row"
+                                style={{ justifyContent: "space-between", gap: 12 }}
+                              >
+                                <span className="badge">{perioProbes.length} records</span>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => toggleChartingMeta("perio")}
+                                >
+                                  {chartingMetaOpen.perio
+                                    ? "Hide parity metadata"
+                                    : "Show parity metadata"}
+                                </button>
+                              </div>
+                              {chartingMetaOpen.perio && (
+                                <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
+                                  <div>Linkage: transactions.ref_id -> patient mapping</div>
+                                  <div>Legacy keys shown in table.</div>
+                                </div>
+                              )}
+                              {perioProbes.length === 0 ? (
+                                <div className="notice">No perio probes found.</div>
+                              ) : (
+                                <Table>
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th>
+                                      <th>Tooth</th>
+                                      <th>Site</th>
+                                      <th>Depth</th>
+                                      <th>Bleeding</th>
+                                      <th>Plaque</th>
+                                      {chartingMetaOpen.perio && (
+                                        <>
+                                          <th>Legacy key</th>
+                                          <th>Legacy trans</th>
+                                          <th>Legacy patient</th>
+                                          <th>Updated</th>
+                                        </>
+                                      )}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {perioProbes.map((probe) => (
+                                      <tr key={probe.legacy_probe_key}>
+                                        <td>{formatShortDate(probe.recorded_at)}</td>
+                                        <td>{probe.tooth ?? "—"}</td>
+                                        <td>{probe.probing_point ?? "—"}</td>
+                                        <td>{probe.depth ?? "—"}</td>
+                                        <td>{probe.bleeding ?? "—"}</td>
+                                        <td>{probe.plaque ?? "—"}</td>
+                                        {chartingMetaOpen.perio && (
+                                          <>
+                                            <td>{probe.legacy_probe_key}</td>
+                                            <td>{probe.legacy_trans_id ?? "—"}</td>
+                                            <td>{probe.legacy_patient_code ?? "—"}</td>
+                                            <td>{formatDateTime(probe.updated_at)}</td>
+                                          </>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
+                              )}
+                            </div>
+                          </Panel>
+
+                          <Panel title="BPE entries">
+                            <div className="stack" style={{ gap: 12 }}>
+                              <div
+                                className="row"
+                                style={{ justifyContent: "space-between", gap: 12 }}
+                              >
+                                <span className="badge">{bpeEntries.length} records</span>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => toggleChartingMeta("bpe")}
+                                >
+                                  {chartingMetaOpen.bpe
+                                    ? "Hide parity metadata"
+                                    : "Show parity metadata"}
+                                </button>
+                              </div>
+                              {chartingMetaOpen.bpe && (
+                                <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
+                                  <div>Linkage: bpe_id join</div>
+                                  <div>Legacy keys shown in table.</div>
+                                </div>
+                              )}
+                              {bpeEntries.length === 0 ? (
+                                <div className="notice">No BPE entries found.</div>
+                              ) : (
+                                <Table>
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th>
+                                      <th>UR</th>
+                                      <th>UA</th>
+                                      <th>UL</th>
+                                      <th>LL</th>
+                                      <th>LA</th>
+                                      <th>LR</th>
+                                      <th>Notes</th>
+                                      <th>User</th>
+                                      {chartingMetaOpen.bpe && (
+                                        <>
+                                          <th>Legacy key</th>
+                                          <th>Legacy BPE ID</th>
+                                          <th>Legacy patient</th>
+                                          <th>Updated</th>
+                                        </>
+                                      )}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {bpeEntries.map((entry) => (
+                                      <tr key={entry.legacy_bpe_key}>
+                                        <td>{formatShortDate(entry.recorded_at)}</td>
+                                        <td>{entry.sextant_1 ?? "—"}</td>
+                                        <td>{entry.sextant_2 ?? "—"}</td>
+                                        <td>{entry.sextant_3 ?? "—"}</td>
+                                        <td>{entry.sextant_4 ?? "—"}</td>
+                                        <td>{entry.sextant_5 ?? "—"}</td>
+                                        <td>{entry.sextant_6 ?? "—"}</td>
+                                        <td>{entry.notes || "—"}</td>
+                                        <td>{entry.user_code ?? "—"}</td>
+                                        {chartingMetaOpen.bpe && (
+                                          <>
+                                            <td>{entry.legacy_bpe_key}</td>
+                                            <td>{entry.legacy_bpe_id ?? "—"}</td>
+                                            <td>{entry.legacy_patient_code ?? "—"}</td>
+                                            <td>{formatDateTime(entry.updated_at)}</td>
+                                          </>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
+                              )}
+                            </div>
+                          </Panel>
+
+                          <Panel title="BPE furcations">
+                            <div className="stack" style={{ gap: 12 }}>
+                              <div
+                                className="row"
+                                style={{ justifyContent: "space-between", gap: 12 }}
+                              >
+                                <span className="badge">{bpeFurcations.length} records</span>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => toggleChartingMeta("bpeFurcations")}
+                                >
+                                  {chartingMetaOpen.bpeFurcations
+                                    ? "Hide parity metadata"
+                                    : "Show parity metadata"}
+                                </button>
+                              </div>
+                              {chartingMetaOpen.bpeFurcations && (
+                                <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
+                                  <div>Linkage: bpe_id join</div>
+                                  <div>Legacy keys shown in table.</div>
+                                </div>
+                              )}
+                              {bpeFurcations.length === 0 ? (
+                                <div className="notice">No BPE furcations found.</div>
+                              ) : (
+                                <Table>
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th>
+                                      <th>Tooth</th>
+                                      <th>Furcation</th>
+                                      <th>Sextant</th>
+                                      <th>Notes</th>
+                                      <th>User</th>
+                                      {chartingMetaOpen.bpeFurcations && (
+                                        <>
+                                          <th>Legacy key</th>
+                                          <th>Legacy BPE ID</th>
+                                          <th>Legacy patient</th>
+                                          <th>Updated</th>
+                                        </>
+                                      )}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {bpeFurcations.map((entry) => (
+                                      <tr key={entry.legacy_bpe_furcation_key}>
+                                        <td>{formatShortDate(entry.recorded_at)}</td>
+                                        <td>{entry.tooth ?? "—"}</td>
+                                        <td>{entry.furcation ?? "—"}</td>
+                                        <td>{entry.sextant ?? "—"}</td>
+                                        <td>{entry.notes || "—"}</td>
+                                        <td>{entry.user_code ?? "—"}</td>
+                                        {chartingMetaOpen.bpeFurcations && (
+                                          <>
+                                            <td>{entry.legacy_bpe_furcation_key}</td>
+                                            <td>{entry.legacy_bpe_id ?? "—"}</td>
+                                            <td>{entry.legacy_patient_code ?? "—"}</td>
+                                            <td>{formatDateTime(entry.updated_at)}</td>
+                                          </>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
+                              )}
+                            </div>
+                          </Panel>
+
+                          <Panel title="Patient notes">
+                            <div className="stack" style={{ gap: 12 }}>
+                              <div
+                                className="row"
+                                style={{ justifyContent: "space-between", gap: 12 }}
+                              >
+                                <span className="badge">{chartingNotes.length} records</span>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => toggleChartingMeta("notes")}
+                                >
+                                  {chartingMetaOpen.notes
+                                    ? "Hide parity metadata"
+                                    : "Show parity metadata"}
+                                </button>
+                              </div>
+                              {chartingMetaOpen.notes && (
+                                <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
+                                  <div>Linkage: patient_code</div>
+                                  <div>Legacy keys shown in table.</div>
+                                </div>
+                              )}
+                              {chartingNotes.length === 0 ? (
+                                <div className="notice">No patient notes found.</div>
+                              ) : (
+                                <Table>
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th>
+                                      <th>Category</th>
+                                      <th>Note</th>
+                                      <th>Tooth</th>
+                                      <th>Surface</th>
+                                      <th>User</th>
+                                      {chartingMetaOpen.notes && (
+                                        <>
+                                          <th>Legacy key</th>
+                                          <th>Legacy note #</th>
+                                          <th>Legacy patient</th>
+                                          <th>Updated</th>
+                                        </>
+                                      )}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {chartingNotes.map((note) => (
+                                      <tr key={note.legacy_note_key}>
+                                        <td>{formatShortDate(note.note_date)}</td>
+                                        <td>{note.category_number ?? "—"}</td>
+                                        <td>{note.note || "—"}</td>
+                                        <td>{note.tooth ?? "—"}</td>
+                                        <td>{note.surface ?? "—"}</td>
+                                        <td>{note.user_code ?? "—"}</td>
+                                        {chartingMetaOpen.notes && (
+                                          <>
+                                            <td>{note.legacy_note_key}</td>
+                                            <td>{note.legacy_note_number ?? "—"}</td>
+                                            <td>{note.legacy_patient_code ?? "—"}</td>
+                                            <td>{formatDateTime(note.updated_at)}</td>
+                                          </>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
+                              )}
+                            </div>
+                          </Panel>
+
+                          <Panel title="Tooth surfaces">
+                            <div className="stack" style={{ gap: 12 }}>
+                              <div
+                                className="row"
+                                style={{ justifyContent: "space-between", gap: 12 }}
+                              >
+                                <span className="badge">{toothSurfaces.length} records</span>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => toggleChartingMeta("surfaces")}
+                                >
+                                  {chartingMetaOpen.surfaces
+                                    ? "Hide parity metadata"
+                                    : "Show parity metadata"}
+                                </button>
+                              </div>
+                              {chartingMetaOpen.surfaces && (
+                                <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
+                                  <div>Lookup table shared across patients.</div>
+                                  <div>Legacy keys shown in table.</div>
+                                </div>
+                              )}
+                              {toothSurfaces.length === 0 ? (
+                                <div className="notice">No tooth surfaces found.</div>
+                              ) : (
+                                <Table>
+                                  <thead>
+                                    <tr>
+                                      <th>Legacy tooth</th>
+                                      <th>Legacy surface</th>
+                                      <th>Label</th>
+                                      <th>Short label</th>
+                                      <th>Sort</th>
+                                      {chartingMetaOpen.surfaces && (
+                                        <>
+                                          <th>Legacy source</th>
+                                          <th>Updated</th>
+                                        </>
+                                      )}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {toothSurfaces.map((surface) => (
+                                      <tr
+                                        key={`${surface.legacy_tooth_id}-${surface.legacy_surface_no}`}
+                                      >
+                                        <td>{surface.legacy_tooth_id}</td>
+                                        <td>{surface.legacy_surface_no}</td>
+                                        <td>{surface.label || "—"}</td>
+                                        <td>{surface.short_label || "—"}</td>
+                                        <td>{surface.sort_order ?? "—"}</td>
+                                        {chartingMetaOpen.surfaces && (
+                                          <>
+                                            <td>{surface.legacy_source}</td>
+                                            <td>{formatDateTime(surface.updated_at)}</td>
+                                          </>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </Table>
+                              )}
+                            </div>
+                          </Panel>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : tab === "clinical" ? (
                 <div className="stack">

@@ -42,6 +42,7 @@ from app.services.document_templates import ensure_default_templates
 from app.models.user import User
 from sqlalchemy import select
 from app.routers.r4_calendar import router as r4_calendar_router
+from app.routers.r4_charting import router as r4_charting_router
 
 app = FastAPI(title="Dental PMS API", version="0.1.0")
 logger = logging.getLogger("dental_pms.startup")
@@ -122,3 +123,4 @@ app.include_router(reports_router)
 app.include_router(legacy_admin_router)
 app.include_router(r4_admin_router)
 app.include_router(r4_calendar_router)
+app.include_router(r4_charting_router)

@@ -7,6 +7,9 @@ ENV NEXT_PUBLIC_BUILD_SHA=$BUILD_SHA
 
 COPY package.json package-lock.json ./
 RUN npm ci
+# Ensure Playwright browser deps are present for local runs.
+RUN npx playwright install-deps
+RUN npx playwright install chromium
 
 # Copy the entire Next.js project (must include /app routes)
 COPY . .
