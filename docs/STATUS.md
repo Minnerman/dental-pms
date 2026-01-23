@@ -64,6 +64,11 @@
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
   - Importer skips probe/furcation rows when patient linkage is missing or ambiguous.
   - Updated discovery + spot-check docs with proof queries and linkage notes.
+- 2026-01-23: Stage133 CSV review export (patient-level charting fidelity).
+  - Script: `backend/app/scripts/r4_charting_spotcheck.py` now supports CSV output with `--format csv` and `--entities`.
+  - Outputs: `index.csv` summary plus `sqlserver_<entity>.csv` and `postgres_<entity>.csv`.
+  - Doc: `docs/r4/R4_CHARTING_CSV_REVIEW.md`.
+  - Example run (local, not committed): `tmp/stage133/patient_1000000/`, `tmp/stage133/patient_1000035/`.
 - 2026-01-23: Stage131 spot-check tooling (patient-level R4 charting fidelity).
   - Doc: `docs/r4/R4_CHARTING_SPOTCHECK.md`.
   - Patient 1000000: PerioProbe via Transactions.RefId join; patient 1000035: BPE/BPEFurcation via BPEID join.
