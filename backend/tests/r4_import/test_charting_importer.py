@@ -80,3 +80,34 @@ def test_r4_charting_import_idempotent_and_updates():
         assert stats_second.tooth_systems_created == 0
     finally:
         session.close()
+
+
+class DuplicatePerioProbeSource(FixtureSource):
+    def list_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ):
+        items = super().list_perio_probes(patients_from, patients_to, limit)
+        if items:
+            items.append(items[0])
+        return items
+
+
+def test_r4_charting_import_skips_duplicate_perio_probes():
+    session = SessionLocal()
+    try:
+        clear_r4_charting(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = DuplicatePerioProbeSource()
+
+        stats = import_r4_charting(session, source, actor_id)
+        session.commit()
+
+        assert stats.perio_probes_created == 1
+        assert stats.perio_probes_skipped == 1
+    finally:
+        session.close()
