@@ -58,14 +58,10 @@
 - V1 finish line: `docs/V1_FINISH_LINE.md`
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
-## In progress
-- Stage 126: build the read-only calendar API + UI (filtering by date/clinician/status/unlinked, default-visible statuses pending/checked-in/arrived/dna, persistent filters, clinician badges, and the “Read-only: R4 remains the live diary” banner). Stage 127 will follow once the calendar is stable so reception staff can manually link unlinked appointments via the new `r4_appointment_patient_links` table.
+-## In progress
+- None (awaiting next stage assignment).
 
-## Recent fixes
-- 2026-01-22 23:12 UTC: Stage125 completed (incremental appointments rollout + status distribution).
-  - Imported windows: Oct 2024 (117 rows/1 null), Nov 2024 (158/12), Dec 2024 (86/11), Jan 2025 (104/12), Feb 2025 (72/4), Mar 2025 (117/5), plus 2023 Q1–Q4 (404,315,320,280 rows with 0–3 nulls).
-  - Stats include `status_distribution` (normalised) so we can verify default-visible statuses (pending/checked-in/arrived/dna) while the rest remain hidden by default.
-  - Postgres verification confirmed each window’s counts/nulls.
+-## Recent fixes
 - 2026-01-22 22:29 UTC: Stage124 pilot (appointments import, Jan 2025 window; Stage124.1 fixes).
   - Dry-run honours `--appts-from/--appts-to`: filtered count=104, range `2025-01-02T09:00:00` → `2025-01-31T16:00:00`, null patients=12.
   - Apply stats-out (`/tmp/stage124_appts_2025-01_stats.json`): created=104, updated=0, skipped=0; rerun (`/tmp/stage124_appts_2025-01_rerun_stats.json`) yielded created=0, updated=0, skipped=104.
