@@ -101,3 +101,60 @@ The script writes:
 2) BPEFurcation linkage unsupported in this R4 schema.
    - SQL Server BPE table lacks `BPEID`; `BPEFurcation` has `BPEID`.
    - Comparison currently blocked; need confirmed join key (likely `BPE.RefId`) or alternate linkage.
+
+## Stage 137 review refresh (2026-01-24)
+
+Notes:
+- `r4_fixed_notes` is not patient-linked in this schema, so it is excluded from patient
+  counts and appears as 0 in `index.csv`.
+- Spotchecks ran with `--ensure-mapping`.
+
+### Patient 1000000 (perio-heavy + duplicates)
+- Artefacts: `tmp/stage137/patient_1000000/`
+- Entities reviewed: `perio_probes`, `temporary_notes`, `tooth_surfaces`.
+- Outcome:
+  - Perio probes parity holds on unique rows (SQL unique=117, PG total=117; SQL sample=20).
+  - Temporary notes match (1 vs 1).
+  - Tooth surfaces match (20 vs 20).
+
+### Patient 1011978 (BPE-heavy)
+- Artefacts: `tmp/stage137/patient_1011978/`
+- Entities reviewed: `bpe`, `bpe_furcations`, `temporary_notes`, `tooth_surfaces`.
+- Outcome:
+  - BPE match (16 vs 16).
+  - BPE furcations match (16 vs 16).
+  - Temporary notes match (1 vs 1).
+  - Tooth surfaces match (20 vs 20).
+
+### Patient 1013684 (BPE-heavy)
+- Artefacts: `tmp/stage137/patient_1013684/`
+- Entities reviewed: `bpe`, `bpe_furcations`, `temporary_notes`, `tooth_surfaces`.
+- Outcome:
+  - BPE match (15 vs 15).
+  - BPE furcations match (15 vs 15).
+  - Temporary notes match (1 vs 1).
+  - Tooth surfaces match (20 vs 20).
+
+### Patient 1012056 (notes-heavy)
+- Artefacts: `tmp/stage137/patient_1012056/`
+- Entities reviewed: `patient_notes`, `bpe`, `bpe_furcations`, `temporary_notes`, `tooth_surfaces`.
+- Outcome:
+  - Patient notes match (20 vs 20).
+  - BPE match (4 vs 4).
+  - BPE furcations match (4 vs 4).
+  - Temporary notes match (1 vs 1).
+  - Tooth surfaces match (20 vs 20).
+
+### Patient 1000035 (BPE + notes)
+- Artefacts: `tmp/stage137/patient_1000035/`
+- Entities reviewed: `patient_notes`, `bpe`, `bpe_furcations`, `temporary_notes`, `treatment_notes`, `tooth_surfaces`.
+- Outcome:
+  - Patient notes match (11 vs 11).
+  - BPE match (8 vs 8).
+  - BPE furcations match (8 vs 8).
+  - Treatment notes match (2 vs 2).
+  - Temporary notes match (1 vs 1).
+  - Tooth surfaces match (20 vs 20).
+
+### Mismatch punch list (feeds Stage 138)
+- None observed in this cohort.
