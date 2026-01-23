@@ -4321,7 +4321,7 @@ export default function PatientDetailClient({
                               </div>
                               {chartingMetaOpen.perio && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
-                                  <div>Linkage: transactions.ref_id -> patient mapping</div>
+                                  <div>Linkage: transactions.ref_id -&gt; patient mapping</div>
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
