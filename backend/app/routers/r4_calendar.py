@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.patient import Patient
 from app.models.r4_appointment import R4Appointment
+from app.models.r4_appointment_patient_link import R4AppointmentPatientLink
 from app.models.r4_user import R4User
 from app.services.r4_import.status import normalize_status
 
@@ -48,6 +49,19 @@ class CalendarItem(BaseModel):
 class CalendarList(BaseModel):
     items: List[CalendarItem]
     total_count: int | None = None
+
+
+class AppointmentLinkRequest(BaseModel):
+    patient_id: int
+
+
+class AppointmentLinkResponse(BaseModel):
+    id: int
+    legacy_source: str
+    legacy_appointment_id: int
+    patient_id: int
+    linked_by_user_id: int
+    linked_at: datetime
 
 
 def _parse_date(value: str, field_name: str) -> date:
@@ -96,25 +110,30 @@ def _parse_status_values(values: Iterable[str] | None) -> list[str]:
     return [value for value in normalized if value]
 
 
-def _resolve_patient_display(patient: Patient | None) -> dict[str, object]:
-    if patient:
-        name = " ".join(filter(None, [patient.first_name, patient.last_name])).strip()
-        if name:
-            return {
-                "patient_id": patient.id,
-                "patient_display_name": name,
-                "is_unlinked": False,
-            }
-    return {
-        "patient_id": None,
-        "patient_display_name": "Unlinked",
-        "is_unlinked": True,
-    }
+def _patient_name(patient: Patient | None) -> str | None:
+    if not patient:
+        return None
+    name = " ".join(filter(None, [patient.first_name, patient.last_name])).strip()
+    return name or None
+
+
+def _resolve_patient_display(
+    linked_patient: Patient | None, code_patient: Patient | None
+) -> dict[str, object]:
+    patient = linked_patient or code_patient
+    name = _patient_name(patient)
+    if patient and name:
+        return {
+            "patient_id": patient.id,
+            "patient_display_name": name,
+            "is_unlinked": False,
+        }
+    return {"patient_id": None, "patient_display_name": "Unlinked", "is_unlinked": True}
 
 
 def _apply_filters(
     stmt,
-    patient_alias,
+    resolved_patient_id,
     status_expr,
     from_dt,
     to_dt,
@@ -138,11 +157,11 @@ def _apply_filters(
             status_code=400, detail="`unlinked_only` and `linked_only` cannot both be true"
         )
     if unlinked_only:
-        stmt = stmt.where(patient_alias.id.is_(None))
+        stmt = stmt.where(resolved_patient_id.is_(None))
     elif linked_only:
-        stmt = stmt.where(patient_alias.id.is_not(None))
+        stmt = stmt.where(resolved_patient_id.is_not(None))
     elif not show_unlinked:
-        stmt = stmt.where(patient_alias.id.is_not(None))
+        stmt = stmt.where(resolved_patient_id.is_not(None))
     return stmt
 
 
@@ -172,22 +191,31 @@ def list_r4_calendar(
     from_dt = from_local.astimezone(timezone.utc)
     to_dt = to_local.astimezone(timezone.utc)
 
-    patient_alias = aliased(Patient)
+    link_alias = aliased(R4AppointmentPatientLink)
+    linked_patient = aliased(Patient)
+    code_patient = aliased(Patient)
     status_expr = _build_status_expression()
     include_statuses = _parse_status_values(statuses)
     exclude_statuses = _parse_status_values(exclude_statuses)
     if not include_statuses and not show_hidden:
         include_statuses = list(DEFAULT_VISIBLE_STATUSES)
 
-    join_condition = patient_alias.legacy_id == cast(R4Appointment.patient_code, String)
+    join_condition = code_patient.legacy_id == cast(R4Appointment.patient_code, String)
+    resolved_patient_id = func.coalesce(linked_patient.id, code_patient.id)
 
     base_stmt = (
         select(R4Appointment)
-        .outerjoin(patient_alias, join_condition)
+        .outerjoin(
+            link_alias,
+            (link_alias.legacy_source == R4Appointment.legacy_source)
+            & (link_alias.legacy_appointment_id == R4Appointment.legacy_appointment_id),
+        )
+        .outerjoin(linked_patient, linked_patient.id == link_alias.patient_id)
+        .outerjoin(code_patient, join_condition)
     )
     base_stmt = _apply_filters(
         base_stmt,
-        patient_alias,
+        resolved_patient_id,
         status_expr,
         from_dt,
         to_dt,
@@ -206,13 +234,19 @@ def list_r4_calendar(
         total_count = int(db.scalar(total_stmt) or 0)
 
     data_stmt = (
-        select(R4Appointment, patient_alias, R4User)
-        .outerjoin(patient_alias, join_condition)
+        select(R4Appointment, linked_patient, code_patient, R4User)
+        .outerjoin(
+            link_alias,
+            (link_alias.legacy_source == R4Appointment.legacy_source)
+            & (link_alias.legacy_appointment_id == R4Appointment.legacy_appointment_id),
+        )
+        .outerjoin(linked_patient, linked_patient.id == link_alias.patient_id)
+        .outerjoin(code_patient, join_condition)
         .outerjoin(R4User, R4User.legacy_user_code == R4Appointment.clinician_code)
     )
     data_stmt = _apply_filters(
         data_stmt,
-        patient_alias,
+        resolved_patient_id,
         status_expr,
         from_dt,
         to_dt,
@@ -232,8 +266,8 @@ def list_r4_calendar(
     rows = db.execute(data_stmt).all()
 
     items: List[CalendarItem] = []
-    for appointment, patient, clinician in rows:
-        patient_payload = _resolve_patient_display(patient)
+    for appointment, linked_patient_row, code_patient_row, clinician in rows:
+        patient_payload = _resolve_patient_display(linked_patient_row, code_patient_row)
         item = CalendarItem(
             legacy_appointment_id=appointment.legacy_appointment_id,
             starts_at=appointment.starts_at,
@@ -257,3 +291,56 @@ def list_r4_calendar(
     if include_total:
         response["total_count"] = total_count
     return response
+
+
+@router.post("/{legacy_appointment_id}/link", response_model=AppointmentLinkResponse)
+def link_r4_appointment(
+    *,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+    legacy_appointment_id: int,
+    payload: AppointmentLinkRequest,
+):
+    appointment = db.scalar(
+        select(R4Appointment).where(
+            R4Appointment.legacy_source == "r4",
+            R4Appointment.legacy_appointment_id == legacy_appointment_id,
+        )
+    )
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    patient = db.get(Patient, payload.patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    link = db.scalar(
+        select(R4AppointmentPatientLink).where(
+            R4AppointmentPatientLink.legacy_source == appointment.legacy_source,
+            R4AppointmentPatientLink.legacy_appointment_id
+            == appointment.legacy_appointment_id,
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if link:
+        if link.patient_id == payload.patient_id:
+            return link
+        link.patient_id = payload.patient_id
+        link.linked_by_user_id = user.id
+        link.linked_at = now
+        db.add(link)
+        db.commit()
+        db.refresh(link)
+        return link
+
+    link = R4AppointmentPatientLink(
+        legacy_source=appointment.legacy_source,
+        legacy_appointment_id=appointment.legacy_appointment_id,
+        patient_id=payload.patient_id,
+        linked_by_user_id=user.id,
+        linked_at=now,
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return link

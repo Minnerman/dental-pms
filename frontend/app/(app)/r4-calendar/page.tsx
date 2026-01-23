@@ -39,6 +39,14 @@ type AppointmentResponse = {
   total_count?: number | null;
 };
 
+type PatientSearch = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  phone?: string | null;
+};
+
 type CalendarEvent = {
   id: string;
   title: string;
@@ -88,7 +96,30 @@ function buildClinicianLabel(item: AppointmentItem) {
   return item.clinician_name ?? item.clinician_role ?? null;
 }
 
-function AppointmentEvent({ event }: { event: CalendarEvent }) {
+function formatPatientLabel(patient: PatientSearch) {
+  const dob = patient.date_of_birth ? ` (${patient.date_of_birth})` : "";
+  return `${patient.last_name}, ${patient.first_name}${dob}`;
+}
+
+function formatDateTime(value: string) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function AppointmentEvent({
+  event,
+  onLink,
+}: {
+  event: CalendarEvent;
+  onLink: (item: AppointmentItem) => void;
+}) {
   const item = event.resource;
   const clinician = buildClinicianLabel(item);
   const unlinkedDetail = item.is_unlinked ? buildUnlinkedDetail(item) : null;
@@ -103,6 +134,20 @@ function AppointmentEvent({ event }: { event: CalendarEvent }) {
         )}
       </div>
       {item.is_unlinked && unlinkedDetail && <div>{unlinkedDetail}</div>}
+      {item.is_unlinked && (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          data-testid={`r4-link-appointment-${item.legacy_appointment_id}`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onLink(item);
+          }}
+        >
+          Link to patient
+        </button>
+      )}
       {clinician && <div className="muted">{clinician}</div>}
     </div>
   );
@@ -122,6 +167,13 @@ export default function R4CalendarPage() {
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkTarget, setLinkTarget] = useState<AppointmentItem | null>(null);
+  const [patientQuery, setPatientQuery] = useState("");
+  const [patientOptions, setPatientOptions] = useState<PatientSearch[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<PatientSearch | null>(null);
+  const [patientLoading, setPatientLoading] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const showHiddenParam = searchParams.get("show_hidden");
   const showHidden = showHiddenParam === "1" || showHiddenParam === "true";
 
@@ -199,6 +251,88 @@ export default function R4CalendarPage() {
   useEffect(() => {
     loadAppointments();
   }, [loadAppointments]);
+
+  useEffect(() => {
+    if (!linkTarget) return;
+    const trimmed = patientQuery.trim();
+    if (selectedPatient && trimmed === formatPatientLabel(selectedPatient)) {
+      return;
+    }
+    if (trimmed.length < 2) {
+      setPatientOptions([]);
+      setSelectedPatient(null);
+      return;
+    }
+    const timeout = window.setTimeout(async () => {
+      setPatientLoading(true);
+      setLinkError(null);
+      try {
+        const params = new URLSearchParams({ q: trimmed, limit: "10" });
+        const res = await apiFetch(`/api/patients/search?${params.toString()}`);
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Patient search failed (HTTP ${res.status})`);
+        }
+        const data = (await res.json()) as PatientSearch[];
+        setPatientOptions(data);
+      } catch (err) {
+        setLinkError(err instanceof Error ? err.message : "Patient search failed");
+      } finally {
+        setPatientLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [linkTarget, patientQuery, selectedPatient, router]);
+
+  const openLinkModal = useCallback((item: AppointmentItem) => {
+    setLinkTarget(item);
+    setPatientQuery("");
+    setPatientOptions([]);
+    setSelectedPatient(null);
+    setLinkError(null);
+  }, []);
+
+  const closeLinkModal = useCallback(() => {
+    setLinkTarget(null);
+    setPatientQuery("");
+    setPatientOptions([]);
+    setSelectedPatient(null);
+    setLinkError(null);
+  }, []);
+
+  const submitLink = useCallback(async () => {
+    if (!linkTarget) return;
+    if (!selectedPatient) {
+      setLinkError("Select a patient to link.");
+      return;
+    }
+    setLinking(true);
+    setLinkError(null);
+    try {
+      const res = await apiFetch(`/api/appointments/${linkTarget.legacy_appointment_id}/link`, {
+        method: "POST",
+        body: JSON.stringify({ patient_id: selectedPatient.id }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to link appointment (HTTP ${res.status})`);
+      }
+      await loadAppointments();
+      closeLinkModal();
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : "Failed to link appointment");
+    } finally {
+      setLinking(false);
+    }
+  }, [linkTarget, selectedPatient, loadAppointments, closeLinkModal, router]);
 
   const clinicianOptions = useMemo(() => {
     const map = new Map<number, AppointmentItem>();
@@ -343,6 +477,80 @@ export default function R4CalendarPage() {
           {!loading && appointments.length === 0 && !error && (
             <div className="notice">No appointments in this range.</div>
           )}
+          {linkTarget && (
+            <div className="card" style={{ margin: 0 }} data-testid="r4-link-modal">
+              <div className="stack">
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <div>
+                    <h4 style={{ marginTop: 0 }}>Link appointment</h4>
+                    <div style={{ color: "var(--muted)" }}>
+                      {linkTarget.legacy_appointment_id} ·{" "}
+                      {formatDateTime(linkTarget.starts_at)}
+                    </div>
+                  </div>
+                  <button className="btn btn-secondary" type="button" onClick={closeLinkModal}>
+                    Close
+                  </button>
+                </div>
+                <label className="stack">
+                  <span>Search patient</span>
+                  <input
+                    className="input"
+                    placeholder="Search by name, phone, or DOB..."
+                    value={patientQuery}
+                    onChange={(e) => setPatientQuery(e.target.value)}
+                    data-testid="r4-link-search"
+                  />
+                </label>
+                {patientLoading && <div className="badge">Searching patients…</div>}
+                {patientOptions.length > 0 && (
+                  <div className="card" style={{ margin: 0 }}>
+                    <div className="stack">
+                      {patientOptions.map((patient) => (
+                        <button
+                          key={patient.id}
+                          className={
+                            selectedPatient?.id === patient.id
+                              ? "btn btn-primary"
+                              : "btn btn-secondary"
+                          }
+                          type="button"
+                          data-testid={`r4-link-patient-${patient.id}`}
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setPatientQuery(formatPatientLabel(patient));
+                            setPatientOptions([]);
+                          }}
+                        >
+                          {formatPatientLabel(patient)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedPatient && (
+                  <div className="notice">
+                    Linking to: {formatPatientLabel(selectedPatient)}
+                  </div>
+                )}
+                {linkError && <div className="notice">{linkError}</div>}
+                <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+                  <button className="btn btn-secondary" type="button" onClick={closeLinkModal}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={submitLink}
+                    disabled={linking || !selectedPatient}
+                    data-testid="r4-link-save"
+                  >
+                    {linking ? "Linking..." : "Link"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div style={{ height: 720 }}>
             <Calendar
               localizer={localizer}
@@ -354,7 +562,11 @@ export default function R4CalendarPage() {
               length={agendaLength}
               startAccessor="start"
               endAccessor="end"
-              components={{ event: AppointmentEvent }}
+              components={{
+                event: ({ event }: { event: CalendarEvent }) => (
+                  <AppointmentEvent event={event} onLink={openLinkModal} />
+                ),
+              }}
               toolbar={false}
             />
           </div>
