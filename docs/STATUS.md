@@ -69,6 +69,10 @@
   - Outputs: `index.csv` summary plus `sqlserver_<entity>.csv` and `postgres_<entity>.csv`.
   - Doc: `docs/r4/R4_CHARTING_CSV_REVIEW.md`.
   - Example run (local, not committed): `tmp/stage133/patient_1000000/`, `tmp/stage133/patient_1000035/`.
+- 2026-01-23: Stage134 clinical CSV review loop.
+  - Cohort: 1000000 (perio+edge), 1011978 (BPE-heavy), 1012056 (notes-heavy), 1013684 (BPE-heavy).
+  - Summary: BPE and notes matched for selected patients; PerioProbe mismatch for patient 1000000; BPEFurcation linkage unsupported (schema lacks `BPEID` on BPE).
+  - Details: `docs/r4/R4_CHARTING_CSV_REVIEW.md`.
 - 2026-01-23: Stage131 spot-check tooling (patient-level R4 charting fidelity).
   - Doc: `docs/r4/R4_CHARTING_SPOTCHECK.md`.
   - Patient 1000000: PerioProbe via Transactions.RefId join; patient 1000035: BPE/BPEFurcation via BPEID join.
