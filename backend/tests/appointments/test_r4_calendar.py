@@ -2,23 +2,37 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.db.session import SessionLocal
 from app.models.patient import Patient
 from app.models.r4_appointment import R4Appointment
 from app.models.r4_user import R4User
+from app.models.user import User
+from app.services.users import ensure_admin_user
 
 
 DEFAULT_STATUSSET = {"pending", "checked-in", "checked in", "arrived", "did not attend", "dna"}
 
 
+def _actor_id(session) -> int:
+    actor = session.scalar(select(User).order_by(User.id.asc()).limit(1))
+    if not actor:
+        actor = ensure_admin_user(
+            session, email="admin@example.com", password="ChangeMe123!"
+        )
+    return actor.id
+
+
 def _create_patient(session, legacy_id: str) -> Patient:
+    actor_id = _actor_id(session)
     patient = Patient(
         first_name="R4",
         last_name="Patient",
         legacy_source="r4",
         legacy_id=legacy_id,
+        created_by_user_id=actor_id,
+        updated_by_user_id=actor_id,
     )
     session.add(patient)
     session.flush()
@@ -26,12 +40,15 @@ def _create_patient(session, legacy_id: str) -> Patient:
 
 
 def _create_user(session, legacy_code: int, full_name: str) -> R4User:
+    actor_id = _actor_id(session)
     user = R4User(
         legacy_source="r4",
         legacy_user_code=legacy_code,
         full_name=full_name,
         display_name=full_name,
         is_current=True,
+        created_by_user_id=actor_id,
+        updated_by_user_id=actor_id,
     )
     session.add(user)
     session.flush()
@@ -46,6 +63,7 @@ def _create_appointment(
     status: str,
     starts_at: datetime,
 ) -> R4Appointment:
+    actor_id = _actor_id(session)
     appt = R4Appointment(
         legacy_source="r4",
         legacy_appointment_id=legacy_id,
@@ -56,6 +74,8 @@ def _create_appointment(
         clinician_code=clinician_code,
         status=status,
         appointment_type="Test",
+        created_by_user_id=actor_id,
+        updated_by_user_id=actor_id,
     )
     session.add(appt)
     session.flush()
@@ -66,10 +86,11 @@ def _unique_legacy_id() -> str:
     return str(uuid.uuid4().int % 10000000)
 
 
-def _cleanup(session):
+def _cleanup(session, patient_ids: list[int] | None = None):
     session.execute(delete(R4Appointment).where(R4Appointment.legacy_source == "r4"))
     session.execute(delete(R4User).where(R4User.legacy_source == "r4"))
-    session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
+    if patient_ids:
+        session.execute(delete(Patient).where(Patient.id.in_(patient_ids)))
     session.commit()
 
 
@@ -134,7 +155,7 @@ def test_r4_calendar_status_filters(api_client, auth_headers, db_session):
         for item in items_hidden
     )
 
-    _cleanup(db_session)
+    _cleanup(db_session, [patient.id])
 
 
 def test_r4_calendar_unlinked_and_total(api_client, auth_headers, db_session):
@@ -180,7 +201,7 @@ def test_r4_calendar_unlinked_and_total(api_client, auth_headers, db_session):
     assert any(item["legacy_appointment_id"] == unlinked.legacy_appointment_id for item in body["items"])
     assert any(item["is_unlinked"] for item in body["items"])
 
-    _cleanup(db_session)
+    _cleanup(db_session, [patient.id])
 
 
 def test_r4_calendar_clinician_filter(api_client, auth_headers, db_session):
@@ -220,7 +241,7 @@ def test_r4_calendar_clinician_filter(api_client, auth_headers, db_session):
     assert all(item["clinician_code"] == clinician_a.legacy_user_code for item in items)
     assert any(item["legacy_appointment_id"] == appt_a.legacy_appointment_id for item in items)
 
-    _cleanup(db_session)
+    _cleanup(db_session, [patient.id])
 
 
 def test_r4_calendar_linked_unlinked_toggles(api_client, auth_headers, db_session):
@@ -266,7 +287,7 @@ def test_r4_calendar_linked_unlinked_toggles(api_client, auth_headers, db_sessio
     assert all(item["is_unlinked"] is True for item in items_unlinked)
     assert any(item["legacy_appointment_id"] == unlinked.legacy_appointment_id for item in items_unlinked)
 
-    _cleanup(db_session)
+    _cleanup(db_session, [patient.id])
 
 
 def test_r4_calendar_ordering_stability(api_client, auth_headers, db_session):
@@ -301,4 +322,4 @@ def test_r4_calendar_ordering_stability(api_client, auth_headers, db_session):
     ids = [item["legacy_appointment_id"] for item in items]
     assert ids.index(appt_low.legacy_appointment_id) < ids.index(appt_high.legacy_appointment_id)
 
-    _cleanup(db_session)
+    _cleanup(db_session, [patient.id])
