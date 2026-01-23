@@ -1,0 +1,19 @@
+[
+  {
+    "patient_code": 1001,
+    "note_number": 1,
+    "note_date": "2026-01-04T12:00:00Z",
+    "note": "Note A",
+    "tooth": 11,
+    "surface": 1,
+    "category_number": 10,
+    "fixed_note_code": 500,
+    "user_code": 700
+  },
+  {
+    "patient_code": null,
+    "note_number": 2,
+    "note_date": "2026-01-05T12:00:00Z",
+    "note": "Missing patient"
+  }
+]

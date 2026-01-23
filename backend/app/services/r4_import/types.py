@@ -121,3 +121,136 @@ class R4TreatmentPlanReview(BaseModel):
     reviewed: bool = False
     last_edit_user: str | None = None
     last_edit_date: datetime | None = None
+
+
+class R4ToothSystem(BaseModel):
+    tooth_system_id: int = Field(..., ge=1)
+    name: str | None = None
+    description: str | None = None
+    sort_order: int | None = None
+    is_default: bool = False
+
+
+class R4ToothSurface(BaseModel):
+    tooth_id: int = Field(..., ge=1)
+    surface_no: int = Field(..., ge=0)
+    label: str | None = None
+    short_label: str | None = None
+    sort_order: int | None = None
+
+
+class R4ChartHealingAction(BaseModel):
+    action_id: int = Field(..., ge=1)
+    patient_code: int | None = None
+    appointment_need_id: int | None = None
+    tp_number: int | None = None
+    tp_item: int | None = None
+    code_id: int | None = None
+    action_date: datetime | None = None
+    action_type: str | None = None
+    tooth: int | None = None
+    surface: int | None = None
+    status: str | None = None
+    notes: str | None = None
+    user_code: int | None = None
+
+
+class R4BPEEntry(BaseModel):
+    bpe_id: int | None = None
+    patient_code: int | None = None
+    recorded_at: datetime | None = None
+    sextant_1: int | None = None
+    sextant_2: int | None = None
+    sextant_3: int | None = None
+    sextant_4: int | None = None
+    sextant_5: int | None = None
+    sextant_6: int | None = None
+    notes: str | None = None
+    user_code: int | None = None
+
+
+class R4BPEFurcation(BaseModel):
+    furcation_id: int | None = None
+    bpe_id: int | None = None
+    patient_code: int | None = None
+    tooth: int | None = None
+    furcation: int | None = None
+    sextant: int | None = None
+    recorded_at: datetime | None = None
+    notes: str | None = None
+    user_code: int | None = None
+
+
+class R4PerioProbe(BaseModel):
+    trans_id: int | None = None
+    patient_code: int | None = None
+    tooth: int | None = None
+    probing_point: int | None = None
+    depth: int | None = None
+    bleeding: int | None = None
+    plaque: int | None = None
+    recorded_at: datetime | None = None
+
+
+class R4PerioPlaque(BaseModel):
+    trans_id: int | None = None
+    patient_code: int | None = None
+    tooth: int | None = None
+    plaque: int | None = None
+    bleeding: int | None = None
+    recorded_at: datetime | None = None
+
+
+class R4PatientNote(BaseModel):
+    patient_code: int | None = None
+    note_number: int | None = None
+    note_date: datetime | None = None
+    note: str | None = None
+    tooth: int | None = None
+    surface: int | None = None
+    category_number: int | None = None
+    fixed_note_code: int | None = None
+    user_code: int | None = None
+
+
+class R4FixedNote(BaseModel):
+    fixed_note_code: int = Field(..., ge=1)
+    category_number: int | None = None
+    description: str | None = None
+    note: str | None = None
+    tooth: int | None = None
+    surface: int | None = None
+
+
+class R4NoteCategory(BaseModel):
+    category_number: int = Field(..., ge=0)
+    description: str | None = None
+
+
+class R4TreatmentNote(BaseModel):
+    note_id: int = Field(..., ge=1)
+    patient_code: int | None = None
+    tp_number: int | None = None
+    tp_item: int | None = None
+    note: str | None = None
+    note_date: datetime | None = None
+    user_code: int | None = None
+
+
+class R4TemporaryNote(BaseModel):
+    patient_code: int = Field(..., ge=1)
+    note: str | None = None
+    updated_at: datetime | None = None
+    user_code: int | None = None
+
+
+class R4OldPatientNote(BaseModel):
+    patient_code: int | None = None
+    note_number: int | None = None
+    note_date: datetime | None = None
+    note: str | None = None
+    tooth: int | None = None
+    surface: int | None = None
+    category_number: int | None = None
+    fixed_note_code: int | None = None
+    user_code: int | None = None

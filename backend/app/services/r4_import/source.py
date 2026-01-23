@@ -13,6 +13,19 @@ from app.services.r4_import.types import (
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
+    R4ToothSystem,
+    R4ToothSurface,
+    R4ChartHealingAction,
+    R4BPEEntry,
+    R4BPEFurcation,
+    R4PerioProbe,
+    R4PerioPlaque,
+    R4PatientNote,
+    R4FixedNote,
+    R4NoteCategory,
+    R4TreatmentNote,
+    R4TemporaryNote,
+    R4OldPatientNote,
 )
 
 
@@ -89,4 +102,88 @@ class R4Source(Protocol):
         tp_to: int | None = None,
         limit: int | None = None,
     ) -> Iterable[R4TreatmentPlanReview]:
+        raise NotImplementedError
+
+    def list_tooth_systems(self, limit: int | None = None) -> Iterable[R4ToothSystem]:
+        raise NotImplementedError
+
+    def list_tooth_surfaces(self, limit: int | None = None) -> Iterable[R4ToothSurface]:
+        raise NotImplementedError
+
+    def list_chart_healing_actions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4ChartHealingAction]:
+        raise NotImplementedError
+
+    def list_bpe_entries(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4BPEEntry]:
+        raise NotImplementedError
+
+    def list_bpe_furcations(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4BPEFurcation]:
+        raise NotImplementedError
+
+    def list_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4PerioProbe]:
+        raise NotImplementedError
+
+    def list_perio_plaque(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4PerioPlaque]:
+        raise NotImplementedError
+
+    def list_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4PatientNote]:
+        raise NotImplementedError
+
+    def list_fixed_notes(self, limit: int | None = None) -> Iterable[R4FixedNote]:
+        raise NotImplementedError
+
+    def list_note_categories(self, limit: int | None = None) -> Iterable[R4NoteCategory]:
+        raise NotImplementedError
+
+    def list_treatment_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentNote]:
+        raise NotImplementedError
+
+    def list_temporary_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TemporaryNote]:
+        raise NotImplementedError
+
+    def list_old_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4OldPatientNote]:
         raise NotImplementedError

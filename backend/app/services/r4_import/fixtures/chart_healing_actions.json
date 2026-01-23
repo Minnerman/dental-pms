@@ -1,0 +1,23 @@
+[
+  {
+    "action_id": 9001,
+    "patient_code": 1001,
+    "appointment_need_id": 42,
+    "tp_number": 1,
+    "tp_item": 1,
+    "code_id": 2001,
+    "action_date": "2026-01-01T10:00:00Z",
+    "action_type": "Complete",
+    "tooth": 11,
+    "surface": 1,
+    "status": "Done",
+    "notes": "Ok",
+    "user_code": 700
+  },
+  {
+    "action_id": 9002,
+    "patient_code": null,
+    "action_date": "2026-01-02T11:00:00Z",
+    "action_type": "Planned"
+  }
+]

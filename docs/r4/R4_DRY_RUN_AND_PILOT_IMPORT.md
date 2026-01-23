@@ -293,6 +293,33 @@ docker compose run --rm backend python -m app.scripts.r4_import \
   --entity treatment_plans_summary
 ```
 
+## G2) Stage 129: charting import (discovery-driven)
+
+Dry-run (bounded window):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity charting \
+  --dry-run \
+  --patients-from 1000101 \
+  --patients-to 1000110 \
+  --limit 5
+```
+
+Apply (tiny window, stats-out recommended):
+
+```bash
+docker compose exec -T backend python -m app.scripts.r4_import \
+  --source sqlserver \
+  --entity charting \
+  --apply \
+  --confirm APPLY \
+  --patients-from 1000101 \
+  --patients-to 1000110 \
+  --stats-out /tmp/r4_charting_stats.json
+```
+
 ## H) Rollback (dev-only guidance)
 
 If the pilot window was incorrect, remove rows by legacy markers. Use extreme

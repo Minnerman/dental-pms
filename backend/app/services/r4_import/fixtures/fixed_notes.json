@@ -1,0 +1,10 @@
+[
+  {
+    "fixed_note_code": 500,
+    "category_number": 10,
+    "description": "Post-op",
+    "note": "Post-op instructions",
+    "tooth": 11,
+    "surface": 1
+  }
+]
