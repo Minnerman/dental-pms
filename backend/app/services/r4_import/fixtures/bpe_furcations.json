@@ -1,0 +1,11 @@
+[
+  {
+    "furcation_id": 4001,
+    "bpe_id": 3001,
+    "patient_code": 1001,
+    "tooth": 16,
+    "furcation": 2,
+    "sextant": 1,
+    "recorded_at": "2026-01-03T09:00:00Z"
+  }
+]

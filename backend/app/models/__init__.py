@@ -42,6 +42,21 @@ from app.models.r4_treatment_plan import (
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
 )
+from app.models.r4_charting import (
+    R4ToothSystem,
+    R4ToothSurface,
+    R4ChartHealingAction,
+    R4BPEEntry,
+    R4BPEFurcation,
+    R4PerioProbe,
+    R4PerioPlaque,
+    R4PatientNote,
+    R4FixedNote,
+    R4NoteCategory,
+    R4TreatmentNote,
+    R4TemporaryNote,
+    R4OldPatientNote,
+)
 from app.models.r4_treatment_transaction import R4TreatmentTransaction
 from app.models.r4_user import R4User
 from app.models.r4_patient_mapping import R4PatientMapping
@@ -104,6 +119,19 @@ __all__ = [
     "R4TreatmentPlan",
     "R4TreatmentPlanItem",
     "R4TreatmentPlanReview",
+    "R4ToothSystem",
+    "R4ToothSurface",
+    "R4ChartHealingAction",
+    "R4BPEEntry",
+    "R4BPEFurcation",
+    "R4PerioProbe",
+    "R4PerioPlaque",
+    "R4PatientNote",
+    "R4FixedNote",
+    "R4NoteCategory",
+    "R4TreatmentNote",
+    "R4TemporaryNote",
+    "R4OldPatientNote",
     "R4Appointment",
     "R4AppointmentPatientLink",
     "R4PatientMapping",

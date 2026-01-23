@@ -15,6 +15,19 @@ from app.services.r4_import.types import (
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
+    R4ToothSystem,
+    R4ToothSurface,
+    R4ChartHealingAction,
+    R4BPEEntry,
+    R4BPEFurcation,
+    R4PerioProbe,
+    R4PerioPlaque,
+    R4PatientNote,
+    R4FixedNote,
+    R4NoteCategory,
+    R4TreatmentNote,
+    R4TemporaryNote,
+    R4OldPatientNote,
 )
 
 
@@ -205,6 +218,151 @@ class FixtureSource(R4Source):
             return items
         return items[:limit]
 
+    def list_tooth_systems(self, limit: int | None = None) -> list[R4ToothSystem]:
+        data = self._load_json("tooth_systems.json")
+        items = [R4ToothSystem.model_validate(item) for item in data]
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_tooth_surfaces(self, limit: int | None = None) -> list[R4ToothSurface]:
+        data = self._load_json("tooth_surfaces.json")
+        items = [R4ToothSurface.model_validate(item) for item in data]
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_chart_healing_actions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4ChartHealingAction]:
+        data = self._load_json("chart_healing_actions.json")
+        items = [R4ChartHealingAction.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_bpe_entries(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4BPEEntry]:
+        data = self._load_json("bpe_entries.json")
+        items = [R4BPEEntry.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_bpe_furcations(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4BPEFurcation]:
+        data = self._load_json("bpe_furcations.json")
+        items = [R4BPEFurcation.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4PerioProbe]:
+        data = self._load_json("perio_probes.json")
+        items = [R4PerioProbe.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_perio_plaque(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4PerioPlaque]:
+        data = self._load_json("perio_plaque.json")
+        items = [R4PerioPlaque.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4PatientNote]:
+        data = self._load_json("patient_notes.json")
+        items = [R4PatientNote.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_fixed_notes(self, limit: int | None = None) -> list[R4FixedNote]:
+        data = self._load_json("fixed_notes.json")
+        items = [R4FixedNote.model_validate(item) for item in data]
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_note_categories(self, limit: int | None = None) -> list[R4NoteCategory]:
+        data = self._load_json("note_categories.json")
+        items = [R4NoteCategory.model_validate(item) for item in data]
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_treatment_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TreatmentNote]:
+        data = self._load_json("treatment_notes.json")
+        items = [R4TreatmentNote.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_temporary_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4TemporaryNote]:
+        data = self._load_json("temporary_notes.json")
+        items = [R4TemporaryNote.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
+    def list_old_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> list[R4OldPatientNote]:
+        data = self._load_json("old_patient_notes.json")
+        items = [R4OldPatientNote.model_validate(item) for item in data]
+        items = self._filter_patient_rows(items, patients_from, patients_to)
+        if limit is None:
+            return items
+        return items[:limit]
+
     @staticmethod
     def _filter_plans(items, patients_from, patients_to, tp_from, tp_to):
         if patients_from is None and patients_to is None and tp_from is None and tp_to is None:
@@ -235,6 +393,23 @@ class FixtureSource(R4Source):
             if tp_from is not None and item.tp_number < tp_from:
                 continue
             if tp_to is not None and item.tp_number > tp_to:
+                continue
+            filtered.append(item)
+        return filtered
+
+    @staticmethod
+    def _filter_patient_rows(items, patients_from, patients_to):
+        if patients_from is None and patients_to is None:
+            return items
+        filtered = []
+        for item in items:
+            patient_code = getattr(item, "patient_code", None)
+            if patient_code is None:
+                filtered.append(item)
+                continue
+            if patients_from is not None and patient_code < patients_from:
+                continue
+            if patients_to is not None and patient_code > patients_to:
                 continue
             filtered.append(item)
         return filtered

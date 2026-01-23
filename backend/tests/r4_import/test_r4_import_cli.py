@@ -457,3 +457,62 @@ def test_cli_sqlserver_apply_stats_out(tmp_path, monkeypatch):
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["entity"] == "patients"
     assert payload["stats"]["patients_created"] == 1
+
+
+def test_cli_sqlserver_dry_run_charting(monkeypatch):
+    recorded = {}
+
+    class ChartingSqlServerSource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def dry_run_summary(self, *args, **kwargs):
+            raise AssertionError("dry_run_summary should not run for charting entity")
+
+        def dry_run_summary_charting(
+            self,
+            limit: int = 10,
+            patients_from: int | None = None,
+            patients_to: int | None = None,
+        ):
+            recorded["limit"] = limit
+            recorded["patients_from"] = patients_from
+            recorded["patients_to"] = patients_to
+            return {"ok": True, "entity": "charting"}
+
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    monkeypatch.setattr(r4_import_script.R4SqlServerConfig, "from_env", lambda: config)
+    monkeypatch.setattr(r4_import_script, "R4SqlServerSource", ChartingSqlServerSource)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--source",
+            "sqlserver",
+            "--dry-run",
+            "--entity",
+            "charting",
+            "--patients-from",
+            "100",
+            "--patients-to",
+            "200",
+            "--limit",
+            "5",
+        ],
+    )
+    assert r4_import_script.main() == 0
+    assert recorded["limit"] == 5
+    assert recorded["patients_from"] == 100
+    assert recorded["patients_to"] == 200

@@ -1,0 +1,23 @@
+[
+  {
+    "tooth_id": 11,
+    "surface_no": 1,
+    "label": "M",
+    "short_label": "M",
+    "sort_order": 1
+  },
+  {
+    "tooth_id": 11,
+    "surface_no": 2,
+    "label": "O",
+    "short_label": "O",
+    "sort_order": 2
+  },
+  {
+    "tooth_id": 12,
+    "surface_no": 1,
+    "label": "M",
+    "short_label": "M",
+    "sort_order": 1
+  }
+]

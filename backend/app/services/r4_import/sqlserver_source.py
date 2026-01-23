@@ -18,6 +18,19 @@ from app.services.r4_import.types import (
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4TreatmentPlanReview,
+    R4ToothSystem,
+    R4ToothSurface,
+    R4ChartHealingAction,
+    R4BPEEntry,
+    R4BPEFurcation,
+    R4PerioProbe,
+    R4PerioPlaque,
+    R4PatientNote,
+    R4FixedNote,
+    R4NoteCategory,
+    R4TreatmentNote,
+    R4TemporaryNote,
+    R4OldPatientNote,
 )
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
@@ -319,6 +332,127 @@ class R4SqlServerSource:
             ),
         }
 
+    def dry_run_summary_charting(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "source": "sqlserver",
+            "server": f"{self._config.host}:{self._config.port}",
+            "database": self._config.database,
+            "tooth_systems_count": self.count_tooth_systems(),
+            "tooth_surfaces_count": self.count_tooth_surfaces(),
+            "chart_healing_actions_count": self.count_chart_healing_actions(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "chart_healing_actions_date_range": self.chart_healing_actions_date_range(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "bpe_count": self.count_bpe_entries(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "bpe_date_range": self.bpe_date_range(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "bpe_furcations_count": self.count_bpe_furcations(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "perio_probes_count": self.count_perio_probes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "perio_plaque_count": self.count_perio_plaque(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "patient_notes_count": self.count_patient_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "patient_notes_date_range": self.patient_notes_date_range(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "fixed_notes_count": self.count_fixed_notes(),
+            "note_categories_count": self.count_note_categories(),
+            "treatment_notes_count": self.count_treatment_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "treatment_notes_date_range": self.treatment_notes_date_range(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "temporary_notes_count": self.count_temporary_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "old_patient_notes_count": self.count_old_patient_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "old_patient_notes_date_range": self.old_patient_notes_date_range(
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_tooth_systems": self.sample_tooth_systems(limit=limit),
+            "sample_tooth_surfaces": self.sample_tooth_surfaces(limit=limit),
+            "sample_chart_healing_actions": self.sample_chart_healing_actions(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_bpe_entries": self.sample_bpe_entries(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_bpe_furcations": self.sample_bpe_furcations(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_perio_probes": self.sample_perio_probes(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_perio_plaque": self.sample_perio_plaque(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_patient_notes": self.sample_patient_notes(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_fixed_notes": self.sample_fixed_notes(limit=limit),
+            "sample_note_categories": self.sample_note_categories(limit=limit),
+            "sample_treatment_notes": self.sample_treatment_notes(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_temporary_notes": self.sample_temporary_notes(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+            "sample_old_patient_notes": self.sample_old_patient_notes(
+                limit=limit,
+                patients_from=patients_from,
+                patients_to=patients_to,
+            ),
+        }
+
     def count_patients(
         self,
         patients_from: int | None = None,
@@ -496,6 +630,218 @@ class R4SqlServerSource:
             params,
         )
         return int(rows[0]["count"]) if rows else 0
+
+    def count_tooth_systems(self) -> int:
+        return self._count_table("ToothSystems")
+
+    def count_tooth_surfaces(self) -> int:
+        return self._count_table("ToothSurfaces")
+
+    def count_chart_healing_actions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("ChartHealingActions", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("ChartHealingActions", where_clause, params)
+
+    def count_bpe_entries(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("BPE", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("BPE", where_clause, params)
+
+    def count_bpe_furcations(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("BPEFurcation", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("BPEFurcation", where_clause, params)
+
+    def count_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("PerioProbe", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("PerioProbe", where_clause, params)
+
+    def count_perio_plaque(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("PerioPlaque", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("PerioPlaque", where_clause, params)
+
+    def count_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("PatientNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("PatientNotes", where_clause, params)
+
+    def count_fixed_notes(self) -> int:
+        return self._count_table("FixedNotes")
+
+    def count_note_categories(self) -> int:
+        return self._count_table("NoteCategories")
+
+    def count_treatment_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("TreatmentNotes", where_clause, params)
+
+    def count_temporary_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("TemporaryNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("TemporaryNotes", where_clause, params)
+
+    def count_old_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> int:
+        patient_col = self._pick_column("OldPatientNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._count_table("OldPatientNotes", where_clause, params)
+
+    def chart_healing_actions_date_range(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, str] | None:
+        date_col = self._pick_column(
+            "ChartHealingActions",
+            ["ActionDate", "Date", "CreatedDate", "ActionedDate", "ActionedOn"],
+        )
+        if not date_col:
+            return None
+        patient_col = self._pick_column("ChartHealingActions", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._date_range("ChartHealingActions", date_col, where_clause, params)
+
+    def bpe_date_range(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, str] | None:
+        date_col = self._pick_column("BPE", ["Date", "BPEDate", "RecordedDate", "EntryDate"])
+        if not date_col:
+            return None
+        patient_col = self._pick_column("BPE", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._date_range("BPE", date_col, where_clause, params)
+
+    def patient_notes_date_range(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, str] | None:
+        date_col = self._pick_column("PatientNotes", ["Date", "NoteDate", "CreatedDate"])
+        if not date_col:
+            return None
+        patient_col = self._pick_column("PatientNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._date_range("PatientNotes", date_col, where_clause, params)
+
+    def treatment_notes_date_range(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, str] | None:
+        date_col = self._pick_column("TreatmentNotes", ["Date", "NoteDate", "CreatedDate"])
+        if not date_col:
+            return None
+        patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._date_range("TreatmentNotes", date_col, where_clause, params)
+
+    def old_patient_notes_date_range(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> dict[str, str] | None:
+        date_col = self._pick_column("OldPatientNotes", ["Date", "NoteDate", "CreatedDate"])
+        if not date_col:
+            return None
+        patient_col = self._pick_column("OldPatientNotes", ["PatientCode"])
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        ) if patient_col else ("", [])
+        return self._date_range("OldPatientNotes", date_col, where_clause, params)
 
     def appt_date_range(self) -> dict[str, str] | None:
         starts_col = self._pick_column("Appts", ["StartTime", "StartsAt", "ApptDate", "ScheduledDate"])
@@ -897,6 +1243,542 @@ class R4SqlServerSource:
                     "patient_code": row.get("patient_code"),
                     "tp_number": row.get("tp_number"),
                     "creation_date": self._format_dt(row.get("creation_date")),
+                }
+            )
+        return samples
+
+    def sample_tooth_systems(self, limit: int = 10) -> list[dict[str, Any]]:
+        id_col = self._require_column(
+            "ToothSystems",
+            ["ToothSystemId", "ToothSystemID", "ToothSystem"],
+        )
+        name_col = self._pick_column("ToothSystems", ["Name", "SystemName"])
+        desc_col = self._pick_column("ToothSystems", ["Description", "Notes"])
+        sort_col = self._pick_column("ToothSystems", ["SortOrder", "Order", "DisplayOrder"])
+        default_col = self._pick_column("ToothSystems", ["IsDefault", "DefaultSystem"])
+        select_cols = [f"{id_col} AS tooth_system_id"]
+        if name_col:
+            select_cols.append(f"{name_col} AS name")
+        if desc_col:
+            select_cols.append(f"{desc_col} AS description")
+        if sort_col:
+            select_cols.append(f"{sort_col} AS sort_order")
+        if default_col:
+            select_cols.append(f"{default_col} AS is_default")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.ToothSystems WITH (NOLOCK) "
+            f"ORDER BY {id_col}",
+            [limit],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "tooth_system_id": row.get("tooth_system_id"),
+                    "name": row.get("name"),
+                    "description": row.get("description"),
+                    "sort_order": row.get("sort_order"),
+                    "is_default": _coerce_bool(row.get("is_default"), default=False)
+                    if row.get("is_default") is not None
+                    else None,
+                }
+            )
+        return samples
+
+    def sample_tooth_surfaces(self, limit: int = 10) -> list[dict[str, Any]]:
+        tooth_col = self._require_column("ToothSurfaces", ["ToothId", "ToothID", "Tooth"])
+        surface_col = self._require_column(
+            "ToothSurfaces",
+            ["SurfaceNo", "SurfaceNumber", "Surface"],
+        )
+        label_col = self._pick_column("ToothSurfaces", ["Label", "SurfaceLabel", "Name"])
+        short_col = self._pick_column("ToothSurfaces", ["ShortLabel", "Abbrev"])
+        sort_col = self._pick_column("ToothSurfaces", ["SortOrder", "Order", "DisplayOrder"])
+        select_cols = [f"{tooth_col} AS tooth_id", f"{surface_col} AS surface_no"]
+        if label_col:
+            select_cols.append(f"{label_col} AS label")
+        if short_col:
+            select_cols.append(f"{short_col} AS short_label")
+        if sort_col:
+            select_cols.append(f"{sort_col} AS sort_order")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.ToothSurfaces WITH (NOLOCK) "
+            f"ORDER BY {tooth_col}, {surface_col}",
+            [limit],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "tooth_id": row.get("tooth_id"),
+                    "surface_no": row.get("surface_no"),
+                    "label": row.get("label"),
+                    "short_label": row.get("short_label"),
+                    "sort_order": row.get("sort_order"),
+                }
+            )
+        return samples
+
+    def sample_chart_healing_actions(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        id_col = self._require_column(
+            "ChartHealingActions",
+            ["ID", "ActionID", "ChartHealingActionID"],
+        )
+        patient_col = self._pick_column("ChartHealingActions", ["PatientCode"])
+        date_col = self._pick_column(
+            "ChartHealingActions",
+            ["ActionDate", "Date", "CreatedDate", "ActionedDate", "ActionedOn"],
+        )
+        code_col = self._pick_column("ChartHealingActions", ["CodeID", "CodeId"])
+        tooth_col = self._pick_column("ChartHealingActions", ["Tooth"])
+        surface_col = self._pick_column("ChartHealingActions", ["Surface"])
+        status_col = self._pick_column("ChartHealingActions", ["Status", "StatusCode"])
+        select_cols = [f"{id_col} AS action_id"]
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if date_col:
+            select_cols.append(f"{date_col} AS action_date")
+        if code_col:
+            select_cols.append(f"{code_col} AS code_id")
+        if tooth_col:
+            select_cols.append(f"{tooth_col} AS tooth")
+        if surface_col:
+            select_cols.append(f"{surface_col} AS surface")
+        if status_col:
+            select_cols.append(f"{status_col} AS status")
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.ChartHealingActions WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {id_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "action_id": row.get("action_id"),
+                    "patient_code": row.get("patient_code"),
+                    "action_date": self._format_dt(row.get("action_date")),
+                    "code_id": row.get("code_id"),
+                    "tooth": row.get("tooth"),
+                    "surface": row.get("surface"),
+                    "status": row.get("status"),
+                }
+            )
+        return samples
+
+    def sample_bpe_entries(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_col = self._pick_column("BPE", ["PatientCode"])
+        bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+        date_col = self._pick_column("BPE", ["Date", "BPEDate", "RecordedDate", "EntryDate"])
+        sextant_cols = [
+            self._pick_column("BPE", [f"Sextant{i}", f"Sextant{i}Score"]) for i in range(1, 7)
+        ]
+        select_cols = []
+        if bpe_id_col:
+            select_cols.append(f"{bpe_id_col} AS bpe_id")
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if date_col:
+            select_cols.append(f"{date_col} AS recorded_at")
+        for idx, col in enumerate(sextant_cols, start=1):
+            if col:
+                select_cols.append(f"{col} AS sextant_{idx}")
+        if not select_cols:
+            return []
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        order_col = bpe_id_col or patient_col or date_col
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPE WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {order_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            entry = {
+                "bpe_id": row.get("bpe_id"),
+                "patient_code": row.get("patient_code"),
+                "recorded_at": self._format_dt(row.get("recorded_at")),
+            }
+            for idx in range(1, 7):
+                entry[f"sextant_{idx}"] = row.get(f"sextant_{idx}")
+            samples.append(entry)
+        return samples
+
+    def sample_bpe_furcations(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        id_col = self._pick_column("BPEFurcation", ["pKey", "ID", "BPEFurcationID"])
+        patient_col = self._pick_column("BPEFurcation", ["PatientCode"])
+        bpe_id_col = self._pick_column("BPEFurcation", ["BPEID", "BPEId"])
+        tooth_col = self._pick_column("BPEFurcation", ["Tooth"])
+        furcation_col = self._pick_column("BPEFurcation", ["Furcation", "FurcationScore"])
+        select_cols = []
+        if id_col:
+            select_cols.append(f"{id_col} AS furcation_id")
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if bpe_id_col:
+            select_cols.append(f"{bpe_id_col} AS bpe_id")
+        if tooth_col:
+            select_cols.append(f"{tooth_col} AS tooth")
+        if furcation_col:
+            select_cols.append(f"{furcation_col} AS furcation")
+        if not select_cols:
+            return []
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        order_col = id_col or bpe_id_col or patient_col
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPEFurcation WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {order_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "furcation_id": row.get("furcation_id"),
+                    "patient_code": row.get("patient_code"),
+                    "bpe_id": row.get("bpe_id"),
+                    "tooth": row.get("tooth"),
+                    "furcation": row.get("furcation"),
+                }
+            )
+        return samples
+
+    def sample_perio_probes(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        trans_col = self._pick_column("PerioProbe", ["TransId", "TransID"])
+        patient_col = self._pick_column("PerioProbe", ["PatientCode"])
+        tooth_col = self._pick_column("PerioProbe", ["Tooth"])
+        point_col = self._pick_column("PerioProbe", ["ProbingPoint", "Point"])
+        depth_col = self._pick_column("PerioProbe", ["Depth", "ProbeDepth"])
+        select_cols = []
+        if trans_col:
+            select_cols.append(f"{trans_col} AS trans_id")
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if tooth_col:
+            select_cols.append(f"{tooth_col} AS tooth")
+        if point_col:
+            select_cols.append(f"{point_col} AS probing_point")
+        if depth_col:
+            select_cols.append(f"{depth_col} AS depth")
+        if not select_cols:
+            return []
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        order_col = trans_col or patient_col
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioProbe WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {order_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "trans_id": row.get("trans_id"),
+                    "patient_code": row.get("patient_code"),
+                    "tooth": row.get("tooth"),
+                    "probing_point": row.get("probing_point"),
+                    "depth": row.get("depth"),
+                }
+            )
+        return samples
+
+    def sample_perio_plaque(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        trans_col = self._pick_column("PerioPlaque", ["TransId", "TransID"])
+        patient_col = self._pick_column("PerioPlaque", ["PatientCode"])
+        tooth_col = self._pick_column("PerioPlaque", ["Tooth"])
+        plaque_col = self._pick_column("PerioPlaque", ["Plaque", "PlaqueScore"])
+        select_cols = []
+        if trans_col:
+            select_cols.append(f"{trans_col} AS trans_id")
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if tooth_col:
+            select_cols.append(f"{tooth_col} AS tooth")
+        if plaque_col:
+            select_cols.append(f"{plaque_col} AS plaque")
+        if not select_cols:
+            return []
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        order_col = trans_col or patient_col
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioPlaque WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {order_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "trans_id": row.get("trans_id"),
+                    "patient_code": row.get("patient_code"),
+                    "tooth": row.get("tooth"),
+                    "plaque": row.get("plaque"),
+                }
+            )
+        return samples
+
+    def sample_patient_notes(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_col = self._pick_column("PatientNotes", ["PatientCode"])
+        note_no_col = self._pick_column("PatientNotes", ["NoteNumber", "NoteNo"])
+        date_col = self._pick_column("PatientNotes", ["Date", "NoteDate", "CreatedDate"])
+        note_col = self._pick_column("PatientNotes", ["Note", "Notes", "NoteText", "NoteBody"])
+        select_cols = []
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if note_no_col:
+            select_cols.append(f"{note_no_col} AS note_number")
+        if date_col:
+            select_cols.append(f"{date_col} AS note_date")
+        if note_col:
+            select_cols.append(f"{note_col} AS note")
+        if not select_cols:
+            return []
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        order_col = note_no_col or patient_col or date_col
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PatientNotes WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {order_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "patient_code": row.get("patient_code"),
+                    "note_number": row.get("note_number"),
+                    "note_date": self._format_dt(row.get("note_date")),
+                    "note": row.get("note"),
+                }
+            )
+        return samples
+
+    def sample_fixed_notes(self, limit: int = 10) -> list[dict[str, Any]]:
+        code_col = self._require_column("FixedNotes", ["FixedNoteCode"])
+        desc_col = self._pick_column("FixedNotes", ["Description", "NoteDesc"])
+        note_col = self._pick_column("FixedNotes", ["Note", "Notes", "NoteText"])
+        select_cols = [f"{code_col} AS fixed_note_code"]
+        if desc_col:
+            select_cols.append(f"{desc_col} AS description")
+        if note_col:
+            select_cols.append(f"{note_col} AS note")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.FixedNotes WITH (NOLOCK) "
+            f"ORDER BY {code_col}",
+            [limit],
+        )
+        return [
+            {
+                "fixed_note_code": row.get("fixed_note_code"),
+                "description": row.get("description"),
+                "note": row.get("note"),
+            }
+            for row in rows
+        ]
+
+    def sample_note_categories(self, limit: int = 10) -> list[dict[str, Any]]:
+        code_col = self._require_column("NoteCategories", ["CategoryNumber", "CategoryNo"])
+        desc_col = self._pick_column("NoteCategories", ["Description", "Name"])
+        select_cols = [f"{code_col} AS category_number"]
+        if desc_col:
+            select_cols.append(f"{desc_col} AS description")
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.NoteCategories WITH (NOLOCK) "
+            f"ORDER BY {code_col}",
+            [limit],
+        )
+        return [
+            {
+                "category_number": row.get("category_number"),
+                "description": row.get("description"),
+            }
+            for row in rows
+        ]
+
+    def sample_treatment_notes(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        note_id_col = self._require_column("TreatmentNotes", ["NoteID", "NoteId"])
+        patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
+        date_col = self._pick_column("TreatmentNotes", ["Date", "NoteDate", "CreatedDate"])
+        note_col = self._pick_column("TreatmentNotes", ["Note", "Notes", "NoteText", "NoteBody"])
+        select_cols = [f"{note_id_col} AS note_id"]
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if date_col:
+            select_cols.append(f"{date_col} AS note_date")
+        if note_col:
+            select_cols.append(f"{note_col} AS note")
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentNotes WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {note_id_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "note_id": row.get("note_id"),
+                    "patient_code": row.get("patient_code"),
+                    "note_date": self._format_dt(row.get("note_date")),
+                    "note": row.get("note"),
+                }
+            )
+        return samples
+
+    def sample_temporary_notes(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_col = self._require_column("TemporaryNotes", ["PatientCode"])
+        note_col = self._pick_column("TemporaryNotes", ["Note", "Notes", "NoteText"])
+        updated_col = self._pick_column("TemporaryNotes", ["UpdatedAt", "LastEditDate", "Date"])
+        select_cols = [f"{patient_col} AS patient_code"]
+        if note_col:
+            select_cols.append(f"{note_col} AS note")
+        if updated_col:
+            select_cols.append(f"{updated_col} AS legacy_updated_at")
+        where_clause, params = self._build_range_filter(
+            patient_col,
+            patients_from,
+            patients_to,
+        )
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TemporaryNotes WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {patient_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "patient_code": row.get("patient_code"),
+                    "note": row.get("note"),
+                    "legacy_updated_at": self._format_dt(row.get("legacy_updated_at")),
+                }
+            )
+        return samples
+
+    def sample_old_patient_notes(
+        self,
+        limit: int = 10,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+    ) -> list[dict[str, Any]]:
+        patient_col = self._pick_column("OldPatientNotes", ["PatientCode"])
+        note_no_col = self._pick_column("OldPatientNotes", ["NoteNumber", "NoteNo"])
+        date_col = self._pick_column("OldPatientNotes", ["Date", "NoteDate", "CreatedDate"])
+        note_col = self._pick_column("OldPatientNotes", ["Note", "Notes", "NoteText", "NoteBody"])
+        select_cols = []
+        if patient_col:
+            select_cols.append(f"{patient_col} AS patient_code")
+        if note_no_col:
+            select_cols.append(f"{note_no_col} AS note_number")
+        if date_col:
+            select_cols.append(f"{date_col} AS note_date")
+        if note_col:
+            select_cols.append(f"{note_col} AS note")
+        if not select_cols:
+            return []
+        where_clause, params = ("", [])
+        if patient_col:
+            where_clause, params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+        order_col = note_no_col or patient_col or date_col
+        rows = self._query(
+            f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.OldPatientNotes WITH (NOLOCK) "
+            f"{where_clause} ORDER BY {order_col}",
+            [limit, *params],
+        )
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            samples.append(
+                {
+                    "patient_code": row.get("patient_code"),
+                    "note_number": row.get("note_number"),
+                    "note_date": self._format_dt(row.get("note_date")),
+                    "note": row.get("note"),
                 }
             )
         return samples
@@ -1797,6 +2679,963 @@ class R4SqlServerSource:
                 if remaining is not None:
                     remaining -= 1
 
+    def list_tooth_systems(self, limit: int | None = None) -> Iterable[R4ToothSystem]:
+        id_col = self._require_column(
+            "ToothSystems",
+            ["ToothSystemId", "ToothSystemID", "ToothSystem"],
+        )
+        name_col = self._pick_column("ToothSystems", ["Name", "SystemName"])
+        desc_col = self._pick_column("ToothSystems", ["Description", "Notes"])
+        sort_col = self._pick_column("ToothSystems", ["SortOrder", "Order", "DisplayOrder"])
+        default_col = self._pick_column("ToothSystems", ["IsDefault", "DefaultSystem"])
+        last_id: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_clause = ""
+            params: list[Any] = []
+            if last_id is not None:
+                where_clause = f"WHERE {id_col} > ?"
+                params.append(last_id)
+            select_cols = [f"{id_col} AS tooth_system_id"]
+            if name_col:
+                select_cols.append(f"{name_col} AS name")
+            if desc_col:
+                select_cols.append(f"{desc_col} AS description")
+            if sort_col:
+                select_cols.append(f"{sort_col} AS sort_order")
+            if default_col:
+                select_cols.append(f"{default_col} AS is_default")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.ToothSystems WITH (NOLOCK) "
+                f"{where_clause} ORDER BY {id_col}",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                system_id = row.get("tooth_system_id")
+                if system_id is None:
+                    continue
+                last_id = int(system_id)
+                yield R4ToothSystem(
+                    tooth_system_id=last_id,
+                    name=(row.get("name") or "").strip() or None,
+                    description=(row.get("description") or "").strip() or None,
+                    sort_order=int(row["sort_order"]) if row.get("sort_order") is not None else None,
+                    is_default=_coerce_bool(row.get("is_default"), default=False),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_tooth_surfaces(self, limit: int | None = None) -> Iterable[R4ToothSurface]:
+        tooth_col = self._require_column("ToothSurfaces", ["ToothId", "ToothID", "Tooth"])
+        surface_col = self._require_column(
+            "ToothSurfaces",
+            ["SurfaceNo", "SurfaceNumber", "Surface"],
+        )
+        label_col = self._pick_column("ToothSurfaces", ["Label", "SurfaceLabel", "Name"])
+        short_col = self._pick_column("ToothSurfaces", ["ShortLabel", "Abbrev"])
+        sort_col = self._pick_column("ToothSurfaces", ["SortOrder", "Order", "DisplayOrder"])
+        last_tooth: int | None = None
+        last_surface: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if last_tooth is not None and last_surface is not None:
+                where_parts.append(
+                    f"({tooth_col} > ? OR ({tooth_col} = ? AND {surface_col} > ?))"
+                )
+                params.extend([last_tooth, last_tooth, last_surface])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{tooth_col} AS tooth_id", f"{surface_col} AS surface_no"]
+            if label_col:
+                select_cols.append(f"{label_col} AS label")
+            if short_col:
+                select_cols.append(f"{short_col} AS short_label")
+            if sort_col:
+                select_cols.append(f"{sort_col} AS sort_order")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.ToothSurfaces WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {tooth_col} ASC, {surface_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                tooth_id = row.get("tooth_id")
+                surface_no = row.get("surface_no")
+                if tooth_id is None or surface_no is None:
+                    continue
+                last_tooth = int(tooth_id)
+                last_surface = int(surface_no)
+                yield R4ToothSurface(
+                    tooth_id=last_tooth,
+                    surface_no=last_surface,
+                    label=(row.get("label") or "").strip() or None,
+                    short_label=(row.get("short_label") or "").strip() or None,
+                    sort_order=int(row["sort_order"]) if row.get("sort_order") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_chart_healing_actions(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4ChartHealingAction]:
+        id_col = self._require_column(
+            "ChartHealingActions",
+            ["ID", "ActionID", "ChartHealingActionID"],
+        )
+        patient_col = self._pick_column("ChartHealingActions", ["PatientCode"])
+        appt_need_col = self._pick_column(
+            "ChartHealingActions",
+            ["AppointmentNeedId", "ApptNeedId", "AppointmentNeedID"],
+        )
+        tp_number_col = self._pick_column("ChartHealingActions", ["TPNumber", "TPNum", "TPNo"])
+        tp_item_col = self._pick_column("ChartHealingActions", ["TPItem", "TPItemNo"])
+        code_col = self._pick_column("ChartHealingActions", ["CodeID", "CodeId"])
+        date_col = self._pick_column(
+            "ChartHealingActions",
+            ["ActionDate", "Date", "CreatedDate", "ActionedDate", "ActionedOn"],
+        )
+        type_col = self._pick_column("ChartHealingActions", ["ActionType", "Type", "Action"])
+        tooth_col = self._pick_column("ChartHealingActions", ["Tooth"])
+        surface_col = self._pick_column("ChartHealingActions", ["Surface"])
+        status_col = self._pick_column("ChartHealingActions", ["Status", "StatusCode"])
+        notes_col = self._pick_column("ChartHealingActions", ["Notes", "Note", "Description"])
+        user_col = self._pick_column("ChartHealingActions", ["UserCode", "UserId", "RecordedBy"])
+        last_id: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if patient_col:
+                range_clause, range_params = self._build_range_filter(
+                    patient_col,
+                    patients_from,
+                    patients_to,
+                )
+                if range_clause:
+                    where_parts.append(range_clause.replace("WHERE", "").strip())
+                    params.extend(range_params)
+            if last_id is not None:
+                where_parts.append(f"{id_col} > ?")
+                params.append(last_id)
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{id_col} AS action_id"]
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if appt_need_col:
+                select_cols.append(f"{appt_need_col} AS appointment_need_id")
+            if tp_number_col:
+                select_cols.append(f"{tp_number_col} AS tp_number")
+            if tp_item_col:
+                select_cols.append(f"{tp_item_col} AS tp_item")
+            if code_col:
+                select_cols.append(f"{code_col} AS code_id")
+            if date_col:
+                select_cols.append(f"{date_col} AS action_date")
+            if type_col:
+                select_cols.append(f"{type_col} AS action_type")
+            if tooth_col:
+                select_cols.append(f"{tooth_col} AS tooth")
+            if surface_col:
+                select_cols.append(f"{surface_col} AS surface")
+            if status_col:
+                select_cols.append(f"{status_col} AS status")
+            if notes_col:
+                select_cols.append(f"{notes_col} AS notes")
+            if user_col:
+                select_cols.append(f"{user_col} AS user_code")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.ChartHealingActions WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {id_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                action_id = row.get("action_id")
+                if action_id is None:
+                    continue
+                last_id = int(action_id)
+                yield R4ChartHealingAction(
+                    action_id=last_id,
+                    patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
+                    appointment_need_id=(
+                        int(row["appointment_need_id"])
+                        if row.get("appointment_need_id") is not None
+                        else None
+                    ),
+                    tp_number=int(row["tp_number"]) if row.get("tp_number") is not None else None,
+                    tp_item=int(row["tp_item"]) if row.get("tp_item") is not None else None,
+                    code_id=int(row["code_id"]) if row.get("code_id") is not None else None,
+                    action_date=row.get("action_date"),
+                    action_type=(row.get("action_type") or "").strip() or None,
+                    tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
+                    surface=int(row["surface"]) if row.get("surface") is not None else None,
+                    status=(row.get("status") or "").strip() or None,
+                    notes=(row.get("notes") or "").strip() or None,
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_bpe_entries(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4BPEEntry]:
+        patient_col = self._pick_column("BPE", ["PatientCode"])
+        bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
+        date_col = self._pick_column("BPE", ["Date", "BPEDate", "RecordedDate", "EntryDate"])
+        sextant_cols = [
+            self._pick_column("BPE", [f"Sextant{i}", f"Sextant{i}Score"]) for i in range(1, 7)
+        ]
+        if not patient_col and not bpe_id_col:
+            raise RuntimeError("BPE missing PatientCode/BPEID columns; cannot keyset stream.")
+        if not date_col and not bpe_id_col:
+            raise RuntimeError("BPE missing date column; cannot keyset stream without BPEID.")
+        last_id: int | None = None
+        last_patient: int | None = None
+        last_date: datetime | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if patient_col:
+                range_clause, range_params = self._build_range_filter(
+                    patient_col,
+                    patients_from,
+                    patients_to,
+                )
+                if range_clause:
+                    where_parts.append(range_clause.replace("WHERE", "").strip())
+                    params.extend(range_params)
+            if bpe_id_col and last_id is not None:
+                where_parts.append(f"{bpe_id_col} > ?")
+                params.append(last_id)
+            elif patient_col and date_col and last_patient is not None and last_date is not None:
+                where_parts.append(
+                    f"({patient_col} > ? OR ({patient_col} = ? AND {date_col} > ?))"
+                )
+                params.extend([last_patient, last_patient, last_date])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = []
+            if bpe_id_col:
+                select_cols.append(f"{bpe_id_col} AS bpe_id")
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if date_col:
+                select_cols.append(f"{date_col} AS recorded_at")
+            for idx, col in enumerate(sextant_cols, start=1):
+                if col:
+                    select_cols.append(f"{col} AS sextant_{idx}")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPE WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {bpe_id_col or patient_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                bpe_id = row.get("bpe_id")
+                patient_code = row.get("patient_code")
+                recorded_at = row.get("recorded_at")
+                if bpe_id_col and bpe_id is not None:
+                    last_id = int(bpe_id)
+                elif patient_code is not None and recorded_at is not None:
+                    last_patient = int(patient_code)
+                    last_date = recorded_at
+                yield R4BPEEntry(
+                    bpe_id=int(bpe_id) if bpe_id is not None else None,
+                    patient_code=int(patient_code) if patient_code is not None else None,
+                    recorded_at=recorded_at,
+                    sextant_1=int(row["sextant_1"]) if row.get("sextant_1") is not None else None,
+                    sextant_2=int(row["sextant_2"]) if row.get("sextant_2") is not None else None,
+                    sextant_3=int(row["sextant_3"]) if row.get("sextant_3") is not None else None,
+                    sextant_4=int(row["sextant_4"]) if row.get("sextant_4") is not None else None,
+                    sextant_5=int(row["sextant_5"]) if row.get("sextant_5") is not None else None,
+                    sextant_6=int(row["sextant_6"]) if row.get("sextant_6") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_bpe_furcations(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4BPEFurcation]:
+        id_col = self._pick_column("BPEFurcation", ["pKey", "ID", "BPEFurcationID"])
+        patient_col = self._pick_column("BPEFurcation", ["PatientCode"])
+        bpe_id_col = self._pick_column("BPEFurcation", ["BPEID", "BPEId"])
+        tooth_col = self._pick_column("BPEFurcation", ["Tooth"])
+        furcation_col = self._pick_column("BPEFurcation", ["Furcation", "FurcationScore"])
+        if not id_col and not bpe_id_col:
+            raise RuntimeError("BPEFurcation missing key columns; cannot keyset stream.")
+        if not id_col and (not tooth_col or not furcation_col):
+            raise RuntimeError("BPEFurcation missing tooth/furcation columns for keyset.")
+        last_id: int | None = None
+        last_bpe: int | None = None
+        last_tooth: int | None = None
+        last_furcation: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if patient_col:
+                range_clause, range_params = self._build_range_filter(
+                    patient_col,
+                    patients_from,
+                    patients_to,
+                )
+                if range_clause:
+                    where_parts.append(range_clause.replace("WHERE", "").strip())
+                    params.extend(range_params)
+            if id_col and last_id is not None:
+                where_parts.append(f"{id_col} > ?")
+                params.append(last_id)
+            elif bpe_id_col and last_bpe is not None:
+                where_parts.append(
+                    f"({bpe_id_col} > ? OR ({bpe_id_col} = ? AND "
+                    f"({tooth_col} > ? OR ({tooth_col} = ? AND {furcation_col} > ?))))"
+                )
+                params.extend(
+                    [last_bpe, last_bpe, last_tooth or 0, last_tooth or 0, last_furcation or 0]
+                )
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = []
+            if id_col:
+                select_cols.append(f"{id_col} AS furcation_id")
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if bpe_id_col:
+                select_cols.append(f"{bpe_id_col} AS bpe_id")
+            if tooth_col:
+                select_cols.append(f"{tooth_col} AS tooth")
+            if furcation_col:
+                select_cols.append(f"{furcation_col} AS furcation")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPEFurcation WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {id_col or bpe_id_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                furcation_id = row.get("furcation_id")
+                bpe_id = row.get("bpe_id")
+                tooth = row.get("tooth")
+                furcation = row.get("furcation")
+                if id_col and furcation_id is not None:
+                    last_id = int(furcation_id)
+                elif bpe_id is not None and tooth is not None and furcation is not None:
+                    last_bpe = int(bpe_id)
+                    last_tooth = int(tooth)
+                    last_furcation = int(furcation)
+                yield R4BPEFurcation(
+                    furcation_id=int(furcation_id) if furcation_id is not None else None,
+                    bpe_id=int(bpe_id) if bpe_id is not None else None,
+                    patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
+                    tooth=int(tooth) if tooth is not None else None,
+                    furcation=int(furcation) if furcation is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_perio_probes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4PerioProbe]:
+        trans_col = self._require_column("PerioProbe", ["TransId", "TransID"])
+        tooth_col = self._require_column("PerioProbe", ["Tooth"])
+        point_col = self._require_column("PerioProbe", ["ProbingPoint", "Point"])
+        patient_col = self._pick_column("PerioProbe", ["PatientCode"])
+        depth_col = self._pick_column("PerioProbe", ["Depth", "ProbeDepth"])
+        bleed_col = self._pick_column("PerioProbe", ["Bleeding", "BleedingScore"])
+        plaque_col = self._pick_column("PerioProbe", ["Plaque", "PlaqueScore"])
+        date_col = self._pick_column("PerioProbe", ["Date", "RecordedDate", "ProbeDate"])
+        last_trans: int | None = None
+        last_tooth: int | None = None
+        last_point: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if patient_col:
+                range_clause, range_params = self._build_range_filter(
+                    patient_col,
+                    patients_from,
+                    patients_to,
+                )
+                if range_clause:
+                    where_parts.append(range_clause.replace("WHERE", "").strip())
+                    params.extend(range_params)
+            if last_trans is not None and last_tooth is not None and last_point is not None:
+                where_parts.append(
+                    f"({trans_col} > ? OR ({trans_col} = ? AND ({tooth_col} > ? OR "
+                    f"({tooth_col} = ? AND {point_col} > ?))))"
+                )
+                params.extend([last_trans, last_trans, last_tooth, last_tooth, last_point])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [
+                f"{trans_col} AS trans_id",
+                f"{tooth_col} AS tooth",
+                f"{point_col} AS probing_point",
+            ]
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if depth_col:
+                select_cols.append(f"{depth_col} AS depth")
+            if bleed_col:
+                select_cols.append(f"{bleed_col} AS bleeding")
+            if plaque_col:
+                select_cols.append(f"{plaque_col} AS plaque")
+            if date_col:
+                select_cols.append(f"{date_col} AS recorded_at")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioProbe WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {trans_col} ASC, {tooth_col} ASC, {point_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                trans_id = row.get("trans_id")
+                tooth = row.get("tooth")
+                point = row.get("probing_point")
+                if trans_id is None or tooth is None or point is None:
+                    continue
+                last_trans = int(trans_id)
+                last_tooth = int(tooth)
+                last_point = int(point)
+                yield R4PerioProbe(
+                    trans_id=last_trans,
+                    patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
+                    tooth=last_tooth,
+                    probing_point=last_point,
+                    depth=int(row["depth"]) if row.get("depth") is not None else None,
+                    bleeding=int(row["bleeding"]) if row.get("bleeding") is not None else None,
+                    plaque=int(row["plaque"]) if row.get("plaque") is not None else None,
+                    recorded_at=row.get("recorded_at"),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_perio_plaque(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4PerioPlaque]:
+        trans_col = self._require_column("PerioPlaque", ["TransId", "TransID"])
+        tooth_col = self._require_column("PerioPlaque", ["Tooth"])
+        patient_col = self._pick_column("PerioPlaque", ["PatientCode"])
+        plaque_col = self._pick_column("PerioPlaque", ["Plaque", "PlaqueScore"])
+        bleed_col = self._pick_column("PerioPlaque", ["Bleeding", "BleedingScore"])
+        date_col = self._pick_column("PerioPlaque", ["Date", "RecordedDate"])
+        last_trans: int | None = None
+        last_tooth: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if patient_col:
+                range_clause, range_params = self._build_range_filter(
+                    patient_col,
+                    patients_from,
+                    patients_to,
+                )
+                if range_clause:
+                    where_parts.append(range_clause.replace("WHERE", "").strip())
+                    params.extend(range_params)
+            if last_trans is not None and last_tooth is not None:
+                where_parts.append(
+                    f"({trans_col} > ? OR ({trans_col} = ? AND {tooth_col} > ?))"
+                )
+                params.extend([last_trans, last_trans, last_tooth])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{trans_col} AS trans_id", f"{tooth_col} AS tooth"]
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if plaque_col:
+                select_cols.append(f"{plaque_col} AS plaque")
+            if bleed_col:
+                select_cols.append(f"{bleed_col} AS bleeding")
+            if date_col:
+                select_cols.append(f"{date_col} AS recorded_at")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioPlaque WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {trans_col} ASC, {tooth_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                trans_id = row.get("trans_id")
+                tooth = row.get("tooth")
+                if trans_id is None or tooth is None:
+                    continue
+                last_trans = int(trans_id)
+                last_tooth = int(tooth)
+                yield R4PerioPlaque(
+                    trans_id=last_trans,
+                    patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
+                    tooth=last_tooth,
+                    plaque=int(row["plaque"]) if row.get("plaque") is not None else None,
+                    bleeding=int(row["bleeding"]) if row.get("bleeding") is not None else None,
+                    recorded_at=row.get("recorded_at"),
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4PatientNote]:
+        patient_col = self._require_column("PatientNotes", ["PatientCode"])
+        note_no_col = self._pick_column("PatientNotes", ["NoteNumber", "NoteNo"])
+        if not note_no_col:
+            raise RuntimeError("PatientNotes missing NoteNumber column.")
+        date_col = self._pick_column("PatientNotes", ["Date", "NoteDate", "CreatedDate"])
+        note_col = self._pick_column("PatientNotes", ["Note", "Notes", "NoteText", "NoteBody"])
+        tooth_col = self._pick_column("PatientNotes", ["Tooth"])
+        surface_col = self._pick_column("PatientNotes", ["Surface"])
+        category_col = self._pick_column("PatientNotes", ["CategoryNumber", "CategoryNo"])
+        fixed_note_col = self._pick_column("PatientNotes", ["FixedNoteCode", "FixedNote"])
+        user_col = self._pick_column("PatientNotes", ["UserCode", "EnteredBy"])
+        last_patient: int | None = None
+        last_note: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            if last_patient is not None and last_note is not None:
+                where_parts.append(
+                    f"({patient_col} > ? OR ({patient_col} = ? AND {note_no_col} > ?))"
+                )
+                params.extend([last_patient, last_patient, last_note])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{patient_col} AS patient_code", f"{note_no_col} AS note_number"]
+            if date_col:
+                select_cols.append(f"{date_col} AS note_date")
+            if note_col:
+                select_cols.append(f"{note_col} AS note")
+            if tooth_col:
+                select_cols.append(f"{tooth_col} AS tooth")
+            if surface_col:
+                select_cols.append(f"{surface_col} AS surface")
+            if category_col:
+                select_cols.append(f"{category_col} AS category_number")
+            if fixed_note_col:
+                select_cols.append(f"{fixed_note_col} AS fixed_note_code")
+            if user_col:
+                select_cols.append(f"{user_col} AS user_code")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PatientNotes WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_col} ASC, {note_no_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                note_number = row.get("note_number")
+                if patient_code is None or note_number is None:
+                    continue
+                last_patient = int(patient_code)
+                last_note = int(note_number)
+                yield R4PatientNote(
+                    patient_code=last_patient,
+                    note_number=last_note,
+                    note_date=row.get("note_date"),
+                    note=(row.get("note") or "").strip() or None,
+                    tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
+                    surface=int(row["surface"]) if row.get("surface") is not None else None,
+                    category_number=int(row["category_number"])
+                    if row.get("category_number") is not None
+                    else None,
+                    fixed_note_code=int(row["fixed_note_code"])
+                    if row.get("fixed_note_code") is not None
+                    else None,
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_fixed_notes(self, limit: int | None = None) -> Iterable[R4FixedNote]:
+        code_col = self._require_column("FixedNotes", ["FixedNoteCode"])
+        category_col = self._pick_column("FixedNotes", ["CategoryNumber", "CategoryNo"])
+        desc_col = self._pick_column("FixedNotes", ["Description", "NoteDesc"])
+        note_col = self._pick_column("FixedNotes", ["Note", "Notes", "NoteText"])
+        tooth_col = self._pick_column("FixedNotes", ["Tooth"])
+        surface_col = self._pick_column("FixedNotes", ["Surface"])
+        last_code: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_clause = ""
+            params: list[Any] = []
+            if last_code is not None:
+                where_clause = f"WHERE {code_col} > ?"
+                params.append(last_code)
+            select_cols = [f"{code_col} AS fixed_note_code"]
+            if category_col:
+                select_cols.append(f"{category_col} AS category_number")
+            if desc_col:
+                select_cols.append(f"{desc_col} AS description")
+            if note_col:
+                select_cols.append(f"{note_col} AS note")
+            if tooth_col:
+                select_cols.append(f"{tooth_col} AS tooth")
+            if surface_col:
+                select_cols.append(f"{surface_col} AS surface")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.FixedNotes WITH (NOLOCK) "
+                f"{where_clause} ORDER BY {code_col}",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                code = row.get("fixed_note_code")
+                if code is None:
+                    continue
+                last_code = int(code)
+                yield R4FixedNote(
+                    fixed_note_code=last_code,
+                    category_number=int(row["category_number"])
+                    if row.get("category_number") is not None
+                    else None,
+                    description=(row.get("description") or "").strip() or None,
+                    note=(row.get("note") or "").strip() or None,
+                    tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
+                    surface=int(row["surface"]) if row.get("surface") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_note_categories(self, limit: int | None = None) -> Iterable[R4NoteCategory]:
+        code_col = self._require_column("NoteCategories", ["CategoryNumber", "CategoryNo"])
+        desc_col = self._pick_column("NoteCategories", ["Description", "Name"])
+        last_code: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_clause = ""
+            params: list[Any] = []
+            if last_code is not None:
+                where_clause = f"WHERE {code_col} > ?"
+                params.append(last_code)
+            select_cols = [f"{code_col} AS category_number"]
+            if desc_col:
+                select_cols.append(f"{desc_col} AS description")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.NoteCategories WITH (NOLOCK) "
+                f"{where_clause} ORDER BY {code_col}",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                code = row.get("category_number")
+                if code is None:
+                    continue
+                last_code = int(code)
+                yield R4NoteCategory(
+                    category_number=last_code,
+                    description=(row.get("description") or "").strip() or None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_treatment_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TreatmentNote]:
+        note_id_col = self._require_column("TreatmentNotes", ["NoteID", "NoteId"])
+        patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
+        tp_col = self._pick_column("TreatmentNotes", ["TPNumber", "TPNum", "TPNo"])
+        tp_item_col = self._pick_column("TreatmentNotes", ["TPItem", "TPItemNo"])
+        date_col = self._pick_column("TreatmentNotes", ["Date", "NoteDate", "CreatedDate"])
+        note_col = self._pick_column("TreatmentNotes", ["Note", "Notes", "NoteText", "NoteBody"])
+        user_col = self._pick_column("TreatmentNotes", ["UserCode", "EnteredBy"])
+        last_id: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            if patient_col:
+                range_clause, range_params = self._build_range_filter(
+                    patient_col,
+                    patients_from,
+                    patients_to,
+                )
+                if range_clause:
+                    where_parts.append(range_clause.replace("WHERE", "").strip())
+                    params.extend(range_params)
+            if last_id is not None:
+                where_parts.append(f"{note_id_col} > ?")
+                params.append(last_id)
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{note_id_col} AS note_id"]
+            if patient_col:
+                select_cols.append(f"{patient_col} AS patient_code")
+            if tp_col:
+                select_cols.append(f"{tp_col} AS tp_number")
+            if tp_item_col:
+                select_cols.append(f"{tp_item_col} AS tp_item")
+            if date_col:
+                select_cols.append(f"{date_col} AS note_date")
+            if note_col:
+                select_cols.append(f"{note_col} AS note")
+            if user_col:
+                select_cols.append(f"{user_col} AS user_code")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentNotes WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {note_id_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                note_id = row.get("note_id")
+                if note_id is None:
+                    continue
+                last_id = int(note_id)
+                yield R4TreatmentNote(
+                    note_id=last_id,
+                    patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
+                    tp_number=int(row["tp_number"]) if row.get("tp_number") is not None else None,
+                    tp_item=int(row["tp_item"]) if row.get("tp_item") is not None else None,
+                    note_date=row.get("note_date"),
+                    note=(row.get("note") or "").strip() or None,
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_temporary_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4TemporaryNote]:
+        patient_col = self._require_column("TemporaryNotes", ["PatientCode"])
+        note_col = self._pick_column("TemporaryNotes", ["Note", "Notes", "NoteText"])
+        date_col = self._pick_column("TemporaryNotes", ["UpdatedAt", "LastEditDate", "Date"])
+        user_col = self._pick_column("TemporaryNotes", ["UserCode", "EnteredBy"])
+        last_patient: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            if last_patient is not None:
+                where_parts.append(f"{patient_col} > ?")
+                params.append(last_patient)
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{patient_col} AS patient_code"]
+            if note_col:
+                select_cols.append(f"{note_col} AS note")
+            if date_col:
+                select_cols.append(f"{date_col} AS legacy_updated_at")
+            if user_col:
+                select_cols.append(f"{user_col} AS user_code")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TemporaryNotes WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                if patient_code is None:
+                    continue
+                last_patient = int(patient_code)
+                yield R4TemporaryNote(
+                    patient_code=last_patient,
+                    note=(row.get("note") or "").strip() or None,
+                    legacy_updated_at=row.get("legacy_updated_at"),
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
+    def list_old_patient_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4OldPatientNote]:
+        patient_col = self._require_column("OldPatientNotes", ["PatientCode"])
+        note_no_col = self._pick_column("OldPatientNotes", ["NoteNumber", "NoteNo"])
+        if not note_no_col:
+            raise RuntimeError("OldPatientNotes missing NoteNumber column.")
+        date_col = self._pick_column("OldPatientNotes", ["Date", "NoteDate", "CreatedDate"])
+        note_col = self._pick_column("OldPatientNotes", ["Note", "Notes", "NoteText", "NoteBody"])
+        tooth_col = self._pick_column("OldPatientNotes", ["Tooth"])
+        surface_col = self._pick_column("OldPatientNotes", ["Surface"])
+        category_col = self._pick_column("OldPatientNotes", ["CategoryNumber", "CategoryNo"])
+        fixed_note_col = self._pick_column("OldPatientNotes", ["FixedNoteCode", "FixedNote"])
+        user_col = self._pick_column("OldPatientNotes", ["UserCode", "EnteredBy"])
+        last_patient: int | None = None
+        last_note: int | None = None
+        remaining = limit
+        batch_size = 500
+        while True:
+            if remaining is not None:
+                if remaining <= 0:
+                    break
+                batch_size = min(batch_size, remaining)
+            where_parts: list[str] = []
+            params: list[Any] = []
+            range_clause, range_params = self._build_range_filter(
+                patient_col,
+                patients_from,
+                patients_to,
+            )
+            if range_clause:
+                where_parts.append(range_clause.replace("WHERE", "").strip())
+                params.extend(range_params)
+            if last_patient is not None and last_note is not None:
+                where_parts.append(
+                    f"({patient_col} > ? OR ({patient_col} = ? AND {note_no_col} > ?))"
+                )
+                params.extend([last_patient, last_patient, last_note])
+            where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+            select_cols = [f"{patient_col} AS patient_code", f"{note_no_col} AS note_number"]
+            if date_col:
+                select_cols.append(f"{date_col} AS note_date")
+            if note_col:
+                select_cols.append(f"{note_col} AS note")
+            if tooth_col:
+                select_cols.append(f"{tooth_col} AS tooth")
+            if surface_col:
+                select_cols.append(f"{surface_col} AS surface")
+            if category_col:
+                select_cols.append(f"{category_col} AS category_number")
+            if fixed_note_col:
+                select_cols.append(f"{fixed_note_col} AS fixed_note_code")
+            if user_col:
+                select_cols.append(f"{user_col} AS user_code")
+            rows = self._query(
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.OldPatientNotes WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {patient_col} ASC, {note_no_col} ASC",
+                [batch_size, *params],
+            )
+            if not rows:
+                break
+            for row in rows:
+                patient_code = row.get("patient_code")
+                note_number = row.get("note_number")
+                if patient_code is None or note_number is None:
+                    continue
+                last_patient = int(patient_code)
+                last_note = int(note_number)
+                yield R4OldPatientNote(
+                    patient_code=last_patient,
+                    note_number=last_note,
+                    note_date=row.get("note_date"),
+                    note=(row.get("note") or "").strip() or None,
+                    tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
+                    surface=int(row["surface"]) if row.get("surface") is not None else None,
+                    category_number=int(row["category_number"])
+                    if row.get("category_number") is not None
+                    else None,
+                    fixed_note_code=int(row["fixed_note_code"])
+                    if row.get("fixed_note_code") is not None
+                    else None,
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
+                )
+                if remaining is not None:
+                    remaining -= 1
+
     def _connect(self):
         if not self._tcp_checked:
             _check_tcp_connectivity(
@@ -1877,6 +3716,40 @@ class R4SqlServerSource:
         columns = [row["COLUMN_NAME"] for row in rows]
         self._columns_cache[table] = columns
         return columns
+
+    def _count_table(
+        self,
+        table: str,
+        where_clause: str = "",
+        params: list[Any] | None = None,
+    ) -> int:
+        rows = self._query(
+            f"SELECT COUNT(1) AS count FROM dbo.{table} WITH (NOLOCK){where_clause}",
+            params or [],
+        )
+        if not rows:
+            return 0
+        return int(rows[0].get("count") or 0)
+
+    def _date_range(
+        self,
+        table: str,
+        date_col: str,
+        where_clause: str = "",
+        params: list[Any] | None = None,
+    ) -> dict[str, str] | None:
+        rows = self._query(
+            f"SELECT MIN({date_col}) AS min_date, MAX({date_col}) AS max_date "
+            f"FROM dbo.{table} WITH (NOLOCK){where_clause}",
+            params or [],
+        )
+        if not rows:
+            return None
+        min_date = self._format_dt(rows[0].get("min_date"))
+        max_date = self._format_dt(rows[0].get("max_date"))
+        if not min_date and not max_date:
+            return None
+        return {"min": min_date, "max": max_date}
 
     def _pick_column(self, table: str, candidates: list[str]) -> str | None:
         columns = self._get_columns(table)

@@ -19,6 +19,7 @@ from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.postgres_verify import verify_patients_window
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 from app.services.r4_import.r4_user_importer import import_r4_users
+from app.services.r4_import.charting_importer import import_r4_charting
 from app.services.r4_import.treatment_transactions_importer import (
     import_r4_treatment_transactions,
 )
@@ -166,6 +167,7 @@ def main() -> int:
             "treatment_plans",
             "treatment_plans_summary",
             "treatment_plans_backfill_patient_ids",
+            "charting",
         ),
         help="Entity to import (default: patients_appts).",
     )
@@ -402,6 +404,16 @@ def main() -> int:
                             limit=args.limit,
                             progress_every=args.progress_every,
                         )
+                    elif args.entity == "charting":
+                        stats = import_r4_charting(
+                            session,
+                            source,
+                            actor_id,
+                            legacy_source="r4",
+                            patients_from=args.patients_from,
+                            patients_to=args.patients_to,
+                            limit=args.limit,
+                        )
                     else:
                         stats = import_r4_treatment_plans(
                             session,
@@ -481,6 +493,12 @@ def main() -> int:
                     patients_to=args.patients_to,
                     date_floor=args.date_floor,
                 )
+            elif args.entity == "charting":
+                summary = source.dry_run_summary_charting(
+                    limit=args.limit or 10,
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                )
             else:
                 summary = source.dry_run_summary_treatment_plans(
                     limit=args.limit or 10,
@@ -537,6 +555,15 @@ def main() -> int:
                 patients_to=args.patients_to,
                 limit=args.limit,
                 progress_every=args.progress_every,
+            )
+        elif args.entity == "charting":
+            stats = import_r4_charting(
+                session,
+                source,
+                actor_id,
+                patients_from=args.patients_from,
+                patients_to=args.patients_to,
+                limit=args.limit,
             )
         else:
             stats = import_r4_treatment_plans(

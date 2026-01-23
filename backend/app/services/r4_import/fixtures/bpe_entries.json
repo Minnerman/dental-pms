@@ -1,0 +1,13 @@
+[
+  {
+    "bpe_id": 3001,
+    "patient_code": 1001,
+    "recorded_at": "2026-01-03T09:00:00Z",
+    "sextant_1": 1,
+    "sextant_2": 2,
+    "sextant_3": 3,
+    "sextant_4": 1,
+    "sextant_5": 0,
+    "sextant_6": 2
+  }
+]

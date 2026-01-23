@@ -1,0 +1,13 @@
+[
+  {
+    "patient_code": 1001,
+    "note_number": 99,
+    "note_date": "2025-12-31T12:00:00Z",
+    "note": "Old note",
+    "tooth": 12,
+    "surface": 2,
+    "category_number": 10,
+    "fixed_note_code": 500,
+    "user_code": 700
+  }
+]
