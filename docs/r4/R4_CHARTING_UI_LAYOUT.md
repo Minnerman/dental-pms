@@ -20,6 +20,7 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
 - Patient notes: text search, category filter, date range.
 - Filters are server-backed; totals and pagination reflect the filtered dataset.
 - Stage 153 adds per-user filter presets (3 slots per section) stored in localStorage.
+- Stage 154 adds debounced text search and ignores stale responses on rapid filter edits.
 
 ## CSV export (Stage 151)
 - Export is Postgres-only and read-only.

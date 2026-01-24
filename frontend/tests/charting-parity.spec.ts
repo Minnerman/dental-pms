@@ -379,7 +379,10 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
   const beforeCount = beforeText ? parseBadgeCount(beforeText) : null;
   expect(beforeCount).not.toBeNull();
 
-  await page.getByPlaceholder("Find text...").fill("note 1");
+  const notesInput = page.getByPlaceholder("Find text...");
+  await notesInput.click();
+  await notesInput.type("note");
+  await notesInput.type(" 1");
   await expect(notesBadge).toHaveText(/Patient notes:\s*1/, { timeout: 30_000 });
   if (beforeCount !== null) {
     expect(beforeCount).toBeGreaterThan(1);
