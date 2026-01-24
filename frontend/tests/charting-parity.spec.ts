@@ -158,6 +158,18 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   }> = [];
 
   await primePageAuth(page, request);
+  const exportPatientId = patientMap.get(1000000);
+  if (exportPatientId) {
+    await page.goto(`${baseUrl}/patients/${exportPatientId}/charting`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByTestId("charting-export-csv").click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/charting_/i);
+  }
 
   for (const target of parityTargets) {
     const patientId = patientMap.get(target.legacyCode);
