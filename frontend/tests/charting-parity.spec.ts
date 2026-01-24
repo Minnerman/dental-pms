@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
@@ -32,6 +32,18 @@ const parityTargets: ParityTarget[] = [
     entity: "notes",
     label: "Patient notes",
   },
+  {
+    legacyCode: 1013684,
+    patientIdEnv: "STAGE141_PATIENT_ID_1013684",
+    entity: "bpe",
+    label: "BPE entries",
+  },
+  {
+    legacyCode: 1000035,
+    patientIdEnv: "STAGE141_PATIENT_ID_1000035",
+    entity: "bpe",
+    label: "BPE entries",
+  },
 ];
 
 const hasAllPatientIds = parityTargets.every((target) => process.env[target.patientIdEnv]);
@@ -43,7 +55,31 @@ function parseBadgeCount(text: string) {
   return Number(match[1]);
 }
 
+function formatUiDate(value?: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleDateString("en-GB");
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+async function expectRowWithCells(table: Locator, cells: string[]) {
+  const rows = table.locator("tbody tr");
+  const rowCount = await rows.count();
+  for (let idx = 0; idx < rowCount; idx += 1) {
+    const text = normalizeText(await rows.nth(idx).innerText());
+    if (cells.every((cell) => text.includes(cell))) {
+      return;
+    }
+  }
+  throw new Error(`Expected row not found for cells: ${cells.join(" | ")}`);
+}
+
 test("charting viewer parity matches API counts", async ({ page, request }) => {
+  test.setTimeout(120_000);
   const token = await ensureAuthReady(request);
   const baseUrl = getBaseUrl();
   const report: Array<{
@@ -53,6 +89,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
     api_count: number;
     ui_count: number;
     status: "pass" | "fail";
+    row_checks?: Array<{ cells: string[]; status: "pass" | "fail" }>;
   }> = [];
 
   await primePageAuth(page, request);
@@ -71,6 +108,9 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       waitUntil: "domcontentloaded",
     });
     await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.locator(".badge", { hasText: "Perio probes:" }).first()
+    ).toBeVisible({ timeout: 30_000 });
 
     const badge = page.locator(".badge", { hasText: `${target.label}:` }).first();
     await expect(badge).toBeVisible();
@@ -79,18 +119,71 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
     expect(uiCount).not.toBeNull();
     expect(uiCount).toBe(apiCount);
 
-    report.push({
+    const entryReport: {
+      legacy_code: number;
+      patient_id: string;
+      entity: string;
+      api_count: number;
+      ui_count: number;
+      status: "pass" | "fail";
+      row_checks?: Array<{ cells: string[]; status: "pass" | "fail" }>;
+    } = {
       legacy_code: target.legacyCode,
       patient_id: patientId,
       entity: target.label,
       api_count: apiCount,
       ui_count: uiCount as number,
       status: apiCount === uiCount ? "pass" : "fail",
-    });
+    };
+
+    if (target.legacyCode === 1000000 && target.entity === "perio-probes") {
+      const samples = apiData.slice(0, 3);
+      if (samples.length === 0) {
+        throw new Error("No perio probe rows available for row-level parity checks.");
+      }
+      const panel = page
+        .locator("section.panel")
+        .filter({ has: page.locator(".panel-title", { hasText: "Perio probes" }) });
+      const table = panel.locator("table");
+      entryReport.row_checks = [];
+      for (const row of samples) {
+        const cells = [
+          formatUiDate(row.recorded_at),
+          String(row.tooth ?? "—"),
+          String(row.probing_point ?? "—"),
+          String(row.depth ?? "—"),
+        ];
+        await expectRowWithCells(table, cells);
+        entryReport.row_checks.push({ cells, status: "pass" });
+      }
+    }
+
+    if (target.legacyCode === 1012056 && target.entity === "notes") {
+      const samples = apiData
+        .filter((row: any) => row?.note_date && row?.note)
+        .slice(0, 2);
+      const panel = page
+        .locator("section.panel")
+        .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+      const table = panel.locator("table");
+      entryReport.row_checks = [];
+      for (const row of samples) {
+        const noteSnippet = normalizeText(String(row.note)).slice(0, 30);
+        const cells = [
+          formatUiDate(row.note_date),
+          String(row.category_number ?? "—"),
+          noteSnippet,
+        ];
+        await expectRowWithCells(table, cells);
+        entryReport.row_checks.push({ cells, status: "pass" });
+      }
+    }
+
+    report.push(entryReport);
   }
 
   const reportPath =
-    process.env.UI_PARITY_OUT ?? "/tmp/stage140/ui_parity.json";
+    process.env.UI_PARITY_OUT ?? "/tmp/stage141/ui_parity.json";
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log("UI_PARITY_REPORT", JSON.stringify(report));
