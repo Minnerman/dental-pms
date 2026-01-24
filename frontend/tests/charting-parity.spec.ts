@@ -168,7 +168,13 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       `${baseUrl}/api/patients/${patientId}/charting/${target.entity}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    expect(apiResponse.ok()).toBeTruthy();
+    if (!apiResponse.ok()) {
+      const status = apiResponse.status();
+      const body = await apiResponse.text();
+      throw new Error(
+        `Charting API ${target.entity} failed (${status}): ${body.slice(0, 1000)}`
+      );
+    }
     const apiPayload = await apiResponse.json();
     const { items: apiData, total: apiCount } = extractApiItems<any>(apiPayload);
 
