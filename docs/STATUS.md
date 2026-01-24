@@ -156,6 +156,9 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Per-section presets can be copied as JSON and imported on another machine.
   - LocalStorage presets remain the primary persistence layer.
   - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-24: Stage156 preset export/import test coverage.
+  - Playwright asserts notes preset JSON roundtrip and stable shape.
+  - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
