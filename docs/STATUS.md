@@ -100,7 +100,7 @@
 - 2026-01-24: Stage142 UI parity row-level expansion (BPE + furcations + tooth surfaces).
   - Cohort: 1000000, 1011978, 1012056, 1013684, 1000035.
   - Artefact: `tmp/stage142/ui_parity.json` (Playwright parity report).
-  - Summary: row-level checks added for BPE (1011978), BPE furcations (1000035), tooth surfaces sanity (1000000).
+  - Summary: counts parity PASS for all 5; row-level parity PASS for BPE (1011978), BPE furcations (1000035), tooth surfaces sanity (1000000).
   - Doc: `docs/r4/R4_CHARTING_UI_PARITY.md` (Stage 142 section).
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).

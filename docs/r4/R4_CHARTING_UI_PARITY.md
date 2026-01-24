@@ -141,7 +141,15 @@ Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
 - tmp/stage142/ui_parity.json (Playwright parity report)
 
 ## Results
-- Automated UI parity: pending run after Stage 142 test updates.
+- Automated UI parity (Playwright):
+  - 1000000: Perio probes PASS (API=117, UI=117)
+  - 1011978: BPE entries PASS (API=16, UI=16)
+  - 1012056: Patient notes PASS (API=37, UI=37)
+  - 1013684: BPE entries PASS (API=15, UI=15)
+  - 1000035: BPE entries PASS (API=8, UI=8)
+  - 1000035: BPE furcations PASS (API=8, UI=8)
+  - 1000000: Tooth surfaces PASS (API=11700, UI=11700)
 
 ## Notes
 - Stage 142 adds row-level checks for BPE (1011978), BPE furcations (1000035), and tooth surfaces sanity (1000000).
+- Artefact: `tmp/stage142/ui_parity.json`.
