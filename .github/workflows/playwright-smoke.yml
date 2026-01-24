@@ -358,10 +358,11 @@ jobs:
 
       - name: Check seed route availability
         run: |
-          docker compose --env-file .env exec -T backend python - <<'PY'
+          set +e
+          SEED_OUT=$(
+            docker compose --env-file .env exec -T backend python - <<'PY'
           import json
           import os
-          import sys
           import urllib.error
           import urllib.request
 
@@ -397,16 +398,16 @@ jobs:
             body = exc.read(500).decode("utf-8", "replace")
             print("login status", exc.code)
             print(body)
-            sys.exit(1)
+            raise SystemExit(1)
           print("login status", status)
           if status != 200:
             print(body)
-            sys.exit(1)
+            raise SystemExit(1)
           token = json.loads(body).get("access_token")
           if not token:
             print("login response missing access_token")
             print(body)
-            sys.exit(1)
+            raise SystemExit(1)
           try:
             seed_status, seed_body = post_json(
               seed_url,
@@ -416,7 +417,7 @@ jobs:
           except urllib.error.HTTPError as exc:
             seed_body = exc.read(500).decode("utf-8", "replace")
             seed_status = exc.code
-          print("POST", seed_url, "=>", seed_status)
+          print("seed status", seed_status)
           print(seed_body)
           if seed_status == 404:
             spec = json.loads(
@@ -427,8 +428,17 @@ jobs:
             paths = sorted([p for p in spec.get("paths", {}) if "/test" in p or "seed" in p])
             print("openapi paths", json.dumps(paths, indent=2))
           if seed_status >= 400:
-            sys.exit(1)
+            raise SystemExit(2)
           PY
+          )
+          SEED_RC=$?
+          echo "$SEED_OUT"
+          if [ "$SEED_RC" -ne 0 ]; then
+            echo "Seed failed; dumping backend logs…"
+            docker compose --env-file .env logs --no-color --tail=300 backend
+            exit 1
+          fi
+          set -e
 
       - name: Wait for frontend proxy
         run: |
