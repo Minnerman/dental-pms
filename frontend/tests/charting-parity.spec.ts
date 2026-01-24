@@ -101,7 +101,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     expect(apiResponse.ok()).toBeTruthy();
-    const apiData = (await apiResponse.json()) as unknown[];
+    const apiData = (await apiResponse.json()) as any[];
     const apiCount = apiData.length;
 
     await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
