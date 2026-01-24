@@ -121,6 +121,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - UI displays “Showing X of Y” for paginated sections; counts still use totals.
 - 2026-01-24: Stage146 charting viewer enablement runbook.
   - Doc: `docs/r4/CHARTING_VIEWER_ENABLEMENT.md`.
+- 2026-01-24: Stage147 charting viewer security + observability.
+  - Structured access logs on charting routes (user, patient, status, duration).
+  - Basic per-user rate limiting on charting reads.
+  - `/config` smoke check added to `ops/verify.sh`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

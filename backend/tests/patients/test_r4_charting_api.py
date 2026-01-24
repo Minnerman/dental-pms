@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import delete, func, select
 
 from app.db.session import SessionLocal
@@ -12,7 +13,9 @@ from app.models.r4_charting import (
     R4PatientNote,
     R4PerioProbe,
 )
-from app.models.user import User
+from app.models.capability import UserCapability
+from app.models.user import Role, User
+from app.services.users import create_user
 
 
 def resolve_actor_id(session) -> int:
@@ -65,6 +68,32 @@ def _charting_enabled(api_client) -> bool:
         return False
     payload = res.json()
     return bool(payload.get("feature_flags", {}).get("charting_viewer"))
+
+
+def _create_test_user(session, *, role: Role, password: str) -> User:
+    email = f"charting_{uuid4().hex[:10]}@example.com"
+    return create_user(
+        session,
+        email=email,
+        password=password,
+        full_name="Charting Test",
+        role=role,
+        is_active=True,
+        must_change_password=False,
+    )
+
+
+def _login(api_client, *, email: str, password: str) -> dict[str, str]:
+    res = api_client.post("/auth/login", json={"email": email, "password": password})
+    assert res.status_code == 200, res.text
+    token = res.json().get("access_token")
+    assert token
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _cleanup_user(session, user: User) -> None:
+    session.execute(delete(UserCapability).where(UserCapability.user_id == user.id))
+    session.execute(delete(User).where(User.id == user.id))
 
 
 def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
@@ -197,13 +226,82 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         session.close()
 
 
-def test_charting_endpoints_blocked_when_feature_disabled(api_client, auth_headers):
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/patients/1/charting/perio-probes",
+        "/patients/1/charting/bpe",
+        "/patients/1/charting/bpe-furcations",
+        "/patients/1/charting/notes",
+        "/patients/1/charting/tooth-surfaces",
+        "/patients/1/charting/meta",
+    ],
+)
+def test_charting_endpoints_blocked_when_feature_disabled(
+    api_client, auth_headers, endpoint
+):
     if _charting_enabled(api_client):
         return
-    res = api_client.get("/patients/1/charting/perio-probes", headers=auth_headers)
+    res = api_client.get(endpoint, headers=auth_headers)
     assert res.status_code == 403, res.text
 
 
-def test_charting_endpoints_require_auth(api_client):
-    res = api_client.get("/patients/1/charting/perio-probes")
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/patients/1/charting/perio-probes",
+        "/patients/1/charting/bpe",
+        "/patients/1/charting/bpe-furcations",
+        "/patients/1/charting/notes",
+        "/patients/1/charting/tooth-surfaces",
+        "/patients/1/charting/meta",
+    ],
+)
+def test_charting_endpoints_require_auth(api_client, endpoint):
+    res = api_client.get(endpoint)
     assert res.status_code == 401
+
+
+def test_charting_endpoints_forbidden_for_external_role(api_client):
+    session = SessionLocal()
+    user = None
+    password = "ChartingPass123!"
+    try:
+        user = _create_test_user(session, role=Role.external, password=password)
+        headers = _login(api_client, email=user.email, password=password)
+        res = api_client.get("/patients/1/charting/perio-probes", headers=headers)
+        assert res.status_code == 403, res.text
+    finally:
+        if user is not None:
+            _cleanup_user(session, user)
+            session.commit()
+        session.close()
+
+
+def test_charting_rate_limit_allows_then_throttles(api_client):
+    if not _charting_enabled(api_client):
+        return
+    session = SessionLocal()
+    user = None
+    password = "ChartingPass123!"
+    try:
+        user = _create_test_user(session, role=Role.receptionist, password=password)
+        headers = _login(api_client, email=user.email, password=password)
+        ok_count = 0
+        throttled = False
+        for _ in range(65):
+            res = api_client.get("/patients/1/charting/perio-probes", headers=headers)
+            if res.status_code == 200:
+                ok_count += 1
+                continue
+            if res.status_code == 429:
+                throttled = True
+                break
+            assert res.status_code in {200, 429}, res.text
+        assert ok_count > 0
+        assert throttled, "Expected charting rate limit to throttle"
+    finally:
+        if user is not None:
+            _cleanup_user(session, user)
+            session.commit()
+        session.close()
