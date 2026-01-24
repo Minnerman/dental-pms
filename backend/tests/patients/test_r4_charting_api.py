@@ -16,6 +16,7 @@ from app.models.r4_charting import (
 )
 from app.models.capability import UserCapability
 from app.models.user import Role, User
+from app.services.charting_csv import ENTITY_COLUMNS
 from app.services.users import create_user
 
 
@@ -219,6 +220,89 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         )
         assert notes_res.status_code == 200, notes_res.text
         assert notes_res.json()[0]["legacy_note_key"] == note_key
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+            session.commit()
+        session.close()
+
+
+def test_charting_export_returns_csv_zip(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 990000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+        probe_key = f"{legacy_code}:2:1:{uuid4().hex[:6]}"
+        note_key = f"{legacy_code}:{uuid4().hex[:6]}"
+
+        session.add(
+            R4PerioProbe(
+                legacy_source="r4",
+                legacy_probe_key=probe_key,
+                legacy_trans_id=100,
+                legacy_patient_code=legacy_code,
+                tooth=2,
+                probing_point=1,
+                depth=3,
+                bleeding=0,
+                plaque=1,
+                recorded_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                created_by_user_id=actor_id,
+            )
+        )
+        session.add(
+            R4BPEEntry(
+                legacy_source="r4",
+                legacy_bpe_key=f"bpe-{legacy_code}-{uuid4().hex[:6]}",
+                legacy_bpe_id=3001,
+                legacy_patient_code=legacy_code,
+                recorded_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+                sextant_1=2,
+                sextant_2=1,
+                sextant_3=0,
+                sextant_4=2,
+                sextant_5=1,
+                sextant_6=0,
+                created_by_user_id=actor_id,
+            )
+        )
+        session.add(
+            R4PatientNote(
+                legacy_source="r4",
+                legacy_note_key=note_key,
+                legacy_patient_code=legacy_code,
+                legacy_note_number=1,
+                note_date=datetime(2024, 5, 1, tzinfo=timezone.utc),
+                note="Export note",
+                created_by_user_id=actor_id,
+            )
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/export?entities=perio_probes,bpe,patient_notes",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        assert res.headers["content-type"].startswith("application/zip")
+        import io
+        import zipfile
+
+        with zipfile.ZipFile(io.BytesIO(res.content)) as archive:
+            names = set(archive.namelist())
+            assert "index.csv" in names
+            assert "postgres_perio_probes.csv" in names
+            assert "postgres_bpe.csv" in names
+            assert "postgres_patient_notes.csv" in names
+            header = archive.read("postgres_perio_probes.csv").decode("utf-8").splitlines()[0]
+            assert header == ",".join(ENTITY_COLUMNS["perio_probes"])
     finally:
         session.rollback()
         if legacy_code is not None:

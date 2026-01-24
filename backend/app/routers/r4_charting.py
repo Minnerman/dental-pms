@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import io
 import logging
 import time
+import zipfile
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, nullslast, select
 from sqlalchemy.orm import Session
 
@@ -18,6 +21,19 @@ from app.models.r4_charting import (
     R4PatientNote,
     R4PerioProbe,
     R4ToothSurface,
+)
+from app.services.charting_csv import (
+    ENTITY_ALIASES,
+    ENTITY_COLUMNS,
+    ENTITY_DATE_FIELDS,
+    ENTITY_LINKAGE,
+    ENTITY_SORT_KEYS,
+    csv_text,
+    date_range,
+    format_dt,
+    normalize_entity_rows,
+    parse_entities,
+    rows_for_csv,
 )
 from app.schemas.r4_charting import (
     PaginatedR4PerioProbeOut,
@@ -109,6 +125,17 @@ def _resolve_legacy_patient_code(db: Session, patient_id: int) -> int | None:
         return None
     legacy_id = patient.legacy_id or ""
     return int(legacy_id) if legacy_id.isdigit() else None
+
+
+def _pg_rows(db: Session, stmt):
+    rows = db.execute(stmt).mappings().all()
+    normalized: list[dict[str, object]] = []
+    for row in rows:
+        payload = {}
+        for key, value in row.items():
+            payload[key] = format_dt(value)
+        normalized.append(payload)
+    return normalized
 
 
 @router.get("/perio-probes", response_model=PaginatedR4PerioProbeOut)
@@ -478,6 +505,174 @@ def get_charting_meta(
             duration_ms=duration_ms,
         )
         return payload
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
+def _export_rows_for_entity(
+    db: Session,
+    entity: str,
+    patient_code: int,
+) -> list[dict[str, object]]:
+    if entity == "patient_notes":
+        stmt = select(
+            R4PatientNote.legacy_patient_code.label("patient_code"),
+            R4PatientNote.legacy_note_key.label("legacy_note_key"),
+            R4PatientNote.legacy_note_number.label("note_number"),
+            R4PatientNote.note_date.label("note_date"),
+            R4PatientNote.note.label("note"),
+            R4PatientNote.tooth.label("tooth"),
+            R4PatientNote.surface.label("surface"),
+            R4PatientNote.category_number.label("category_number"),
+            R4PatientNote.fixed_note_code.label("fixed_note_code"),
+            R4PatientNote.user_code.label("user_code"),
+        ).where(R4PatientNote.legacy_patient_code == patient_code)
+        return _pg_rows(db, stmt)
+    if entity == "bpe":
+        stmt = select(
+            R4BPEEntry.legacy_patient_code.label("patient_code"),
+            R4BPEEntry.legacy_bpe_key.label("legacy_bpe_key"),
+            R4BPEEntry.legacy_bpe_id.label("legacy_bpe_id"),
+            R4BPEEntry.recorded_at.label("recorded_at"),
+            R4BPEEntry.sextant_1.label("sextant_1"),
+            R4BPEEntry.sextant_2.label("sextant_2"),
+            R4BPEEntry.sextant_3.label("sextant_3"),
+            R4BPEEntry.sextant_4.label("sextant_4"),
+            R4BPEEntry.sextant_5.label("sextant_5"),
+            R4BPEEntry.sextant_6.label("sextant_6"),
+        ).where(R4BPEEntry.legacy_patient_code == patient_code)
+        return _pg_rows(db, stmt)
+    if entity == "bpe_furcations":
+        stmt = select(
+            R4BPEFurcation.legacy_patient_code.label("patient_code"),
+            R4BPEFurcation.legacy_bpe_furcation_key.label("legacy_bpe_furcation_key"),
+            R4BPEFurcation.legacy_bpe_id.label("legacy_bpe_id"),
+            R4BPEFurcation.recorded_at.label("recorded_at"),
+            R4BPEFurcation.tooth.label("tooth"),
+            R4BPEFurcation.furcation.label("furcation"),
+            R4BPEFurcation.sextant.label("sextant"),
+        ).where(R4BPEFurcation.legacy_patient_code == patient_code)
+        return _pg_rows(db, stmt)
+    if entity == "perio_probes":
+        stmt = select(
+            R4PerioProbe.legacy_patient_code.label("patient_code"),
+            R4PerioProbe.legacy_probe_key.label("legacy_probe_key"),
+            R4PerioProbe.legacy_trans_id.label("legacy_trans_id"),
+            R4PerioProbe.recorded_at.label("recorded_at"),
+            R4PerioProbe.tooth.label("tooth"),
+            R4PerioProbe.probing_point.label("probing_point"),
+            R4PerioProbe.depth.label("depth"),
+            R4PerioProbe.bleeding.label("bleeding"),
+            R4PerioProbe.plaque.label("plaque"),
+        ).where(R4PerioProbe.legacy_patient_code == patient_code)
+        return _pg_rows(db, stmt)
+    if entity == "tooth_surfaces":
+        stmt = select(
+            R4ToothSurface.legacy_tooth_id.label("legacy_tooth_id"),
+            R4ToothSurface.legacy_surface_no.label("legacy_surface_no"),
+            R4ToothSurface.label.label("label"),
+            R4ToothSurface.short_label.label("short_label"),
+            R4ToothSurface.sort_order.label("sort_order"),
+        )
+        return _pg_rows(db, stmt)
+    raise HTTPException(status_code=400, detail=f"Unsupported export entity: {entity}")
+
+
+@router.get("/export")
+def export_charting(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+    entities: str | None = Query(default=None),
+) -> Response:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        patient_code = _resolve_legacy_patient_code(db, patient_id)
+        if patient_code is None:
+            raise HTTPException(status_code=404, detail="Patient is not linked to R4.")
+        selected = parse_entities(entities, ENTITY_ALIASES)
+        if not selected:
+            raise HTTPException(status_code=400, detail="No export entities requested.")
+        buffer = io.BytesIO()
+        index_rows: list[dict[str, object]] = []
+        with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for entity in selected:
+                raw_rows = _export_rows_for_entity(db, entity, patient_code)
+                normalized = normalize_entity_rows(entity, raw_rows, patient_code)
+                csv_rows = rows_for_csv(normalized, ENTITY_COLUMNS[entity], patient_code)
+                csv_body = csv_text(csv_rows, ENTITY_COLUMNS[entity], ENTITY_SORT_KEYS.get(entity, []))
+                archive.writestr(f"postgres_{entity}.csv", csv_body)
+                min_date, max_date = date_range(normalized, ENTITY_DATE_FIELDS.get(entity, []))
+                index_rows.append(
+                    {
+                        "entity": entity,
+                        "linkage_method": ENTITY_LINKAGE.get(entity),
+                        "sqlserver_status": None,
+                        "sqlserver_reason": None,
+                        "sqlserver_count": None,
+                        "sqlserver_total": None,
+                        "sqlserver_unique_count": None,
+                        "sqlserver_duplicate_count": None,
+                        "sqlserver_date_min": None,
+                        "sqlserver_date_max": None,
+                        "postgres_count": len(normalized),
+                        "postgres_total": len(normalized),
+                        "postgres_unique_count": len(normalized),
+                        "postgres_duplicate_count": 0,
+                        "postgres_date_min": min_date,
+                        "postgres_date_max": max_date,
+                    }
+                )
+            index_columns = [
+                "entity",
+                "linkage_method",
+                "sqlserver_status",
+                "sqlserver_reason",
+                "sqlserver_count",
+                "sqlserver_total",
+                "sqlserver_unique_count",
+                "sqlserver_duplicate_count",
+                "sqlserver_date_min",
+                "sqlserver_date_max",
+                "postgres_count",
+                "postgres_total",
+                "postgres_unique_count",
+                "postgres_duplicate_count",
+                "postgres_date_min",
+                "postgres_date_max",
+            ]
+            index_csv = csv_text(index_rows, index_columns, ["entity"])
+            archive.writestr("index.csv", index_csv)
+        buffer.seek(0)
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        filename = f"charting_{patient_code}_{stamp}.zip"
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=200,
+            duration_ms=duration_ms,
+        )
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     except HTTPException as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
         _log_charting_access(

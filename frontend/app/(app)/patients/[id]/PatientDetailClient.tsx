@@ -768,6 +768,30 @@ export default function PatientDetailClient({
   const [chartingMetaOpen, setChartingMetaOpen] = useState<Record<string, boolean>>(
     {}
   );
+  const [perioFilterFrom, setPerioFilterFrom] = useState("");
+  const [perioFilterTo, setPerioFilterTo] = useState("");
+  const [perioFilterTooth, setPerioFilterTooth] = useState("");
+  const [perioFilterSite, setPerioFilterSite] = useState("");
+  const [perioFilterBleeding, setPerioFilterBleeding] = useState(false);
+  const [perioFilterPlaque, setPerioFilterPlaque] = useState(false);
+  const [bpeFilterFrom, setBpeFilterFrom] = useState("");
+  const [bpeFilterTo, setBpeFilterTo] = useState("");
+  const [bpeLatestOnly, setBpeLatestOnly] = useState(false);
+  const [notesFilterQuery, setNotesFilterQuery] = useState("");
+  const [notesFilterCategory, setNotesFilterCategory] = useState("");
+  const [notesFilterFrom, setNotesFilterFrom] = useState("");
+  const [notesFilterTo, setNotesFilterTo] = useState("");
+  const [chartingExportEntities, setChartingExportEntities] = useState<
+    Record<string, boolean>
+  >({
+    perio_probes: true,
+    bpe: true,
+    bpe_furcations: true,
+    patient_notes: true,
+    tooth_surfaces: true,
+  });
+  const [chartingExporting, setChartingExporting] = useState(false);
+  const [chartingExportError, setChartingExportError] = useState<string | null>(null);
 
   async function loadPatient() {
     setLoading(true);
@@ -2413,6 +2437,29 @@ export default function PatientDetailClient({
     return label ? `${label} (${value})` : String(value);
   }
 
+  function parseDateInput(value: string, endOfDay: boolean) {
+    if (!value) return null;
+    const suffix = endOfDay ? "T23:59:59" : "T00:00:00";
+    const parsed = new Date(`${value}${suffix}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function withinDateRange(
+    value: string | null | undefined,
+    fromValue: string,
+    toValue: string
+  ) {
+    if (!fromValue && !toValue) return true;
+    if (!value) return false;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return false;
+    const fromDate = parseDateInput(fromValue, false);
+    const toDate = parseDateInput(toValue, true);
+    if (fromDate && parsed < fromDate) return false;
+    if (toDate && parsed > toDate) return false;
+    return true;
+  }
+
   function buildDateGroups<T>(
     items: T[],
     getDate: (item: T) => string | null | undefined
@@ -3037,6 +3084,60 @@ export default function PatientDetailClient({
     }
   }
 
+  function getFilenameFromDisposition(res: Response, fallback: string) {
+    const header = res.headers.get("content-disposition");
+    if (!header) return fallback;
+    const match = header.match(/filename="?([^\";]+)"?/i);
+    return match?.[1] ?? fallback;
+  }
+
+  async function downloadChartingExport() {
+    if (!chartingViewerEnabled || chartingExporting) return;
+    const selected = Object.entries(chartingExportEntities)
+      .filter(([, enabled]) => enabled)
+      .map(([entity]) => entity);
+    if (selected.length === 0) {
+      setChartingExportError("Select at least one charting entity to export.");
+      return;
+    }
+    setChartingExporting(true);
+    setChartingExportError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("entities", selected.join(","));
+      const res = await apiFetch(
+        `/api/patients/${patientId}/charting/export?${params.toString()}`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to export charting (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const fallbackName = `charting_${patientId}_${stamp}.zip`;
+      const filename = getFilenameFromDisposition(res, fallbackName);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setChartingExportError(
+        err instanceof Error ? err.message : "Failed to export charting"
+      );
+    } finally {
+      setChartingExporting(false);
+    }
+  }
+
   function buildEstimateFilename() {
     const date = new Date().toISOString().slice(0, 10);
     if (!patient) return `Estimate_${patientId}_${date}.pdf`;
@@ -3206,17 +3307,103 @@ export default function PatientDetailClient({
     return <div className="notice">Invalid patient ID.</div>;
   }
 
-  const perioGroups = buildDateGroups(perioProbes, (probe) => probe.recorded_at);
-  const bpeGroups = buildDateGroups(bpeEntries, (entry) => entry.recorded_at);
-  const bpeFurcationGroups = buildDateGroups(bpeFurcations, (entry) => entry.recorded_at);
+  const perioToothFilter = perioFilterTooth.trim();
+  const perioToothValue = perioToothFilter ? Number(perioToothFilter) : null;
+  const perioSiteValue = perioFilterSite ? Number(perioFilterSite) : null;
 
-  const sortedNotes = [...chartingNotes].sort((a, b) => {
+  const filteredPerioProbes = perioProbes.filter((probe) => {
+    if (!withinDateRange(probe.recorded_at, perioFilterFrom, perioFilterTo)) {
+      return false;
+    }
+    if (perioToothFilter && probe.tooth !== perioToothValue) {
+      return false;
+    }
+    if (perioFilterSite && probe.probing_point !== perioSiteValue) {
+      return false;
+    }
+    if (perioFilterBleeding && !(probe.bleeding && probe.bleeding > 0)) {
+      return false;
+    }
+    if (perioFilterPlaque && !(probe.plaque && probe.plaque > 0)) {
+      return false;
+    }
+    return true;
+  });
+
+  const bpeFiltered = bpeEntries.filter((entry) =>
+    withinDateRange(entry.recorded_at, bpeFilterFrom, bpeFilterTo)
+  );
+  const bpeFurcationFiltered = bpeFurcations.filter((entry) =>
+    withinDateRange(entry.recorded_at, bpeFilterFrom, bpeFilterTo)
+  );
+  const bpeLatestKey = bpeLatestOnly
+    ? buildDateGroups(bpeFiltered, (entry) => entry.recorded_at)[0]?.key
+    : null;
+  const filteredBpeEntries =
+    bpeLatestOnly && bpeLatestKey
+      ? bpeFiltered.filter((entry) => {
+          const key =
+            entry.recorded_at && !Number.isNaN(new Date(entry.recorded_at).getTime())
+              ? new Date(entry.recorded_at).toISOString().slice(0, 10)
+              : "unknown";
+          return key === bpeLatestKey;
+        })
+      : bpeFiltered;
+  const filteredBpeFurcations =
+    bpeLatestOnly && bpeLatestKey
+      ? bpeFurcationFiltered.filter((entry) => {
+          const key =
+            entry.recorded_at && !Number.isNaN(new Date(entry.recorded_at).getTime())
+              ? new Date(entry.recorded_at).toISOString().slice(0, 10)
+              : "unknown";
+          return key === bpeLatestKey;
+        })
+      : bpeFurcationFiltered;
+
+  const noteQuery = notesFilterQuery.trim().toLowerCase();
+  const noteCategoryValue = notesFilterCategory ? Number(notesFilterCategory) : null;
+  const filteredNotes = chartingNotes.filter((note) => {
+    const noteText = note.note?.toLowerCase() ?? "";
+    if (noteQuery && !noteText.includes(noteQuery)) {
+      return false;
+    }
+    if (notesFilterCategory && note.category_number !== noteCategoryValue) {
+      return false;
+    }
+    const noteDate = note.note_date ?? note.updated_at ?? note.created_at;
+    if (!withinDateRange(noteDate, notesFilterFrom, notesFilterTo)) {
+      return false;
+    }
+    return true;
+  });
+
+  const perioGroups = buildDateGroups(filteredPerioProbes, (probe) => probe.recorded_at);
+  const bpeGroups = buildDateGroups(filteredBpeEntries, (entry) => entry.recorded_at);
+  const bpeFurcationGroups = buildDateGroups(
+    filteredBpeFurcations,
+    (entry) => entry.recorded_at
+  );
+
+  const sortedNotes = [...filteredNotes].sort((a, b) => {
     const dateA = a.note_date ?? a.updated_at ?? a.created_at;
     const dateB = b.note_date ?? b.updated_at ?? b.created_at;
     const timeA = dateA ? new Date(dateA).getTime() : -Infinity;
     const timeB = dateB ? new Date(dateB).getTime() : -Infinity;
     return timeB - timeA;
   });
+  const noteCategoryOptions = [...new Set(chartingNotes.map((note) => note.category_number))]
+    .filter((value): value is number => typeof value === "number")
+    .sort((a, b) => a - b);
+  const chartingExportOptions = [
+    { key: "perio_probes", label: "Perio probes" },
+    { key: "bpe", label: "BPE entries" },
+    { key: "bpe_furcations", label: "BPE furcations" },
+    { key: "patient_notes", label: "Patient notes" },
+    { key: "tooth_surfaces", label: "Tooth surfaces" },
+  ];
+  const chartingExportSelected = chartingExportOptions.filter(
+    (option) => chartingExportEntities[option.key]
+  );
   const visibleNotes = chartingNotesExpanded ? sortedNotes : sortedNotes.slice(0, 10);
   const hasMoreNotes = sortedNotes.length > visibleNotes.length;
 
@@ -4498,6 +4685,47 @@ export default function PatientDetailClient({
                           </span>
                         ) : null}
                       </div>
+                      <Panel title="Export CSV">
+                        <div className="stack" style={{ gap: 12 }}>
+                          <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                            {chartingExportOptions.map((option) => (
+                              <label key={option.key} className="row" style={{ gap: 6 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={chartingExportEntities[option.key]}
+                                  onChange={(event) =>
+                                    setChartingExportEntities((prev) => ({
+                                      ...prev,
+                                      [option.key]: event.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>{option.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={downloadChartingExport}
+                              disabled={chartingExporting}
+                              data-testid="charting-export-csv"
+                            >
+                              {chartingExporting ? "Exporting..." : "Export CSV"}
+                            </button>
+                            <span className="badge">
+                              {chartingExportSelected.length} selected
+                            </span>
+                          </div>
+                          {chartingExportError && (
+                            <div className="notice">{chartingExportError}</div>
+                          )}
+                          <div style={{ color: "var(--muted)" }}>
+                            Exports use the same column order as spot-check CSVs.
+                          </div>
+                        </div>
+                      </Panel>
 
                       {chartingError && (
                         <div className="notice">
@@ -4554,7 +4782,8 @@ export default function PatientDetailClient({
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
                                 <span className="badge">
-                                  Showing {perioProbes.length} of {perioProbeTotal}
+                                  Showing {filteredPerioProbes.length} of {perioProbes.length} loaded
+                                  (total {perioProbeTotal})
                                 </span>
                                 <button
                                   className="btn btn-secondary"
@@ -4566,13 +4795,92 @@ export default function PatientDetailClient({
                                     : "Show parity metadata"}
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">From</label>
+                                  <input
+                                    className="input"
+                                    type="date"
+                                    value={perioFilterFrom}
+                                    onChange={(event) => setPerioFilterFrom(event.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">To</label>
+                                  <input
+                                    className="input"
+                                    type="date"
+                                    value={perioFilterTo}
+                                    onChange={(event) => setPerioFilterTo(event.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">Tooth</label>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    placeholder="e.g. 24"
+                                    value={perioFilterTooth}
+                                    onChange={(event) => setPerioFilterTooth(event.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">Site</label>
+                                  <select
+                                    className="input"
+                                    value={perioFilterSite}
+                                    onChange={(event) => setPerioFilterSite(event.target.value)}
+                                  >
+                                    <option value="">All</option>
+                                    {Object.entries(perioSiteLabels).map(([value, label]) => (
+                                      <option key={value} value={value}>
+                                        {label} ({value})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <label className="row" style={{ gap: 6 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={perioFilterBleeding}
+                                    onChange={(event) =>
+                                      setPerioFilterBleeding(event.target.checked)
+                                    }
+                                  />
+                                  <span>Only bleeding</span>
+                                </label>
+                                <label className="row" style={{ gap: 6 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={perioFilterPlaque}
+                                    onChange={(event) =>
+                                      setPerioFilterPlaque(event.target.checked)
+                                    }
+                                  />
+                                  <span>Only plaque</span>
+                                </label>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    setPerioFilterFrom("");
+                                    setPerioFilterTo("");
+                                    setPerioFilterTooth("");
+                                    setPerioFilterSite("");
+                                    setPerioFilterBleeding(false);
+                                    setPerioFilterPlaque(false);
+                                  }}
+                                >
+                                  Clear filters
+                                </button>
+                              </div>
                               {chartingMetaOpen.perio && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: transactions.ref_id -&gt; patient mapping</div>
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {perioProbeTotal === 0 ? (
+                              {filteredPerioProbes.length === 0 ? (
                                 <div className="notice">No perio probes found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -4664,7 +4972,9 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{bpeEntries.length} records</span>
+                                <span className="badge">
+                                  {filteredBpeEntries.length} of {bpeEntries.length} records
+                                </span>
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
@@ -4675,13 +4985,52 @@ export default function PatientDetailClient({
                                     : "Show parity metadata"}
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">From</label>
+                                  <input
+                                    className="input"
+                                    type="date"
+                                    value={bpeFilterFrom}
+                                    onChange={(event) => setBpeFilterFrom(event.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">To</label>
+                                  <input
+                                    className="input"
+                                    type="date"
+                                    value={bpeFilterTo}
+                                    onChange={(event) => setBpeFilterTo(event.target.value)}
+                                  />
+                                </div>
+                                <label className="row" style={{ gap: 6 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={bpeLatestOnly}
+                                    onChange={(event) => setBpeLatestOnly(event.target.checked)}
+                                  />
+                                  <span>Latest exam only</span>
+                                </label>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    setBpeFilterFrom("");
+                                    setBpeFilterTo("");
+                                    setBpeLatestOnly(false);
+                                  }}
+                                >
+                                  Clear filters
+                                </button>
+                              </div>
                               {chartingMetaOpen.bpe && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {bpeEntries.length === 0 ? (
+                              {filteredBpeEntries.length === 0 ? (
                                 <div className="notice">No BPE entries found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -4804,7 +5153,9 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{bpeFurcations.length} records</span>
+                                <span className="badge">
+                                  {filteredBpeFurcations.length} of {bpeFurcations.length} records
+                                </span>
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
@@ -4815,13 +5166,16 @@ export default function PatientDetailClient({
                                     : "Show parity metadata"}
                                 </button>
                               </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                Uses the same date filters as BPE entries.
+                              </div>
                               {chartingMetaOpen.bpeFurcations && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {bpeFurcations.length === 0 ? (
+                              {filteredBpeFurcations.length === 0 ? (
                                 <div className="notice">No BPE furcations found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -4913,7 +5267,9 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{chartingNotes.length} records</span>
+                                <span className="badge">
+                                  {filteredNotes.length} of {chartingNotes.length} records
+                                </span>
                                 {hasMoreNotes && (
                                   <button
                                     className="btn btn-secondary"
@@ -4935,13 +5291,72 @@ export default function PatientDetailClient({
                                     : "Show parity metadata"}
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">Search</label>
+                                  <input
+                                    className="input"
+                                    type="search"
+                                    placeholder="Find text..."
+                                    value={notesFilterQuery}
+                                    onChange={(event) => setNotesFilterQuery(event.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">Category</label>
+                                  <select
+                                    className="input"
+                                    value={notesFilterCategory}
+                                    onChange={(event) =>
+                                      setNotesFilterCategory(event.target.value)
+                                    }
+                                  >
+                                    <option value="">All</option>
+                                    {noteCategoryOptions.map((value) => (
+                                      <option key={value} value={value}>
+                                        {value}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">From</label>
+                                  <input
+                                    className="input"
+                                    type="date"
+                                    value={notesFilterFrom}
+                                    onChange={(event) => setNotesFilterFrom(event.target.value)}
+                                  />
+                                </div>
+                                <div className="stack" style={{ gap: 6 }}>
+                                  <label className="label">To</label>
+                                  <input
+                                    className="input"
+                                    type="date"
+                                    value={notesFilterTo}
+                                    onChange={(event) => setNotesFilterTo(event.target.value)}
+                                  />
+                                </div>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    setNotesFilterQuery("");
+                                    setNotesFilterCategory("");
+                                    setNotesFilterFrom("");
+                                    setNotesFilterTo("");
+                                  }}
+                                >
+                                  Clear filters
+                                </button>
+                              </div>
                               {chartingMetaOpen.notes && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: patient_code</div>
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {chartingNotes.length === 0 ? (
+                              {filteredNotes.length === 0 ? (
                                 <div className="notice">No patient notes found.</div>
                               ) : (
                                 <div data-testid="notes-list">
