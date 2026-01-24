@@ -77,6 +77,11 @@
   - Artefacts: `tmp/stage137/patient_<code>/` (per patient).
   - Summary: all reviewed entities matched; no punch list items.
   - Note: `r4_fixed_notes` is not patient-linked in this schema; excluded from patient counts.
+- 2026-01-24: Stage138 read-only charting viewer (feature-flagged).
+  - Feature flag: `NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1`.
+  - Read-only API endpoints for perio probes, BPE entries, BPE furcations, patient notes, tooth surfaces.
+  - Patient charting tab and route: `/patients/<id>/charting`, with parity metadata toggles.
+  - No editing or write operations in this stage.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
