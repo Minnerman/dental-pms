@@ -148,6 +148,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Per-section presets (3 slots) stored in localStorage; last-used filters persist on refresh.
   - Filters clear buttons reset pagination and refetch server-side results.
   - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-24: Stage154 charting filter performance hardening.
+  - Debounced notes search and stale-response guards prevent out-of-order totals.
+  - Load-more requests ignore stale responses for pagination stability.
+  - Playwright covers rapid filter edits on seeded notes.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

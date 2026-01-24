@@ -778,10 +778,15 @@ export default function PatientDetailClient({
   const [bpeFilterTo, setBpeFilterTo] = useState("");
   const [bpeLatestOnly, setBpeLatestOnly] = useState(false);
   const [notesFilterQuery, setNotesFilterQuery] = useState("");
+  const [notesFilterQueryDebounced, setNotesFilterQueryDebounced] = useState("");
   const [notesFilterCategory, setNotesFilterCategory] = useState("");
   const [notesFilterFrom, setNotesFilterFrom] = useState("");
   const [notesFilterTo, setNotesFilterTo] = useState("");
   const chartingFiltersInitialized = useRef(false);
+  const notesFilterDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chartingRequestId = useRef(0);
+  const perioLoadMoreRequestId = useRef(0);
+  const surfacesLoadMoreRequestId = useRef(0);
   const [chartingExportEntities, setChartingExportEntities] = useState<
     Record<string, boolean>
   >({
@@ -1567,7 +1572,7 @@ export default function PatientDetailClient({
     const params = new URLSearchParams();
     if (notesFilterFrom) params.set("from", notesFilterFrom);
     if (notesFilterTo) params.set("to", notesFilterTo);
-    const query = notesFilterQuery.trim();
+    const query = notesFilterQueryDebounced.trim();
     if (query) params.set("q", query);
     if (notesFilterCategory) params.set("category", notesFilterCategory);
     return params;
@@ -1592,11 +1597,13 @@ export default function PatientDetailClient({
     setNotesFilterFrom(String(payload.from ?? ""));
     setNotesFilterTo(String(payload.to ?? ""));
     setNotesFilterQuery(String(payload.q ?? ""));
+    setNotesFilterQueryDebounced(String(payload.q ?? ""));
     setNotesFilterCategory(String(payload.category ?? ""));
   }
 
   async function loadCharting() {
     if (!chartingViewerEnabled) return;
+    const requestId = ++chartingRequestId.current;
     setChartingLoading(true);
     setChartingError(null);
     try {
@@ -1676,6 +1683,9 @@ export default function PatientDetailClient({
         surfacesRes.json(),
         metaRes.json(),
       ]);
+      if (requestId !== chartingRequestId.current) {
+        return;
+      }
 
       const perioPayload = perioData as PaginatedResult<R4PerioProbe>;
       setPerioProbes(perioPayload.items ?? []);
@@ -1700,14 +1710,20 @@ export default function PatientDetailClient({
       setChartingMeta(metaData as ChartingMeta);
       setChartingLoaded(true);
     } catch (err) {
+      if (requestId !== chartingRequestId.current) {
+        return;
+      }
       setChartingError(err instanceof Error ? err.message : "Failed to load charting");
     } finally {
-      setChartingLoading(false);
+      if (requestId === chartingRequestId.current) {
+        setChartingLoading(false);
+      }
     }
   }
 
   async function loadMorePerioProbes() {
     if (!perioProbeHasMore || perioProbeLoadingMore) return;
+    const requestId = ++perioLoadMoreRequestId.current;
     setPerioProbeLoadingMore(true);
     try {
       const perioParams = buildPerioParams(perioProbeOffset);
@@ -1718,6 +1734,9 @@ export default function PatientDetailClient({
         throw new Error(`Failed to load more perio probes (HTTP ${res.status})`);
       }
       const payload = (await res.json()) as PaginatedResult<R4PerioProbe>;
+      if (requestId !== perioLoadMoreRequestId.current) {
+        return;
+      }
       setPerioProbes((prev) => [...prev, ...(payload.items ?? [])]);
       setPerioProbeTotal(payload.total ?? perioProbeTotal);
       setPerioProbeHasMore(Boolean(payload.has_more));
@@ -1725,16 +1744,22 @@ export default function PatientDetailClient({
         (payload.offset ?? perioProbeOffset) + (payload.items?.length ?? 0)
       );
     } catch (err) {
+      if (requestId !== perioLoadMoreRequestId.current) {
+        return;
+      }
       setChartingError(
         err instanceof Error ? err.message : "Failed to load more perio probes"
       );
     } finally {
-      setPerioProbeLoadingMore(false);
+      if (requestId === perioLoadMoreRequestId.current) {
+        setPerioProbeLoadingMore(false);
+      }
     }
   }
 
   async function loadMoreToothSurfaces() {
     if (!toothSurfacesHasMore || toothSurfacesLoadingMore) return;
+    const requestId = ++surfacesLoadMoreRequestId.current;
     setToothSurfacesLoadingMore(true);
     try {
       const res = await apiFetch(
@@ -1744,6 +1769,9 @@ export default function PatientDetailClient({
         throw new Error(`Failed to load more tooth surfaces (HTTP ${res.status})`);
       }
       const payload = (await res.json()) as PaginatedResult<R4ToothSurface>;
+      if (requestId !== surfacesLoadMoreRequestId.current) {
+        return;
+      }
       setToothSurfaces((prev) => [...prev, ...(payload.items ?? [])]);
       setToothSurfacesTotal(payload.total ?? toothSurfacesTotal);
       setToothSurfacesHasMore(Boolean(payload.has_more));
@@ -1751,11 +1779,16 @@ export default function PatientDetailClient({
         (payload.offset ?? toothSurfacesOffset) + (payload.items?.length ?? 0)
       );
     } catch (err) {
+      if (requestId !== surfacesLoadMoreRequestId.current) {
+        return;
+      }
       setChartingError(
         err instanceof Error ? err.message : "Failed to load more tooth surfaces"
       );
     } finally {
-      setToothSurfacesLoadingMore(false);
+      if (requestId === surfacesLoadMoreRequestId.current) {
+        setToothSurfacesLoadingMore(false);
+      }
     }
   }
 
@@ -2362,7 +2395,7 @@ export default function PatientDetailClient({
     bpeFilterFrom,
     bpeFilterTo,
     bpeLatestOnly,
-    notesFilterQuery,
+    notesFilterQueryDebounced,
     notesFilterCategory,
     notesFilterFrom,
     notesFilterTo,
@@ -2426,6 +2459,25 @@ export default function PatientDetailClient({
     notesFilterCategory,
     saveCurrentFilters,
   ]);
+
+  useEffect(() => {
+    if (!chartingFiltersReady) return;
+    if (notesFilterDebounceRef.current) {
+      clearTimeout(notesFilterDebounceRef.current);
+    }
+    if (!notesFilterQuery.trim()) {
+      setNotesFilterQueryDebounced("");
+      return;
+    }
+    notesFilterDebounceRef.current = setTimeout(() => {
+      setNotesFilterQueryDebounced(notesFilterQuery);
+    }, 300);
+    return () => {
+      if (notesFilterDebounceRef.current) {
+        clearTimeout(notesFilterDebounceRef.current);
+      }
+    };
+  }, [chartingFiltersReady, notesFilterQuery]);
 
   useEffect(() => {
     const fromUrl = getTransactionFiltersFromParams(searchParams);
@@ -5670,7 +5722,18 @@ export default function PatientDetailClient({
                                     type="search"
                                     placeholder="Find text..."
                                     value={notesFilterQuery}
-                                    onChange={(event) => setNotesFilterQuery(event.target.value)}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      setNotesFilterQuery(value);
+                                      if (!value) {
+                                        setNotesFilterQueryDebounced("");
+                                      }
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        setNotesFilterQueryDebounced(notesFilterQuery);
+                                      }
+                                    }}
                                   />
                                 </div>
                                 <div className="stack" style={{ gap: 6 }}>
