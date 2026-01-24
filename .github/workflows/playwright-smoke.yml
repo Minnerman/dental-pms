@@ -370,7 +370,7 @@ jobs:
           print("FEATURE_CHARTING_VIEWER=", os.getenv("FEATURE_CHARTING_VIEWER"))
 
           base_url = "http://localhost:8000"
-          login_url = f"{base_url}/api/auth/login"
+          login_url = f"{base_url}/auth/login"
           seed_url = f"{base_url}/test/seed/charting"
 
           def post_json(url, payload, headers=None):
@@ -393,36 +393,40 @@ jobs:
                 "password": os.getenv("ADMIN_PASSWORD", "ChangeMe123!"),
               },
             )
-            print("login status", status)
-            if status != 200:
-              print(body)
-              sys.exit(1)
-            token = json.loads(body).get("access_token")
-            if not token:
-              print("login response missing access_token")
-              print(body)
-              sys.exit(1)
+          except urllib.error.HTTPError as exc:
+            body = exc.read(500).decode("utf-8", "replace")
+            print("login status", exc.code)
+            print(body)
+            sys.exit(1)
+          print("login status", status)
+          if status != 200:
+            print(body)
+            sys.exit(1)
+          token = json.loads(body).get("access_token")
+          if not token:
+            print("login response missing access_token")
+            print(body)
+            sys.exit(1)
+          try:
             seed_status, seed_body = post_json(
               seed_url,
               {},
               headers={"Authorization": f"Bearer {token}"},
             )
-            print("POST", seed_url, "=>", seed_status)
-            print(seed_body)
-            if seed_status == 404:
-              spec = json.loads(
-                urllib.request.urlopen(f"{base_url}/openapi.json", timeout=10)
-                .read(20000)
-                .decode("utf-8", "replace")
-              )
-              paths = sorted([p for p in spec.get("paths", {}) if "/test" in p or "seed" in p])
-              print("openapi paths", json.dumps(paths, indent=2))
-            if seed_status >= 400:
-              sys.exit(1)
           except urllib.error.HTTPError as exc:
-            body = exc.read(500).decode("utf-8", "replace")
-            print("seed status", exc.code)
-            print(body)
+            seed_body = exc.read(500).decode("utf-8", "replace")
+            seed_status = exc.code
+          print("POST", seed_url, "=>", seed_status)
+          print(seed_body)
+          if seed_status == 404:
+            spec = json.loads(
+              urllib.request.urlopen(f"{base_url}/openapi.json", timeout=10)
+              .read(20000)
+              .decode("utf-8", "replace")
+            )
+            paths = sorted([p for p in spec.get("paths", {}) if "/test" in p or "seed" in p])
+            print("openapi paths", json.dumps(paths, indent=2))
+          if seed_status >= 400:
             sys.exit(1)
           PY
 
