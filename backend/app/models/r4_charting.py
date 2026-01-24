@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import AuditMixin, Base
@@ -345,3 +355,16 @@ class R4OldPatientNote(Base, AuditMixin):
     category_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fixed_note_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     user_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class R4ChartingImportState(Base, AuditMixin):
+    __tablename__ = "r4_charting_import_state"
+    __table_args__ = (
+        UniqueConstraint("patient_id", name="uq_r4_charting_import_state_patient"),
+        Index("ix_r4_charting_import_state_patient", "patient_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    legacy_patient_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

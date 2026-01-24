@@ -415,6 +415,21 @@ type R4ToothSurface = {
   updated_at: string;
 };
 
+type ChartingMeta = {
+  patient_id: number;
+  legacy_patient_code?: number | null;
+  last_imported_at?: string | null;
+  source?: string | null;
+};
+
+type PaginatedResult<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
   DOMICILIARY_PRIVATE: "Domiciliary (Private)",
@@ -539,7 +554,8 @@ const lowerTeeth = [
 
 const allTeeth = [...upperTeeth, ...lowerTeeth];
 const bpeSextants = ["UR", "UA", "UL", "LL", "LA", "LR"];
-const chartingViewerEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
+const initialChartingViewerEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
+const chartingPageSize = 500;
 
 
 type PatientTab =
@@ -729,11 +745,24 @@ export default function PatientDetailClient({
   const [chartingLoaded, setChartingLoaded] = useState(false);
   const [chartingLoading, setChartingLoading] = useState(false);
   const [chartingError, setChartingError] = useState<string | null>(null);
+  const [chartingViewerEnabled, setChartingViewerEnabled] = useState(
+    initialChartingViewerEnabled
+  );
+  const [chartingConfigLoaded, setChartingConfigLoaded] = useState(false);
+  const [chartingMeta, setChartingMeta] = useState<ChartingMeta | null>(null);
   const [perioProbes, setPerioProbes] = useState<R4PerioProbe[]>([]);
+  const [perioProbeTotal, setPerioProbeTotal] = useState(0);
+  const [perioProbeHasMore, setPerioProbeHasMore] = useState(false);
+  const [perioProbeOffset, setPerioProbeOffset] = useState(0);
+  const [perioProbeLoadingMore, setPerioProbeLoadingMore] = useState(false);
   const [bpeEntries, setBpeEntries] = useState<R4BPEEntry[]>([]);
   const [bpeFurcations, setBpeFurcations] = useState<R4BPEFurcation[]>([]);
   const [chartingNotes, setChartingNotes] = useState<R4PatientNote[]>([]);
   const [toothSurfaces, setToothSurfaces] = useState<R4ToothSurface[]>([]);
+  const [toothSurfacesTotal, setToothSurfacesTotal] = useState(0);
+  const [toothSurfacesHasMore, setToothSurfacesHasMore] = useState(false);
+  const [toothSurfacesOffset, setToothSurfacesOffset] = useState(0);
+  const [toothSurfacesLoadingMore, setToothSurfacesLoadingMore] = useState(false);
   const [chartingNotesExpanded, setChartingNotesExpanded] = useState(false);
   const [chartingMetaOpen, setChartingMetaOpen] = useState<Record<string, boolean>>(
     {}
@@ -1382,6 +1411,24 @@ export default function PatientDetailClient({
     }
   }
 
+  async function loadChartingConfig() {
+    try {
+      const res = await apiFetch("/api/config");
+      if (res.ok) {
+        const data = (await res.json()) as {
+          feature_flags?: { charting_viewer?: boolean };
+        };
+        if (typeof data?.feature_flags?.charting_viewer === "boolean") {
+          setChartingViewerEnabled(data.feature_flags.charting_viewer);
+        }
+      }
+    } catch {
+      // Keep fallback flag on failure.
+    } finally {
+      setChartingConfigLoaded(true);
+    }
+  }
+
   async function loadCharting() {
     if (!chartingViewerEnabled) return;
     setChartingLoading(true);
@@ -1393,12 +1440,18 @@ export default function PatientDetailClient({
         bpeFurcationsRes,
         notesRes,
         surfacesRes,
+        metaRes,
       ] = await Promise.all([
-        apiFetch(`/api/patients/${patientId}/charting/perio-probes`),
+        apiFetch(
+          `/api/patients/${patientId}/charting/perio-probes?limit=${chartingPageSize}&offset=0`
+        ),
         apiFetch(`/api/patients/${patientId}/charting/bpe`),
         apiFetch(`/api/patients/${patientId}/charting/bpe-furcations`),
         apiFetch(`/api/patients/${patientId}/charting/notes`),
-        apiFetch(`/api/patients/${patientId}/charting/tooth-surfaces`),
+        apiFetch(
+          `/api/patients/${patientId}/charting/tooth-surfaces?limit=${chartingPageSize}&offset=0`
+        ),
+        apiFetch(`/api/patients/${patientId}/charting/meta`),
       ]);
 
       if (
@@ -1406,7 +1459,8 @@ export default function PatientDetailClient({
         bpeRes.status === 401 ||
         bpeFurcationsRes.status === 401 ||
         notesRes.status === 401 ||
-        surfacesRes.status === 401
+        surfacesRes.status === 401 ||
+        metaRes.status === 401
       ) {
         clearToken();
         router.replace("/login");
@@ -1418,8 +1472,21 @@ export default function PatientDetailClient({
         !bpeRes.ok ||
         !bpeFurcationsRes.ok ||
         !notesRes.ok ||
-        !surfacesRes.ok
+        !surfacesRes.ok ||
+        !metaRes.ok
       ) {
+        if (
+          perioRes.status === 403 ||
+          bpeRes.status === 403 ||
+          bpeFurcationsRes.status === 403 ||
+          notesRes.status === 403 ||
+          surfacesRes.status === 403 ||
+          metaRes.status === 403
+        ) {
+          setChartingViewerEnabled(false);
+          setChartingError("Charting viewer is disabled.");
+          return;
+        }
         throw new Error("Failed to load charting data");
       }
 
@@ -1429,23 +1496,94 @@ export default function PatientDetailClient({
         bpeFurcationsData,
         notesData,
         surfacesData,
+        metaData,
       ] = await Promise.all([
         perioRes.json(),
         bpeRes.json(),
         bpeFurcationsRes.json(),
         notesRes.json(),
         surfacesRes.json(),
+        metaRes.json(),
       ]);
-      setPerioProbes(perioData as R4PerioProbe[]);
+
+      const perioPayload = perioData as PaginatedResult<R4PerioProbe>;
+      setPerioProbes(perioPayload.items ?? []);
+      setPerioProbeTotal(perioPayload.total ?? perioPayload.items?.length ?? 0);
+      setPerioProbeHasMore(Boolean(perioPayload.has_more));
+      setPerioProbeOffset(
+        (perioPayload.offset ?? 0) + (perioPayload.items?.length ?? 0)
+      );
       setBpeEntries(bpeData as R4BPEEntry[]);
       setBpeFurcations(bpeFurcationsData as R4BPEFurcation[]);
       setChartingNotes(notesData as R4PatientNote[]);
-      setToothSurfaces(surfacesData as R4ToothSurface[]);
+
+      const surfacesPayload = surfacesData as PaginatedResult<R4ToothSurface>;
+      setToothSurfaces(surfacesPayload.items ?? []);
+      setToothSurfacesTotal(
+        surfacesPayload.total ?? surfacesPayload.items?.length ?? 0
+      );
+      setToothSurfacesHasMore(Boolean(surfacesPayload.has_more));
+      setToothSurfacesOffset(
+        (surfacesPayload.offset ?? 0) + (surfacesPayload.items?.length ?? 0)
+      );
+      setChartingMeta(metaData as ChartingMeta);
       setChartingLoaded(true);
     } catch (err) {
       setChartingError(err instanceof Error ? err.message : "Failed to load charting");
     } finally {
       setChartingLoading(false);
+    }
+  }
+
+  async function loadMorePerioProbes() {
+    if (!perioProbeHasMore || perioProbeLoadingMore) return;
+    setPerioProbeLoadingMore(true);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/charting/perio-probes?limit=${chartingPageSize}&offset=${perioProbeOffset}`
+      );
+      if (!res.ok) {
+        throw new Error(`Failed to load more perio probes (HTTP ${res.status})`);
+      }
+      const payload = (await res.json()) as PaginatedResult<R4PerioProbe>;
+      setPerioProbes((prev) => [...prev, ...(payload.items ?? [])]);
+      setPerioProbeTotal(payload.total ?? perioProbeTotal);
+      setPerioProbeHasMore(Boolean(payload.has_more));
+      setPerioProbeOffset(
+        (payload.offset ?? perioProbeOffset) + (payload.items?.length ?? 0)
+      );
+    } catch (err) {
+      setChartingError(
+        err instanceof Error ? err.message : "Failed to load more perio probes"
+      );
+    } finally {
+      setPerioProbeLoadingMore(false);
+    }
+  }
+
+  async function loadMoreToothSurfaces() {
+    if (!toothSurfacesHasMore || toothSurfacesLoadingMore) return;
+    setToothSurfacesLoadingMore(true);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/charting/tooth-surfaces?limit=${chartingPageSize}&offset=${toothSurfacesOffset}`
+      );
+      if (!res.ok) {
+        throw new Error(`Failed to load more tooth surfaces (HTTP ${res.status})`);
+      }
+      const payload = (await res.json()) as PaginatedResult<R4ToothSurface>;
+      setToothSurfaces((prev) => [...prev, ...(payload.items ?? [])]);
+      setToothSurfacesTotal(payload.total ?? toothSurfacesTotal);
+      setToothSurfacesHasMore(Boolean(payload.has_more));
+      setToothSurfacesOffset(
+        (payload.offset ?? toothSurfacesOffset) + (payload.items?.length ?? 0)
+      );
+    } catch (err) {
+      setChartingError(
+        err instanceof Error ? err.message : "Failed to load more tooth surfaces"
+      );
+    } finally {
+      setToothSurfacesLoadingMore(false);
     }
   }
 
@@ -1892,6 +2030,10 @@ export default function PatientDetailClient({
   }, [isValidPatientId, patientId]);
 
   useEffect(() => {
+    void loadChartingConfig();
+  }, []);
+
+  useEffect(() => {
     setTransactions([]);
     setTransactionsNextCursor(null);
     setTransactionsLoaded(false);
@@ -1900,10 +2042,17 @@ export default function PatientDetailClient({
   useEffect(() => {
     setChartingLoaded(false);
     setPerioProbes([]);
+    setPerioProbeTotal(0);
+    setPerioProbeHasMore(false);
+    setPerioProbeOffset(0);
     setBpeEntries([]);
     setBpeFurcations([]);
     setChartingNotes([]);
     setToothSurfaces([]);
+    setToothSurfacesTotal(0);
+    setToothSurfacesHasMore(false);
+    setToothSurfacesOffset(0);
+    setChartingMeta(null);
     setChartingError(null);
   }, [patientId]);
 
@@ -1914,7 +2063,13 @@ export default function PatientDetailClient({
       return;
     }
     setTab(initialTab);
-  }, [initialTab]);
+  }, [initialTab, chartingViewerEnabled]);
+
+  useEffect(() => {
+    if (tab === "charting" && !chartingViewerEnabled) {
+      setTab("summary");
+    }
+  }, [tab, chartingViewerEnabled]);
 
   useEffect(() => {
     if (tab !== "clinical") return;
@@ -1935,8 +2090,9 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (tab !== "charting") return;
     if (chartingLoaded) return;
+    if (!chartingViewerEnabled) return;
     void loadCharting();
-  }, [tab, chartingLoaded, patientId]);
+  }, [tab, chartingLoaded, patientId, chartingViewerEnabled]);
 
   useEffect(() => {
     const fromUrl = getTransactionFiltersFromParams(searchParams);
@@ -4308,7 +4464,9 @@ export default function PatientDetailClient({
               ) : tab === "charting" ? (
                 <div className="stack" data-testid="charting-viewer">
                   {!chartingViewerEnabled ? (
-                    <div className="notice">Charting viewer is disabled.</div>
+                    <div className="notice">
+                      Charting viewer is disabled{chartingConfigLoaded ? "." : " (loading...)"}
+                    </div>
                   ) : (
                     <>
                       <div
@@ -4334,6 +4492,14 @@ export default function PatientDetailClient({
                         >
                           {chartingLoading ? "Refreshing..." : "Refresh"}
                         </button>
+                      </div>
+                      <div className="notice">
+                        <strong>Read-only view</strong> · Editing not available.
+                        {chartingMeta?.last_imported_at ? (
+                          <span style={{ marginLeft: 8 }}>
+                            Last imported: {formatDateTime(chartingMeta.last_imported_at)}
+                          </span>
+                        ) : null}
                       </div>
 
                       {chartingError && (
@@ -4364,21 +4530,23 @@ export default function PatientDetailClient({
                       ) : (
                         <div className="stack">
                           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                            <span className="badge">Perio probes: {perioProbes.length}</span>
+                            <span className="badge">Perio probes: {perioProbeTotal}</span>
                             <span className="badge">BPE entries: {bpeEntries.length}</span>
                             <span className="badge">
                               BPE furcations: {bpeFurcations.length}
                             </span>
                             <span className="badge">Patient notes: {chartingNotes.length}</span>
-                            <span className="badge">Tooth surfaces: {toothSurfaces.length}</span>
+                            <span className="badge">
+                              Tooth surfaces: {toothSurfacesTotal}
+                            </span>
                           </div>
 
                           {chartingLoaded &&
-                            perioProbes.length === 0 &&
+                            perioProbeTotal === 0 &&
                             bpeEntries.length === 0 &&
                             bpeFurcations.length === 0 &&
                             chartingNotes.length === 0 &&
-                            toothSurfaces.length === 0 && (
+                            toothSurfacesTotal === 0 && (
                               <div className="notice">No charting data yet.</div>
                             )}
 
@@ -4388,7 +4556,7 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{perioProbes.length} records</span>
+                                <span className="badge">{perioProbeTotal} records</span>
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
@@ -4405,7 +4573,7 @@ export default function PatientDetailClient({
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {perioProbes.length === 0 ? (
+                              {perioProbeTotal === 0 ? (
                                 <div className="notice">No perio probes found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -4477,6 +4645,16 @@ export default function PatientDetailClient({
                                     );
                                   })}
                                 </div>
+                              )}
+                              {perioProbeHasMore && (
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={loadMorePerioProbes}
+                                  disabled={perioProbeLoadingMore}
+                                >
+                                  {perioProbeLoadingMore ? "Loading..." : "Load more"}
+                                </button>
                               )}
                             </div>
                           </Panel>
@@ -4825,7 +5003,7 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{toothSurfaces.length} records</span>
+                                <span className="badge">{toothSurfacesTotal} records</span>
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
@@ -4842,7 +5020,7 @@ export default function PatientDetailClient({
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {toothSurfaces.length === 0 ? (
+                              {toothSurfacesTotal === 0 ? (
                                 <div className="notice">No tooth surfaces found.</div>
                               ) : (
                                 <Table>
@@ -4881,6 +5059,16 @@ export default function PatientDetailClient({
                                     ))}
                                   </tbody>
                                 </Table>
+                              )}
+                              {toothSurfacesHasMore && (
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={loadMoreToothSurfaces}
+                                  disabled={toothSurfacesLoadingMore}
+                                >
+                                  {toothSurfacesLoadingMore ? "Loading..." : "Load more"}
+                                </button>
                               )}
                             </div>
                           </Panel>

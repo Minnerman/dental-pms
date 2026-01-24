@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://dental_pms:change-me@localhost:5432/dental_pms"
     admin_email: EmailStr = "admin@example.com"
     admin_password: str = "ChangeMe123!"
+    feature_charting_viewer: bool = Field(default=True, alias="FEATURE_CHARTING_VIEWER")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

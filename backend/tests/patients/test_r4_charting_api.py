@@ -5,7 +5,13 @@ from sqlalchemy import delete, func, select
 
 from app.db.session import SessionLocal
 from app.models.patient import Patient
-from app.models.r4_charting import R4BPEEntry, R4BPEFurcation, R4PatientNote, R4PerioProbe
+from app.models.r4_charting import (
+    R4BPEEntry,
+    R4BPEFurcation,
+    R4ChartingImportState,
+    R4PatientNote,
+    R4PerioProbe,
+)
 from app.models.user import User
 
 
@@ -43,6 +49,12 @@ def _cleanup(session, patient_id: int | None, legacy_code: int) -> None:
     session.execute(
         delete(R4PatientNote).where(R4PatientNote.legacy_patient_code == legacy_code)
     )
+    if patient_id is not None:
+        session.execute(
+            delete(R4ChartingImportState).where(
+                R4ChartingImportState.patient_id == patient_id
+            )
+        )
     if patient_id is not None:
         session.execute(delete(Patient).where(Patient.id == patient_id))
 
@@ -138,8 +150,16 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         )
         assert res.status_code == 200, res.text
         probes = res.json()
-        assert probes[0]["legacy_probe_key"] == probe_key_older
-        assert probes[1]["legacy_probe_key"] == probe_key_newer
+        assert probes["total"] == 2
+        assert probes["items"][0]["legacy_probe_key"] == probe_key_older
+        assert probes["items"][1]["legacy_probe_key"] == probe_key_newer
+        limited = api_client.get(
+            f"/patients/{patient.id}/charting/perio-probes?limit=1", headers=auth_headers
+        )
+        assert limited.status_code == 200, limited.text
+        limited_payload = limited.json()
+        assert limited_payload["total"] == 2
+        assert len(limited_payload["items"]) == 1
 
         bpe_res = api_client.get(
             f"/patients/{patient.id}/charting/bpe", headers=auth_headers
@@ -163,3 +183,18 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         _cleanup(session, patient_id, legacy_code)
         session.commit()
         session.close()
+
+
+def test_charting_endpoints_blocked_when_feature_disabled(api_client, auth_headers):
+    config = api_client.get("/config").json()
+    enabled = config.get("feature_flags", {}).get("charting_viewer", True)
+    res = api_client.get("/patients/1/charting/perio-probes", headers=auth_headers)
+    if enabled:
+        assert res.status_code != 403, res.text
+    else:
+        assert res.status_code == 403, res.text
+
+
+def test_charting_endpoints_require_auth(api_client):
+    res = api_client.get("/patients/1/charting/perio-probes")
+    assert res.status_code == 401

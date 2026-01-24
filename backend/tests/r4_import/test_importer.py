@@ -3,6 +3,7 @@ from sqlalchemy import delete, func, select, update
 from app.db.session import SessionLocal
 from app.models.appointment import Appointment
 from app.models.patient import Patient
+from app.models.r4_charting import R4ChartingImportState
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import R4TreatmentPlan
 from app.models.user import User
@@ -23,6 +24,11 @@ def clear_r4(session) -> None:
         update(R4TreatmentPlan)
         .where(R4TreatmentPlan.patient_id.in_(r4_patient_ids))
         .values(patient_id=None)
+    )
+    session.execute(
+        delete(R4ChartingImportState).where(
+            R4ChartingImportState.patient_id.in_(r4_patient_ids)
+        )
     )
     session.execute(
         delete(R4PatientMapping).where(R4PatientMapping.patient_id.in_(r4_patient_ids))

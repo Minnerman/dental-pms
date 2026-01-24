@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.r4_charting import (
     R4BPEEntry,
     R4BPEFurcation,
+    R4ChartingImportState,
     R4ChartHealingAction,
     R4FixedNote,
     R4NoteCategory,
@@ -144,6 +145,7 @@ def import_r4_charting(
             )
     mapped_patient_cache: dict[int, bool] = {}
     seen_perio_probe_keys: set[str] = set()
+    imported_patient_codes: set[int] = set()
 
     for system in source.list_tooth_systems(limit=limit):
         _upsert_tooth_system(session, system, actor_id, legacy_source, stats)
@@ -154,12 +156,18 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, action.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_chart_healing_action(session, action, actor_id, legacy_source, stats)
     for entry in source.list_bpe_entries(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, entry.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_bpe_entry(session, entry, actor_id, legacy_source, stats)
     for furcation in source.list_bpe_furcations(
         patients_from=patients_from,
@@ -181,6 +189,13 @@ def import_r4_charting(
             stats.bpe_furcations_skipped += 1
             _log_unlinked_patient("bpe_furcations", furcation.furcation_id, furcation.patient_code)
             continue
+        _track_patient_code(
+            session,
+            legacy_source,
+            furcation.patient_code,
+            mapped_patient_cache,
+            imported_patient_codes,
+        )
         _upsert_bpe_furcation(session, furcation, actor_id, legacy_source, stats)
     for probe in source.list_perio_probes(
         patients_from=patients_from,
@@ -207,6 +222,9 @@ def import_r4_charting(
             _log_unlinked_patient("perio_probes", probe.trans_id, probe.patient_code)
             _append_sample(stats.perio_probes_sample_unmapped, _build_perio_probe_key(probe))
             continue
+        _track_patient_code(
+            session, legacy_source, probe.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         legacy_key = _build_perio_probe_key(probe)
         if legacy_key in seen_perio_probe_keys:
             stats.perio_probes_skipped_duplicate += 1
@@ -220,12 +238,18 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, plaque.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_perio_plaque(session, plaque, actor_id, legacy_source, stats)
     for note in source.list_patient_notes(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, note.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_patient_note(session, note, actor_id, legacy_source, stats)
     for fixed_note in source.list_fixed_notes(limit=limit):
         _upsert_fixed_note(session, fixed_note, actor_id, legacy_source, stats)
@@ -236,19 +260,35 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, note.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_treatment_note(session, note, actor_id, legacy_source, stats)
     for note in source.list_temporary_notes(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, note.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_temporary_note(session, note, actor_id, legacy_source, stats)
     for note in source.list_old_patient_notes(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
     ):
+        _track_patient_code(
+            session, legacy_source, note.patient_code, mapped_patient_cache, imported_patient_codes
+        )
         _upsert_old_patient_note(session, note, actor_id, legacy_source, stats)
+
+    _record_charting_import_state(
+        session,
+        legacy_source,
+        imported_patient_codes,
+        actor_id,
+    )
 
     return stats
 
@@ -826,6 +866,59 @@ def _build_patient_note_key(note: R4PatientNotePayload) -> str:
     if note.note_number is not None:
         return _build_legacy_key(note.patient_code, note.note_number)
     return _build_legacy_key(note.patient_code, note.note_date)
+
+
+def _track_patient_code(
+    session: Session,
+    legacy_source: str,
+    patient_code: int | None,
+    cache: dict[int, bool],
+    imported: set[int],
+) -> None:
+    if patient_code is None:
+        return
+    if _is_patient_mapped(session, legacy_source, patient_code, cache):
+        imported.add(patient_code)
+
+
+def _record_charting_import_state(
+    session: Session,
+    legacy_source: str,
+    patient_codes: set[int],
+    actor_id: int,
+) -> None:
+    if not patient_codes:
+        return
+    mappings = list(
+        session.scalars(
+            select(R4PatientMapping).where(
+                R4PatientMapping.legacy_source == legacy_source,
+                R4PatientMapping.legacy_patient_code.in_(patient_codes),
+            )
+        )
+    )
+    if not mappings:
+        return
+    now = datetime.now(timezone.utc)
+    for mapping in mappings:
+        record = session.scalar(
+            select(R4ChartingImportState).where(
+                R4ChartingImportState.patient_id == mapping.patient_id
+            )
+        )
+        if record:
+            record.legacy_patient_code = mapping.legacy_patient_code
+            record.last_imported_at = now
+            record.updated_by_user_id = actor_id
+        else:
+            session.add(
+                R4ChartingImportState(
+                    patient_id=mapping.patient_id,
+                    legacy_patient_code=mapping.legacy_patient_code,
+                    last_imported_at=now,
+                    created_by_user_id=actor_id,
+                )
+            )
 
 
 def _is_patient_mapped(
