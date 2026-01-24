@@ -1,5 +1,7 @@
 # R4 charting discovery (Stage 128)
 
+**R4 SQL Server is strictly read-only.** Codex must only run `SELECT` queries against R4. **No writes of any kind**: no `UPDATE/INSERT/DELETE/MERGE`, no DDL (`CREATE/ALTER/DROP`), no stored procedures, no temp-table side effects, no schema changes, and nothing that could modify or impact the R4 server.
+
 Status: discovery-only. No UI or import changes in this stage. All R4 access is SELECT-only.
 
 Goal: identify the exact R4 tables/views, keys, code systems, and rendering rules needed to match the R4 odontogram and related clinical charting behaviors.

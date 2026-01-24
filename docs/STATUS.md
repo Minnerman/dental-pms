@@ -1,5 +1,7 @@
 # Dental PMS — Status (Stop Point)
 
+R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
+
 ## What's working now
 - Auth + RBAC with admin-only `/users`
 - Patients list/create/edit + notes per patient
