@@ -117,6 +117,20 @@ async function expectBlockWithText(root: Locator, cells: string[]) {
   }
 }
 
+function extractApiItems<T>(payload: unknown): { items: T[]; total: number } {
+  if (Array.isArray(payload)) {
+    return { items: payload as T[], total: payload.length };
+  }
+  const data = payload as {
+    items?: T[];
+    total?: number;
+  };
+  return {
+    items: data?.items ?? [],
+    total: typeof data?.total === "number" ? data.total : (data?.items ?? []).length,
+  };
+}
+
 test("charting viewer parity matches API counts", async ({ page, request }) => {
   test.setTimeout(120_000);
   const token = await ensureAuthReady(request);
@@ -140,8 +154,8 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     expect(apiResponse.ok()).toBeTruthy();
-    const apiData = (await apiResponse.json()) as any[];
-    const apiCount = apiData.length;
+    const apiPayload = await apiResponse.json();
+    const { items: apiData, total: apiCount } = extractApiItems<any>(apiPayload);
 
     await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
       waitUntil: "domcontentloaded",

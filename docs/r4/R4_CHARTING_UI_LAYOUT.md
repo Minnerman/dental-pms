@@ -9,6 +9,10 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
 ## Evidence
 - Playwright parity report: `tmp/stage143/ui_parity.json`.
 
+## Operational notes
+- Read-only banner and last-imported metadata are displayed in the charting viewer.
+- Charting viewer availability is controlled by the runtime flag `FEATURE_CHARTING_VIEWER`.
+
 ## Perio probes
 - Grouped by exam date (latest exam highlighted).
 - Within a date: ordered by tooth number, then probing site order (MB, B, DB, ML, L, DL).

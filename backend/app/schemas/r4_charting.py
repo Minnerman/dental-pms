@@ -86,3 +86,26 @@ class R4ToothSurfaceOut(BaseModel):
     sort_order: int | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class PaginatedR4PerioProbeOut(BaseModel):
+    items: list[R4PerioProbeOut]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class PaginatedR4ToothSurfaceOut(BaseModel):
+    items: list[R4ToothSurfaceOut]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class R4ChartingMetaOut(BaseModel):
+    patient_id: int
+    legacy_patient_code: int | None = None
+    last_imported_at: datetime | None = None
+    source: str = "r4"

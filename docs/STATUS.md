@@ -108,6 +108,11 @@
   - Notes list shows latest 10 with show-more toggle and category badges.
   - Parity report: `tmp/stage143/ui_parity.json` (counts + row-level checks PASS).
   - Doc: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-24: Stage144 charting viewer operational gating + safety.
+  - Runtime flag: `FEATURE_CHARTING_VIEWER` exposed via `/config`; charting endpoints return 403 when disabled.
+  - UI shows read-only banner and last-imported metadata from `/patients/<id>/charting/meta`.
+  - Pagination defaults for perio probes + tooth surfaces (limit 500, max 5000) with load-more UI.
+  - Migration adds `r4_charting_import_state` and index on `r4_perio_probes` for patient/date ordering.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

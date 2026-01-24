@@ -56,6 +56,7 @@ from app.models.r4_charting import (
     R4TreatmentNote,
     R4TemporaryNote,
     R4OldPatientNote,
+    R4ChartingImportState,
 )
 from app.models.r4_treatment_transaction import R4TreatmentTransaction
 from app.models.r4_user import R4User
@@ -132,6 +133,7 @@ __all__ = [
     "R4TreatmentNote",
     "R4TemporaryNote",
     "R4OldPatientNote",
+    "R4ChartingImportState",
     "R4Appointment",
     "R4AppointmentPatientLink",
     "R4PatientMapping",
