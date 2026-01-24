@@ -787,6 +787,7 @@ export default function PatientDetailClient({
   const chartingRequestId = useRef(0);
   const perioLoadMoreRequestId = useRef(0);
   const surfacesLoadMoreRequestId = useRef(0);
+  const chartingPresetVersion = 1;
   const [chartingExportEntities, setChartingExportEntities] = useState<
     Record<string, boolean>
   >({
@@ -1546,6 +1547,45 @@ export default function PatientDetailClient({
     },
     [chartingStorageKey]
   );
+
+  function serializePreset(section: string, payload: Record<string, unknown>) {
+    return JSON.stringify({
+      version: chartingPresetVersion,
+      section,
+      payload,
+    });
+  }
+
+  function parsePreset(section: string, raw: string) {
+    try {
+      const parsed = JSON.parse(raw) as {
+        version?: number;
+        section?: string;
+        payload?: Record<string, unknown>;
+      };
+      if (!parsed || typeof parsed !== "object") return null;
+      if (parsed.section && parsed.section !== section) return null;
+      if (!parsed.payload || typeof parsed.payload !== "object") return null;
+      return parsed.payload;
+    } catch {
+      return null;
+    }
+  }
+
+  async function copyPresetToClipboard(section: string, payload: Record<string, unknown>) {
+    const text = serializePreset(section, payload);
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    window.prompt("Copy preset JSON", text);
+  }
+
+  function importPresetFromPrompt(section: string) {
+    const raw = window.prompt("Paste preset JSON");
+    if (!raw) return null;
+    return parsePreset(section, raw);
+  }
 
   function buildPerioParams(offset: number) {
     const params = new URLSearchParams();
@@ -5203,6 +5243,36 @@ export default function PatientDetailClient({
                                   </div>
                                 ))}
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={async () => {
+                                    await copyPresetToClipboard("perio", {
+                                      from: perioFilterFrom,
+                                      to: perioFilterTo,
+                                      tooth: perioFilterTooth,
+                                      site: perioFilterSite,
+                                      bleeding: perioFilterBleeding,
+                                      plaque: perioFilterPlaque,
+                                    });
+                                  }}
+                                >
+                                  Copy preset JSON
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    const payload = importPresetFromPrompt("perio");
+                                    if (payload) {
+                                      applyPerioFilters(payload);
+                                    }
+                                  }}
+                                >
+                                  Import preset JSON
+                                </button>
+                              </div>
                               {chartingMetaOpen.perio && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: transactions.ref_id -&gt; patient mapping</div>
@@ -5400,6 +5470,33 @@ export default function PatientDetailClient({
                                   </div>
                                 ))}
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={async () => {
+                                    await copyPresetToClipboard("bpe", {
+                                      from: bpeFilterFrom,
+                                      to: bpeFilterTo,
+                                      latest_only: bpeLatestOnly,
+                                    });
+                                  }}
+                                >
+                                  Copy preset JSON
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    const payload = importPresetFromPrompt("bpe");
+                                    if (payload) {
+                                      applyBpeFilters(payload);
+                                    }
+                                  }}
+                                >
+                                  Import preset JSON
+                                </button>
+                              </div>
                               {chartingMetaOpen.bpe && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
@@ -5591,6 +5688,33 @@ export default function PatientDetailClient({
                                     </button>
                                   </div>
                                 ))}
+                              </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={async () => {
+                                    await copyPresetToClipboard("furcations", {
+                                      from: bpeFilterFrom,
+                                      to: bpeFilterTo,
+                                      latest_only: bpeLatestOnly,
+                                    });
+                                  }}
+                                >
+                                  Copy preset JSON
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    const payload = importPresetFromPrompt("furcations");
+                                    if (payload) {
+                                      applyBpeFilters(payload);
+                                    }
+                                  }}
+                                >
+                                  Import preset JSON
+                                </button>
                               </div>
                               {chartingMetaOpen.bpeFurcations && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
@@ -5838,6 +5962,34 @@ export default function PatientDetailClient({
                                     </button>
                                   </div>
                                 ))}
+                              </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={async () => {
+                                    await copyPresetToClipboard("notes", {
+                                      from: notesFilterFrom,
+                                      to: notesFilterTo,
+                                      q: notesFilterQuery,
+                                      category: notesFilterCategory,
+                                    });
+                                  }}
+                                >
+                                  Copy preset JSON
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => {
+                                    const payload = importPresetFromPrompt("notes");
+                                    if (payload) {
+                                      applyNotesFilters(payload);
+                                    }
+                                  }}
+                                >
+                                  Import preset JSON
+                                </button>
                               </div>
                               {chartingMetaOpen.notes && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
