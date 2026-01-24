@@ -779,6 +779,7 @@ export default function PatientDetailClient({
   const [bpeLatestOnly, setBpeLatestOnly] = useState(false);
   const [notesFilterQuery, setNotesFilterQuery] = useState("");
   const [notesFilterQueryDebounced, setNotesFilterQueryDebounced] = useState("");
+  const [notesIncludeTextInLink, setNotesIncludeTextInLink] = useState(false);
   const [notesFilterCategory, setNotesFilterCategory] = useState("");
   const [notesFilterFrom, setNotesFilterFrom] = useState("");
   const [notesFilterTo, setNotesFilterTo] = useState("");
@@ -805,6 +806,7 @@ export default function PatientDetailClient({
   const [chartingPresetSlots, setChartingPresetSlots] = useState<Record<string, boolean>>(
     {}
   );
+  const [chartingUrlApplied, setChartingUrlApplied] = useState(false);
 
   async function loadPatient() {
     setLoading(true);
@@ -1618,6 +1620,61 @@ export default function PatientDetailClient({
     return params;
   }
 
+  function buildChartingShareParams(
+    section: "perio" | "bpe" | "furcations" | "notes"
+  ) {
+    const params = new URLSearchParams();
+    if (section === "perio") {
+      if (perioFilterFrom) params.set("charting_perio_from", perioFilterFrom);
+      if (perioFilterTo) params.set("charting_perio_to", perioFilterTo);
+      if (perioFilterTooth.trim()) {
+        params.set("charting_perio_tooth", perioFilterTooth.trim());
+      }
+      if (perioFilterSite) params.set("charting_perio_site", perioFilterSite);
+      if (perioFilterBleeding) params.set("charting_perio_bleeding", "1");
+      if (perioFilterPlaque) params.set("charting_perio_plaque", "1");
+    }
+    if (section === "bpe" || section === "furcations") {
+      if (bpeFilterFrom) params.set("charting_bpe_from", bpeFilterFrom);
+      if (bpeFilterTo) params.set("charting_bpe_to", bpeFilterTo);
+      if (bpeLatestOnly) params.set("charting_bpe_latest", "1");
+    }
+    if (section === "notes") {
+      if (notesFilterFrom) params.set("charting_notes_from", notesFilterFrom);
+      if (notesFilterTo) params.set("charting_notes_to", notesFilterTo);
+      if (notesFilterCategory) {
+        params.set("charting_notes_category", notesFilterCategory);
+      }
+      const query = notesFilterQuery.trim();
+      if (notesIncludeTextInLink && query) {
+        params.set("charting_notes_q_inc", "1");
+        params.set("charting_notes_q", query);
+      }
+    }
+    return params;
+  }
+
+  async function copyChartingLink(
+    section: "perio" | "bpe" | "furcations" | "notes"
+  ) {
+    if (typeof window === "undefined") return;
+    if (section === "notes" && notesIncludeTextInLink && notesFilterQuery.trim()) {
+      const proceed = window.confirm(
+        "This link will include the notes text search, which may contain patient-sensitive terms. Continue?"
+      );
+      if (!proceed) return;
+    }
+    const params = buildChartingShareParams(section);
+    const basePath = `/patients/${patientId}/charting`;
+    const query = params.toString();
+    const url = `${window.location.origin}${basePath}${query ? `?${query}` : ""}`;
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      return;
+    }
+    window.prompt("Copy charting link", url);
+  }
+
   function applyPerioFilters(payload: Record<string, unknown>) {
     setPerioFilterFrom(String(payload.from ?? ""));
     setPerioFilterTo(String(payload.to ?? ""));
@@ -2332,6 +2389,8 @@ export default function PatientDetailClient({
     setChartingMeta(null);
     setChartingError(null);
     setChartingFiltersReady(false);
+    setChartingUrlApplied(false);
+    setNotesIncludeTextInLink(false);
   }, [patientId]);
 
   useEffect(() => {
@@ -2365,6 +2424,7 @@ export default function PatientDetailClient({
     if (!chartingViewerEnabled) return;
     if (!chartingUserLoaded) return;
     if (chartingFiltersReady) return;
+    if (chartingUrlApplied) return;
     const storedPerio = loadStoredFilters("perio");
     if (storedPerio) {
       setPerioFilterFrom(String(storedPerio.from ?? ""));
@@ -2387,6 +2447,9 @@ export default function PatientDetailClient({
       setNotesFilterQuery(String(storedNotes.q ?? ""));
       setNotesFilterCategory(String(storedNotes.category ?? ""));
     }
+    const chartingParams = new URLSearchParams(searchParams?.toString() ?? "");
+    applyChartingFiltersFromParams(chartingParams);
+    setChartingUrlApplied(true);
     [1, 2, 3].forEach((slot) => {
       updatePresetSlot("perio", slot, Boolean(loadPresetFilters("perio", slot)));
       updatePresetSlot("bpe", slot, Boolean(loadPresetFilters("bpe", slot)));
@@ -2398,10 +2461,13 @@ export default function PatientDetailClient({
     chartingViewerEnabled,
     chartingUserLoaded,
     chartingFiltersReady,
+    chartingUrlApplied,
     chartingUserKey,
     loadStoredFilters,
     loadPresetFilters,
     updatePresetSlot,
+    searchParams,
+    applyChartingFiltersFromParams,
   ]);
 
   useEffect(() => {
@@ -2630,6 +2696,81 @@ export default function PatientDetailClient({
     setTransactionsCostOnly(false);
     updateTransactionFiltersInUrl(next);
     void loadTransactions({ reset: true, overrides: next });
+  }
+
+  function parseChartingDateParam(value: string | null) {
+    if (!value) return "";
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return "";
+    return trimmed;
+  }
+
+  function parseChartingIntParam(value: string | null) {
+    if (!value) return "";
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return "";
+    return trimmed;
+  }
+
+  function parseChartingPerioSite(value: string | null) {
+    const parsed = parseChartingIntParam(value);
+    if (!parsed) return "";
+    const numeric = Number(parsed);
+    if (!Number.isFinite(numeric) || !perioSiteLabels[numeric]) return "";
+    return String(numeric);
+  }
+
+  function applyChartingFiltersFromParams(params: URLSearchParams) {
+    const hasPerioParams = [
+      "charting_perio_from",
+      "charting_perio_to",
+      "charting_perio_tooth",
+      "charting_perio_site",
+      "charting_perio_bleeding",
+      "charting_perio_plaque",
+    ].some((key) => params.has(key));
+    if (hasPerioParams) {
+      setPerioFilterFrom(parseChartingDateParam(params.get("charting_perio_from")));
+      setPerioFilterTo(parseChartingDateParam(params.get("charting_perio_to")));
+      setPerioFilterTooth(parseChartingIntParam(params.get("charting_perio_tooth")));
+      setPerioFilterSite(parseChartingPerioSite(params.get("charting_perio_site")));
+      setPerioFilterBleeding(params.get("charting_perio_bleeding") === "1");
+      setPerioFilterPlaque(params.get("charting_perio_plaque") === "1");
+    }
+
+    const hasBpeParams = [
+      "charting_bpe_from",
+      "charting_bpe_to",
+      "charting_bpe_latest",
+    ].some((key) => params.has(key));
+    if (hasBpeParams) {
+      setBpeFilterFrom(parseChartingDateParam(params.get("charting_bpe_from")));
+      setBpeFilterTo(parseChartingDateParam(params.get("charting_bpe_to")));
+      setBpeLatestOnly(params.get("charting_bpe_latest") === "1");
+    }
+
+    const hasNotesParams = [
+      "charting_notes_from",
+      "charting_notes_to",
+      "charting_notes_category",
+      "charting_notes_q_inc",
+      "charting_notes_q",
+    ].some((key) => params.has(key));
+    if (hasNotesParams) {
+      setNotesFilterFrom(parseChartingDateParam(params.get("charting_notes_from")));
+      setNotesFilterTo(parseChartingDateParam(params.get("charting_notes_to")));
+      setNotesFilterCategory(parseChartingIntParam(params.get("charting_notes_category")));
+      const includeText = params.get("charting_notes_q_inc") === "1";
+      setNotesIncludeTextInLink(includeText);
+      if (includeText) {
+        const query = (params.get("charting_notes_q") ?? "").trim();
+        setNotesFilterQuery(query);
+        setNotesFilterQueryDebounced(query);
+      } else {
+        setNotesFilterQuery("");
+        setNotesFilterQueryDebounced("");
+      }
+    }
   }
 
   useEffect(() => {
@@ -5273,6 +5414,15 @@ export default function PatientDetailClient({
                                   Import preset JSON
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void copyChartingLink("perio")}
+                                >
+                                  Copy filter link
+                                </button>
+                              </div>
                               {chartingMetaOpen.perio && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: transactions.ref_id -&gt; patient mapping</div>
@@ -5497,6 +5647,15 @@ export default function PatientDetailClient({
                                   Import preset JSON
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void copyChartingLink("bpe")}
+                                >
+                                  Copy filter link
+                                </button>
+                              </div>
                               {chartingMetaOpen.bpe && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
@@ -5714,6 +5873,15 @@ export default function PatientDetailClient({
                                   }}
                                 >
                                   Import preset JSON
+                                </button>
+                              </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void copyChartingLink("furcations")}
+                                >
+                                  Copy filter link
                                 </button>
                               </div>
                               {chartingMetaOpen.bpeFurcations && (
@@ -5989,6 +6157,25 @@ export default function PatientDetailClient({
                                   }}
                                 >
                                   Import preset JSON
+                                </button>
+                              </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <label className="row" style={{ gap: 6 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={notesIncludeTextInLink}
+                                    onChange={(event) =>
+                                      setNotesIncludeTextInLink(event.target.checked)
+                                    }
+                                  />
+                                  <span>Include text search in link</span>
+                                </label>
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void copyChartingLink("notes")}
+                                >
+                                  Copy filter link
                                 </button>
                               </div>
                               {chartingMetaOpen.notes && (

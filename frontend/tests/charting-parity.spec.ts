@@ -450,3 +450,134 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   await notesPanel.getByRole("button", { name: "Import preset JSON" }).click();
   await expect(notesInput).toHaveValue("note 1");
 });
+
+test("charting notes share link roundtrip (non-text filters)", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const { patientMap } = await seedCharting(request);
+  const patientId = patientMap.get(1012056);
+  if (!patientId) {
+    throw new Error("Missing seeded patient 1012056 for share link test.");
+  }
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+
+  await page.evaluate(() => {
+    // @ts-expect-error - attach test helper to window
+    window.__copiedChartingLink = null;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      const original = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (value: string) => {
+        // @ts-expect-error - attach test helper to window
+        window.__copiedChartingLink = value;
+        return original(value);
+      };
+    }
+  });
+
+  const notesPanel = page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  await expect(notesPanel).toBeVisible();
+
+  await notesPanel.getByLabel("From").fill("2024-07-02");
+  await notesPanel.getByLabel("To").fill("2024-07-03");
+  await notesPanel.getByLabel("Category").selectOption("1");
+  await notesPanel.getByRole("button", { name: "Copy filter link" }).click();
+
+  const copied = await page.evaluate(() => {
+    // @ts-expect-error - read test helper from window
+    return window.__copiedChartingLink as string | null;
+  });
+  expect(copied).not.toBeNull();
+  if (!copied) {
+    return;
+  }
+  expect(copied).toContain("charting_notes_from=2024-07-02");
+  expect(copied).toContain("charting_notes_to=2024-07-03");
+  expect(copied).toContain("charting_notes_category=1");
+  expect(copied).not.toContain("charting_notes_q=");
+
+  await page.goto(copied, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+  const notesPanelAfter = page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  await expect(notesPanelAfter).toBeVisible();
+  await expect(notesPanelAfter.getByLabel("From")).toHaveValue("2024-07-02");
+  await expect(notesPanelAfter.getByLabel("To")).toHaveValue("2024-07-03");
+  await expect(notesPanelAfter.getByLabel("Category")).toHaveValue("1");
+  await expect(notesPanelAfter.getByPlaceholder("Find text...")).toHaveValue("");
+  await expect(
+    notesPanelAfter.getByLabel("Include text search in link")
+  ).not.toBeChecked();
+
+  const notesBadge = page.locator(".badge", { hasText: "Patient notes:" }).first();
+  await expect(notesBadge).toHaveText(/Patient notes:\s*2/, { timeout: 30_000 });
+});
+
+test("charting notes share link includes text search when opted in", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const { patientMap } = await seedCharting(request);
+  const patientId = patientMap.get(1012056);
+  if (!patientId) {
+    throw new Error("Missing seeded patient 1012056 for share link opt-in test.");
+  }
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+
+  await page.evaluate(() => {
+    // @ts-expect-error - attach test helper to window
+    window.__copiedChartingLink = null;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      const original = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (value: string) => {
+        // @ts-expect-error - attach test helper to window
+        window.__copiedChartingLink = value;
+        return original(value);
+      };
+    }
+    window.confirm = () => true;
+  });
+
+  const notesPanel = page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  await expect(notesPanel).toBeVisible();
+  await notesPanel.getByPlaceholder("Find text...").fill("note 1");
+  await notesPanel.getByLabel("Include text search in link").check();
+  await notesPanel.getByRole("button", { name: "Copy filter link" }).click();
+
+  const copied = await page.evaluate(() => {
+    // @ts-expect-error - read test helper from window
+    return window.__copiedChartingLink as string | null;
+  });
+  expect(copied).not.toBeNull();
+  if (copied) {
+    const parsed = new URL(copied);
+    expect(parsed.searchParams.get("charting_notes_q_inc")).toBe("1");
+    expect(parsed.searchParams.get("charting_notes_q")).toBe("note 1");
+  }
+});
