@@ -44,6 +44,7 @@ From the repo root:
 - Enable: set `FEATURE_CHARTING_VIEWER=true` in `.env` and restart containers.
 - Verify: `curl http://localhost:8100/config` and look for `"charting_viewer": true`.
 - Disable quickly: remove the env var or set `FEATURE_CHARTING_VIEWER=false` and restart.
+- Full runbook: `docs/r4/CHARTING_VIEWER_ENABLEMENT.md`.
 
 Patients-only pilot (Stage 108):
 ```bash
