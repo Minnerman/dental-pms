@@ -84,7 +84,7 @@ jobs:
 
           for i in 1 2 3; do
             echo "Attempt $i/3: docker compose pull db"
-            if docker compose pull db; then
+            if docker compose --env-file .env pull db; then
               break
             fi
             echo "Pull failed; sleeping 20s..."
@@ -93,7 +93,7 @@ jobs:
 
           for i in 1 2 3; do
             echo "Attempt $i/3: docker compose up -d db"
-            if docker compose up -d db; then
+            if docker compose --env-file .env up -d db; then
               exit 0
             fi
             echo "Up failed; sleeping 20s..."
@@ -109,14 +109,14 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
+            if docker compose --env-file .env exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
               echo "Postgres ready"
               exit 0
             fi
             sleep 1
           done
           echo "Postgres not ready"
-          docker compose logs --no-color --tail=200 db || true
+          docker compose --env-file .env logs --no-color --tail=200 db || true
           exit 1
 
       - name: Run migrations (retry)
@@ -125,7 +125,7 @@ jobs:
           set -euo pipefail
           for i in 1 2 3; do
             echo "Attempt $i/3: running migrations"
-            if docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
+            if docker compose --env-file .env run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
               exit 0
             fi
             echo "Migrations failed (likely transient pull). Sleeping 15s..."
@@ -135,7 +135,7 @@ jobs:
           exit 1
 
       - name: Start backend
-        run: docker compose up -d backend
+        run: docker compose --env-file .env up -d backend
 
       - name: Wait for backend health
         run: |
@@ -147,11 +147,11 @@ jobs:
             sleep 2
           done
           echo "Backend did not become healthy in time" >&2
-          docker compose logs --no-color --tail=200 backend
+          docker compose --env-file .env logs --no-color --tail=200 backend
           exit 1
 
       - name: Start frontend
-        run: docker compose up -d frontend
+        run: docker compose --env-file .env up -d frontend
 
       - name: Wait for frontend proxy
         run: |
@@ -163,7 +163,7 @@ jobs:
             sleep 2
           done
           echo "Frontend proxy did not become healthy in time" >&2
-          docker compose logs --no-color --tail=200 frontend
+          docker compose --env-file .env logs --no-color --tail=200 frontend
           exit 1
 
       - name: Install frontend deps
@@ -192,11 +192,298 @@ jobs:
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker compose ps
-          docker compose logs --no-color --tail=300 backend
-          docker compose logs --no-color --tail=300 frontend
-          docker compose logs --no-color --tail=300 db
+          docker compose --env-file .env ps
+          docker compose --env-file .env logs --no-color --tail=300 backend
+          docker compose --env-file .env logs --no-color --tail=300 frontend
+          docker compose --env-file .env logs --no-color --tail=300 db
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose --env-file .env down -v
+
+  playwright-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: test
+      ENABLE_TEST_ROUTES: "1"
+      FEATURE_CHARTING_VIEWER: "true"
+      NEXT_PUBLIC_FEATURE_CHARTING_VIEWER: "1"
+      BACKEND_BASE_URL: http://localhost:8100
+      COMPOSE_PROJECT_NAME: dentalpms_playwright_parity
+      POSTGRES_DB: dental_pms
+      POSTGRES_USER: dental_pms
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_PORT: 5442
+      DATABASE_URL: postgresql+psycopg://dental_pms:change-me@db:5432/dental_pms
+      BACKEND_PORT: 8100
+      FRONTEND_PORT: 3100
+      SECRET_KEY: dev-secret-please-change-32chars-long
+      JWT_SECRET: dev-jwt-secret-please-change-32chars
+      JWT_ALG: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 120
+      RESET_TOKEN_EXPIRE_MINUTES: 30
+      RESET_TOKEN_DEBUG: "false"
+      RESET_REQUESTS_PER_MINUTE: 5
+      RESET_CONFIRM_PER_MINUTE: 5
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: ChangeMe123!
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Write CI .env
+        run: |
+          cat <<'EOF' > .env
+          POSTGRES_DB=${POSTGRES_DB}
+          POSTGRES_USER=${POSTGRES_USER}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_PORT=${POSTGRES_PORT}
+          DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+          BACKEND_PORT=${BACKEND_PORT}
+          FRONTEND_PORT=${FRONTEND_PORT}
+          APP_ENV=${APP_ENV}
+          SECRET_KEY=${SECRET_KEY}
+          JWT_SECRET=${JWT_SECRET}
+          JWT_ALG=${JWT_ALG}
+          ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+          RESET_TOKEN_EXPIRE_MINUTES=${RESET_TOKEN_EXPIRE_MINUTES}
+          RESET_TOKEN_DEBUG=${RESET_TOKEN_DEBUG}
+          RESET_REQUESTS_PER_MINUTE=${RESET_REQUESTS_PER_MINUTE}
+          RESET_CONFIRM_PER_MINUTE=${RESET_CONFIRM_PER_MINUTE}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          ENABLE_TEST_ROUTES=${ENABLE_TEST_ROUTES}
+          FEATURE_CHARTING_VIEWER=${FEATURE_CHARTING_VIEWER}
+          NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=${NEXT_PUBLIC_FEATURE_CHARTING_VIEWER}
+          EOF
+
+      - name: Start database (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export COMPOSE_HTTP_TIMEOUT=300
+          export DOCKER_CLIENT_TIMEOUT=300
+
+          for i in 1 2 3; do
+            echo "Attempt $i/3: docker compose pull db"
+            if docker compose --env-file .env pull db; then
+              break
+            fi
+            echo "Pull failed; sleeping 20s..."
+            sleep 20
+          done
+
+          for i in 1 2 3; do
+            echo "Attempt $i/3: docker compose up -d db"
+            if docker compose --env-file .env up -d db; then
+              exit 0
+            fi
+            echo "Up failed; sleeping 20s..."
+            sleep 20
+          done
+
+          echo "DB failed to start after retries"
+          docker compose logs --no-color --tail=200 db || true
+          exit 1
+
+      - name: Wait for Postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if docker compose --env-file .env exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
+              echo "Postgres ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres not ready"
+          docker compose --env-file .env logs --no-color --tail=200 db || true
+          exit 1
+
+      - name: Run migrations (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            echo "Attempt $i/3: running migrations"
+            if docker compose --env-file .env run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
+              exit 0
+            fi
+            echo "Migrations failed (likely transient pull). Sleeping 15s..."
+            sleep 15
+          done
+          echo "Giving up after 3 attempts."
+          exit 1
+
+      - name: Start backend
+        run: docker compose --env-file .env up -d backend
+
+      - name: Assert backend env
+        run: |
+          docker compose --env-file .env exec -T backend env | egrep '^(APP_ENV|ENABLE_TEST_ROUTES|FEATURE_CHARTING_VIEWER)='
+          docker compose --env-file .env exec -T backend python -c "import os; print('APP_ENV=',os.getenv('APP_ENV'),'ENABLE_TEST_ROUTES=',os.getenv('ENABLE_TEST_ROUTES'),'FEATURE_CHARTING_VIEWER=',os.getenv('FEATURE_CHARTING_VIEWER'))"
+
+      - name: Wait for backend health
+        run: |
+          set -e
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://localhost:${BACKEND_PORT}/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not become healthy in time" >&2
+          docker compose --env-file .env logs --no-color --tail=200 backend
+          exit 1
+
+      - name: Start frontend
+        run: docker compose --env-file .env up -d frontend
+
+      - name: Check seed route availability
+        run: |
+          set +e
+          SEED_OUT=$(
+            docker compose --env-file .env exec -T backend python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          print("APP_ENV=", os.getenv("APP_ENV"))
+          print("ENABLE_TEST_ROUTES=", os.getenv("ENABLE_TEST_ROUTES"))
+          print("FEATURE_CHARTING_VIEWER=", os.getenv("FEATURE_CHARTING_VIEWER"))
+
+          base_url = "http://localhost:8000"
+          login_url = f"{base_url}/auth/login"
+          seed_url = f"{base_url}/test/seed/charting"
+
+          def post_json(url, payload, headers=None):
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+              url,
+              data=data,
+              method="POST",
+              headers={"Content-Type": "application/json", **(headers or {})},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+              body = resp.read(500).decode("utf-8", "replace")
+              return resp.status, body
+
+          try:
+            status, body = post_json(
+              login_url,
+              {
+                "email": os.getenv("ADMIN_EMAIL", "admin@example.com"),
+                "password": os.getenv("ADMIN_PASSWORD", "ChangeMe123!"),
+              },
+            )
+          except urllib.error.HTTPError as exc:
+            body = exc.read(500).decode("utf-8", "replace")
+            print("login status", exc.code)
+            print(body)
+            raise SystemExit(1)
+          print("login status", status)
+          if status != 200:
+            print(body)
+            raise SystemExit(1)
+          token = json.loads(body).get("access_token")
+          if not token:
+            print("login response missing access_token")
+            print(body)
+            raise SystemExit(1)
+          try:
+            seed_status, seed_body = post_json(
+              seed_url,
+              {},
+              headers={"Authorization": f"Bearer {token}"},
+            )
+          except urllib.error.HTTPError as exc:
+            seed_body = exc.read(500).decode("utf-8", "replace")
+            seed_status = exc.code
+          print("seed status", seed_status)
+          print(seed_body)
+          if seed_status == 404:
+            spec = json.loads(
+              urllib.request.urlopen(f"{base_url}/openapi.json", timeout=10)
+              .read(20000)
+              .decode("utf-8", "replace")
+            )
+            paths = sorted([p for p in spec.get("paths", {}) if "/test" in p or "seed" in p])
+            print("openapi paths", json.dumps(paths, indent=2))
+          if seed_status >= 400:
+            raise SystemExit(2)
+          PY
+          )
+          SEED_RC=$?
+          echo "$SEED_OUT"
+          if [ "$SEED_RC" -ne 0 ]; then
+            echo "Seed failed; dumping backend logs…"
+            docker compose --env-file .env logs --no-color --tail=300 backend
+            exit 1
+          fi
+          set -e
+
+      - name: Wait for frontend proxy
+        run: |
+          set -e
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://localhost:${FRONTEND_PORT}/api/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend proxy did not become healthy in time" >&2
+          docker compose --env-file .env logs --no-color --tail=200 frontend
+          exit 1
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run Playwright parity
+        run: npx playwright test tests/charting-viewer.spec.ts tests/charting-parity.spec.ts
+        working-directory: frontend
+        env:
+          FRONTEND_BASE_URL: http://localhost:${{ env.FRONTEND_PORT }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-parity-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env ps
+          docker compose --env-file .env logs --no-color --tail=300 backend
+          docker compose --env-file .env logs --no-color --tail=300 frontend
+          docker compose --env-file .env logs --no-color --tail=300 db
+
+      - name: Tear down
+        if: always()
+        run: docker compose --env-file .env down -v

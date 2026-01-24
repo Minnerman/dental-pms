@@ -126,12 +126,14 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   test.setTimeout(120_000);
   const token = await ensureAuthReady(request);
   const baseUrl = getBaseUrl();
+  const backendBaseUrl =
+    process.env.BACKEND_BASE_URL ?? `http://localhost:${process.env.BACKEND_PORT ?? "8100"}`;
   const configRes = await request.get(`${baseUrl}/api/config`);
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
   test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
-  const seedRes = await request.post(`${baseUrl}/api/test/seed/charting`, {
+  const seedRes = await request.post(`${backendBaseUrl}/test/seed/charting`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (seedRes.status() === 404) {
@@ -166,7 +168,13 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       `${baseUrl}/api/patients/${patientId}/charting/${target.entity}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    expect(apiResponse.ok()).toBeTruthy();
+    if (!apiResponse.ok()) {
+      const status = apiResponse.status();
+      const body = await apiResponse.text();
+      throw new Error(
+        `Charting API ${target.entity} failed (${status}): ${body.slice(0, 1000)}`
+      );
+    }
     const apiPayload = await apiResponse.json();
     const { items: apiData, total: apiCount } = extractApiItems<any>(apiPayload);
 
@@ -210,7 +218,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "Perio probes" }) });
-      await expect(panel.getByText("Exam date:")).toBeVisible();
+      await expect(panel.getByText("Exam date:").first()).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const cells = [
