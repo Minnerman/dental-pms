@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
@@ -781,6 +781,7 @@ export default function PatientDetailClient({
   const [notesFilterCategory, setNotesFilterCategory] = useState("");
   const [notesFilterFrom, setNotesFilterFrom] = useState("");
   const [notesFilterTo, setNotesFilterTo] = useState("");
+  const chartingFiltersInitialized = useRef(false);
   const [chartingExportEntities, setChartingExportEntities] = useState<
     Record<string, boolean>
   >({
@@ -1454,11 +1455,45 @@ export default function PatientDetailClient({
     }
   }
 
+  function buildPerioParams(offset: number) {
+    const params = new URLSearchParams();
+    params.set("limit", String(chartingPageSize));
+    params.set("offset", String(offset));
+    if (perioFilterFrom) params.set("from", perioFilterFrom);
+    if (perioFilterTo) params.set("to", perioFilterTo);
+    if (perioFilterTooth.trim()) params.set("tooth", perioFilterTooth.trim());
+    if (perioFilterSite) params.set("site", perioFilterSite);
+    if (perioFilterBleeding) params.set("bleeding", "1");
+    if (perioFilterPlaque) params.set("plaque", "1");
+    return params;
+  }
+
+  function buildBpeParams() {
+    const params = new URLSearchParams();
+    if (bpeFilterFrom) params.set("from", bpeFilterFrom);
+    if (bpeFilterTo) params.set("to", bpeFilterTo);
+    if (bpeLatestOnly) params.set("latest_only", "1");
+    return params;
+  }
+
+  function buildNotesParams() {
+    const params = new URLSearchParams();
+    if (notesFilterFrom) params.set("from", notesFilterFrom);
+    if (notesFilterTo) params.set("to", notesFilterTo);
+    const query = notesFilterQuery.trim();
+    if (query) params.set("q", query);
+    if (notesFilterCategory) params.set("category", notesFilterCategory);
+    return params;
+  }
+
   async function loadCharting() {
     if (!chartingViewerEnabled) return;
     setChartingLoading(true);
     setChartingError(null);
     try {
+      const perioParams = buildPerioParams(0);
+      const bpeParams = buildBpeParams();
+      const notesParams = buildNotesParams();
       const [
         perioRes,
         bpeRes,
@@ -1468,11 +1503,13 @@ export default function PatientDetailClient({
         metaRes,
       ] = await Promise.all([
         apiFetch(
-          `/api/patients/${patientId}/charting/perio-probes?limit=${chartingPageSize}&offset=0`
+          `/api/patients/${patientId}/charting/perio-probes?${perioParams.toString()}`
         ),
-        apiFetch(`/api/patients/${patientId}/charting/bpe`),
-        apiFetch(`/api/patients/${patientId}/charting/bpe-furcations`),
-        apiFetch(`/api/patients/${patientId}/charting/notes`),
+        apiFetch(`/api/patients/${patientId}/charting/bpe?${bpeParams.toString()}`),
+        apiFetch(
+          `/api/patients/${patientId}/charting/bpe-furcations?${bpeParams.toString()}`
+        ),
+        apiFetch(`/api/patients/${patientId}/charting/notes?${notesParams.toString()}`),
         apiFetch(
           `/api/patients/${patientId}/charting/tooth-surfaces?limit=${chartingPageSize}&offset=0`
         ),
@@ -1564,8 +1601,9 @@ export default function PatientDetailClient({
     if (!perioProbeHasMore || perioProbeLoadingMore) return;
     setPerioProbeLoadingMore(true);
     try {
+      const perioParams = buildPerioParams(perioProbeOffset);
       const res = await apiFetch(
-        `/api/patients/${patientId}/charting/perio-probes?limit=${chartingPageSize}&offset=${perioProbeOffset}`
+        `/api/patients/${patientId}/charting/perio-probes?${perioParams.toString()}`
       );
       if (!res.ok) {
         throw new Error(`Failed to load more perio probes (HTTP ${res.status})`);
@@ -2066,6 +2104,7 @@ export default function PatientDetailClient({
 
   useEffect(() => {
     setChartingLoaded(false);
+    chartingFiltersInitialized.current = false;
     setPerioProbes([]);
     setPerioProbeTotal(0);
     setPerioProbeHasMore(false);
@@ -2114,6 +2153,33 @@ export default function PatientDetailClient({
     if (!chartingViewerEnabled) return;
     void loadCharting();
   }, [tab, chartingLoaded, patientId, chartingViewerEnabled]);
+
+  useEffect(() => {
+    if (tab !== "charting") return;
+    if (!chartingViewerEnabled) return;
+    if (!chartingFiltersInitialized.current) {
+      chartingFiltersInitialized.current = true;
+      return;
+    }
+    setChartingNotesExpanded(false);
+    void loadCharting();
+  }, [
+    tab,
+    chartingViewerEnabled,
+    perioFilterFrom,
+    perioFilterTo,
+    perioFilterTooth,
+    perioFilterSite,
+    perioFilterBleeding,
+    perioFilterPlaque,
+    bpeFilterFrom,
+    bpeFilterTo,
+    bpeLatestOnly,
+    notesFilterQuery,
+    notesFilterCategory,
+    notesFilterFrom,
+    notesFilterTo,
+  ]);
 
   useEffect(() => {
     const fromUrl = getTransactionFiltersFromParams(searchParams);
@@ -2435,29 +2501,6 @@ export default function PatientDetailClient({
     if (value === null || value === undefined) return "—";
     const label = perioSiteLabels[value];
     return label ? `${label} (${value})` : String(value);
-  }
-
-  function parseDateInput(value: string, endOfDay: boolean) {
-    if (!value) return null;
-    const suffix = endOfDay ? "T23:59:59" : "T00:00:00";
-    const parsed = new Date(`${value}${suffix}`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  function withinDateRange(
-    value: string | null | undefined,
-    fromValue: string,
-    toValue: string
-  ) {
-    if (!fromValue && !toValue) return true;
-    if (!value) return false;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return false;
-    const fromDate = parseDateInput(fromValue, false);
-    const toDate = parseDateInput(toValue, true);
-    if (fromDate && parsed < fromDate) return false;
-    if (toDate && parsed > toDate) return false;
-    return true;
   }
 
   function buildDateGroups<T>(
@@ -3307,84 +3350,14 @@ export default function PatientDetailClient({
     return <div className="notice">Invalid patient ID.</div>;
   }
 
-  const perioToothFilter = perioFilterTooth.trim();
-  const perioToothValue = perioToothFilter ? Number(perioToothFilter) : null;
-  const perioSiteValue = perioFilterSite ? Number(perioFilterSite) : null;
-
-  const filteredPerioProbes = perioProbes.filter((probe) => {
-    if (!withinDateRange(probe.recorded_at, perioFilterFrom, perioFilterTo)) {
-      return false;
-    }
-    if (perioToothFilter && probe.tooth !== perioToothValue) {
-      return false;
-    }
-    if (perioFilterSite && probe.probing_point !== perioSiteValue) {
-      return false;
-    }
-    if (perioFilterBleeding && !(probe.bleeding && probe.bleeding > 0)) {
-      return false;
-    }
-    if (perioFilterPlaque && !(probe.plaque && probe.plaque > 0)) {
-      return false;
-    }
-    return true;
-  });
-
-  const bpeFiltered = bpeEntries.filter((entry) =>
-    withinDateRange(entry.recorded_at, bpeFilterFrom, bpeFilterTo)
-  );
-  const bpeFurcationFiltered = bpeFurcations.filter((entry) =>
-    withinDateRange(entry.recorded_at, bpeFilterFrom, bpeFilterTo)
-  );
-  const bpeLatestKey = bpeLatestOnly
-    ? buildDateGroups(bpeFiltered, (entry) => entry.recorded_at)[0]?.key
-    : null;
-  const filteredBpeEntries =
-    bpeLatestOnly && bpeLatestKey
-      ? bpeFiltered.filter((entry) => {
-          const key =
-            entry.recorded_at && !Number.isNaN(new Date(entry.recorded_at).getTime())
-              ? new Date(entry.recorded_at).toISOString().slice(0, 10)
-              : "unknown";
-          return key === bpeLatestKey;
-        })
-      : bpeFiltered;
-  const filteredBpeFurcations =
-    bpeLatestOnly && bpeLatestKey
-      ? bpeFurcationFiltered.filter((entry) => {
-          const key =
-            entry.recorded_at && !Number.isNaN(new Date(entry.recorded_at).getTime())
-              ? new Date(entry.recorded_at).toISOString().slice(0, 10)
-              : "unknown";
-          return key === bpeLatestKey;
-        })
-      : bpeFurcationFiltered;
-
-  const noteQuery = notesFilterQuery.trim().toLowerCase();
-  const noteCategoryValue = notesFilterCategory ? Number(notesFilterCategory) : null;
-  const filteredNotes = chartingNotes.filter((note) => {
-    const noteText = note.note?.toLowerCase() ?? "";
-    if (noteQuery && !noteText.includes(noteQuery)) {
-      return false;
-    }
-    if (notesFilterCategory && note.category_number !== noteCategoryValue) {
-      return false;
-    }
-    const noteDate = note.note_date ?? note.updated_at ?? note.created_at;
-    if (!withinDateRange(noteDate, notesFilterFrom, notesFilterTo)) {
-      return false;
-    }
-    return true;
-  });
-
-  const perioGroups = buildDateGroups(filteredPerioProbes, (probe) => probe.recorded_at);
-  const bpeGroups = buildDateGroups(filteredBpeEntries, (entry) => entry.recorded_at);
+  const perioGroups = buildDateGroups(perioProbes, (probe) => probe.recorded_at);
+  const bpeGroups = buildDateGroups(bpeEntries, (entry) => entry.recorded_at);
   const bpeFurcationGroups = buildDateGroups(
-    filteredBpeFurcations,
+    bpeFurcations,
     (entry) => entry.recorded_at
   );
 
-  const sortedNotes = [...filteredNotes].sort((a, b) => {
+  const sortedNotes = [...chartingNotes].sort((a, b) => {
     const dateA = a.note_date ?? a.updated_at ?? a.created_at;
     const dateB = b.note_date ?? b.updated_at ?? b.created_at;
     const timeA = dateA ? new Date(dateA).getTime() : -Infinity;
@@ -4782,8 +4755,7 @@ export default function PatientDetailClient({
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
                                 <span className="badge">
-                                  Showing {filteredPerioProbes.length} of {perioProbes.length} loaded
-                                  (total {perioProbeTotal})
+                                  Showing {perioProbes.length} of {perioProbeTotal} total
                                 </span>
                                 <button
                                   className="btn btn-secondary"
@@ -4880,7 +4852,7 @@ export default function PatientDetailClient({
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {filteredPerioProbes.length === 0 ? (
+                              {perioProbes.length === 0 ? (
                                 <div className="notice">No perio probes found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -4973,7 +4945,7 @@ export default function PatientDetailClient({
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
                                 <span className="badge">
-                                  {filteredBpeEntries.length} of {bpeEntries.length} records
+                                  {bpeEntries.length} records
                                 </span>
                                 <button
                                   className="btn btn-secondary"
@@ -5030,7 +5002,7 @@ export default function PatientDetailClient({
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {filteredBpeEntries.length === 0 ? (
+                              {bpeEntries.length === 0 ? (
                                 <div className="notice">No BPE entries found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -5154,7 +5126,7 @@ export default function PatientDetailClient({
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
                                 <span className="badge">
-                                  {filteredBpeFurcations.length} of {bpeFurcations.length} records
+                                  {bpeFurcations.length} records
                                 </span>
                                 <button
                                   className="btn btn-secondary"
@@ -5175,7 +5147,7 @@ export default function PatientDetailClient({
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {filteredBpeFurcations.length === 0 ? (
+                              {bpeFurcations.length === 0 ? (
                                 <div className="notice">No BPE furcations found.</div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
@@ -5268,7 +5240,7 @@ export default function PatientDetailClient({
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
                                 <span className="badge">
-                                  {filteredNotes.length} of {chartingNotes.length} records
+                                  {chartingNotes.length} records
                                 </span>
                                 {hasMoreNotes && (
                                   <button
@@ -5356,7 +5328,7 @@ export default function PatientDetailClient({
                                   <div>Legacy keys shown in table.</div>
                                 </div>
                               )}
-                              {filteredNotes.length === 0 ? (
+                              {chartingNotes.length === 0 ? (
                                 <div className="notice">No patient notes found.</div>
                               ) : (
                                 <div data-testid="notes-list">

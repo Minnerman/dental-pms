@@ -7,7 +7,7 @@ import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, nullslast, select
+from sqlalchemy import and_, func, nullslast, select
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings
@@ -145,6 +145,12 @@ def list_perio_probes(
     access=Depends(_charting_access_context),
     limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None, alias="to"),
+    tooth: int | None = Query(default=None, ge=1),
+    site: int | None = Query(default=None, ge=1),
+    bleeding: int | None = Query(default=None, ge=0, le=1),
+    plaque: int | None = Query(default=None, ge=0, le=1),
 ) -> dict[str, object]:
     user = access["user"]
     start = access["start"]
@@ -170,15 +176,40 @@ def list_perio_probes(
                 duration_ms=duration_ms,
             )
             return payload
-        total = db.scalar(
-            select(func.count()).select_from(R4PerioProbe).where(
-                R4PerioProbe.legacy_patient_code == patient_code
-            )
-        )
+        filters = [R4PerioProbe.legacy_patient_code == patient_code]
+        if from_:
+            filters.append(R4PerioProbe.recorded_at >= from_)
+        if to:
+            filters.append(R4PerioProbe.recorded_at <= to)
+        if tooth is not None:
+            filters.append(R4PerioProbe.tooth == tooth)
+        if site is not None:
+            filters.append(R4PerioProbe.probing_point == site)
+        if bleeding is not None:
+            if bleeding == 1:
+                filters.append(
+                    and_(
+                        R4PerioProbe.bleeding.is_not(None),
+                        R4PerioProbe.bleeding > 0,
+                    )
+                )
+            else:
+                filters.append(R4PerioProbe.bleeding == 0)
+        if plaque is not None:
+            if plaque == 1:
+                filters.append(
+                    and_(
+                        R4PerioProbe.plaque.is_not(None),
+                        R4PerioProbe.plaque > 0,
+                    )
+                )
+            else:
+                filters.append(R4PerioProbe.plaque == 0)
+        total = db.scalar(select(func.count()).select_from(R4PerioProbe).where(*filters))
         total = int(total or 0)
         stmt = (
             select(R4PerioProbe)
-            .where(R4PerioProbe.legacy_patient_code == patient_code)
+            .where(*filters)
             .order_by(
                 nullslast(R4PerioProbe.recorded_at.asc()),
                 nullslast(R4PerioProbe.tooth.asc()),
@@ -228,6 +259,9 @@ def list_bpe_entries(
     patient_id: int,
     db: Session = Depends(get_db),
     access=Depends(_charting_access_context),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None, alias="to"),
+    latest_only: bool = Query(default=False, alias="latest_only"),
 ) -> list[R4BPEEntry]:
     user = access["user"]
     start = access["start"]
@@ -246,9 +280,20 @@ def list_bpe_entries(
                 duration_ms=duration_ms,
             )
             return []
+        filters = [R4BPEEntry.legacy_patient_code == patient_code]
+        if from_:
+            filters.append(R4BPEEntry.recorded_at >= from_)
+        if to:
+            filters.append(R4BPEEntry.recorded_at <= to)
+        if latest_only:
+            latest_date = db.scalar(
+                select(func.max(func.date(R4BPEEntry.recorded_at))).where(*filters)
+            )
+            if latest_date is not None:
+                filters.append(func.date(R4BPEEntry.recorded_at) == latest_date)
         stmt = (
             select(R4BPEEntry)
-            .where(R4BPEEntry.legacy_patient_code == patient_code)
+            .where(*filters)
             .order_by(
                 nullslast(R4BPEEntry.recorded_at.asc()),
                 nullslast(R4BPEEntry.legacy_bpe_id.asc()),
@@ -286,6 +331,9 @@ def list_bpe_furcations(
     patient_id: int,
     db: Session = Depends(get_db),
     access=Depends(_charting_access_context),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None, alias="to"),
+    latest_only: bool = Query(default=False, alias="latest_only"),
 ) -> list[R4BPEFurcation]:
     user = access["user"]
     start = access["start"]
@@ -304,9 +352,20 @@ def list_bpe_furcations(
                 duration_ms=duration_ms,
             )
             return []
+        filters = [R4BPEFurcation.legacy_patient_code == patient_code]
+        if from_:
+            filters.append(R4BPEFurcation.recorded_at >= from_)
+        if to:
+            filters.append(R4BPEFurcation.recorded_at <= to)
+        if latest_only:
+            latest_date = db.scalar(
+                select(func.max(func.date(R4BPEFurcation.recorded_at))).where(*filters)
+            )
+            if latest_date is not None:
+                filters.append(func.date(R4BPEFurcation.recorded_at) == latest_date)
         stmt = (
             select(R4BPEFurcation)
-            .where(R4BPEFurcation.legacy_patient_code == patient_code)
+            .where(*filters)
             .order_by(
                 nullslast(R4BPEFurcation.recorded_at.asc()),
                 nullslast(R4BPEFurcation.legacy_bpe_id.asc()),
@@ -346,6 +405,10 @@ def list_patient_notes(
     patient_id: int,
     db: Session = Depends(get_db),
     access=Depends(_charting_access_context),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None, alias="to"),
+    q: str | None = Query(default=None, alias="q"),
+    category: int | None = Query(default=None, alias="category"),
 ) -> list[R4PatientNote]:
     user = access["user"]
     start = access["start"]
@@ -364,9 +427,18 @@ def list_patient_notes(
                 duration_ms=duration_ms,
             )
             return []
+        filters = [R4PatientNote.legacy_patient_code == patient_code]
+        if from_:
+            filters.append(R4PatientNote.note_date >= from_)
+        if to:
+            filters.append(R4PatientNote.note_date <= to)
+        if q:
+            filters.append(R4PatientNote.note.ilike(f"%{q}%"))
+        if category is not None:
+            filters.append(R4PatientNote.category_number == category)
         stmt = (
             select(R4PatientNote)
-            .where(R4PatientNote.legacy_patient_code == patient_code)
+            .where(*filters)
             .order_by(
                 nullslast(R4PatientNote.note_date.asc()),
                 nullslast(R4PatientNote.legacy_note_number.asc()),

@@ -140,6 +140,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Client-side filters for perio probes, BPE, and notes.
   - Export endpoint returns spot-check-compatible CSVs (zip with `postgres_*.csv` + `index.csv`).
   - UI export selector added to charting viewer.
+- 2026-01-24: Stage152 server-side charting filters (paginated endpoints).
+  - Filters moved server-side for perio probes, BPE entries, BPE furcations, and patient notes.
+  - Filtered totals now reflect query params; pagination resets on filter change.
+  - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
