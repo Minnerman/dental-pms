@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
@@ -793,6 +793,12 @@ export default function PatientDetailClient({
   });
   const [chartingExporting, setChartingExporting] = useState(false);
   const [chartingExportError, setChartingExportError] = useState<string | null>(null);
+  const [chartingUserKey, setChartingUserKey] = useState("anonymous");
+  const [chartingUserLoaded, setChartingUserLoaded] = useState(false);
+  const [chartingFiltersReady, setChartingFiltersReady] = useState(false);
+  const [chartingPresetSlots, setChartingPresetSlots] = useState<Record<string, boolean>>(
+    {}
+  );
 
   async function loadPatient() {
     setLoading(true);
@@ -1455,6 +1461,87 @@ export default function PatientDetailClient({
     }
   }
 
+  const chartingStorageKey = useCallback(
+    (section: string, slot?: number) => {
+      const suffix = slot ? `preset${slot}` : "current";
+      return `chartingFilters:${chartingUserKey}:${section}:${suffix}`;
+    },
+    [chartingUserKey]
+  );
+
+  const updatePresetSlot = useCallback((section: string, slot: number, exists: boolean) => {
+    setChartingPresetSlots((prev) => ({
+      ...prev,
+      [`${section}:${slot}`]: exists,
+    }));
+  }, []);
+
+  const getPresetExists = useCallback(
+    (section: string, slot: number) => Boolean(chartingPresetSlots[`${section}:${slot}`]),
+    [chartingPresetSlots]
+  );
+
+  const saveCurrentFilters = useCallback(
+    (section: string, payload: object) => {
+      try {
+        localStorage.setItem(chartingStorageKey(section), JSON.stringify(payload));
+      } catch {
+        // Ignore local storage errors.
+      }
+    },
+    [chartingStorageKey]
+  );
+
+  const savePreset = useCallback(
+    (section: string, slot: number, payload: object) => {
+      try {
+        localStorage.setItem(chartingStorageKey(section, slot), JSON.stringify(payload));
+        updatePresetSlot(section, slot, true);
+      } catch {
+        // Ignore local storage errors.
+      }
+    },
+    [chartingStorageKey, updatePresetSlot]
+  );
+
+  const clearPreset = useCallback(
+    (section: string, slot: number) => {
+      try {
+        localStorage.removeItem(chartingStorageKey(section, slot));
+        updatePresetSlot(section, slot, false);
+      } catch {
+        // Ignore local storage errors.
+      }
+    },
+    [chartingStorageKey, updatePresetSlot]
+  );
+
+  const loadStoredFilters = useCallback(
+    (section: string) => {
+      try {
+        const raw = localStorage.getItem(chartingStorageKey(section));
+        if (!raw) return null;
+        return JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    },
+    [chartingStorageKey]
+  );
+
+  const loadPresetFilters = useCallback(
+    (section: string, slot: number) => {
+      try {
+        const raw = localStorage.getItem(chartingStorageKey(section, slot));
+        if (!raw) return null;
+        return JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    },
+    [chartingStorageKey]
+  );
+
   function buildPerioParams(offset: number) {
     const params = new URLSearchParams();
     params.set("limit", String(chartingPageSize));
@@ -1484,6 +1571,28 @@ export default function PatientDetailClient({
     if (query) params.set("q", query);
     if (notesFilterCategory) params.set("category", notesFilterCategory);
     return params;
+  }
+
+  function applyPerioFilters(payload: Record<string, unknown>) {
+    setPerioFilterFrom(String(payload.from ?? ""));
+    setPerioFilterTo(String(payload.to ?? ""));
+    setPerioFilterTooth(String(payload.tooth ?? ""));
+    setPerioFilterSite(String(payload.site ?? ""));
+    setPerioFilterBleeding(Boolean(payload.bleeding));
+    setPerioFilterPlaque(Boolean(payload.plaque));
+  }
+
+  function applyBpeFilters(payload: Record<string, unknown>) {
+    setBpeFilterFrom(String(payload.from ?? ""));
+    setBpeFilterTo(String(payload.to ?? ""));
+    setBpeLatestOnly(Boolean(payload.latest_only));
+  }
+
+  function applyNotesFilters(payload: Record<string, unknown>) {
+    setNotesFilterFrom(String(payload.from ?? ""));
+    setNotesFilterTo(String(payload.to ?? ""));
+    setNotesFilterQuery(String(payload.q ?? ""));
+    setNotesFilterCategory(String(payload.category ?? ""));
   }
 
   async function loadCharting() {
@@ -2097,6 +2206,37 @@ export default function PatientDetailClient({
   }, []);
 
   useEffect(() => {
+    if (!chartingViewerEnabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch("/api/me");
+        if (res.status === 401 || res.status === 403) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (res.ok) {
+          const data = (await res.json()) as { id?: number; email?: string };
+          if (!cancelled) {
+            const key = data.email || (data.id ? String(data.id) : "anonymous");
+            setChartingUserKey(key);
+          }
+        }
+      } catch {
+        // Ignore user lookup failures for charting presets.
+      } finally {
+        if (!cancelled) {
+          setChartingUserLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chartingViewerEnabled, router]);
+
+  useEffect(() => {
     setTransactions([]);
     setTransactionsNextCursor(null);
     setTransactionsLoaded(false);
@@ -2118,6 +2258,7 @@ export default function PatientDetailClient({
     setToothSurfacesOffset(0);
     setChartingMeta(null);
     setChartingError(null);
+    setChartingFiltersReady(false);
   }, [patientId]);
 
   useEffect(() => {
@@ -2148,15 +2289,60 @@ export default function PatientDetailClient({
   }, [tab, transactionsLoaded, patientId, searchParams]);
 
   useEffect(() => {
+    if (!chartingViewerEnabled) return;
+    if (!chartingUserLoaded) return;
+    if (chartingFiltersReady) return;
+    const storedPerio = loadStoredFilters("perio");
+    if (storedPerio) {
+      setPerioFilterFrom(String(storedPerio.from ?? ""));
+      setPerioFilterTo(String(storedPerio.to ?? ""));
+      setPerioFilterTooth(String(storedPerio.tooth ?? ""));
+      setPerioFilterSite(String(storedPerio.site ?? ""));
+      setPerioFilterBleeding(Boolean(storedPerio.bleeding));
+      setPerioFilterPlaque(Boolean(storedPerio.plaque));
+    }
+    const storedBpe = loadStoredFilters("bpe");
+    if (storedBpe) {
+      setBpeFilterFrom(String(storedBpe.from ?? ""));
+      setBpeFilterTo(String(storedBpe.to ?? ""));
+      setBpeLatestOnly(Boolean(storedBpe.latest_only));
+    }
+    const storedNotes = loadStoredFilters("notes");
+    if (storedNotes) {
+      setNotesFilterFrom(String(storedNotes.from ?? ""));
+      setNotesFilterTo(String(storedNotes.to ?? ""));
+      setNotesFilterQuery(String(storedNotes.q ?? ""));
+      setNotesFilterCategory(String(storedNotes.category ?? ""));
+    }
+    [1, 2, 3].forEach((slot) => {
+      updatePresetSlot("perio", slot, Boolean(loadPresetFilters("perio", slot)));
+      updatePresetSlot("bpe", slot, Boolean(loadPresetFilters("bpe", slot)));
+      updatePresetSlot("furcations", slot, Boolean(loadPresetFilters("furcations", slot)));
+      updatePresetSlot("notes", slot, Boolean(loadPresetFilters("notes", slot)));
+    });
+    setChartingFiltersReady(true);
+  }, [
+    chartingViewerEnabled,
+    chartingUserLoaded,
+    chartingFiltersReady,
+    chartingUserKey,
+    loadStoredFilters,
+    loadPresetFilters,
+    updatePresetSlot,
+  ]);
+
+  useEffect(() => {
     if (tab !== "charting") return;
     if (chartingLoaded) return;
     if (!chartingViewerEnabled) return;
+    if (!chartingFiltersReady) return;
     void loadCharting();
-  }, [tab, chartingLoaded, patientId, chartingViewerEnabled]);
+  }, [tab, chartingLoaded, patientId, chartingViewerEnabled, chartingFiltersReady]);
 
   useEffect(() => {
     if (tab !== "charting") return;
     if (!chartingViewerEnabled) return;
+    if (!chartingFiltersReady) return;
     if (!chartingFiltersInitialized.current) {
       chartingFiltersInitialized.current = true;
       return;
@@ -2166,6 +2352,7 @@ export default function PatientDetailClient({
   }, [
     tab,
     chartingViewerEnabled,
+    chartingFiltersReady,
     perioFilterFrom,
     perioFilterTo,
     perioFilterTooth,
@@ -2179,6 +2366,65 @@ export default function PatientDetailClient({
     notesFilterCategory,
     notesFilterFrom,
     notesFilterTo,
+    loadCharting,
+  ]);
+
+  useEffect(() => {
+    if (!chartingFiltersReady) return;
+    saveCurrentFilters("perio", {
+      from: perioFilterFrom,
+      to: perioFilterTo,
+      tooth: perioFilterTooth,
+      site: perioFilterSite,
+      bleeding: perioFilterBleeding,
+      plaque: perioFilterPlaque,
+    });
+  }, [
+    chartingFiltersReady,
+    chartingUserKey,
+    perioFilterFrom,
+    perioFilterTo,
+    perioFilterTooth,
+    perioFilterSite,
+    perioFilterBleeding,
+    perioFilterPlaque,
+    saveCurrentFilters,
+  ]);
+
+  useEffect(() => {
+    if (!chartingFiltersReady) return;
+    const payload = {
+      from: bpeFilterFrom,
+      to: bpeFilterTo,
+      latest_only: bpeLatestOnly,
+    };
+    saveCurrentFilters("bpe", payload);
+    saveCurrentFilters("furcations", payload);
+  }, [
+    chartingFiltersReady,
+    chartingUserKey,
+    bpeFilterFrom,
+    bpeFilterTo,
+    bpeLatestOnly,
+    saveCurrentFilters,
+  ]);
+
+  useEffect(() => {
+    if (!chartingFiltersReady) return;
+    saveCurrentFilters("notes", {
+      from: notesFilterFrom,
+      to: notesFilterTo,
+      q: notesFilterQuery,
+      category: notesFilterCategory,
+    });
+  }, [
+    chartingFiltersReady,
+    chartingUserKey,
+    notesFilterFrom,
+    notesFilterTo,
+    notesFilterQuery,
+    notesFilterCategory,
+    saveCurrentFilters,
   ]);
 
   useEffect(() => {
@@ -4846,6 +5092,65 @@ export default function PatientDetailClient({
                                   Clear filters
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <span className="label">Presets</span>
+                                {[1, 2, 3].map((slot) => (
+                                  <div
+                                    key={`perio-preset-${slot}`}
+                                    className="row"
+                                    style={{ gap: 6, flexWrap: "wrap" }}
+                                  >
+                                    <span className="badge">Preset {slot}</span>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("perio", slot)}
+                                      onClick={() => {
+                                        const payload = loadPresetFilters("perio", slot);
+                                        if (payload) {
+                                          applyPerioFilters(payload);
+                                        }
+                                      }}
+                                    >
+                                      Load
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={
+                                        !(
+                                          perioFilterFrom ||
+                                          perioFilterTo ||
+                                          perioFilterTooth ||
+                                          perioFilterSite ||
+                                          perioFilterBleeding ||
+                                          perioFilterPlaque
+                                        )
+                                      }
+                                      onClick={() =>
+                                        savePreset("perio", slot, {
+                                          from: perioFilterFrom,
+                                          to: perioFilterTo,
+                                          tooth: perioFilterTooth,
+                                          site: perioFilterSite,
+                                          bleeding: perioFilterBleeding,
+                                          plaque: perioFilterPlaque,
+                                        })
+                                      }
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("perio", slot)}
+                                      onClick={() => clearPreset("perio", slot)}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
                               {chartingMetaOpen.perio && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: transactions.ref_id -&gt; patient mapping</div>
@@ -4996,6 +5301,53 @@ export default function PatientDetailClient({
                                   Clear filters
                                 </button>
                               </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <span className="label">Presets</span>
+                                {[1, 2, 3].map((slot) => (
+                                  <div
+                                    key={`bpe-preset-${slot}`}
+                                    className="row"
+                                    style={{ gap: 6, flexWrap: "wrap" }}
+                                  >
+                                    <span className="badge">Preset {slot}</span>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("bpe", slot)}
+                                      onClick={() => {
+                                        const payload = loadPresetFilters("bpe", slot);
+                                        if (payload) {
+                                          applyBpeFilters(payload);
+                                        }
+                                      }}
+                                    >
+                                      Load
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!(bpeFilterFrom || bpeFilterTo || bpeLatestOnly)}
+                                      onClick={() =>
+                                        savePreset("bpe", slot, {
+                                          from: bpeFilterFrom,
+                                          to: bpeFilterTo,
+                                          latest_only: bpeLatestOnly,
+                                        })
+                                      }
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("bpe", slot)}
+                                      onClick={() => clearPreset("bpe", slot)}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
                               {chartingMetaOpen.bpe && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
@@ -5140,6 +5492,53 @@ export default function PatientDetailClient({
                               </div>
                               <div style={{ color: "var(--muted)" }}>
                                 Uses the same date filters as BPE entries.
+                              </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <span className="label">Presets</span>
+                                {[1, 2, 3].map((slot) => (
+                                  <div
+                                    key={`furcations-preset-${slot}`}
+                                    className="row"
+                                    style={{ gap: 6, flexWrap: "wrap" }}
+                                  >
+                                    <span className="badge">Preset {slot}</span>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("furcations", slot)}
+                                      onClick={() => {
+                                        const payload = loadPresetFilters("furcations", slot);
+                                        if (payload) {
+                                          applyBpeFilters(payload);
+                                        }
+                                      }}
+                                    >
+                                      Load
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!(bpeFilterFrom || bpeFilterTo || bpeLatestOnly)}
+                                      onClick={() =>
+                                        savePreset("furcations", slot, {
+                                          from: bpeFilterFrom,
+                                          to: bpeFilterTo,
+                                          latest_only: bpeLatestOnly,
+                                        })
+                                      }
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("furcations", slot)}
+                                      onClick={() => clearPreset("furcations", slot)}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
                               {chartingMetaOpen.bpeFurcations && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
@@ -5321,6 +5720,61 @@ export default function PatientDetailClient({
                                 >
                                   Clear filters
                                 </button>
+                              </div>
+                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                                <span className="label">Presets</span>
+                                {[1, 2, 3].map((slot) => (
+                                  <div
+                                    key={`notes-preset-${slot}`}
+                                    className="row"
+                                    style={{ gap: 6, flexWrap: "wrap" }}
+                                  >
+                                    <span className="badge">Preset {slot}</span>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("notes", slot)}
+                                      onClick={() => {
+                                        const payload = loadPresetFilters("notes", slot);
+                                        if (payload) {
+                                          applyNotesFilters(payload);
+                                        }
+                                      }}
+                                    >
+                                      Load
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={
+                                        !(
+                                          notesFilterFrom ||
+                                          notesFilterTo ||
+                                          notesFilterQuery ||
+                                          notesFilterCategory
+                                        )
+                                      }
+                                      onClick={() =>
+                                        savePreset("notes", slot, {
+                                          from: notesFilterFrom,
+                                          to: notesFilterTo,
+                                          q: notesFilterQuery,
+                                          category: notesFilterCategory,
+                                        })
+                                      }
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      disabled={!getPresetExists("notes", slot)}
+                                      onClick={() => clearPreset("notes", slot)}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
                               {chartingMetaOpen.notes && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
