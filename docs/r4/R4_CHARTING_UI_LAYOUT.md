@@ -12,13 +12,13 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
 ## Operational notes
 - Read-only banner and last-imported metadata are displayed in the charting viewer.
 - Charting viewer availability is controlled by the runtime flag `FEATURE_CHARTING_VIEWER`.
-- Stage 151 adds client-side filters and CSV export for read-only review.
+- Stage 151 adds CSV export; Stage 152 moves charting filters to the server.
 
-## Filters (Stage 151)
+## Filters (Stage 152)
 - Perio probes: date range, tooth, site, bleeding-only, plaque-only.
 - BPE: date range + "latest exam only" toggle (furcations follow the same filters).
 - Patient notes: text search, category filter, date range.
-- Filters are client-side; they only affect currently loaded data.
+- Filters are server-backed; totals and pagination reflect the filtered dataset.
 
 ## CSV export (Stage 151)
 - Export is Postgres-only and read-only.

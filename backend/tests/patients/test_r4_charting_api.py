@@ -228,6 +228,160 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         session.close()
 
 
+def test_charting_filters_apply(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 990000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+        older = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        newer = datetime(2024, 6, 1, tzinfo=timezone.utc)
+
+        session.add_all(
+            [
+                R4PerioProbe(
+                    legacy_source="r4",
+                    legacy_probe_key=f"{legacy_code}:2:1:{uuid4().hex[:6]}",
+                    legacy_trans_id=100,
+                    legacy_patient_code=legacy_code,
+                    tooth=2,
+                    probing_point=1,
+                    depth=3,
+                    bleeding=0,
+                    plaque=1,
+                    recorded_at=older,
+                    created_by_user_id=actor_id,
+                ),
+                R4PerioProbe(
+                    legacy_source="r4",
+                    legacy_probe_key=f"{legacy_code}:3:2:{uuid4().hex[:6]}",
+                    legacy_trans_id=200,
+                    legacy_patient_code=legacy_code,
+                    tooth=3,
+                    probing_point=2,
+                    depth=4,
+                    bleeding=1,
+                    plaque=0,
+                    recorded_at=newer,
+                    created_by_user_id=actor_id,
+                ),
+                R4BPEEntry(
+                    legacy_source="r4",
+                    legacy_bpe_key=f"bpe-{legacy_code}-old",
+                    legacy_bpe_id=3001,
+                    legacy_patient_code=legacy_code,
+                    recorded_at=older,
+                    sextant_1=2,
+                    sextant_2=1,
+                    sextant_3=0,
+                    sextant_4=2,
+                    sextant_5=1,
+                    sextant_6=0,
+                    created_by_user_id=actor_id,
+                ),
+                R4BPEEntry(
+                    legacy_source="r4",
+                    legacy_bpe_key=f"bpe-{legacy_code}-new",
+                    legacy_bpe_id=3002,
+                    legacy_patient_code=legacy_code,
+                    recorded_at=newer,
+                    sextant_1=3,
+                    sextant_2=2,
+                    sextant_3=1,
+                    sextant_4=3,
+                    sextant_5=2,
+                    sextant_6=1,
+                    created_by_user_id=actor_id,
+                ),
+                R4BPEFurcation(
+                    legacy_source="r4",
+                    legacy_bpe_furcation_key=f"furc-{legacy_code}-old",
+                    legacy_bpe_id=3001,
+                    legacy_patient_code=legacy_code,
+                    tooth=11,
+                    furcation=2,
+                    recorded_at=older,
+                    created_by_user_id=actor_id,
+                ),
+                R4BPEFurcation(
+                    legacy_source="r4",
+                    legacy_bpe_furcation_key=f"furc-{legacy_code}-new",
+                    legacy_bpe_id=3002,
+                    legacy_patient_code=legacy_code,
+                    tooth=21,
+                    furcation=1,
+                    recorded_at=newer,
+                    created_by_user_id=actor_id,
+                ),
+                R4PatientNote(
+                    legacy_source="r4",
+                    legacy_note_key=f"{legacy_code}:note-old",
+                    legacy_patient_code=legacy_code,
+                    legacy_note_number=1,
+                    note_date=older,
+                    note="Recall due",
+                    category_number=5,
+                    created_by_user_id=actor_id,
+                ),
+                R4PatientNote(
+                    legacy_source="r4",
+                    legacy_note_key=f"{legacy_code}:note-new",
+                    legacy_patient_code=legacy_code,
+                    legacy_note_number=2,
+                    note_date=newer,
+                    note="Follow up exam",
+                    category_number=9,
+                    created_by_user_id=actor_id,
+                ),
+            ]
+        )
+        session.commit()
+
+        perio_filtered = api_client.get(
+            f"/patients/{patient.id}/charting/perio-probes?from=2024-06-01&bleeding=1",
+            headers=auth_headers,
+        )
+        assert perio_filtered.status_code == 200, perio_filtered.text
+        perio_payload = perio_filtered.json()
+        assert perio_payload["total"] == 1
+        assert perio_payload["items"][0]["tooth"] == 3
+
+        bpe_latest = api_client.get(
+            f"/patients/{patient.id}/charting/bpe?latest_only=1", headers=auth_headers
+        )
+        assert bpe_latest.status_code == 200, bpe_latest.text
+        assert len(bpe_latest.json()) == 1
+        assert bpe_latest.json()[0]["legacy_bpe_id"] == 3002
+
+        furc_latest = api_client.get(
+            f"/patients/{patient.id}/charting/bpe-furcations?latest_only=1",
+            headers=auth_headers,
+        )
+        assert furc_latest.status_code == 200, furc_latest.text
+        assert len(furc_latest.json()) == 1
+        assert furc_latest.json()[0]["legacy_bpe_id"] == 3002
+
+        notes_filtered = api_client.get(
+            f"/patients/{patient.id}/charting/notes?q=follow&category=9",
+            headers=auth_headers,
+        )
+        assert notes_filtered.status_code == 200, notes_filtered.text
+        notes_payload = notes_filtered.json()
+        assert len(notes_payload) == 1
+        assert notes_payload[0]["legacy_note_number"] == 2
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+            session.commit()
+        session.close()
+
+
 def test_charting_export_returns_csv_zip(api_client, auth_headers):
     session = SessionLocal()
     patient_id = None
