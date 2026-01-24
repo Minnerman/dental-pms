@@ -212,7 +212,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "Perio probes" }) });
-      await expect(panel.getByText("Exam date:")).toBeVisible();
+      await expect(panel.getByText("Exam date:").first()).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const cells = [
