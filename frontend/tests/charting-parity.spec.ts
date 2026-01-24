@@ -388,3 +388,65 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
     expect(beforeCount).toBeGreaterThan(1);
   }
 });
+
+test("charting notes preset export/import roundtrip", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const { patientMap } = await seedCharting(request);
+  const patientId = patientMap.get(1012056);
+  if (!patientId) {
+    throw new Error("Missing seeded patient 1012056 for preset test.");
+  }
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+
+  await page.evaluate(() => {
+    // @ts-expect-error - attach test helper to window
+    window.__copiedPreset = null;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      const original = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (value: string) => {
+        // @ts-expect-error - attach test helper to window
+        window.__copiedPreset = value;
+        return original(value);
+      };
+    }
+  });
+
+  const notesPanel = page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  await expect(notesPanel).toBeVisible();
+  const notesInput = notesPanel.getByPlaceholder("Find text...");
+  await notesInput.fill("note 1");
+  await notesPanel.getByRole("button", { name: "Copy preset JSON" }).click();
+
+  const copied = await page.evaluate(() => {
+    // @ts-expect-error - read test helper from window
+    return window.__copiedPreset as string | null;
+  });
+  expect(copied).not.toBeNull();
+  if (copied) {
+    expect(copied).toContain("\"section\":\"notes\"");
+    expect(copied).toContain("\"version\":1");
+    expect(copied).toContain("\"q\":\"note 1\"");
+  }
+
+  await notesPanel.getByRole("button", { name: "Clear filters" }).click();
+  await expect(notesInput).toHaveValue("");
+
+  await page.evaluate((value) => {
+    window.prompt = () => value;
+  }, copied);
+  await notesPanel.getByRole("button", { name: "Import preset JSON" }).click();
+  await expect(notesInput).toHaveValue("note 1");
+});
