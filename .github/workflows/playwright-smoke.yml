@@ -205,7 +205,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      APP_ENV: development
+      APP_ENV: test
       ENABLE_TEST_ROUTES: "1"
       FEATURE_CHARTING_VIEWER: "true"
       NEXT_PUBLIC_FEATURE_CHARTING_VIEWER: "1"
