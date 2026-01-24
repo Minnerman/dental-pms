@@ -84,7 +84,7 @@ jobs:
 
           for i in 1 2 3; do
             echo "Attempt $i/3: docker compose pull db"
-            if docker compose pull db; then
+            if docker compose --env-file .env pull db; then
               break
             fi
             echo "Pull failed; sleeping 20s..."
@@ -93,7 +93,7 @@ jobs:
 
           for i in 1 2 3; do
             echo "Attempt $i/3: docker compose up -d db"
-            if docker compose up -d db; then
+            if docker compose --env-file .env up -d db; then
               exit 0
             fi
             echo "Up failed; sleeping 20s..."
@@ -109,14 +109,14 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
+            if docker compose --env-file .env exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
               echo "Postgres ready"
               exit 0
             fi
             sleep 1
           done
           echo "Postgres not ready"
-          docker compose logs --no-color --tail=200 db || true
+          docker compose --env-file .env logs --no-color --tail=200 db || true
           exit 1
 
       - name: Run migrations (retry)
@@ -125,7 +125,7 @@ jobs:
           set -euo pipefail
           for i in 1 2 3; do
             echo "Attempt $i/3: running migrations"
-            if docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
+            if docker compose --env-file .env run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
               exit 0
             fi
             echo "Migrations failed (likely transient pull). Sleeping 15s..."
@@ -135,7 +135,7 @@ jobs:
           exit 1
 
       - name: Start backend
-        run: docker compose up -d backend
+        run: docker compose --env-file .env up -d backend
 
       - name: Wait for backend health
         run: |
@@ -147,11 +147,11 @@ jobs:
             sleep 2
           done
           echo "Backend did not become healthy in time" >&2
-          docker compose logs --no-color --tail=200 backend
+          docker compose --env-file .env logs --no-color --tail=200 backend
           exit 1
 
       - name: Start frontend
-        run: docker compose up -d frontend
+        run: docker compose --env-file .env up -d frontend
 
       - name: Wait for frontend proxy
         run: |
@@ -163,7 +163,7 @@ jobs:
             sleep 2
           done
           echo "Frontend proxy did not become healthy in time" >&2
-          docker compose logs --no-color --tail=200 frontend
+          docker compose --env-file .env logs --no-color --tail=200 frontend
           exit 1
 
       - name: Install frontend deps
@@ -192,14 +192,14 @@ jobs:
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker compose ps
-          docker compose logs --no-color --tail=300 backend
-          docker compose logs --no-color --tail=300 frontend
-          docker compose logs --no-color --tail=300 db
+          docker compose --env-file .env ps
+          docker compose --env-file .env logs --no-color --tail=300 backend
+          docker compose --env-file .env logs --no-color --tail=300 frontend
+          docker compose --env-file .env logs --no-color --tail=300 db
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose --env-file .env down -v
 
   playwright-parity:
     runs-on: ubuntu-latest
@@ -281,7 +281,7 @@ jobs:
 
           for i in 1 2 3; do
             echo "Attempt $i/3: docker compose pull db"
-            if docker compose pull db; then
+            if docker compose --env-file .env pull db; then
               break
             fi
             echo "Pull failed; sleeping 20s..."
@@ -290,7 +290,7 @@ jobs:
 
           for i in 1 2 3; do
             echo "Attempt $i/3: docker compose up -d db"
-            if docker compose up -d db; then
+            if docker compose --env-file .env up -d db; then
               exit 0
             fi
             echo "Up failed; sleeping 20s..."
@@ -306,14 +306,14 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
+            if docker compose --env-file .env exec -T db pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
               echo "Postgres ready"
               exit 0
             fi
             sleep 1
           done
           echo "Postgres not ready"
-          docker compose logs --no-color --tail=200 db || true
+          docker compose --env-file .env logs --no-color --tail=200 db || true
           exit 1
 
       - name: Run migrations (retry)
@@ -322,7 +322,7 @@ jobs:
           set -euo pipefail
           for i in 1 2 3; do
             echo "Attempt $i/3: running migrations"
-            if docker compose run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
+            if docker compose --env-file .env run --rm -e DATABASE_URL="${DATABASE_URL}" backend sh -lc 'python -m alembic upgrade head'; then
               exit 0
             fi
             echo "Migrations failed (likely transient pull). Sleeping 15s..."
@@ -332,7 +332,12 @@ jobs:
           exit 1
 
       - name: Start backend
-        run: docker compose up -d backend
+        run: docker compose --env-file .env up -d backend
+
+      - name: Assert backend env
+        run: |
+          docker compose --env-file .env exec -T backend env | egrep '^(APP_ENV|ENABLE_TEST_ROUTES|FEATURE_CHARTING_VIEWER)='
+          docker compose --env-file .env exec -T backend python -c "import os; print('APP_ENV=',os.getenv('APP_ENV'),'ENABLE_TEST_ROUTES=',os.getenv('ENABLE_TEST_ROUTES'),'FEATURE_CHARTING_VIEWER=',os.getenv('FEATURE_CHARTING_VIEWER'))"
 
       - name: Wait for backend health
         run: |
@@ -344,11 +349,19 @@ jobs:
             sleep 2
           done
           echo "Backend did not become healthy in time" >&2
-          docker compose logs --no-color --tail=200 backend
+          docker compose --env-file .env logs --no-color --tail=200 backend
           exit 1
 
       - name: Start frontend
-        run: docker compose up -d frontend
+        run: docker compose --env-file .env up -d frontend
+
+      - name: Check seed route availability
+        run: |
+          docker compose --env-file .env exec -T frontend node -e "
+          fetch('http://backend:8000/api/test/seed/charting', {method:'POST'})
+            .then(r => { console.log('seed status', r.status); if (r.status === 404) process.exit(1); })
+            .catch(err => { console.error(err); process.exit(1); });
+          "
 
       - name: Wait for frontend proxy
         run: |
@@ -360,7 +373,7 @@ jobs:
             sleep 2
           done
           echo "Frontend proxy did not become healthy in time" >&2
-          docker compose logs --no-color --tail=200 frontend
+          docker compose --env-file .env logs --no-color --tail=200 frontend
           exit 1
 
       - name: Install frontend deps
@@ -389,11 +402,11 @@ jobs:
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker compose ps
-          docker compose logs --no-color --tail=300 backend
-          docker compose logs --no-color --tail=300 frontend
-          docker compose logs --no-color --tail=300 db
+          docker compose --env-file .env ps
+          docker compose --env-file .env logs --no-color --tail=300 backend
+          docker compose --env-file .env logs --no-color --tail=300 frontend
+          docker compose --env-file .env logs --no-color --tail=300 db
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose --env-file .env down -v
