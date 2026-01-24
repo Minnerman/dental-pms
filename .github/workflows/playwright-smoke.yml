@@ -209,7 +209,7 @@ jobs:
       ENABLE_TEST_ROUTES: "1"
       FEATURE_CHARTING_VIEWER: "true"
       NEXT_PUBLIC_FEATURE_CHARTING_VIEWER: "1"
-      BACKEND_BASE_URL: http://backend:8000
+      BACKEND_BASE_URL: http://localhost:8100
       COMPOSE_PROJECT_NAME: dentalpms_playwright_parity
       POSTGRES_DB: dental_pms
       POSTGRES_USER: dental_pms
