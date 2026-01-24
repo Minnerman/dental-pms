@@ -102,6 +102,12 @@
   - Artefact: `tmp/stage142/ui_parity.json` (Playwright parity report).
   - Summary: counts parity PASS for all 5; row-level parity PASS for BPE (1011978), BPE furcations (1000035), tooth surfaces sanity (1000000).
   - Doc: `docs/r4/R4_CHARTING_UI_PARITY.md` (Stage 142 section).
+- 2026-01-24: Stage143 charting UI layout parity (read-only).
+  - Perio probes grouped by exam date with R4 site labels and ordering.
+  - BPE rendered as sextant grids per exam date; furcations grouped by exam date.
+  - Notes list shows latest 10 with show-more toggle and category badges.
+  - Parity report: `tmp/stage143/ui_parity.json` (counts + row-level checks PASS).
+  - Doc: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

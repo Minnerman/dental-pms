@@ -734,6 +734,7 @@ export default function PatientDetailClient({
   const [bpeFurcations, setBpeFurcations] = useState<R4BPEFurcation[]>([]);
   const [chartingNotes, setChartingNotes] = useState<R4PatientNote[]>([]);
   const [toothSurfaces, setToothSurfaces] = useState<R4ToothSurface[]>([]);
+  const [chartingNotesExpanded, setChartingNotesExpanded] = useState(false);
   const [chartingMetaOpen, setChartingMetaOpen] = useState<Record<string, boolean>>(
     {}
   );
@@ -2235,6 +2236,71 @@ export default function PatientDetailClient({
     return parsed.toLocaleString("en-GB");
   }
 
+  const perioSiteLabels: Record<number, string> = {
+    1: "MB",
+    2: "B",
+    3: "DB",
+    4: "ML",
+    5: "L",
+    6: "DL",
+  };
+
+  const perioSiteSort: Record<number, number> = {
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    6: 6,
+  };
+
+  function formatPerioSite(value?: number | null) {
+    if (value === null || value === undefined) return "—";
+    const label = perioSiteLabels[value];
+    return label ? `${label} (${value})` : String(value);
+  }
+
+  function buildDateGroups<T>(
+    items: T[],
+    getDate: (item: T) => string | null | undefined
+  ) {
+    const groups = new Map<
+      string,
+      { key: string; label: string; sortValue: number; items: T[] }
+    >();
+    items.forEach((item) => {
+      const raw = getDate(item);
+      const parsed = raw ? new Date(raw) : null;
+      const isValid = parsed && !Number.isNaN(parsed.getTime());
+      const key = isValid ? parsed.toISOString().slice(0, 10) : "unknown";
+      const label = isValid ? formatShortDate(parsed.toISOString()) : "Unknown date";
+      const sortValue = isValid ? parsed.getTime() : -Infinity;
+      const group = groups.get(key) ?? {
+        key,
+        label,
+        sortValue,
+        items: [],
+      };
+      group.items.push(item);
+      groups.set(key, group);
+    });
+    return [...groups.values()].sort((a, b) => b.sortValue - a.sortValue);
+  }
+
+  function sortPerioProbes(items: R4PerioProbe[]) {
+    return [...items].sort((a, b) => {
+      const toothA = a.tooth ?? Number.MAX_SAFE_INTEGER;
+      const toothB = b.tooth ?? Number.MAX_SAFE_INTEGER;
+      if (toothA !== toothB) return toothA - toothB;
+      const siteA = a.probing_point ?? Number.MAX_SAFE_INTEGER;
+      const siteB = b.probing_point ?? Number.MAX_SAFE_INTEGER;
+      const orderA = perioSiteSort[siteA] ?? Number.MAX_SAFE_INTEGER;
+      const orderB = perioSiteSort[siteB] ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.legacy_probe_key || "").localeCompare(b.legacy_probe_key || "");
+    });
+  }
+
   function normalizeBpeScores(scores?: string[] | null) {
     const entries = Array.isArray(scores) ? scores : [];
     const filled = [...entries, "", "", "", "", "", ""].slice(0, 6);
@@ -2986,6 +3052,20 @@ export default function PatientDetailClient({
   if (!isValidPatientId) {
     return <div className="notice">Invalid patient ID.</div>;
   }
+
+  const perioGroups = buildDateGroups(perioProbes, (probe) => probe.recorded_at);
+  const bpeGroups = buildDateGroups(bpeEntries, (entry) => entry.recorded_at);
+  const bpeFurcationGroups = buildDateGroups(bpeFurcations, (entry) => entry.recorded_at);
+
+  const sortedNotes = [...chartingNotes].sort((a, b) => {
+    const dateA = a.note_date ?? a.updated_at ?? a.created_at;
+    const dateB = b.note_date ?? b.updated_at ?? b.created_at;
+    const timeA = dateA ? new Date(dateA).getTime() : -Infinity;
+    const timeB = dateB ? new Date(dateB).getTime() : -Infinity;
+    return timeB - timeA;
+  });
+  const visibleNotes = chartingNotesExpanded ? sortedNotes : sortedNotes.slice(0, 10);
+  const hasMoreNotes = sortedNotes.length > visibleNotes.length;
 
   return (
     <div className="app-grid">
@@ -4328,46 +4408,75 @@ export default function PatientDetailClient({
                               {perioProbes.length === 0 ? (
                                 <div className="notice">No perio probes found.</div>
                               ) : (
-                                <Table>
-                                  <thead>
-                                    <tr>
-                                      <th>Date</th>
-                                      <th>Tooth</th>
-                                      <th>Site</th>
-                                      <th>Depth</th>
-                                      <th>Bleeding</th>
-                                      <th>Plaque</th>
-                                      {chartingMetaOpen.perio && (
-                                        <>
-                                          <th>Legacy key</th>
-                                          <th>Legacy trans</th>
-                                          <th>Legacy patient</th>
-                                          <th>Updated</th>
-                                        </>
-                                      )}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {perioProbes.map((probe) => (
-                                      <tr key={probe.legacy_probe_key}>
-                                        <td>{formatShortDate(probe.recorded_at)}</td>
-                                        <td>{probe.tooth ?? "—"}</td>
-                                        <td>{probe.probing_point ?? "—"}</td>
-                                        <td>{probe.depth ?? "—"}</td>
-                                        <td>{probe.bleeding ?? "—"}</td>
-                                        <td>{probe.plaque ?? "—"}</td>
-                                        {chartingMetaOpen.perio && (
-                                          <>
-                                            <td>{probe.legacy_probe_key}</td>
-                                            <td>{probe.legacy_trans_id ?? "—"}</td>
-                                            <td>{probe.legacy_patient_code ?? "—"}</td>
-                                            <td>{formatDateTime(probe.updated_at)}</td>
-                                          </>
-                                        )}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </Table>
+                                <div className="stack" style={{ gap: 16 }}>
+                                  {perioGroups.map((group, index) => {
+                                    const sorted = sortPerioProbes(group.items);
+                                    return (
+                                      <div
+                                        key={`perio-${group.key}`}
+                                        className="stack"
+                                        style={{ gap: 8 }}
+                                        data-testid="perio-group"
+                                      >
+                                        <div
+                                          className="row"
+                                          style={{
+                                            justifyContent: "space-between",
+                                            flexWrap: "wrap",
+                                            gap: 8,
+                                          }}
+                                        >
+                                          <span className="badge">
+                                            Exam date: {group.label}
+                                          </span>
+                                          {index === 0 && group.key !== "unknown" && (
+                                            <span className="badge">Latest exam</span>
+                                          )}
+                                        </div>
+                                        <Table>
+                                          <thead>
+                                            <tr>
+                                              <th>Date</th>
+                                              <th>Tooth</th>
+                                              <th>Site</th>
+                                              <th>Depth</th>
+                                              <th>Bleeding</th>
+                                              <th>Plaque</th>
+                                              {chartingMetaOpen.perio && (
+                                                <>
+                                                  <th>Legacy key</th>
+                                                  <th>Legacy trans</th>
+                                                  <th>Legacy patient</th>
+                                                  <th>Updated</th>
+                                                </>
+                                              )}
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {sorted.map((probe) => (
+                                              <tr key={probe.legacy_probe_key}>
+                                                <td>{formatShortDate(probe.recorded_at)}</td>
+                                                <td>{probe.tooth ?? "—"}</td>
+                                                <td>{formatPerioSite(probe.probing_point)}</td>
+                                                <td>{probe.depth ?? "—"}</td>
+                                                <td>{probe.bleeding ?? "—"}</td>
+                                                <td>{probe.plaque ?? "—"}</td>
+                                                {chartingMetaOpen.perio && (
+                                                  <>
+                                                    <td>{probe.legacy_probe_key}</td>
+                                                    <td>{probe.legacy_trans_id ?? "—"}</td>
+                                                    <td>{probe.legacy_patient_code ?? "—"}</td>
+                                                    <td>{formatDateTime(probe.updated_at)}</td>
+                                                  </>
+                                                )}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </Table>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
                             </div>
                           </Panel>
@@ -4398,52 +4507,116 @@ export default function PatientDetailClient({
                               {bpeEntries.length === 0 ? (
                                 <div className="notice">No BPE entries found.</div>
                               ) : (
-                                <Table>
-                                  <thead>
-                                    <tr>
-                                      <th>Date</th>
-                                      <th>UR</th>
-                                      <th>UA</th>
-                                      <th>UL</th>
-                                      <th>LL</th>
-                                      <th>LA</th>
-                                      <th>LR</th>
-                                      <th>Notes</th>
-                                      <th>User</th>
-                                      {chartingMetaOpen.bpe && (
-                                        <>
-                                          <th>Legacy key</th>
-                                          <th>Legacy BPE ID</th>
-                                          <th>Legacy patient</th>
-                                          <th>Updated</th>
-                                        </>
-                                      )}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {bpeEntries.map((entry) => (
-                                      <tr key={entry.legacy_bpe_key}>
-                                        <td>{formatShortDate(entry.recorded_at)}</td>
-                                        <td>{entry.sextant_1 ?? "—"}</td>
-                                        <td>{entry.sextant_2 ?? "—"}</td>
-                                        <td>{entry.sextant_3 ?? "—"}</td>
-                                        <td>{entry.sextant_4 ?? "—"}</td>
-                                        <td>{entry.sextant_5 ?? "—"}</td>
-                                        <td>{entry.sextant_6 ?? "—"}</td>
-                                        <td>{entry.notes || "—"}</td>
-                                        <td>{entry.user_code ?? "—"}</td>
-                                        {chartingMetaOpen.bpe && (
-                                          <>
-                                            <td>{entry.legacy_bpe_key}</td>
-                                            <td>{entry.legacy_bpe_id ?? "—"}</td>
-                                            <td>{entry.legacy_patient_code ?? "—"}</td>
-                                            <td>{formatDateTime(entry.updated_at)}</td>
-                                          </>
-                                        )}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </Table>
+                                <div className="stack" style={{ gap: 16 }}>
+                                  {bpeGroups.map((group, index) => {
+                                    const sorted = [...group.items].sort((a, b) =>
+                                      (a.legacy_bpe_key || "").localeCompare(b.legacy_bpe_key || "")
+                                    );
+                                    return (
+                                      <div
+                                        key={`bpe-${group.key}`}
+                                        className="stack"
+                                        style={{ gap: 8 }}
+                                        data-testid="bpe-group"
+                                      >
+                                        <div
+                                          className="row"
+                                          style={{
+                                            justifyContent: "space-between",
+                                            flexWrap: "wrap",
+                                            gap: 8,
+                                          }}
+                                        >
+                                          <span className="badge">
+                                            Exam date: {group.label}
+                                          </span>
+                                          {index === 0 && group.key !== "unknown" && (
+                                            <span className="badge">Latest exam</span>
+                                          )}
+                                        </div>
+                                        {sorted.map((entry) => (
+                                          <div
+                                            key={entry.legacy_bpe_key}
+                                            className="stack"
+                                            style={{
+                                              border: "1px solid var(--border)",
+                                              borderRadius: 12,
+                                              padding: 12,
+                                              gap: 10,
+                                            }}
+                                            data-testid="bpe-grid"
+                                          >
+                                            <div
+                                              className="grid"
+                                              style={{
+                                                display: "grid",
+                                                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                                                gap: 8,
+                                              }}
+                                            >
+                                              {[
+                                                { label: "UR", value: entry.sextant_1 },
+                                                { label: "UA", value: entry.sextant_2 },
+                                                { label: "UL", value: entry.sextant_3 },
+                                                { label: "LL", value: entry.sextant_4 },
+                                                { label: "LA", value: entry.sextant_5 },
+                                                { label: "LR", value: entry.sextant_6 },
+                                              ].map((cell) => (
+                                                <div
+                                                  key={cell.label}
+                                                  className="stack"
+                                                  style={{
+                                                    border: "1px solid var(--border)",
+                                                    borderRadius: 8,
+                                                    padding: "6px 8px",
+                                                    gap: 4,
+                                                    textAlign: "center",
+                                                  }}
+                                                >
+                                                  <div
+                                                    style={{
+                                                      fontSize: 12,
+                                                      color: "var(--muted)",
+                                                    }}
+                                                  >
+                                                    {cell.label}
+                                                  </div>
+                                                  <div style={{ fontSize: 16, fontWeight: 600 }}>
+                                                    {cell.value ?? "—"}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                            <div
+                                              className="row"
+                                              style={{ gap: 12, flexWrap: "wrap" }}
+                                            >
+                                              <span className="badge">
+                                                Notes: {entry.notes || "—"}
+                                              </span>
+                                              <span className="badge">
+                                                User: {entry.user_code ?? "—"}
+                                              </span>
+                                            </div>
+                                            {chartingMetaOpen.bpe && (
+                                              <div
+                                                className="stack"
+                                                style={{ gap: 4, color: "var(--muted)" }}
+                                              >
+                                                <div>Legacy key: {entry.legacy_bpe_key}</div>
+                                                <div>Legacy BPE ID: {entry.legacy_bpe_id ?? "—"}</div>
+                                                <div>
+                                                  Legacy patient: {entry.legacy_patient_code ?? "—"}
+                                                </div>
+                                                <div>Updated: {formatDateTime(entry.updated_at)}</div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
                             </div>
                           </Panel>
@@ -4474,46 +4647,85 @@ export default function PatientDetailClient({
                               {bpeFurcations.length === 0 ? (
                                 <div className="notice">No BPE furcations found.</div>
                               ) : (
-                                <Table>
-                                  <thead>
-                                    <tr>
-                                      <th>Date</th>
-                                      <th>Tooth</th>
-                                      <th>Furcation</th>
-                                      <th>Sextant</th>
-                                      <th>Notes</th>
-                                      <th>User</th>
-                                      {chartingMetaOpen.bpeFurcations && (
-                                        <>
-                                          <th>Legacy key</th>
-                                          <th>Legacy BPE ID</th>
-                                          <th>Legacy patient</th>
-                                          <th>Updated</th>
-                                        </>
-                                      )}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {bpeFurcations.map((entry) => (
-                                      <tr key={entry.legacy_bpe_furcation_key}>
-                                        <td>{formatShortDate(entry.recorded_at)}</td>
-                                        <td>{entry.tooth ?? "—"}</td>
-                                        <td>{entry.furcation ?? "—"}</td>
-                                        <td>{entry.sextant ?? "—"}</td>
-                                        <td>{entry.notes || "—"}</td>
-                                        <td>{entry.user_code ?? "—"}</td>
-                                        {chartingMetaOpen.bpeFurcations && (
-                                          <>
-                                            <td>{entry.legacy_bpe_furcation_key}</td>
-                                            <td>{entry.legacy_bpe_id ?? "—"}</td>
-                                            <td>{entry.legacy_patient_code ?? "—"}</td>
-                                            <td>{formatDateTime(entry.updated_at)}</td>
-                                          </>
-                                        )}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </Table>
+                                <div className="stack" style={{ gap: 16 }}>
+                                  {bpeFurcationGroups.map((group, index) => {
+                                    const sorted = [...group.items].sort((a, b) => {
+                                      const toothA = a.tooth ?? Number.MAX_SAFE_INTEGER;
+                                      const toothB = b.tooth ?? Number.MAX_SAFE_INTEGER;
+                                      if (toothA !== toothB) return toothA - toothB;
+                                      const furcA = a.furcation ?? Number.MAX_SAFE_INTEGER;
+                                      const furcB = b.furcation ?? Number.MAX_SAFE_INTEGER;
+                                      if (furcA !== furcB) return furcA - furcB;
+                                      return (a.legacy_bpe_furcation_key || "").localeCompare(
+                                        b.legacy_bpe_furcation_key || ""
+                                      );
+                                    });
+                                    return (
+                                      <div
+                                        key={`bpe-furcations-${group.key}`}
+                                        className="stack"
+                                        style={{ gap: 8 }}
+                                        data-testid="bpe-furcation-group"
+                                      >
+                                        <div
+                                          className="row"
+                                          style={{
+                                            justifyContent: "space-between",
+                                            flexWrap: "wrap",
+                                            gap: 8,
+                                          }}
+                                        >
+                                          <span className="badge">
+                                            Exam date: {group.label}
+                                          </span>
+                                          {index === 0 && group.key !== "unknown" && (
+                                            <span className="badge">Latest exam</span>
+                                          )}
+                                        </div>
+                                        <Table>
+                                          <thead>
+                                            <tr>
+                                              <th>Date</th>
+                                              <th>Tooth</th>
+                                              <th>Furcation</th>
+                                              <th>Sextant</th>
+                                              <th>Notes</th>
+                                              <th>User</th>
+                                              {chartingMetaOpen.bpeFurcations && (
+                                                <>
+                                                  <th>Legacy key</th>
+                                                  <th>Legacy BPE ID</th>
+                                                  <th>Legacy patient</th>
+                                                  <th>Updated</th>
+                                                </>
+                                              )}
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {sorted.map((entry) => (
+                                              <tr key={entry.legacy_bpe_furcation_key}>
+                                                <td>{formatShortDate(entry.recorded_at)}</td>
+                                                <td>{entry.tooth ?? "—"}</td>
+                                                <td>{entry.furcation ?? "—"}</td>
+                                                <td>{entry.sextant ?? "—"}</td>
+                                                <td>{entry.notes || "—"}</td>
+                                                <td>{entry.user_code ?? "—"}</td>
+                                                {chartingMetaOpen.bpeFurcations && (
+                                                  <>
+                                                    <td>{entry.legacy_bpe_furcation_key}</td>
+                                                    <td>{entry.legacy_bpe_id ?? "—"}</td>
+                                                    <td>{entry.legacy_patient_code ?? "—"}</td>
+                                                    <td>{formatDateTime(entry.updated_at)}</td>
+                                                  </>
+                                                )}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </Table>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
                             </div>
                           </Panel>
@@ -4525,6 +4737,17 @@ export default function PatientDetailClient({
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
                                 <span className="badge">{chartingNotes.length} records</span>
+                                {hasMoreNotes && (
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => setChartingNotesExpanded((prev) => !prev)}
+                                  >
+                                    {chartingNotesExpanded
+                                      ? "Show latest 10"
+                                      : `Show all (${sortedNotes.length})`}
+                                  </button>
+                                )}
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
@@ -4544,46 +4767,54 @@ export default function PatientDetailClient({
                               {chartingNotes.length === 0 ? (
                                 <div className="notice">No patient notes found.</div>
                               ) : (
-                                <Table>
-                                  <thead>
-                                    <tr>
-                                      <th>Date</th>
-                                      <th>Category</th>
-                                      <th>Note</th>
-                                      <th>Tooth</th>
-                                      <th>Surface</th>
-                                      <th>User</th>
-                                      {chartingMetaOpen.notes && (
-                                        <>
-                                          <th>Legacy key</th>
-                                          <th>Legacy note #</th>
-                                          <th>Legacy patient</th>
-                                          <th>Updated</th>
-                                        </>
-                                      )}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {chartingNotes.map((note) => (
-                                      <tr key={note.legacy_note_key}>
-                                        <td>{formatShortDate(note.note_date)}</td>
-                                        <td>{note.category_number ?? "—"}</td>
-                                        <td>{note.note || "—"}</td>
-                                        <td>{note.tooth ?? "—"}</td>
-                                        <td>{note.surface ?? "—"}</td>
-                                        <td>{note.user_code ?? "—"}</td>
+                                <div data-testid="notes-list">
+                                  <Table>
+                                    <thead>
+                                      <tr>
+                                        <th>Date</th>
+                                        <th>Category</th>
+                                        <th>Note</th>
+                                        <th>Tooth</th>
+                                        <th>Surface</th>
+                                        <th>User</th>
                                         {chartingMetaOpen.notes && (
                                           <>
-                                            <td>{note.legacy_note_key}</td>
-                                            <td>{note.legacy_note_number ?? "—"}</td>
-                                            <td>{note.legacy_patient_code ?? "—"}</td>
-                                            <td>{formatDateTime(note.updated_at)}</td>
+                                            <th>Legacy key</th>
+                                            <th>Legacy note #</th>
+                                            <th>Legacy patient</th>
+                                            <th>Updated</th>
                                           </>
                                         )}
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </Table>
+                                    </thead>
+                                    <tbody>
+                                      {visibleNotes.map((note) => (
+                                        <tr key={note.legacy_note_key}>
+                                          <td>{formatShortDate(note.note_date)}</td>
+                                          <td>
+                                            <span className="badge">
+                                              {note.category_number ?? "—"}
+                                            </span>
+                                          </td>
+                                          <td style={{ whiteSpace: "pre-wrap" }}>
+                                            {note.note || "—"}
+                                          </td>
+                                          <td>{note.tooth ?? "—"}</td>
+                                          <td>{note.surface ?? "—"}</td>
+                                          <td>{note.user_code ?? "—"}</td>
+                                          {chartingMetaOpen.notes && (
+                                            <>
+                                              <td>{note.legacy_note_key}</td>
+                                              <td>{note.legacy_note_number ?? "—"}</td>
+                                              <td>{note.legacy_patient_code ?? "—"}</td>
+                                              <td>{formatDateTime(note.updated_at)}</td>
+                                            </>
+                                          )}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </Table>
+                                </div>
                               )}
                             </div>
                           </Panel>
