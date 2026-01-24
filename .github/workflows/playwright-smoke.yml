@@ -209,6 +209,7 @@ jobs:
       ENABLE_TEST_ROUTES: "1"
       FEATURE_CHARTING_VIEWER: "true"
       NEXT_PUBLIC_FEATURE_CHARTING_VIEWER: "1"
+      BACKEND_BASE_URL: http://localhost:8100
       COMPOSE_PROJECT_NAME: dentalpms_playwright_parity
       POSTGRES_DB: dental_pms
       POSTGRES_USER: dental_pms
@@ -357,11 +358,25 @@ jobs:
 
       - name: Check seed route availability
         run: |
-          docker compose --env-file .env exec -T frontend node -e "
-          fetch('http://backend:8000/api/test/seed/charting', {method:'POST'})
-            .then(r => { console.log('seed status', r.status); if (r.status === 404) process.exit(1); })
-            .catch(err => { console.error(err); process.exit(1); });
-          "
+          docker compose --env-file .env exec -T backend python - <<'PY'
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+
+          url = "http://localhost:8000/test/seed/charting"
+          req = urllib.request.Request(url, method="POST")
+          try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+              body = resp.read(500).decode("utf-8", "replace")
+              print("seed status", resp.status)
+              print(body)
+          except urllib.error.HTTPError as exc:
+            body = exc.read(500).decode("utf-8", "replace")
+            print("seed status", exc.code)
+            print(body)
+            sys.exit(1)
+          PY
 
       - name: Wait for frontend proxy
         run: |

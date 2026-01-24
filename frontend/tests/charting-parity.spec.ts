@@ -126,12 +126,14 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   test.setTimeout(120_000);
   const token = await ensureAuthReady(request);
   const baseUrl = getBaseUrl();
+  const backendBaseUrl =
+    process.env.BACKEND_BASE_URL ?? `http://localhost:${process.env.BACKEND_PORT ?? "8100"}`;
   const configRes = await request.get(`${baseUrl}/api/config`);
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
   test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
-  const seedRes = await request.post(`${baseUrl}/api/test/seed/charting`, {
+  const seedRes = await request.post(`${backendBaseUrl}/test/seed/charting`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (seedRes.status() === 404) {
