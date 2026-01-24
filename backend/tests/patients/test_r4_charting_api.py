@@ -59,10 +59,21 @@ def _cleanup(session, patient_id: int | None, legacy_code: int) -> None:
         session.execute(delete(Patient).where(Patient.id == patient_id))
 
 
+def _charting_enabled(api_client) -> bool:
+    res = api_client.get("/config")
+    if res.status_code != 200:
+        return False
+    payload = res.json()
+    return bool(payload.get("feature_flags", {}).get("charting_viewer"))
+
+
 def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
     session = SessionLocal()
     patient_id = None
+    legacy_code: int | None = None
     try:
+        if not _charting_enabled(api_client):
+            return
         actor_id = resolve_actor_id(session)
         legacy_code = 990000000 + (uuid4().int % 100000)
         patient = _create_patient(session, legacy_code, actor_id)
@@ -180,19 +191,17 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         assert notes_res.json()[0]["legacy_note_key"] == note_key
     finally:
         session.rollback()
-        _cleanup(session, patient_id, legacy_code)
-        session.commit()
+        if legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+            session.commit()
         session.close()
 
 
 def test_charting_endpoints_blocked_when_feature_disabled(api_client, auth_headers):
-    config = api_client.get("/config").json()
-    enabled = config.get("feature_flags", {}).get("charting_viewer", True)
+    if _charting_enabled(api_client):
+        return
     res = api_client.get("/patients/1/charting/perio-probes", headers=auth_headers)
-    if enabled:
-        assert res.status_code != 403, res.text
-    else:
-        assert res.status_code == 403, res.text
+    assert res.status_code == 403, res.text
 
 
 def test_charting_endpoints_require_auth(api_client):

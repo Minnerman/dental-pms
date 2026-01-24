@@ -115,6 +115,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - UI shows read-only banner and last-imported metadata from `/patients/<id>/charting/meta`.
   - Pagination defaults for perio probes + tooth surfaces (limit 500, max 5000) with load-more UI.
   - Migration adds `r4_charting_import_state` and index on `r4_perio_probes` for patient/date ordering.
+- 2026-01-24: Stage145 staging-safe charting enablement + pagination UX.
+  - Default-off unless `FEATURE_CHARTING_VIEWER=true`; staging/prod must explicitly enable.
+  - `/patients/<id>/charting` shows disabled message (no 404) when flag off.
+  - UI displays “Showing X of Y” for paginated sections; counts still use totals.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

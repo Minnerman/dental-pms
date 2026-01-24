@@ -7,9 +7,14 @@ const chartingEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
 
 test("charting viewer renders read-only sections", async ({ page, request }) => {
   test.skip(!chartingEnabled, "charting viewer disabled");
+  const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
   await primePageAuth(page, request);
   const patientId = await createPatient(request);
-  const baseUrl = getBaseUrl();
 
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
@@ -44,6 +49,7 @@ test("charting viewer gating follows backend config", async ({ page, request }) 
     await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(page.getByTestId("charting-viewer")).toHaveCount(0);
+    await expect(page.getByTestId("charting-viewer")).toBeVisible();
+    await expect(page.getByText("Charting viewer is disabled")).toBeVisible();
   }
 });

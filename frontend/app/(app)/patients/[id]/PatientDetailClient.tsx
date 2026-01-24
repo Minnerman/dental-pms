@@ -578,6 +578,7 @@ export default function PatientDetailClient({
   id: string;
   initialTab?: PatientTab;
 }) {
+  const isChartingRoute = initialTab === "charting";
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -2058,18 +2059,14 @@ export default function PatientDetailClient({
 
   useEffect(() => {
     if (!initialTab) return;
-    if (initialTab === "charting" && !chartingViewerEnabled) {
-      setTab("summary");
-      return;
-    }
     setTab(initialTab);
   }, [initialTab, chartingViewerEnabled]);
 
   useEffect(() => {
-    if (tab === "charting" && !chartingViewerEnabled) {
+    if (!isChartingRoute && tab === "charting" && !chartingViewerEnabled) {
       setTab("summary");
     }
-  }, [tab, chartingViewerEnabled]);
+  }, [tab, chartingViewerEnabled, isChartingRoute]);
 
   useEffect(() => {
     if (tab !== "clinical") return;
@@ -4556,7 +4553,9 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{perioProbeTotal} records</span>
+                                <span className="badge">
+                                  Showing {perioProbes.length} of {perioProbeTotal}
+                                </span>
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
@@ -5003,7 +5002,9 @@ export default function PatientDetailClient({
                                 className="row"
                                 style={{ justifyContent: "space-between", gap: 12 }}
                               >
-                                <span className="badge">{toothSurfacesTotal} records</span>
+                                <span className="badge">
+                                  Showing {toothSurfaces.length} of {toothSurfacesTotal}
+                                </span>
                                 <button
                                   className="btn btn-secondary"
                                   type="button"

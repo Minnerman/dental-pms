@@ -135,6 +135,11 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   test.setTimeout(120_000);
   const token = await ensureAuthReady(request);
   const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
   const report: Array<{
     legacy_code: number;
     patient_id: string;

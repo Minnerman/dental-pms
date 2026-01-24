@@ -39,6 +39,12 @@ From the repo root:
   a rerun of `--apply` to confirm completion or resume with `--patients-from`.
 - Postgres-only verification is available via `--verify-postgres` for patients windows.
 
+## Charting viewer enablement
+- Default is off unless `FEATURE_CHARTING_VIEWER=true` is set.
+- Enable: set `FEATURE_CHARTING_VIEWER=true` in `.env` and restart containers.
+- Verify: `curl http://localhost:8100/config` and look for `"charting_viewer": true`.
+- Disable quickly: remove the env var or set `FEATURE_CHARTING_VIEWER=false` and restart.
+
 Patients-only pilot (Stage 108):
 ```bash
 # Dry-run (read-only, bounded range)
