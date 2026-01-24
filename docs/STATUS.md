@@ -159,6 +159,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - 2026-01-24: Stage156 preset export/import test coverage.
   - Playwright asserts notes preset JSON roundtrip and stable shape.
   - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-24: Stage157 charting shareable filter links (URL query params).
+  - Per-section "Copy filter link" buttons for perio, BPE, furcations, and notes.
+  - Notes text search excluded by default; opt-in checkbox with warning when included.
+  - Playwright covers non-text link roundtrip plus text opt-in link parameters.
+  - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

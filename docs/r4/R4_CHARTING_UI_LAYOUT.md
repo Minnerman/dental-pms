@@ -23,6 +23,12 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
 - Stage 154 adds debounced text search and ignores stale responses on rapid filter edits.
 - Stage 155 adds preset share/export via JSON copy/import per section.
 - Preset JSON shape is stable: `{ "version": 1, "section": "<section>", "payload": { ... } }` (bump version on breaking changes).
+- Stage 157 adds shareable filter links via URL query params (per section).
+  - Perio: `charting_perio_from`, `charting_perio_to`, `charting_perio_tooth`, `charting_perio_site`, `charting_perio_bleeding`, `charting_perio_plaque`.
+  - BPE/furcations: `charting_bpe_from`, `charting_bpe_to`, `charting_bpe_latest`.
+  - Notes: `charting_notes_from`, `charting_notes_to`, `charting_notes_category`.
+  - Notes text search is excluded by default; it is only included when `charting_notes_q_inc=1` and `charting_notes_q` is present.
+  - Copying a link with text search prompts a warning before copying.
 
 ## CSV export (Stage 151)
 - Export is Postgres-only and read-only.
