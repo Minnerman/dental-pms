@@ -125,6 +125,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Structured access logs on charting routes (user, patient, status, duration).
   - Basic per-user rate limiting on charting reads.
   - `/config` smoke check added to `ops/verify.sh`.
+- 2026-01-24: Stage148 deterministic charting seed for UI parity tests.
+  - Seed script: `backend/app/scripts/seed_charting_demo.py` (Postgres-only, idempotent).
+  - Test-only endpoint: `/test/seed/charting` gated by `ENABLE_TEST_ROUTES=1` or `APP_ENV=test`.
+  - Playwright parity uses seeded patients (no env IDs required).
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

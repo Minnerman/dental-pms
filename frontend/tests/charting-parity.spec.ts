@@ -7,7 +7,6 @@ import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
 type ParityTarget = {
   legacyCode: number;
-  patientIdEnv: string;
   entity: "perio-probes" | "bpe" | "bpe-furcations" | "notes" | "tooth-surfaces";
   label:
     | "Perio probes"
@@ -21,50 +20,42 @@ const chartingEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
 const parityTargets: ParityTarget[] = [
   {
     legacyCode: 1000000,
-    patientIdEnv: "STAGE140_PATIENT_ID_1000000",
     entity: "perio-probes",
     label: "Perio probes",
   },
   {
     legacyCode: 1011978,
-    patientIdEnv: "STAGE140_PATIENT_ID_1011978",
     entity: "bpe",
     label: "BPE entries",
   },
   {
     legacyCode: 1012056,
-    patientIdEnv: "STAGE140_PATIENT_ID_1012056",
     entity: "notes",
     label: "Patient notes",
   },
   {
     legacyCode: 1013684,
-    patientIdEnv: "STAGE141_PATIENT_ID_1013684",
     entity: "bpe",
     label: "BPE entries",
   },
   {
     legacyCode: 1000035,
-    patientIdEnv: "STAGE141_PATIENT_ID_1000035",
     entity: "bpe",
     label: "BPE entries",
   },
   {
     legacyCode: 1000035,
-    patientIdEnv: "STAGE141_PATIENT_ID_1000035",
     entity: "bpe-furcations",
     label: "BPE furcations",
   },
   {
     legacyCode: 1000000,
-    patientIdEnv: "STAGE140_PATIENT_ID_1000000",
     entity: "tooth-surfaces",
     label: "Tooth surfaces",
   },
 ];
 
-const hasAllPatientIds = parityTargets.every((target) => process.env[target.patientIdEnv]);
-test.skip(!chartingEnabled || !hasAllPatientIds, "charting parity requires env IDs");
+test.skip(!chartingEnabled, "charting parity requires viewer enabled");
 
 function parseBadgeCount(text: string) {
   const match = text.match(/:\s*(\d+)\s*$/);
@@ -140,6 +131,20 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
     feature_flags?: { charting_viewer?: boolean };
   };
   test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const seedRes = await request.post(`${baseUrl}/api/test/seed/charting`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (seedRes.status() === 404) {
+    throw new Error("Seed endpoint missing. Set ENABLE_TEST_ROUTES=1 for parity tests.");
+  }
+  expect(seedRes.ok()).toBeTruthy();
+  const seedPayload = (await seedRes.json()) as {
+    patients: Array<{ legacy_code: number; patient_id: number }>;
+  };
+  const patientMap = new Map<number, string>();
+  for (const patient of seedPayload.patients ?? []) {
+    patientMap.set(patient.legacy_code, String(patient.patient_id));
+  }
   const report: Array<{
     legacy_code: number;
     patient_id: string;
@@ -153,7 +158,10 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   await primePageAuth(page, request);
 
   for (const target of parityTargets) {
-    const patientId = process.env[target.patientIdEnv] as string;
+    const patientId = patientMap.get(target.legacyCode);
+    if (!patientId) {
+      throw new Error(`Missing seeded patient for legacy code ${target.legacyCode}`);
+    }
     const apiResponse = await request.get(
       `${baseUrl}/api/patients/${patientId}/charting/${target.entity}`,
       { headers: { Authorization: `Bearer ${token}` } }
