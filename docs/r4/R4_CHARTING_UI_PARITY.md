@@ -84,3 +84,41 @@ Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
 
 ## Notes
 - Stage 139 blocker resolved: charting import seeded this cohort and spotcheck limits raised.
+
+---
+
+# R4 Charting UI Parity Review (Stage 141)
+
+Date: 2026-01-24
+Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
+
+## Cohort
+- 1000000 (perio probes + duplicates case)
+- 1011978 (BPE-heavy)
+- 1012056 (notes-heavy)
+- 1013684 (BPE-heavy)
+- 1000035 (BPE/BPEFurcation case)
+
+## Artefacts
+- tmp/stage141/patient_1000000/
+- tmp/stage141/patient_1011978/
+- tmp/stage141/patient_1012056/
+- tmp/stage141/patient_1013684/
+- tmp/stage141/patient_1000035/
+- tmp/stage141/ui_parity.json (Playwright parity report)
+
+## Results
+
+### Automated UI parity (Playwright)
+- 1000000: Perio probes PASS (API=117, UI=117)
+- 1011978: BPE entries PASS (API=16, UI=16)
+- 1012056: Patient notes PASS (API=37, UI=37)
+- 1013684: BPE entries PASS (API=15, UI=15)
+- 1000035: BPE entries PASS (API=8, UI=8)
+
+### Row-level checks
+- 1000000: Perio probe rows matched on date/tooth/site/depth for 3 samples.
+- 1012056: Patient notes matched on date/category/text for 2 samples.
+
+## Notes
+- Some PerioProbe samples have missing recorded_at (displayed as "—"); checks still matched UI rows.
