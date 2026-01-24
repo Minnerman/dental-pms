@@ -144,6 +144,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Filters moved server-side for perio probes, BPE entries, BPE furcations, and patient notes.
   - Filtered totals now reflect query params; pagination resets on filter change.
   - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-24: Stage153 charting filter presets + clear-all UX.
+  - Per-section presets (3 slots) stored in localStorage; last-used filters persist on refresh.
+  - Filters clear buttons reset pagination and refetch server-side results.
+  - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

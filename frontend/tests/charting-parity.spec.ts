@@ -122,17 +122,10 @@ function extractApiItems<T>(payload: unknown): { items: T[]; total: number } {
   };
 }
 
-test("charting viewer parity matches API counts", async ({ page, request }) => {
-  test.setTimeout(120_000);
+async function seedCharting(request: Parameters<typeof ensureAuthReady>[0]) {
   const token = await ensureAuthReady(request);
-  const baseUrl = getBaseUrl();
   const backendBaseUrl =
     process.env.BACKEND_BASE_URL ?? `http://localhost:${process.env.BACKEND_PORT ?? "8100"}`;
-  const configRes = await request.get(`${baseUrl}/api/config`);
-  const config = (await configRes.json()) as {
-    feature_flags?: { charting_viewer?: boolean };
-  };
-  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
   const seedRes = await request.post(`${backendBaseUrl}/test/seed/charting`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -147,6 +140,18 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   for (const patient of seedPayload.patients ?? []) {
     patientMap.set(patient.legacy_code, String(patient.patient_id));
   }
+  return { token, patientMap };
+}
+
+test("charting viewer parity matches API counts", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const { token, patientMap } = await seedCharting(request);
   const report: Array<{
     legacy_code: number;
     patient_id: string;
@@ -346,4 +351,37 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log("UI_PARITY_REPORT", JSON.stringify(report));
+});
+
+test("charting filters reduce totals in UI", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const baseUrl = getBaseUrl();
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const { patientMap } = await seedCharting(request);
+  const patientId = patientMap.get(1012056);
+  if (!patientId) {
+    throw new Error("Missing seeded patient 1012056 for charting filters test.");
+  }
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+
+  const notesBadge = page.locator(".badge", { hasText: "Patient notes:" }).first();
+  await expect(notesBadge).toBeVisible();
+  const beforeText = await notesBadge.textContent();
+  const beforeCount = beforeText ? parseBadgeCount(beforeText) : null;
+  expect(beforeCount).not.toBeNull();
+
+  await page.getByPlaceholder("Find text...").fill("note 1");
+  await expect(notesBadge).toHaveText(/Patient notes:\s*1/, { timeout: 30_000 });
+  if (beforeCount !== null) {
+    expect(beforeCount).toBeGreaterThan(1);
+  }
 });
