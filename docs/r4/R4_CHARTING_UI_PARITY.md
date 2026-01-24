@@ -51,3 +51,36 @@ Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
 ## Follow-ups
 - Run charting import for this cohort before UI parity review.
 - Re-run spotcheck CSVs after import and complete manual UI comparison.
+
+---
+
+# R4 Charting UI Parity Review (Stage 140)
+
+Date: 2026-01-24
+Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
+
+## Cohort
+- 1000000 (perio probes + duplicates case)
+- 1011978 (BPE-heavy)
+- 1012056 (notes-heavy)
+
+## Artefacts
+- tmp/stage140/patient_1000000/ (spotcheck with --limit 5000)
+- tmp/stage140/patient_1011978/ (spotcheck with --limit 5000)
+- tmp/stage140/patient_1012056/ (spotcheck with --limit 5000)
+- tmp/stage140/ui_parity.json (Playwright parity report)
+
+## Results
+
+### Automated UI parity (Playwright)
+- 1000000: Perio probes PASS (API=117, UI=117)
+- 1011978: BPE entries PASS (API=16, UI=16)
+- 1012056: Patient notes PASS (API=37, UI=37)
+
+### CSV index summaries
+- 1000000: perio_probes SQL=166, SQL unique=117, PG=117
+- 1011978: bpe SQL=16, PG=16
+- 1012056: patient_notes SQL=37, PG=37
+
+## Notes
+- Stage 139 blocker resolved: charting import seeded this cohort and spotcheck limits raised.

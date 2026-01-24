@@ -87,6 +87,11 @@
   - Artefacts: `tmp/stage139/patient_<code>/` (per patient).
   - Doc: `docs/r4/R4_CHARTING_UI_PARITY.md`.
   - Note: index.csv shows Postgres counts = 0 for charting entities; UI parity requires charting import for this cohort.
+- 2026-01-24: Stage140 UI parity (seeded charting imports).
+  - Cohort: 1000000, 1011978, 1012056.
+  - Artefacts: `tmp/stage140/patient_<code>/`, `tmp/stage140/ui_parity.json`.
+  - Summary: Playwright parity checks PASS for Perio probes (117), BPE entries (16), Patient notes (37).
+  - Doc: `docs/r4/R4_CHARTING_UI_PARITY.md` (Stage 140 section).
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
