@@ -51,3 +51,18 @@ Pick the path used by your environment.
 - Read-only banner is always displayed in the viewer.
 - Pagination defaults limit rows and show totals.
 - **R4 SQL Server is strictly read-only.** Codex must only run `SELECT` queries against R4. **No writes of any kind**: no `UPDATE/INSERT/DELETE/MERGE`, no DDL (`CREATE/ALTER/DROP`), no stored procedures, no temp-table side effects, no schema changes, and nothing that could modify or impact the R4 server.
+
+## Local UI parity tests (deterministic seed)
+1. Enable test routes and the viewer:
+   - `ENABLE_TEST_ROUTES=1`
+   - `FEATURE_CHARTING_VIEWER=true`
+2. Restart services.
+3. Seed demo charting data:
+   ```bash
+   docker compose exec -T backend python -m app.scripts.seed_charting_demo --apply
+   ```
+4. Run Playwright parity tests:
+   ```bash
+   NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1 docker compose exec -T frontend \
+     npx playwright test tests/charting-viewer.spec.ts tests/charting-parity.spec.ts
+   ```

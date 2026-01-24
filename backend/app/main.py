@@ -44,6 +44,7 @@ from app.models.user import User
 from sqlalchemy import select
 from app.routers.r4_calendar import router as r4_calendar_router
 from app.routers.r4_charting import router as r4_charting_router
+from app.routers.test_seed import router as test_seed_router
 
 app = FastAPI(title="Dental PMS API", version="0.1.0")
 logger = logging.getLogger("dental_pms.startup")
@@ -126,3 +127,5 @@ app.include_router(legacy_admin_router)
 app.include_router(r4_admin_router)
 app.include_router(r4_calendar_router)
 app.include_router(r4_charting_router)
+if settings.app_env.strip().lower() == "test" or settings.enable_test_routes:
+    app.include_router(test_seed_router)

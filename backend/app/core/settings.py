@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     admin_email: EmailStr = "admin@example.com"
     admin_password: str = "ChangeMe123!"
     feature_charting_viewer: bool = Field(default=False, alias="FEATURE_CHARTING_VIEWER")
+    enable_test_routes: bool = Field(default=False, alias="ENABLE_TEST_ROUTES")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
