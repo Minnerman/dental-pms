@@ -79,12 +79,27 @@ function formatUiDate(value?: string | null) {
   return parsed.toLocaleDateString("en-GB");
 }
 
+const perioSiteLabels: Record<number, string> = {
+  1: "MB",
+  2: "B",
+  3: "DB",
+  4: "ML",
+  5: "L",
+  6: "DL",
+};
+
+function formatPerioSite(value?: number | null) {
+  if (value === null || value === undefined) return "—";
+  const label = perioSiteLabels[value];
+  return label ? `${label} (${value})` : String(value);
+}
+
 function normalizeText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-async function expectRowWithCells(table: Locator, cells: string[]) {
-  const rows = table.locator("tbody tr");
+async function expectRowWithCells(root: Locator, cells: string[]) {
+  const rows = root.locator("tbody tr");
   const rowCount = await rows.count();
   for (let idx = 0; idx < rowCount; idx += 1) {
     const text = normalizeText(await rows.nth(idx).innerText());
@@ -93,6 +108,13 @@ async function expectRowWithCells(table: Locator, cells: string[]) {
     }
   }
   throw new Error(`Expected row not found for cells: ${cells.join(" | ")}`);
+}
+
+async function expectBlockWithText(root: Locator, cells: string[]) {
+  const text = normalizeText(await root.innerText());
+  if (!cells.every((cell) => text.includes(cell))) {
+    throw new Error(`Expected text not found for cells: ${cells.join(" | ")}`);
+  }
 }
 
 test("charting viewer parity matches API counts", async ({ page, request }) => {
@@ -161,16 +183,16 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "Perio probes" }) });
-      const table = panel.locator("table");
+      await expect(panel.getByText("Exam date:")).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const cells = [
           formatUiDate(row.recorded_at),
           String(row.tooth ?? "—"),
-          String(row.probing_point ?? "—"),
+          formatPerioSite(row.probing_point),
           String(row.depth ?? "—"),
         ];
-        await expectRowWithCells(table, cells);
+        await expectRowWithCells(panel, cells);
         entryReport.row_checks.push({ cells, status: "pass" });
       }
     }
@@ -183,11 +205,10 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "BPE entries" }) });
-      const table = panel.locator("table");
+      await expect(panel.getByTestId("bpe-grid").first()).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const cells = [
-          formatUiDate(row.recorded_at),
           String(row.sextant_1 ?? "—"),
           String(row.sextant_2 ?? "—"),
           String(row.sextant_3 ?? "—"),
@@ -195,7 +216,9 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
           String(row.sextant_5 ?? "—"),
           String(row.sextant_6 ?? "—"),
         ];
-        await expectRowWithCells(table, cells);
+        const dateLabel = `Exam date: ${formatUiDate(row.recorded_at)}`;
+        const group = panel.locator('[data-testid="bpe-group"]', { hasText: dateLabel });
+        await expectBlockWithText(group.first(), cells);
         entryReport.row_checks.push({ cells, status: "pass" });
       }
     }
@@ -208,7 +231,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "BPE furcations" }) });
-      const table = panel.locator("table");
+      await expect(panel.getByText("Exam date:")).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const cells = [
@@ -217,7 +240,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
           String(row.furcation ?? "—"),
           String(row.sextant ?? "—"),
         ];
-        await expectRowWithCells(table, cells);
+        await expectRowWithCells(panel, cells);
         entryReport.row_checks.push({ cells, status: "pass" });
       }
     }
@@ -230,26 +253,31 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "Tooth surfaces" }) });
-      const table = panel.locator("table");
+      await expect(panel.locator("table").first()).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const cells = [
           String(row.legacy_tooth_id ?? "—"),
           String(row.legacy_surface_no ?? "—"),
         ];
-        await expectRowWithCells(table, cells);
+        await expectRowWithCells(panel, cells);
         entryReport.row_checks.push({ cells, status: "pass" });
       }
     }
 
     if (target.legacyCode === 1012056 && target.entity === "notes") {
-      const samples = apiData
+      const samples = [...apiData]
         .filter((row: any) => row?.note_date && row?.note)
+        .sort((a: any, b: any) => {
+          const timeA = a.note_date ? new Date(a.note_date).getTime() : -Infinity;
+          const timeB = b.note_date ? new Date(b.note_date).getTime() : -Infinity;
+          return timeB - timeA;
+        })
         .slice(0, 2);
       const panel = page
         .locator("section.panel")
         .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
-      const table = panel.locator("table");
+      await expect(panel.getByTestId("notes-list")).toBeVisible();
       entryReport.row_checks = [];
       for (const row of samples) {
         const noteSnippet = normalizeText(String(row.note)).slice(0, 30);
@@ -258,7 +286,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
           String(row.category_number ?? "—"),
           noteSnippet,
         ];
-        await expectRowWithCells(table, cells);
+        await expectRowWithCells(panel, cells);
         entryReport.row_checks.push({ cells, status: "pass" });
       }
     }
