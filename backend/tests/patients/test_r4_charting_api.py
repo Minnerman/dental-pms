@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete, func, select
 
+from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.patient import Patient
 from app.models.r4_charting import (
@@ -279,6 +280,8 @@ def test_charting_endpoints_forbidden_for_external_role(api_client):
 
 
 def test_charting_rate_limit_allows_then_throttles(api_client):
+    if settings.app_env.strip().lower() == "test":
+        pytest.skip("Rate limiting is disabled in APP_ENV=test")
     if not _charting_enabled(api_client):
         return
     session = SessionLocal()

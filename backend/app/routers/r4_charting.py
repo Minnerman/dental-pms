@@ -82,7 +82,7 @@ def _charting_access_context(
             duration_ms=duration_ms,
         )
         raise HTTPException(status_code=403, detail="Charting viewer is disabled.")
-    if not settings.enable_test_routes and settings.app_env.strip().lower() != "test":
+    if settings.app_env.strip().lower() != "test":
         if not CHARTING_RATE_LIMITER.allow(f"user:{user.id}"):
             duration_ms = int((time.monotonic() - start) * 1000)
             _log_charting_access(
