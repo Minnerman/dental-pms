@@ -75,7 +75,9 @@ def _ensure_mapping(session: Session, *, patient: Patient, legacy_code: int) -> 
     return True
 
 
-def _ensure_import_state(session: Session, *, patient: Patient, legacy_code: int) -> bool:
+def _ensure_import_state(
+    session: Session, *, patient: Patient, legacy_code: int, actor_id: int
+) -> bool:
     record = session.scalar(
         select(R4ChartingImportState).where(R4ChartingImportState.patient_id == patient.id)
     )
@@ -86,6 +88,8 @@ def _ensure_import_state(session: Session, *, patient: Patient, legacy_code: int
             patient_id=patient.id,
             legacy_patient_code=legacy_code,
             last_imported_at=datetime.now(timezone.utc),
+            created_by_user_id=actor_id,
+            updated_by_user_id=actor_id,
         )
     )
     return True
@@ -275,7 +279,9 @@ def seed_charting_demo(session: Session) -> dict[str, object]:
             created_counts["patients"] += 1
         if _ensure_mapping(session, patient=patient, legacy_code=legacy_code):
             created_counts["mappings"] += 1
-        if _ensure_import_state(session, patient=patient, legacy_code=legacy_code):
+        if _ensure_import_state(
+            session, patient=patient, legacy_code=legacy_code, actor_id=actor_id
+        ):
             created_counts["import_state"] += 1
         patients.append({"legacy_code": legacy_code, "patient_id": patient.id})
 
