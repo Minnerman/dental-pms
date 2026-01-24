@@ -8,8 +8,13 @@ import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 type ParityTarget = {
   legacyCode: number;
   patientIdEnv: string;
-  entity: "perio-probes" | "bpe" | "notes";
-  label: "Perio probes" | "BPE entries" | "Patient notes";
+  entity: "perio-probes" | "bpe" | "bpe-furcations" | "notes" | "tooth-surfaces";
+  label:
+    | "Perio probes"
+    | "BPE entries"
+    | "BPE furcations"
+    | "Patient notes"
+    | "Tooth surfaces";
 };
 
 const chartingEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
@@ -43,6 +48,18 @@ const parityTargets: ParityTarget[] = [
     patientIdEnv: "STAGE141_PATIENT_ID_1000035",
     entity: "bpe",
     label: "BPE entries",
+  },
+  {
+    legacyCode: 1000035,
+    patientIdEnv: "STAGE141_PATIENT_ID_1000035",
+    entity: "bpe-furcations",
+    label: "BPE furcations",
+  },
+  {
+    legacyCode: 1000000,
+    patientIdEnv: "STAGE140_PATIENT_ID_1000000",
+    entity: "tooth-surfaces",
+    label: "Tooth surfaces",
   },
 ];
 
@@ -158,6 +175,73 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       }
     }
 
+    if (target.legacyCode === 1011978 && target.entity === "bpe") {
+      const samples = apiData.slice(0, 3);
+      if (samples.length === 0) {
+        throw new Error("No BPE rows available for row-level parity checks.");
+      }
+      const panel = page
+        .locator("section.panel")
+        .filter({ has: page.locator(".panel-title", { hasText: "BPE entries" }) });
+      const table = panel.locator("table");
+      entryReport.row_checks = [];
+      for (const row of samples) {
+        const cells = [
+          formatUiDate(row.recorded_at),
+          String(row.sextant_1 ?? "—"),
+          String(row.sextant_2 ?? "—"),
+          String(row.sextant_3 ?? "—"),
+          String(row.sextant_4 ?? "—"),
+          String(row.sextant_5 ?? "—"),
+          String(row.sextant_6 ?? "—"),
+        ];
+        await expectRowWithCells(table, cells);
+        entryReport.row_checks.push({ cells, status: "pass" });
+      }
+    }
+
+    if (target.legacyCode === 1000035 && target.entity === "bpe-furcations") {
+      const samples = apiData.slice(0, 3);
+      if (samples.length === 0) {
+        throw new Error("No BPE furcation rows available for row-level parity checks.");
+      }
+      const panel = page
+        .locator("section.panel")
+        .filter({ has: page.locator(".panel-title", { hasText: "BPE furcations" }) });
+      const table = panel.locator("table");
+      entryReport.row_checks = [];
+      for (const row of samples) {
+        const cells = [
+          formatUiDate(row.recorded_at),
+          String(row.tooth ?? "—"),
+          String(row.furcation ?? "—"),
+          String(row.sextant ?? "—"),
+        ];
+        await expectRowWithCells(table, cells);
+        entryReport.row_checks.push({ cells, status: "pass" });
+      }
+    }
+
+    if (target.legacyCode === 1000000 && target.entity === "tooth-surfaces") {
+      const samples = apiData.slice(0, 2);
+      if (samples.length === 0) {
+        throw new Error("No tooth surface rows available for row-level parity checks.");
+      }
+      const panel = page
+        .locator("section.panel")
+        .filter({ has: page.locator(".panel-title", { hasText: "Tooth surfaces" }) });
+      const table = panel.locator("table");
+      entryReport.row_checks = [];
+      for (const row of samples) {
+        const cells = [
+          String(row.legacy_tooth_id ?? "—"),
+          String(row.legacy_surface_no ?? "—"),
+        ];
+        await expectRowWithCells(table, cells);
+        entryReport.row_checks.push({ cells, status: "pass" });
+      }
+    }
+
     if (target.legacyCode === 1012056 && target.entity === "notes") {
       const samples = apiData
         .filter((row: any) => row?.note_date && row?.note)
@@ -183,7 +267,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   }
 
   const reportPath =
-    process.env.UI_PARITY_OUT ?? "/tmp/stage141/ui_parity.json";
+    process.env.UI_PARITY_OUT ?? "/tmp/stage142/ui_parity.json";
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log("UI_PARITY_REPORT", JSON.stringify(report));

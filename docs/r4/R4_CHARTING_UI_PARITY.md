@@ -122,3 +122,26 @@ Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
 
 ## Notes
 - Some PerioProbe samples have missing recorded_at (displayed as "—"); checks still matched UI rows.
+
+---
+
+# R4 Charting UI Parity Review (Stage 142)
+
+Date: 2026-01-24
+Feature flag: NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1
+
+## Cohort
+- 1000000 (perio probes + duplicates case)
+- 1011978 (BPE-heavy)
+- 1012056 (notes-heavy)
+- 1013684 (BPE-heavy)
+- 1000035 (BPE/BPEFurcation case)
+
+## Artefacts
+- tmp/stage142/ui_parity.json (Playwright parity report)
+
+## Results
+- Automated UI parity: pending run after Stage 142 test updates.
+
+## Notes
+- Stage 142 adds row-level checks for BPE (1011978), BPE furcations (1000035), and tooth surfaces sanity (1000000).
