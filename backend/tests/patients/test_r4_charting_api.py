@@ -17,6 +17,7 @@ from app.models.r4_charting import (
 from app.models.capability import UserCapability
 from app.models.user import Role, User
 from app.services.charting_csv import ENTITY_COLUMNS
+from app.routers import r4_charting
 from app.services.users import create_user
 
 
@@ -457,6 +458,60 @@ def test_charting_export_returns_csv_zip(api_client, auth_headers):
             assert "postgres_patient_notes.csv" in names
             header = archive.read("postgres_perio_probes.csv").decode("utf-8").splitlines()[0]
             assert header == ",".join(ENTITY_COLUMNS["perio_probes"])
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+            session.commit()
+        session.close()
+
+
+def test_charting_export_truncates_rows(api_client, auth_headers, monkeypatch):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        monkeypatch.setattr(r4_charting, "EXPORT_MAX_ROWS", 1)
+        actor_id = resolve_actor_id(session)
+        legacy_code = 990000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+        for idx in range(2):
+            session.add(
+                R4PatientNote(
+                    legacy_source="r4",
+                    legacy_note_key=f"{legacy_code}:{uuid4().hex[:6]}",
+                    legacy_patient_code=legacy_code,
+                    legacy_note_number=idx + 1,
+                    note_date=datetime(2024, 5, 1 + idx, tzinfo=timezone.utc),
+                    note="Export note",
+                    created_by_user_id=actor_id,
+                )
+            )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/export?entities=patient_notes",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        import csv
+        import io
+        import zipfile
+
+        with zipfile.ZipFile(io.BytesIO(res.content)) as archive:
+            index_rows = list(
+                csv.DictReader(archive.read("index.csv").decode("utf-8").splitlines())
+            )
+        assert len(index_rows) == 1
+        row = index_rows[0]
+        assert row["entity"] == "patient_notes"
+        assert row["postgres_count"] == "1"
+        assert row["postgres_total"] == "2"
+        assert row["postgres_truncated"].lower() == "true"
+        assert row["postgres_limit"] == "1"
     finally:
         session.rollback()
         if legacy_code is not None:

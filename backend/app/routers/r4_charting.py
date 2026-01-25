@@ -53,6 +53,8 @@ logger = logging.getLogger("dental_pms.charting")
 DEFAULT_LIMIT = 500
 MAX_LIMIT = 5000
 CHARTING_RATE_LIMITER = SimpleRateLimiter(max_events=60, window_seconds=60)
+CHARTING_EXPORT_RATE_LIMITER = SimpleRateLimiter(max_events=10, window_seconds=60)
+EXPORT_MAX_ROWS = max(settings.charting_export_max_rows, 1)
 
 
 def _log_charting_access(
@@ -595,7 +597,7 @@ def _export_rows_for_entity(
     db: Session,
     entity: str,
     patient_code: int,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], int]:
     if entity == "patient_notes":
         stmt = select(
             R4PatientNote.legacy_patient_code.label("patient_code"),
@@ -609,7 +611,8 @@ def _export_rows_for_entity(
             R4PatientNote.fixed_note_code.label("fixed_note_code"),
             R4PatientNote.user_code.label("user_code"),
         ).where(R4PatientNote.legacy_patient_code == patient_code)
-        return _pg_rows(db, stmt)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
     if entity == "bpe":
         stmt = select(
             R4BPEEntry.legacy_patient_code.label("patient_code"),
@@ -623,7 +626,8 @@ def _export_rows_for_entity(
             R4BPEEntry.sextant_5.label("sextant_5"),
             R4BPEEntry.sextant_6.label("sextant_6"),
         ).where(R4BPEEntry.legacy_patient_code == patient_code)
-        return _pg_rows(db, stmt)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
     if entity == "bpe_furcations":
         stmt = select(
             R4BPEFurcation.legacy_patient_code.label("patient_code"),
@@ -634,7 +638,8 @@ def _export_rows_for_entity(
             R4BPEFurcation.furcation.label("furcation"),
             R4BPEFurcation.sextant.label("sextant"),
         ).where(R4BPEFurcation.legacy_patient_code == patient_code)
-        return _pg_rows(db, stmt)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
     if entity == "perio_probes":
         stmt = select(
             R4PerioProbe.legacy_patient_code.label("patient_code"),
@@ -647,7 +652,8 @@ def _export_rows_for_entity(
             R4PerioProbe.bleeding.label("bleeding"),
             R4PerioProbe.plaque.label("plaque"),
         ).where(R4PerioProbe.legacy_patient_code == patient_code)
-        return _pg_rows(db, stmt)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
     if entity == "tooth_surfaces":
         stmt = select(
             R4ToothSurface.legacy_tooth_id.label("legacy_tooth_id"),
@@ -656,7 +662,8 @@ def _export_rows_for_entity(
             R4ToothSurface.short_label.label("short_label"),
             R4ToothSurface.sort_order.label("sort_order"),
         )
-        return _pg_rows(db, stmt)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
     raise HTTPException(status_code=400, detail=f"Unsupported export entity: {entity}")
 
 
@@ -671,6 +678,22 @@ def export_charting(
     start = access["start"]
     request: Request = access["request"]
     try:
+        if settings.app_env.strip().lower() != "test":
+            if not CHARTING_EXPORT_RATE_LIMITER.allow(f"user:{user.id}"):
+                duration_ms = int((time.monotonic() - start) * 1000)
+                _log_charting_access(
+                    user_id=user.id,
+                    user_email=user.email,
+                    patient_id=patient_id,
+                    path=request.url.path,
+                    method=request.method,
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    duration_ms=duration_ms,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many charting export requests",
+                )
         patient_code = _resolve_legacy_patient_code(db, patient_id)
         if patient_code is None:
             raise HTTPException(status_code=404, detail="Patient is not linked to R4.")
@@ -681,7 +704,8 @@ def export_charting(
         index_rows: list[dict[str, object]] = []
         with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             for entity in selected:
-                raw_rows = _export_rows_for_entity(db, entity, patient_code)
+                raw_rows, total_rows = _export_rows_for_entity(db, entity, patient_code)
+                truncated = total_rows > EXPORT_MAX_ROWS
                 normalized = normalize_entity_rows(entity, raw_rows, patient_code)
                 csv_rows = rows_for_csv(normalized, ENTITY_COLUMNS[entity], patient_code)
                 csv_body = csv_text(csv_rows, ENTITY_COLUMNS[entity], ENTITY_SORT_KEYS.get(entity, []))
@@ -700,11 +724,13 @@ def export_charting(
                         "sqlserver_date_min": None,
                         "sqlserver_date_max": None,
                         "postgres_count": len(normalized),
-                        "postgres_total": len(normalized),
+                        "postgres_total": total_rows,
                         "postgres_unique_count": len(normalized),
                         "postgres_duplicate_count": 0,
                         "postgres_date_min": min_date,
                         "postgres_date_max": max_date,
+                        "postgres_truncated": truncated,
+                        "postgres_limit": EXPORT_MAX_ROWS,
                     }
                 )
             index_columns = [
@@ -724,6 +750,8 @@ def export_charting(
                 "postgres_duplicate_count",
                 "postgres_date_min",
                 "postgres_date_max",
+                "postgres_truncated",
+                "postgres_limit",
             ]
             index_csv = csv_text(index_rows, index_columns, ["entity"])
             archive.writestr("index.csv", index_csv)

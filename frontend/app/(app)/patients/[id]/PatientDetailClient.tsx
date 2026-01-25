@@ -556,6 +556,9 @@ const allTeeth = [...upperTeeth, ...lowerTeeth];
 const bpeSextants = ["UR", "UA", "UL", "LL", "LA", "LR"];
 const initialChartingViewerEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
 const chartingPageSize = 500;
+const chartingLinkVersion = 1;
+const maxChartingLinkParams = 25;
+const maxNotesQueryLength = 200;
 
 
 type PatientTab =
@@ -746,6 +749,7 @@ export default function PatientDetailClient({
   const [chartingLoaded, setChartingLoaded] = useState(false);
   const [chartingLoading, setChartingLoading] = useState(false);
   const [chartingError, setChartingError] = useState<string | null>(null);
+  const [chartingLinkNotice, setChartingLinkNotice] = useState<string | null>(null);
   const [chartingViewerEnabled, setChartingViewerEnabled] = useState(
     initialChartingViewerEnabled
   );
@@ -1552,6 +1556,7 @@ export default function PatientDetailClient({
 
   function serializePreset(section: string, payload: Record<string, unknown>) {
     return JSON.stringify({
+      v: chartingPresetVersion,
       version: chartingPresetVersion,
       section,
       payload,
@@ -1561,11 +1566,22 @@ export default function PatientDetailClient({
   function parsePreset(section: string, raw: string) {
     try {
       const parsed = JSON.parse(raw) as {
+        v?: number;
         version?: number;
         section?: string;
         payload?: Record<string, unknown>;
       };
       if (!parsed || typeof parsed !== "object") return null;
+      const version =
+        typeof parsed.v === "number"
+          ? parsed.v
+          : typeof parsed.version === "number"
+          ? parsed.version
+          : chartingPresetVersion;
+      if (version > chartingPresetVersion) {
+        window.alert(`Unsupported preset version (${version}).`);
+        return null;
+      }
       if (parsed.section && parsed.section !== section) return null;
       if (!parsed.payload || typeof parsed.payload !== "object") return null;
       return parsed.payload;
@@ -1645,12 +1661,13 @@ export default function PatientDetailClient({
       if (notesFilterCategory) {
         params.set("charting_notes_category", notesFilterCategory);
       }
-      const query = notesFilterQuery.trim();
+      const query = sanitizeNotesQuery(notesFilterQuery);
       if (notesIncludeTextInLink && query) {
         params.set("charting_notes_q_inc", "1");
         params.set("charting_notes_q", query);
       }
     }
+    params.set("v", String(chartingLinkVersion));
     return params;
   }
 
@@ -2720,7 +2737,30 @@ export default function PatientDetailClient({
     return String(numeric);
   }
 
+  function sanitizeNotesQuery(value: string) {
+    return value
+      .replace(/[\x00-\x1F\x7F]/g, "")
+      .trim()
+      .slice(0, maxNotesQueryLength);
+  }
+
   function applyChartingFiltersFromParams(params: URLSearchParams) {
+    const chartingKeys = Array.from(params.keys()).filter(
+      (key) => key === "v" || key.startsWith("charting_")
+    );
+    if (chartingKeys.length === 0) {
+      return;
+    }
+    if (chartingKeys.length > maxChartingLinkParams) {
+      setChartingLinkNotice("Charting link ignored (too many parameters).");
+      return;
+    }
+    const versionRaw = params.get("v");
+    if (versionRaw && versionRaw !== String(chartingLinkVersion)) {
+      setChartingLinkNotice(`Unsupported charting link version (${versionRaw}).`);
+      return;
+    }
+    setChartingLinkNotice(null);
     const hasPerioParams = [
       "charting_perio_from",
       "charting_perio_to",
@@ -2763,7 +2803,7 @@ export default function PatientDetailClient({
       const includeText = params.get("charting_notes_q_inc") === "1";
       setNotesIncludeTextInLink(includeText);
       if (includeText) {
-        const query = (params.get("charting_notes_q") ?? "").trim();
+        const query = sanitizeNotesQuery(params.get("charting_notes_q") ?? "");
         setNotesFilterQuery(query);
         setNotesFilterQueryDebounced(query);
       } else {
@@ -5200,6 +5240,9 @@ export default function PatientDetailClient({
                             </button>
                           </div>
                         </div>
+                      )}
+                      {chartingLinkNotice && (
+                        <div className="notice">{chartingLinkNotice}</div>
                       )}
 
                       {chartingLoading ? (

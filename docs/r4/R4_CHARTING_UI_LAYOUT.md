@@ -29,11 +29,16 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
   - Notes: `charting_notes_from`, `charting_notes_to`, `charting_notes_category`.
   - Notes text search is excluded by default; it is only included when `charting_notes_q_inc=1` and `charting_notes_q` is present.
   - Copying a link with text search prompts a warning before copying.
+- Stage 159 hardens link/preset schema and limits.
+  - Share links include `v=1`; missing `v` defaults to 1; unsupported versions are ignored with a UI notice.
+  - Notes link text search is capped to 200 chars and strips control characters.
+  - Preset JSON includes `v: 1` in addition to `version: 1` for backward compatibility.
 
 ## CSV export (Stage 151)
 - Export is Postgres-only and read-only.
 - The CSV column order matches the spot-check format (`postgres_<entity>.csv` + `index.csv`).
 - Export supports per-entity selection from the charting viewer.
+- Export rows per entity are capped (default 5000); `index.csv` records `postgres_truncated` and `postgres_limit`.
 
 ## Perio probes
 - Grouped by exam date (latest exam highlighted).

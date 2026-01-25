@@ -168,6 +168,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Parity spec logs skip reasons and fails when `REQUIRE_CHARTING_PARITY=1`.
   - CI parity job sets `REQUIRE_CHARTING_PARITY=1` to enforce execution.
   - Docs: `docs/r4/CHARTING_VIEWER_ENABLEMENT.md`.
+- 2026-01-25: Stage159 export/link hardening.
+  - Share links include `v=1` and reject unsupported versions with a UI notice.
+  - Notes link text search is capped to 200 chars and strips control characters.
+  - Preset JSON now includes `v: 1` alongside `version: 1`.
+  - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

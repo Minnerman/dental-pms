@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     admin_password: str = "ChangeMe123!"
     feature_charting_viewer: bool = Field(default=False, alias="FEATURE_CHARTING_VIEWER")
     enable_test_routes: bool = Field(default=False, alias="ENABLE_TEST_ROUTES")
+    charting_export_max_rows: int = Field(default=5000, alias="CHARTING_EXPORT_MAX_ROWS")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
         "reset_token_expire_minutes",
         "reset_requests_per_minute",
         "reset_confirm_per_minute",
+        "charting_export_max_rows",
         mode="before",
     )
     @classmethod
