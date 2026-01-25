@@ -788,6 +788,7 @@ export default function PatientDetailClient({
   const [notesFilterFrom, setNotesFilterFrom] = useState("");
   const [notesFilterTo, setNotesFilterTo] = useState("");
   const chartingFiltersInitialized = useRef(false);
+  const chartingAuditSent = useRef(false);
   const notesFilterDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chartingRequestId = useRef(0);
   const perioLoadMoreRequestId = useRef(0);
@@ -1687,9 +1688,31 @@ export default function PatientDetailClient({
     const url = `${window.location.origin}${basePath}${query ? `?${query}` : ""}`;
     if (navigator?.clipboard?.writeText) {
       await navigator.clipboard.writeText(url);
+      void postChartingAudit("share_link_copied", section);
       return;
     }
     window.prompt("Copy charting link", url);
+    void postChartingAudit("share_link_copied", section);
+  }
+
+  async function postChartingAudit(
+    action: "viewer_opened" | "share_link_copied",
+    section?: string
+  ) {
+    if (!chartingViewerEnabled) return;
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/charting/audit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, section }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+      }
+    } catch {
+      // Ignore audit logging failures.
+    }
   }
 
   function applyPerioFilters(payload: Record<string, unknown>) {
@@ -2408,6 +2431,7 @@ export default function PatientDetailClient({
     setChartingFiltersReady(false);
     setChartingUrlApplied(false);
     setNotesIncludeTextInLink(false);
+    chartingAuditSent.current = false;
   }, [patientId]);
 
   useEffect(() => {
@@ -2494,6 +2518,15 @@ export default function PatientDetailClient({
     if (!chartingFiltersReady) return;
     void loadCharting();
   }, [tab, chartingLoaded, patientId, chartingViewerEnabled, chartingFiltersReady]);
+
+  useEffect(() => {
+    if (tab !== "charting") return;
+    if (!chartingViewerEnabled) return;
+    if (!chartingLoaded) return;
+    if (chartingAuditSent.current) return;
+    chartingAuditSent.current = true;
+    void postChartingAudit("viewer_opened");
+  }, [tab, chartingViewerEnabled, chartingLoaded, patientId]);
 
   useEffect(() => {
     if (tab !== "charting") return;
@@ -2996,6 +3029,11 @@ export default function PatientDetailClient({
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return "—";
     return parsed.toLocaleString("en-GB");
+  }
+
+  function formatChartingImportLabel() {
+    if (!chartingMeta?.last_imported_at) return "Not yet imported";
+    return `Last imported: ${formatDateTime(chartingMeta.last_imported_at)}`;
   }
 
   const perioSiteLabels: Record<number, string> = {
@@ -5260,6 +5298,9 @@ export default function PatientDetailClient({
                               Tooth surfaces: {toothSurfacesTotal}
                             </span>
                           </div>
+                          <div style={{ color: "var(--muted)" }}>
+                            {formatChartingImportLabel()}
+                          </div>
 
                           {chartingLoaded &&
                             perioProbeTotal === 0 &&
@@ -5288,6 +5329,9 @@ export default function PatientDetailClient({
                                     ? "Hide parity metadata"
                                     : "Show parity metadata"}
                                 </button>
+                              </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                {formatChartingImportLabel()}
                               </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                                 <div className="stack" style={{ gap: 6 }}>
@@ -5577,6 +5621,9 @@ export default function PatientDetailClient({
                                     : "Show parity metadata"}
                                 </button>
                               </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                {formatChartingImportLabel()}
+                              </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                                 <div className="stack" style={{ gap: 6 }}>
                                   <label className="label">From</label>
@@ -5842,6 +5889,9 @@ export default function PatientDetailClient({
                                 </button>
                               </div>
                               <div style={{ color: "var(--muted)" }}>
+                                {formatChartingImportLabel()}
+                              </div>
+                              <div style={{ color: "var(--muted)" }}>
                                 Uses the same date filters as BPE entries.
                               </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
@@ -6048,6 +6098,9 @@ export default function PatientDetailClient({
                                     ? "Hide parity metadata"
                                     : "Show parity metadata"}
                                 </button>
+                              </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                {formatChartingImportLabel()}
                               </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                                 <div className="stack" style={{ gap: 6 }}>
@@ -6300,6 +6353,9 @@ export default function PatientDetailClient({
                                     ? "Hide parity metadata"
                                     : "Show parity metadata"}
                                 </button>
+                              </div>
+                              <div style={{ color: "var(--muted)" }}>
+                                {formatChartingImportLabel()}
                               </div>
                               {chartingMetaOpen.surfaces && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>

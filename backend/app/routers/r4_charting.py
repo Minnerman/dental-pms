@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.settings import settings
 from app.db.session import get_db
-from app.deps import require_admin
+from app.deps import get_current_user
 from app.models.patient import Patient
 from app.models.r4_charting import (
     R4BPEEntry,
@@ -35,7 +35,9 @@ from app.services.charting_csv import (
     parse_entities,
     rows_for_csv,
 )
+from app.services.audit import log_event
 from app.schemas.r4_charting import (
+    ChartingAuditIn,
     PaginatedR4PerioProbeOut,
     PaginatedR4ToothSurfaceOut,
     R4BPEEntryOut,
@@ -83,11 +85,26 @@ def _log_charting_access(
 
 def _charting_access_context(
     request: Request,
-    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ) -> dict[str, object]:
     start = time.monotonic()
     patient_id = request.path_params.get("patient_id")
     patient_value = int(patient_id) if isinstance(patient_id, str) and patient_id.isdigit() else None
+    if patient_value is not None:
+        patient = db.get(Patient, patient_value)
+        if not patient or patient.deleted_at is not None:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_value,
+                path=request.url.path,
+                method=request.method,
+                status_code=404,
+                duration_ms=duration_ms,
+            )
+            raise HTTPException(status_code=404, detail="Patient not found")
     if not settings.feature_charting_viewer:
         duration_ms = int((time.monotonic() - start) * 1000)
         _log_charting_access(
@@ -759,6 +776,20 @@ def export_charting(
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         filename = f"charting_{patient_code}_{stamp}.zip"
         duration_ms = int((time.monotonic() - start) * 1000)
+        log_event(
+            db,
+            actor=user,
+            action="charting.export",
+            entity_type="patient",
+            entity_id=str(patient_id),
+            after_data={
+                "patient_code": patient_code,
+                "entities": selected,
+                "export_limit": EXPORT_MAX_ROWS,
+            },
+            ip_address=request.client.host if request else None,
+        )
+        db.commit()
         _log_charting_access(
             user_id=user.id,
             user_email=user.email,
@@ -773,6 +804,52 @@ def export_charting(
             media_type="application/zip",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
+@router.post("/audit", status_code=status.HTTP_204_NO_CONTENT)
+def audit_charting_event(
+    patient_id: int,
+    payload: ChartingAuditIn,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+) -> Response:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        log_event(
+            db,
+            actor=user,
+            action=f"charting.{payload.action}",
+            entity_type="patient",
+            entity_id=str(patient_id),
+            after_data={"section": payload.section},
+            ip_address=request.client.host if request else None,
+        )
+        db.commit()
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=status.HTTP_204_NO_CONTENT,
+            duration_ms=duration_ms,
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except HTTPException as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
         _log_charting_access(

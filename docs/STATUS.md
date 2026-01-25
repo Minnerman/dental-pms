@@ -173,6 +173,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Notes link text search is capped to 200 chars and strips control characters.
   - Preset JSON now includes `v: 1` alongside `version: 1`.
   - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-25: Stage160 charting viewer release hardening.
+  - Charting endpoints use patient access rules (404 for missing/deleted) and audit viewer/export events.
+  - Charting sections show last-imported timestamp per section.
+  - Docs: `docs/r4/CHARTING_VIEWER_ENABLEMENT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

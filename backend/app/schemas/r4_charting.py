@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -109,3 +111,8 @@ class R4ChartingMetaOut(BaseModel):
     legacy_patient_code: int | None = None
     last_imported_at: datetime | None = None
     source: str = "r4"
+
+
+class ChartingAuditIn(BaseModel):
+    action: Literal["viewer_opened", "share_link_copied"]
+    section: str | None = None

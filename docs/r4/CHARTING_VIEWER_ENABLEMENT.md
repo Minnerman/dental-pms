@@ -50,6 +50,8 @@ Pick the path used by your environment.
 ## Safety notes
 - Read-only banner is always displayed in the viewer.
 - Pagination defaults limit rows and show totals.
+- Charting sections display the last import timestamp (or "Not yet imported").
+- Audit events are recorded for viewer opens and charting exports.
 - **R4 SQL Server is strictly read-only.** Codex must only run `SELECT` queries against R4. **No writes of any kind**: no `UPDATE/INSERT/DELETE/MERGE`, no DDL (`CREATE/ALTER/DROP`), no stored procedures, no temp-table side effects, no schema changes, and nothing that could modify or impact the R4 server.
 
 ## Local UI parity tests (deterministic seed)

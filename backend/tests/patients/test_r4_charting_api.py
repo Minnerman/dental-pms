@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.patient import Patient
+from app.models.audit_log import AuditLog
 from app.models.r4_charting import (
     R4BPEEntry,
     R4BPEFurcation,
@@ -221,6 +222,34 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         )
         assert notes_res.status_code == 200, notes_res.text
         assert notes_res.json()[0]["legacy_note_key"] == note_key
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+            session.commit()
+        session.close()
+
+
+def test_charting_requires_auth(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 990000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+        session.commit()
+
+        res = api_client.get(f"/patients/{patient.id}/charting/notes")
+        assert res.status_code == 401
+
+        not_found = api_client.get(
+            "/patients/99999999/charting/notes", headers=auth_headers
+        )
+        assert not_found.status_code == 404
     finally:
         session.rollback()
         if legacy_code is not None:
@@ -447,6 +476,16 @@ def test_charting_export_returns_csv_zip(api_client, auth_headers):
         )
         assert res.status_code == 200, res.text
         assert res.headers["content-type"].startswith("application/zip")
+        audit = session.scalar(
+            select(AuditLog)
+            .where(
+                AuditLog.action == "charting.export",
+                AuditLog.entity_type == "patient",
+                AuditLog.entity_id == str(patient.id),
+            )
+            .order_by(AuditLog.created_at.desc())
+        )
+        assert audit is not None
         import io
         import zipfile
 
@@ -458,6 +497,43 @@ def test_charting_export_returns_csv_zip(api_client, auth_headers):
             assert "postgres_patient_notes.csv" in names
             header = archive.read("postgres_perio_probes.csv").decode("utf-8").splitlines()[0]
             assert header == ",".join(ENTITY_COLUMNS["perio_probes"])
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+            session.commit()
+        session.close()
+
+
+def test_charting_audit_endpoint(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 990000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+        session.commit()
+
+        res = api_client.post(
+            f"/patients/{patient.id}/charting/audit",
+            headers=auth_headers,
+            json={"action": "viewer_opened", "section": "perio"},
+        )
+        assert res.status_code == 204, res.text
+        audit = session.scalar(
+            select(AuditLog)
+            .where(
+                AuditLog.action == "charting.viewer_opened",
+                AuditLog.entity_type == "patient",
+                AuditLog.entity_id == str(patient.id),
+            )
+            .order_by(AuditLog.created_at.desc())
+        )
+        assert audit is not None
     finally:
         session.rollback()
         if legacy_code is not None:
