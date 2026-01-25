@@ -805,6 +805,16 @@ export default function PatientDetailClient({
   });
   const [chartingExporting, setChartingExporting] = useState(false);
   const [chartingExportError, setChartingExportError] = useState<string | null>(null);
+  const [chartingReviewPackBusy, setChartingReviewPackBusy] = useState(false);
+  const [chartingReviewPackError, setChartingReviewPackError] = useState<string | null>(
+    null
+  );
+  const [chartingReviewPackNotice, setChartingReviewPackNotice] = useState<
+    string | null
+  >(null);
+  const [chartingReviewPackLinks, setChartingReviewPackLinks] = useState<
+    Record<string, string>
+  >({});
   const [chartingUserKey, setChartingUserKey] = useState("anonymous");
   const [chartingUserLoaded, setChartingUserLoaded] = useState(false);
   const [chartingFiltersReady, setChartingFiltersReady] = useState(false);
@@ -1638,7 +1648,8 @@ export default function PatientDetailClient({
   }
 
   function buildChartingShareParams(
-    section: "perio" | "bpe" | "furcations" | "notes"
+    section: "perio" | "bpe" | "furcations" | "notes",
+    options?: { includeNotesText?: boolean }
   ) {
     const params = new URLSearchParams();
     if (section === "perio") {
@@ -1663,7 +1674,11 @@ export default function PatientDetailClient({
         params.set("charting_notes_category", notesFilterCategory);
       }
       const query = sanitizeNotesQuery(notesFilterQuery);
-      if (notesIncludeTextInLink && query) {
+      const includeText =
+        typeof options?.includeNotesText === "boolean"
+          ? options.includeNotesText
+          : notesIncludeTextInLink;
+      if (includeText && query) {
         params.set("charting_notes_q_inc", "1");
         params.set("charting_notes_q", query);
       }
@@ -1693,6 +1708,29 @@ export default function PatientDetailClient({
     }
     window.prompt("Copy charting link", url);
     void postChartingAudit("share_link_copied", section);
+  }
+
+  function buildReviewPackLinks() {
+    if (typeof window === "undefined") return {};
+    const basePath = `/patients/${patientId}/charting`;
+    const sections: Array<{
+      key: "perio" | "bpe" | "furcations" | "notes";
+      label: string;
+    }> = [
+      { key: "perio", label: "Perio probes" },
+      { key: "bpe", label: "BPE" },
+      { key: "furcations", label: "BPE furcations" },
+      { key: "notes", label: "Patient notes" },
+    ];
+    const links: Record<string, string> = {};
+    for (const section of sections) {
+      const params = buildChartingShareParams(section.key, { includeNotesText: false });
+      const query = params.toString();
+      links[section.label] = `${window.location.origin}${basePath}${
+        query ? `?${query}` : ""
+      }`;
+    }
+    return links;
   }
 
   async function postChartingAudit(
@@ -1743,6 +1781,9 @@ export default function PatientDetailClient({
     const requestId = ++chartingRequestId.current;
     setChartingLoading(true);
     setChartingError(null);
+    setChartingReviewPackNotice(null);
+    setChartingReviewPackError(null);
+    setChartingReviewPackLinks({});
     try {
       const perioParams = buildPerioParams(0);
       const bpeParams = buildBpeParams();
@@ -3036,6 +3077,36 @@ export default function PatientDetailClient({
     return `Last imported: ${formatDateTime(chartingMeta.last_imported_at)}`;
   }
 
+  const chartingHasMapping = chartingMeta?.legacy_patient_code != null;
+  const chartingHasImport = Boolean(chartingMeta?.last_imported_at);
+  const perioFiltersActive =
+    Boolean(perioFilterFrom || perioFilterTo || perioFilterSite) ||
+    Boolean(perioFilterTooth.trim()) ||
+    perioFilterBleeding ||
+    perioFilterPlaque;
+  const bpeFiltersActive = Boolean(bpeFilterFrom || bpeFilterTo || bpeLatestOnly);
+  const notesFiltersActive = Boolean(
+    notesFilterFrom ||
+      notesFilterTo ||
+      notesFilterCategory ||
+      notesFilterQuery.trim()
+  );
+  const anyChartingFiltersActive =
+    perioFiltersActive || bpeFiltersActive || notesFiltersActive;
+
+  function chartingEmptyMessage(hasFilters: boolean) {
+    if (!chartingHasMapping) {
+      return "Patient not linked to R4 charting yet.";
+    }
+    if (!chartingHasImport) {
+      return "No charting imported for this patient yet.";
+    }
+    if (hasFilters) {
+      return "No results for the current filters.";
+    }
+    return "No records in the latest charting import.";
+  }
+
   const perioSiteLabels: Record<number, string> = {
     1: "MB",
     2: "B",
@@ -3735,6 +3806,52 @@ export default function PatientDetailClient({
       );
     } finally {
       setChartingExporting(false);
+    }
+  }
+
+  async function downloadChartingReviewPack() {
+    if (!chartingViewerEnabled || chartingReviewPackBusy) return;
+    setChartingReviewPackBusy(true);
+    setChartingReviewPackError(null);
+    setChartingReviewPackNotice(null);
+    try {
+      const params = new URLSearchParams();
+      const entities = chartingExportOptions.map((option) => option.key);
+      params.set("entities", entities.join(","));
+      const res = await apiFetch(
+        `/api/patients/${patientId}/charting/export?${params.toString()}`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to export review pack (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const fallbackName = `charting_review_pack_${patientId}_${stamp}.zip`;
+      const filename = getFilenameFromDisposition(res, fallbackName);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setChartingReviewPackLinks(buildReviewPackLinks());
+      setChartingReviewPackNotice(
+        "Review pack ready. Share links exclude text search by default."
+      );
+    } catch (err) {
+      setChartingReviewPackError(
+        err instanceof Error ? err.message : "Failed to generate review pack"
+      );
+    } finally {
+      setChartingReviewPackBusy(false);
     }
   }
 
@@ -5244,6 +5361,16 @@ export default function PatientDetailClient({
                             >
                               {chartingExporting ? "Exporting..." : "Export CSV"}
                             </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              onClick={downloadChartingReviewPack}
+                              disabled={chartingReviewPackBusy || chartingExporting}
+                            >
+                              {chartingReviewPackBusy
+                                ? "Generating..."
+                                : "Generate review pack"}
+                            </button>
                             <span className="badge">
                               {chartingExportSelected.length} selected
                             </span>
@@ -5251,8 +5378,50 @@ export default function PatientDetailClient({
                           {chartingExportError && (
                             <div className="notice">{chartingExportError}</div>
                           )}
+                          {chartingReviewPackError && (
+                            <div className="notice">{chartingReviewPackError}</div>
+                          )}
+                          {chartingReviewPackNotice && (
+                            <div className="notice">{chartingReviewPackNotice}</div>
+                          )}
+                          {Object.keys(chartingReviewPackLinks).length > 0 && (
+                            <div className="stack" style={{ gap: 8 }}>
+                              <div className="label">Review pack links</div>
+                              {Object.entries(chartingReviewPackLinks).map(
+                                ([label, link]) => (
+                                  <div
+                                    key={`review-pack-${label}`}
+                                    className="row"
+                                    style={{ gap: 8, flexWrap: "wrap" }}
+                                  >
+                                    <span className="badge">{label}</span>
+                                    <input
+                                      className="input"
+                                      style={{ flex: 1, minWidth: 220 }}
+                                      readOnly
+                                      value={link}
+                                    />
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={async () => {
+                                        if (navigator?.clipboard?.writeText) {
+                                          await navigator.clipboard.writeText(link);
+                                          return;
+                                        }
+                                        window.prompt("Copy review link", link);
+                                      }}
+                                    >
+                                      Copy link
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          )}
                           <div style={{ color: "var(--muted)" }}>
-                            Exports use the same column order as spot-check CSVs.
+                            Exports use the same column order as spot-check CSVs. Review packs
+                            include a non-PHI summary JSON inside the zip.
                           </div>
                         </div>
                       </Panel>
@@ -5308,30 +5477,47 @@ export default function PatientDetailClient({
                             bpeFurcations.length === 0 &&
                             chartingNotes.length === 0 &&
                             toothSurfacesTotal === 0 && (
-                              <div className="notice">No charting data yet.</div>
+                              <div className="notice">
+                                {chartingEmptyMessage(anyChartingFiltersActive)}
+                              </div>
                             )}
 
                           <Panel title="Perio probes">
                             <div className="stack" style={{ gap: 12 }}>
                               <div
                                 className="row"
-                                style={{ justifyContent: "space-between", gap: 12 }}
+                                style={{
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                }}
                               >
-                                <span className="badge">
-                                  Showing {perioProbes.length} of {perioProbeTotal} total
-                                </span>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => toggleChartingMeta("perio")}
-                                >
-                                  {chartingMetaOpen.perio
-                                    ? "Hide parity metadata"
-                                    : "Show parity metadata"}
-                                </button>
-                              </div>
-                              <div style={{ color: "var(--muted)" }}>
-                                {formatChartingImportLabel()}
+                                <div className="stack" style={{ gap: 4 }}>
+                                  <span className="badge">
+                                    Showing {perioProbes.length} of {perioProbeTotal} total
+                                  </span>
+                                  <span style={{ color: "var(--muted)" }}>
+                                    {formatChartingImportLabel()}
+                                  </span>
+                                </div>
+                                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => void copyChartingLink("perio")}
+                                  >
+                                    Copy filter link
+                                  </button>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => toggleChartingMeta("perio")}
+                                  >
+                                    {chartingMetaOpen.perio
+                                      ? "Hide parity metadata"
+                                      : "Show parity metadata"}
+                                  </button>
+                                </div>
                               </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                                 <div className="stack" style={{ gap: 6 }}>
@@ -5501,15 +5687,6 @@ export default function PatientDetailClient({
                                   Import preset JSON
                                 </button>
                               </div>
-                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => void copyChartingLink("perio")}
-                                >
-                                  Copy filter link
-                                </button>
-                              </div>
                               {chartingMetaOpen.perio && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: transactions.ref_id -&gt; patient mapping</div>
@@ -5517,7 +5694,9 @@ export default function PatientDetailClient({
                                 </div>
                               )}
                               {perioProbes.length === 0 ? (
-                                <div className="notice">No perio probes found.</div>
+                                <div className="notice">
+                                  {chartingEmptyMessage(perioFiltersActive)}
+                                </div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
                                   {perioGroups.map((group, index) => {
@@ -5606,23 +5785,38 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 12 }}>
                               <div
                                 className="row"
-                                style={{ justifyContent: "space-between", gap: 12 }}
+                                style={{
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                }}
                               >
-                                <span className="badge">
-                                  {bpeEntries.length} records
-                                </span>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => toggleChartingMeta("bpe")}
-                                >
-                                  {chartingMetaOpen.bpe
-                                    ? "Hide parity metadata"
-                                    : "Show parity metadata"}
-                                </button>
-                              </div>
-                              <div style={{ color: "var(--muted)" }}>
-                                {formatChartingImportLabel()}
+                                <div className="stack" style={{ gap: 4 }}>
+                                  <span className="badge">
+                                    Showing {bpeEntries.length} records
+                                  </span>
+                                  <span style={{ color: "var(--muted)" }}>
+                                    {formatChartingImportLabel()}
+                                  </span>
+                                </div>
+                                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => void copyChartingLink("bpe")}
+                                  >
+                                    Copy filter link
+                                  </button>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => toggleChartingMeta("bpe")}
+                                  >
+                                    {chartingMetaOpen.bpe
+                                      ? "Hide parity metadata"
+                                      : "Show parity metadata"}
+                                  </button>
+                                </div>
                               </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                                 <div className="stack" style={{ gap: 6 }}>
@@ -5737,15 +5931,6 @@ export default function PatientDetailClient({
                                   Import preset JSON
                                 </button>
                               </div>
-                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => void copyChartingLink("bpe")}
-                                >
-                                  Copy filter link
-                                </button>
-                              </div>
                               {chartingMetaOpen.bpe && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
@@ -5753,7 +5938,9 @@ export default function PatientDetailClient({
                                 </div>
                               )}
                               {bpeEntries.length === 0 ? (
-                                <div className="notice">No BPE entries found.</div>
+                                <div className="notice">
+                                  {chartingEmptyMessage(bpeFiltersActive)}
+                                </div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
                                   {bpeGroups.map((group, index) => {
@@ -5873,23 +6060,38 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 12 }}>
                               <div
                                 className="row"
-                                style={{ justifyContent: "space-between", gap: 12 }}
+                                style={{
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                }}
                               >
-                                <span className="badge">
-                                  {bpeFurcations.length} records
-                                </span>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => toggleChartingMeta("bpeFurcations")}
-                                >
-                                  {chartingMetaOpen.bpeFurcations
-                                    ? "Hide parity metadata"
-                                    : "Show parity metadata"}
-                                </button>
-                              </div>
-                              <div style={{ color: "var(--muted)" }}>
-                                {formatChartingImportLabel()}
+                                <div className="stack" style={{ gap: 4 }}>
+                                  <span className="badge">
+                                    Showing {bpeFurcations.length} records
+                                  </span>
+                                  <span style={{ color: "var(--muted)" }}>
+                                    {formatChartingImportLabel()}
+                                  </span>
+                                </div>
+                                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => void copyChartingLink("furcations")}
+                                  >
+                                    Copy filter link
+                                  </button>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => toggleChartingMeta("bpeFurcations")}
+                                  >
+                                    {chartingMetaOpen.bpeFurcations
+                                      ? "Hide parity metadata"
+                                      : "Show parity metadata"}
+                                  </button>
+                                </div>
                               </div>
                               <div style={{ color: "var(--muted)" }}>
                                 Uses the same date filters as BPE entries.
@@ -5968,15 +6170,6 @@ export default function PatientDetailClient({
                                   Import preset JSON
                                 </button>
                               </div>
-                              <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => void copyChartingLink("furcations")}
-                                >
-                                  Copy filter link
-                                </button>
-                              </div>
                               {chartingMetaOpen.bpeFurcations && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
                                   <div>Linkage: bpe_id join</div>
@@ -5984,7 +6177,9 @@ export default function PatientDetailClient({
                                 </div>
                               )}
                               {bpeFurcations.length === 0 ? (
-                                <div className="notice">No BPE furcations found.</div>
+                                <div className="notice">
+                                  {chartingEmptyMessage(bpeFiltersActive)}
+                                </div>
                               ) : (
                                 <div className="stack" style={{ gap: 16 }}>
                                   {bpeFurcationGroups.map((group, index) => {
@@ -6073,34 +6268,49 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 12 }}>
                               <div
                                 className="row"
-                                style={{ justifyContent: "space-between", gap: 12 }}
+                                style={{
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                }}
                               >
-                                <span className="badge">
-                                  {chartingNotes.length} records
-                                </span>
-                                {hasMoreNotes && (
+                                <div className="stack" style={{ gap: 4 }}>
+                                  <span className="badge">
+                                    Showing {chartingNotes.length} records
+                                  </span>
+                                  <span style={{ color: "var(--muted)" }}>
+                                    {formatChartingImportLabel()}
+                                  </span>
+                                </div>
+                                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                  {hasMoreNotes && (
+                                    <button
+                                      className="btn btn-secondary"
+                                      type="button"
+                                      onClick={() => setChartingNotesExpanded((prev) => !prev)}
+                                    >
+                                      {chartingNotesExpanded
+                                        ? "Show latest 10"
+                                        : `Show all (${sortedNotes.length})`}
+                                    </button>
+                                  )}
                                   <button
                                     className="btn btn-secondary"
                                     type="button"
-                                    onClick={() => setChartingNotesExpanded((prev) => !prev)}
+                                    onClick={() => void copyChartingLink("notes")}
                                   >
-                                    {chartingNotesExpanded
-                                      ? "Show latest 10"
-                                      : `Show all (${sortedNotes.length})`}
+                                    Copy filter link
                                   </button>
-                                )}
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => toggleChartingMeta("notes")}
-                                >
-                                  {chartingMetaOpen.notes
-                                    ? "Hide parity metadata"
-                                    : "Show parity metadata"}
-                                </button>
-                              </div>
-                              <div style={{ color: "var(--muted)" }}>
-                                {formatChartingImportLabel()}
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => toggleChartingMeta("notes")}
+                                  >
+                                    {chartingMetaOpen.notes
+                                      ? "Hide parity metadata"
+                                      : "Show parity metadata"}
+                                  </button>
+                                </div>
                               </div>
                               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                                 <div className="stack" style={{ gap: 6 }}>
@@ -6266,13 +6476,6 @@ export default function PatientDetailClient({
                                   />
                                   <span>Include text search in link</span>
                                 </label>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => void copyChartingLink("notes")}
-                                >
-                                  Copy filter link
-                                </button>
                               </div>
                               {chartingMetaOpen.notes && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
@@ -6281,7 +6484,9 @@ export default function PatientDetailClient({
                                 </div>
                               )}
                               {chartingNotes.length === 0 ? (
-                                <div className="notice">No patient notes found.</div>
+                                <div className="notice">
+                                  {chartingEmptyMessage(notesFiltersActive)}
+                                </div>
                               ) : (
                                 <div data-testid="notes-list">
                                   <Table>
@@ -6339,23 +6544,31 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 12 }}>
                               <div
                                 className="row"
-                                style={{ justifyContent: "space-between", gap: 12 }}
+                                style={{
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                }}
                               >
-                                <span className="badge">
-                                  Showing {toothSurfaces.length} of {toothSurfacesTotal}
-                                </span>
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => toggleChartingMeta("surfaces")}
-                                >
-                                  {chartingMetaOpen.surfaces
-                                    ? "Hide parity metadata"
-                                    : "Show parity metadata"}
-                                </button>
-                              </div>
-                              <div style={{ color: "var(--muted)" }}>
-                                {formatChartingImportLabel()}
+                                <div className="stack" style={{ gap: 4 }}>
+                                  <span className="badge">
+                                    Showing {toothSurfaces.length} of {toothSurfacesTotal}
+                                  </span>
+                                  <span style={{ color: "var(--muted)" }}>
+                                    {formatChartingImportLabel()}
+                                  </span>
+                                </div>
+                                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => toggleChartingMeta("surfaces")}
+                                  >
+                                    {chartingMetaOpen.surfaces
+                                      ? "Hide parity metadata"
+                                      : "Show parity metadata"}
+                                  </button>
+                                </div>
                               </div>
                               {chartingMetaOpen.surfaces && (
                                 <div className="stack" style={{ gap: 4, color: "var(--muted)" }}>
@@ -6364,7 +6577,9 @@ export default function PatientDetailClient({
                                 </div>
                               )}
                               {toothSurfacesTotal === 0 ? (
-                                <div className="notice">No tooth surfaces found.</div>
+                                <div className="notice">
+                                  Tooth surface lookup not loaded yet.
+                                </div>
                               ) : (
                                 <Table>
                                   <thead>
