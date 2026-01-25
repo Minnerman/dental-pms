@@ -458,6 +458,7 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   });
   expect(copied).not.toBeNull();
   if (copied) {
+    expect(copied).toContain("\"v\":1");
     expect(copied).toContain("\"section\":\"notes\"");
     expect(copied).toContain("\"version\":1");
     expect(copied).toContain("\"q\":\"note 1\"");
@@ -466,9 +467,10 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   await notesPanel.getByRole("button", { name: "Clear filters" }).click();
   await expect(notesInput).toHaveValue("");
 
+  const withoutV = copied ? copied.replace(/"v":1,?/, "") : copied;
   await page.evaluate((value) => {
     window.prompt = () => value;
-  }, copied);
+  }, withoutV);
   await notesPanel.getByRole("button", { name: "Import preset JSON" }).click();
   await expect(notesInput).toHaveValue("note 1");
 });
@@ -527,6 +529,7 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
   expect(copied).toContain("charting_notes_from=2024-07-02");
   expect(copied).toContain("charting_notes_to=2024-07-03");
   expect(copied).toContain("charting_notes_category=1");
+  expect(copied).toContain("v=1");
   expect(copied).not.toContain("charting_notes_q=");
 
   await page.goto(copied, { waitUntil: "domcontentloaded" });
