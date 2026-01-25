@@ -70,6 +70,7 @@ Pick the path used by your environment.
 
 ## CI parity job assumptions
 - Parity runs with `APP_ENV=test`, `ENABLE_TEST_ROUTES=1`, and `FEATURE_CHARTING_VIEWER=true`.
+- CI parity sets `REQUIRE_CHARTING_PARITY=1` so charting tests fail (not skip) if the viewer is disabled.
 - Charting rate limiting is skipped only when `APP_ENV=test` (CI parity).
 - `BACKEND_BASE_URL` points at the host-mapped backend (`http://localhost:8100`) because Playwright runs on the GitHub runner, not inside Compose.
 

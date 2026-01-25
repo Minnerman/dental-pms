@@ -17,6 +17,7 @@ type ParityTarget = {
 };
 
 const chartingEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
+const requireChartingParity = process.env.REQUIRE_CHARTING_PARITY === "1";
 const parityTargets: ParityTarget[] = [
   {
     legacyCode: 1000000,
@@ -55,7 +56,14 @@ const parityTargets: ParityTarget[] = [
   },
 ];
 
-test.skip(!chartingEnabled, "charting parity requires viewer enabled");
+if (!chartingEnabled) {
+  const msg = "charting parity requires viewer enabled (set NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=1)";
+  if (requireChartingParity) {
+    throw new Error(msg);
+  }
+  // eslint-disable-next-line playwright/no-skipped-test
+  test.skip(true, msg);
+}
 
 function parseBadgeCount(text: string) {
   const match = text.match(/:\s*(\d+)\s*$/);
@@ -122,6 +130,20 @@ function extractApiItems<T>(payload: unknown): { items: T[]; total: number } {
   };
 }
 
+function assertChartingEnabled(
+  config: { feature_flags?: { charting_viewer?: boolean } } | undefined,
+  context: string
+) {
+  if (config?.feature_flags?.charting_viewer) return;
+  const msg = `[parity] skip: charting_viewer disabled in /api/config (${context})`;
+  if (requireChartingParity) {
+    throw new Error(msg);
+  }
+  console.log(msg);
+  // eslint-disable-next-line playwright/no-skipped-test
+  test.skip(true, "charting viewer disabled");
+}
+
 async function seedCharting(request: Parameters<typeof ensureAuthReady>[0]) {
   const token = await ensureAuthReady(request);
   const backendBaseUrl =
@@ -150,7 +172,7 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
-  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  assertChartingEnabled(config, "counts parity");
   const { token, patientMap } = await seedCharting(request);
   const report: Array<{
     legacy_code: number;
@@ -360,7 +382,7 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
-  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  assertChartingEnabled(config, "filters");
   const { patientMap } = await seedCharting(request);
   const patientId = patientMap.get(1012056);
   if (!patientId) {
@@ -396,7 +418,7 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
-  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  assertChartingEnabled(config, "preset roundtrip");
   const { patientMap } = await seedCharting(request);
   const patientId = patientMap.get(1012056);
   if (!patientId) {
@@ -458,7 +480,7 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
-  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  assertChartingEnabled(config, "share link non-text");
   const { patientMap } = await seedCharting(request);
   const patientId = patientMap.get(1012056);
   if (!patientId) {
@@ -535,7 +557,7 @@ test("charting notes share link includes text search when opted in", async ({
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
-  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  assertChartingEnabled(config, "share link text");
   const { patientMap } = await seedCharting(request);
   const patientId = patientMap.get(1012056);
   if (!patientId) {

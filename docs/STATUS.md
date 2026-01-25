@@ -164,6 +164,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Notes text search excluded by default; opt-in checkbox with warning when included.
   - Playwright covers non-text link roundtrip plus text opt-in link parameters.
   - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
+- 2026-01-24: Stage158 parity tests made non-skipping in CI.
+  - Parity spec logs skip reasons and fails when `REQUIRE_CHARTING_PARITY=1`.
+  - CI parity job sets `REQUIRE_CHARTING_PARITY=1` to enforce execution.
+  - Docs: `docs/r4/CHARTING_VIEWER_ENABLEMENT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.
