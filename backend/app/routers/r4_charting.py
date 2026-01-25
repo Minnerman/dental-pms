@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import time
 import zipfile
@@ -772,6 +773,18 @@ def export_charting(
             ]
             index_csv = csv_text(index_rows, index_columns, ["entity"])
             archive.writestr("index.csv", index_csv)
+            review_pack = {
+                "generated_at": format_dt(datetime.now(timezone.utc)),
+                "entities": selected,
+                "export_limit": EXPORT_MAX_ROWS,
+                "totals": {row["entity"]: row["postgres_total"] for row in index_rows},
+                "truncated": {
+                    row["entity"]: row["postgres_truncated"] for row in index_rows
+                },
+            }
+            archive.writestr(
+                "review_pack.json", json.dumps(review_pack, indent=2, sort_keys=True)
+            )
         buffer.seek(0)
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         filename = f"charting_{patient_code}_{stamp}.zip"

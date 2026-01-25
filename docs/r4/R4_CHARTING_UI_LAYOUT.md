@@ -39,6 +39,7 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
 - The CSV column order matches the spot-check format (`postgres_<entity>.csv` + `index.csv`).
 - Export supports per-entity selection from the charting viewer.
 - Export rows per entity are capped (default 5000); `index.csv` records `postgres_truncated` and `postgres_limit`.
+- Stage 161 adds a review pack download (zip) with a non-PHI summary file (`review_pack.json`).
 
 ## Perio probes
 - Grouped by exam date (latest exam highlighted).
@@ -61,6 +62,14 @@ Stage 143 focuses on layout/UX parity only (read-only). The data pipeline and AP
 
 ## Tooth surfaces
 - Read-only lookup table remains available for parity sanity checks.
+
+## Workflow polish (Stage 161)
+- Section headers are standardized: title + counts + last imported + actions (copy link, parity metadata).
+- Empty-state messages now reflect mapping/import state:
+  - "Patient not linked to R4 charting yet" if no mapping.
+  - "No charting imported for this patient yet" if mapping exists but no import.
+  - "No results for the current filters" when filters are active.
+- Review pack download triggers a full Postgres export and provides per-section share links without text search by default.
 
 ## Open gaps
 - Full odontogram visuals and surface overlays are still out of scope.

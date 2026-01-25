@@ -196,6 +196,11 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
       page.getByTestId("charting-export-csv").click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/charting_/i);
+    const [reviewDownload] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Generate review pack" }).click(),
+    ]);
+    expect(reviewDownload.suggestedFilename()).toMatch(/review_pack/i);
   }
 
   for (const target of parityTargets) {

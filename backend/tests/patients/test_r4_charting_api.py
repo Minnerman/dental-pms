@@ -492,6 +492,7 @@ def test_charting_export_returns_csv_zip(api_client, auth_headers):
         with zipfile.ZipFile(io.BytesIO(res.content)) as archive:
             names = set(archive.namelist())
             assert "index.csv" in names
+            assert "review_pack.json" in names
             assert "postgres_perio_probes.csv" in names
             assert "postgres_bpe.csv" in names
             assert "postgres_patient_notes.csv" in names

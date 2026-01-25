@@ -177,6 +177,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Charting endpoints use patient access rules (404 for missing/deleted) and audit viewer/export events.
   - Charting sections show last-imported timestamp per section.
   - Docs: `docs/r4/CHARTING_VIEWER_ENABLEMENT.md`.
+- 2026-01-25: Stage161 charting workflow polish + review pack.
+  - Section headers standardized (counts + last imported + actions) and empty states now explain mapping/import/filter status.
+  - Review pack download added (full export zip with `review_pack.json` summary, no PHI).
+  - Docs: `docs/r4/R4_CHARTING_UI_LAYOUT.md`.
 - 2026-01-23: Stage132 linkage confirmation (PerioProbe/BPEFurcation).
   - Confirmed joins: `PerioProbe.TransId -> Transactions.RefId -> PatientCode`, `BPEFurcation.BPEID -> BPE.RefId` (fallback when `BPE.BPEID` is null).
   - Added SQL Server linkage counters in charting dry-run summary; ambiguous cases now measurable.

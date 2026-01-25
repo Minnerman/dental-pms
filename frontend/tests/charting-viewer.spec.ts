@@ -25,6 +25,7 @@ test("charting viewer renders read-only sections", async ({ page, request }) => 
   await expect(page.getByText("R4 charting viewer")).toBeVisible();
   await expect(page.getByText("Perio probes", { exact: true })).toBeVisible();
   await expect(page.getByText(/Last imported:|Not yet imported/)).toBeVisible();
+  await expect(page.getByText("Patient not linked to R4 charting yet.")).toBeVisible();
 });
 
 test("charting viewer gating follows backend config", async ({ page, request }) => {
