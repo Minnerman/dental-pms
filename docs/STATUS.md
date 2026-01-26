@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## Recent fixes
+- 2026-01-25: Stage162 charting export truncation + access guard.
+  - Charting export counts now reflect enforced row cap; external role blocked with 403s.
+  - Test client defaults to in-process FastAPI app when `BACKEND_BASE_URL` is unset (supports test-only monkeypatches).
+  - Tests: `docker compose exec -T backend pytest -q tests/patients/test_r4_charting_api.py -q`, `docker compose exec -T backend pytest -q`.
 - 2026-01-24: Stage135 charting mismatch fixes (PerioProbe + BPEFurcation).
   - PerioProbe linkage now creates patient mappings during patients import; pipeline counters and explain script added.
   - PerioProbe imports no longer drop patient 1000000 (skipped duplicates are counted and sampled).
