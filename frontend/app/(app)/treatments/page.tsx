@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import HeaderBar from "@/components/ui/HeaderBar";
@@ -91,7 +91,7 @@ export default function TreatmentsPage() {
     return Math.max(0, Math.round(parsed * 100));
   }
 
-  async function loadTreatments() {
+  const loadTreatments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -115,40 +115,43 @@ export default function TreatmentsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, selected]);
 
-  async function loadFees(treatmentId: number) {
-    setError(null);
-    try {
-      const res = await apiFetch(`/api/treatments/${treatmentId}/fees`);
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) {
-        throw new Error(`Failed to load fees (HTTP ${res.status})`);
-      }
-      const data = (await res.json()) as TreatmentFee[];
-      const nextDrafts: Record<PatientCategory, FeeDraft> = {
-        CLINIC_PRIVATE: { ...emptyDraft },
-        DOMICILIARY_PRIVATE: { ...emptyDraft },
-        DENPLAN: { ...emptyDraft },
-      };
-      data.forEach((fee) => {
-        nextDrafts[fee.patient_category] = {
-          fee_type: fee.fee_type,
-          amount: fee.amount_pence ? (fee.amount_pence / 100).toFixed(2) : "",
-          min: fee.min_amount_pence ? (fee.min_amount_pence / 100).toFixed(2) : "",
-          max: fee.max_amount_pence ? (fee.max_amount_pence / 100).toFixed(2) : "",
-          notes: fee.notes ?? "",
+  const loadFees = useCallback(
+    async (treatmentId: number) => {
+      setError(null);
+      try {
+        const res = await apiFetch(`/api/treatments/${treatmentId}/fees`);
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Failed to load fees (HTTP ${res.status})`);
+        }
+        const data = (await res.json()) as TreatmentFee[];
+        const nextDrafts: Record<PatientCategory, FeeDraft> = {
+          CLINIC_PRIVATE: { ...emptyDraft },
+          DOMICILIARY_PRIVATE: { ...emptyDraft },
+          DENPLAN: { ...emptyDraft },
         };
-      });
-      setFees(nextDrafts);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load fees");
-    }
-  }
+        data.forEach((fee) => {
+          nextDrafts[fee.patient_category] = {
+            fee_type: fee.fee_type,
+            amount: fee.amount_pence ? (fee.amount_pence / 100).toFixed(2) : "",
+            min: fee.min_amount_pence ? (fee.min_amount_pence / 100).toFixed(2) : "",
+            max: fee.max_amount_pence ? (fee.max_amount_pence / 100).toFixed(2) : "",
+            notes: fee.notes ?? "",
+          };
+        });
+        setFees(nextDrafts);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load fees");
+      }
+    },
+    [router]
+  );
 
   async function createTreatment() {
     setSaving(true);
@@ -271,13 +274,13 @@ export default function TreatmentsPage() {
 
   useEffect(() => {
     void loadTreatments();
-  }, []);
+  }, [loadTreatments]);
 
   useEffect(() => {
     if (selected) {
       void loadFees(selected.id);
     }
-  }, [selected]);
+  }, [selected, loadFees]);
 
   return (
     <div className="app-grid">
