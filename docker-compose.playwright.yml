@@ -1,0 +1,26 @@
+services:
+  backend:
+    environment:
+      APP_ENV: test
+      ENABLE_TEST_ROUTES: "1"
+      FEATURE_CHARTING_VIEWER: "true"
+
+  frontend:
+    environment:
+      NEXT_PUBLIC_FEATURE_CHARTING_VIEWER: "1"
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.57.0-jammy
+    working_dir: /work/frontend
+    entrypoint: ["npx", "playwright", "test"]
+    depends_on:
+      - backend
+      - frontend
+    env_file:
+      - .env
+    environment:
+      BACKEND_BASE_URL: http://backend:8000
+      BACKEND_PORT: "8000"
+      FRONTEND_BASE_URL: http://frontend:3000
+    volumes:
+      - ./:/work:cached

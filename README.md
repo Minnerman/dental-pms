@@ -30,6 +30,16 @@ From the repo root:
    - Backend: http://localhost:8100/health
    - Frontend: http://localhost:3100
 
+## Playwright in Docker (Linux-friendly)
+Run Playwright tests inside a container with the required system libraries:
+
+```bash
+./ops/playwright_docker.sh tests/charting-parity.spec.ts tests/charting-viewer.spec.ts
+```
+
+If you want a clean database for Playwright, prefix the command with
+`PLAYWRIGHT_CLEAN=1` (this removes Docker volumes for the stack).
+
 ## R4 imports (safe defaults)
 - Without R4 connectivity, use fixtures: `--source fixtures`.
 - `--dry-run`/`--apply` are supported only with `--source sqlserver`.
