@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 -## Recent fixes
+-## Recent fixes
+- 2026-01-27: Stage 163 CI minutes reduction + workflow gating.
+  - CI/recalls/playwright workflows now target PRs to master (with docs-only path ignores) to cut minutes.
+  - Docker build job gated to PRs; nightly smoke keeps coverage with concurrency cancellation.
 - 2026-01-25: Stage 162 charting export truncation + access guard.
   - Charting export counts now reflect enforced row cap; external role blocked with 403s.
   - Test client defaults to in-process FastAPI app when `BACKEND_BASE_URL` is unset (supports test-only monkeypatches).
