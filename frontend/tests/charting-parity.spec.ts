@@ -4,6 +4,7 @@ import path from "node:path";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
+import { installClipboardCapture, readClipboardCapture } from "./helpers/clipboard";
 
 type ParityTarget = {
   legacyCode: number;
@@ -171,6 +172,26 @@ async function clearChartingStorage(page: Page) {
       }
     }
   });
+}
+
+function getNotesPanel(page: Page) {
+  return page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+}
+
+function getPanelInput(panel: Locator, label: string) {
+  return panel
+    .locator("label", { hasText: label })
+    .locator("xpath=..")
+    .locator("input");
+}
+
+function getPanelSelect(panel: Locator, label: string) {
+  return panel
+    .locator("label", { hasText: label })
+    .locator("xpath=..")
+    .locator("select");
 }
 
 async function seedCharting(request: Parameters<typeof ensureAuthReady>[0]) {
@@ -557,10 +578,9 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
   });
   await waitForChartingReady(page);
 
-  const notesPanel = page
-    .locator("section.panel")
-    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  const notesPanel = getNotesPanel(page);
   await expect(notesPanel).toBeVisible();
+  await notesPanel.scrollIntoViewIfNeeded();
   const notesBadge = notesPanel.locator(".badge", { hasText: "Showing" }).first();
   await expect(notesBadge).toHaveText(/Showing\s+\d+\s+records/i, {
     timeout: 30_000,
@@ -595,37 +615,21 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
 
   await primePageAuth(page, request);
   await clearChartingStorage(page);
+  await installClipboardCapture(page, "notesPreset");
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
   await waitForChartingReady(page);
 
-  await page.evaluate(() => {
-    // @ts-expect-error - attach test helper to window
-    window.__copiedPreset = null;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      const original = navigator.clipboard.writeText.bind(navigator.clipboard);
-      navigator.clipboard.writeText = async (value: string) => {
-        // @ts-expect-error - attach test helper to window
-        window.__copiedPreset = value;
-        return original(value);
-      };
-    }
-  });
-
-  const notesPanel = page
-    .locator("section.panel")
-    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  const notesPanel = getNotesPanel(page);
   await expect(notesPanel).toBeVisible({ timeout: 30_000 });
+  await notesPanel.scrollIntoViewIfNeeded();
   const notesInput = notesPanel.getByPlaceholder("Find text...");
   await notesInput.fill("note 1");
   await page.waitForTimeout(400);
   await notesPanel.getByRole("button", { name: "Copy preset JSON" }).click();
 
-  const copied = await page.evaluate(() => {
-    // @ts-expect-error - read test helper from window
-    return window.__copiedPreset as string | null;
-  });
+  const copied = await readClipboardCapture(page, "notesPreset");
   expect(copied).not.toBeNull();
   if (copied) {
     expect(copied).toContain("\"v\":1");
@@ -661,38 +665,28 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
 
   await primePageAuth(page, request);
   await clearChartingStorage(page);
+  await installClipboardCapture(page, "notesShareLink");
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
   await waitForChartingReady(page);
 
-  await page.evaluate(() => {
-    // @ts-expect-error - attach test helper to window
-    window.__copiedChartingLink = null;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      const original = navigator.clipboard.writeText.bind(navigator.clipboard);
-      navigator.clipboard.writeText = async (value: string) => {
-        // @ts-expect-error - attach test helper to window
-        window.__copiedChartingLink = value;
-        return original(value);
-      };
-    }
-  });
-
-  const notesPanel = page
-    .locator("section.panel")
-    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  const notesPanel = getNotesPanel(page);
   await expect(notesPanel).toBeVisible({ timeout: 30_000 });
+  await notesPanel.scrollIntoViewIfNeeded();
 
-  await notesPanel.getByLabel("From").fill("2024-07-02");
-  await notesPanel.getByLabel("To").fill("2024-07-03");
-  await notesPanel.getByLabel("Category").selectOption("1");
+  const fromInput = getPanelInput(notesPanel, "From");
+  const toInput = getPanelInput(notesPanel, "To");
+  const categorySelect = getPanelSelect(notesPanel, "Category");
+  await expect(fromInput).toBeVisible({ timeout: 15_000 });
+  await expect(toInput).toBeVisible({ timeout: 15_000 });
+  await expect(categorySelect).toBeVisible({ timeout: 15_000 });
+  await fromInput.fill("2024-07-02");
+  await toInput.fill("2024-07-03");
+  await categorySelect.selectOption("1");
   await notesPanel.getByRole("button", { name: "Copy filter link" }).click();
 
-  const copied = await page.evaluate(() => {
-    // @ts-expect-error - read test helper from window
-    return window.__copiedChartingLink as string | null;
-  });
+  const copied = await readClipboardCapture(page, "notesShareLink");
   expect(copied).not.toBeNull();
   if (!copied) {
     return;
@@ -705,13 +699,12 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
 
   await page.goto(copied, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
-  const notesPanelAfter = page
-    .locator("section.panel")
-    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  const notesPanelAfter = getNotesPanel(page);
   await expect(notesPanelAfter).toBeVisible();
-  await expect(notesPanelAfter.getByLabel("From")).toHaveValue("2024-07-02");
-  await expect(notesPanelAfter.getByLabel("To")).toHaveValue("2024-07-03");
-  await expect(notesPanelAfter.getByLabel("Category")).toHaveValue("1");
+  await notesPanelAfter.scrollIntoViewIfNeeded();
+  await expect(getPanelInput(notesPanelAfter, "From")).toHaveValue("2024-07-02");
+  await expect(getPanelInput(notesPanelAfter, "To")).toHaveValue("2024-07-03");
+  await expect(getPanelSelect(notesPanelAfter, "Category")).toHaveValue("1");
   await expect(notesPanelAfter.getByPlaceholder("Find text...")).toHaveValue("");
   await expect(
     notesPanelAfter.getByLabel("Include text search in link")
@@ -740,37 +733,23 @@ test("charting notes share link includes text search when opted in", async ({
 
   await primePageAuth(page, request);
   await clearChartingStorage(page);
+  await installClipboardCapture(page, "notesShareLinkText");
+  await page.addInitScript(() => {
+    window.confirm = () => true;
+  });
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
   await waitForChartingReady(page);
 
-  await page.evaluate(() => {
-    // @ts-expect-error - attach test helper to window
-    window.__copiedChartingLink = null;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      const original = navigator.clipboard.writeText.bind(navigator.clipboard);
-      navigator.clipboard.writeText = async (value: string) => {
-        // @ts-expect-error - attach test helper to window
-        window.__copiedChartingLink = value;
-        return original(value);
-      };
-    }
-    window.confirm = () => true;
-  });
-
-  const notesPanel = page
-    .locator("section.panel")
-    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  const notesPanel = getNotesPanel(page);
   await expect(notesPanel).toBeVisible({ timeout: 30_000 });
+  await notesPanel.scrollIntoViewIfNeeded();
   await notesPanel.getByPlaceholder("Find text...").fill("note 1");
   await notesPanel.getByLabel("Include text search in link").check();
   await notesPanel.getByRole("button", { name: "Copy filter link" }).click();
 
-  const copied = await page.evaluate(() => {
-    // @ts-expect-error - read test helper from window
-    return window.__copiedChartingLink as string | null;
-  });
+  const copied = await readClipboardCapture(page, "notesShareLinkText");
   expect(copied).not.toBeNull();
   if (copied) {
     const parsed = new URL(copied);

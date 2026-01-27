@@ -62,9 +62,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 -## Recent fixes
 -## Recent fixes
+- 2026-01-27: Stage 165 dockerized Playwright runner for local Linux.
+  - Added `docker-compose.playwright.yml` and `ops/playwright_docker.sh` to run Playwright in a container.
+  - Documented `PLAYWRIGHT_CLEAN=1` for a clean DB when needed.
 - 2026-01-27: Stage 164 react-hooks exhaustive-deps cleanup.
   - Normalized hook dependencies across charting detail, appointments, and settings pages; no behavior changes intended.
-  - Host lint/typecheck clean; Playwright charting run blocked by missing system library (libatk-1.0.so.0).
 - 2026-01-27: Stage 163 CI minutes reduction + workflow gating.
   - CI/recalls/playwright workflows now target PRs to master (with docs-only path ignores) to cut minutes.
   - Docker build job gated to PRs; nightly smoke keeps coverage with concurrency cancellation.
