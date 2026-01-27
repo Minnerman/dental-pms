@@ -13,8 +13,15 @@ def admin_credentials():
 
 @pytest.fixture(scope="session")
 def api_client():
-    base_url = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
-    with httpx.Client(base_url=base_url, timeout=10.0) as client:
+    base_url = os.getenv("BACKEND_BASE_URL")
+    if base_url:
+        with httpx.Client(base_url=base_url, timeout=10.0) as client:
+            yield client
+        return
+    from app.main import app
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
         yield client
 
 

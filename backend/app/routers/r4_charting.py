@@ -15,6 +15,7 @@ from app.core.settings import settings
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.patient import Patient
+from app.models.user import Role
 from app.models.r4_charting import (
     R4BPEEntry,
     R4BPEFurcation,
@@ -106,6 +107,21 @@ def _charting_access_context(
                 duration_ms=duration_ms,
             )
             raise HTTPException(status_code=404, detail="Patient not found")
+    if user.role == Role.external:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_value,
+            path=request.url.path,
+            method=request.method,
+            status_code=403,
+            duration_ms=duration_ms,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Charting access is restricted for external users.",
+        )
     if not settings.feature_charting_viewer:
         duration_ms = int((time.monotonic() - start) * 1000)
         _log_charting_access(
@@ -723,6 +739,8 @@ def export_charting(
         with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             for entity in selected:
                 raw_rows, total_rows = _export_rows_for_entity(db, entity, patient_code)
+                if len(raw_rows) > EXPORT_MAX_ROWS:
+                    raw_rows = raw_rows[:EXPORT_MAX_ROWS]
                 truncated = total_rows > EXPORT_MAX_ROWS
                 normalized = normalize_entity_rows(entity, raw_rows, patient_code)
                 csv_rows = rows_for_csv(normalized, ENTITY_COLUMNS[entity], patient_code)
