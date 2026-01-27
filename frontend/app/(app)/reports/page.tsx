@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -29,6 +29,17 @@ type FinanceTrends = {
 
 type RangePreset = 7 | 30 | 90;
 
+function buildRange(days: number) {
+  const end = new Date();
+  const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const start = new Date(endDate);
+  start.setDate(start.getDate() - (days - 1));
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: endDate.toISOString().slice(0, 10),
+  };
+}
+
 export default function ReportsPage() {
   const router = useRouter();
   const [rangePreset, setRangePreset] = useState<RangePreset>(30);
@@ -47,18 +58,7 @@ export default function ReportsPage() {
     }).format(pence / 100);
   }
 
-  function buildRange(days: number) {
-    const end = new Date();
-    const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-    const start = new Date(endDate);
-    start.setDate(start.getDate() - (days - 1));
-    return {
-      start: start.toISOString().slice(0, 10),
-      end: endDate.toISOString().slice(0, 10),
-    };
-  }
-
-  async function loadReports(days: number) {
+  const loadReports = useCallback(async (days: number) => {
     setLoading(true);
     setError(null);
     try {
@@ -92,7 +92,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
 
   function downloadCsv(filename: string, rows: string[][]) {
     const content = rows.map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
@@ -142,7 +142,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     void loadReports(rangePreset);
-  }, [rangePreset]);
+  }, [loadReports, rangePreset]);
 
   return (
     <div className="app-grid">

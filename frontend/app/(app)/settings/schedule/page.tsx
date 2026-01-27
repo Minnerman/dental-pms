@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -64,7 +64,7 @@ export default function ScheduleSettingsPage() {
     return byDay;
   }, [hours]);
 
-  async function loadSchedule() {
+  const loadSchedule = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -98,11 +98,11 @@ export default function ScheduleSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
 
   useEffect(() => {
     void loadSchedule();
-  }, []);
+  }, [loadSchedule]);
 
   function updateHour(dayIndex: number, patch: Partial<PracticeHour>) {
     setHours((prev) =>

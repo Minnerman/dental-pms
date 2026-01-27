@@ -559,6 +559,51 @@ const chartingPageSize = 500;
 const chartingLinkVersion = 1;
 const maxChartingLinkParams = 25;
 const maxNotesQueryLength = 200;
+const perioSiteLabels: Record<number, string> = {
+  1: "MB",
+  2: "B",
+  3: "DB",
+  4: "ML",
+  5: "L",
+  6: "DL",
+};
+const perioSiteSort: Record<number, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 5,
+  6: 6,
+};
+
+function parseChartingDateParam(value: string | null) {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function parseChartingIntParam(value: string | null) {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function parseChartingPerioSite(value: string | null) {
+  const parsed = parseChartingIntParam(value);
+  if (!parsed) return "";
+  const numeric = Number(parsed);
+  if (!Number.isFinite(numeric) || !perioSiteLabels[numeric]) return "";
+  return String(numeric);
+}
+
+function sanitizeNotesQuery(value: string) {
+  return value
+    .replace(/[\x00-\x1F\x7F]/g, "")
+    .trim()
+    .slice(0, maxNotesQueryLength);
+}
 
 
 type PatientTab =
@@ -859,7 +904,7 @@ export default function PatientDetailClient({
     ]
   );
 
-  async function loadPatient() {
+  const loadPatient = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -883,28 +928,33 @@ export default function PatientDetailClient({
     } finally {
       setLoading(false);
     }
-  }
+  }, [patientId, router]);
 
-  async function loadNotes(includeDeleted: boolean = showArchivedNotes) {
-    try {
-      const params = new URLSearchParams();
-      if (includeDeleted) params.set("include_deleted", "1");
-      const res = await apiFetch(`/api/patients/${patientId}/notes?${params.toString()}`);
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
+  const loadNotes = useCallback(
+    async (includeDeleted: boolean = showArchivedNotes) => {
+      try {
+        const params = new URLSearchParams();
+        if (includeDeleted) params.set("include_deleted", "1");
+        const res = await apiFetch(
+          `/api/patients/${patientId}/notes?${params.toString()}`
+        );
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (res.ok) {
+          const data = (await res.json()) as Note[];
+          setNotes(data);
+        }
+      } catch {
+        setNotes([]);
       }
-      if (res.ok) {
-        const data = (await res.json()) as Note[];
-        setNotes(data);
-      }
-    } catch {
-      setNotes([]);
-    }
-  }
+    },
+    [patientId, router, showArchivedNotes]
+  );
 
-  async function loadAppointments() {
+  const loadAppointments = useCallback(async () => {
     setLoadingAppointments(true);
     setAppointmentsError(null);
     try {
@@ -952,9 +1002,9 @@ export default function PatientDetailClient({
     } finally {
       setLoadingAppointments(false);
     }
-  }
+  }, [patientId, router]);
 
-  async function loadLedger() {
+  const loadLedger = useCallback(async () => {
     setLedgerLoading(true);
     setLedgerError(null);
     try {
@@ -976,9 +1026,9 @@ export default function PatientDetailClient({
     } finally {
       setLedgerLoading(false);
     }
-  }
+  }, [patientId, router]);
 
-  async function loadLedgerBalance() {
+  const loadLedgerBalance = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/patients/${patientId}/balance`);
       if (res.status === 401) {
@@ -995,63 +1045,76 @@ export default function PatientDetailClient({
     } catch {
       setLedgerBalance(0);
     }
-  }
+  }, [patientId, router]);
 
-  async function loadTransactions(options?: {
-    reset?: boolean;
-    overrides?: { from?: string; to?: string; costOnly?: boolean };
-  }) {
-    if (!isValidPatientId) return;
-    const reset = options?.reset ?? false;
-    if (!reset && !transactionsNextCursor) return;
-    setTransactionsLoading(true);
-    setTransactionsError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("limit", "50");
-      const fromValue = options?.overrides?.from ?? transactionsFrom;
-      const toValue = options?.overrides?.to ?? transactionsTo;
-      const costOnlyValue = options?.overrides?.costOnly ?? transactionsCostOnly;
-      if (fromValue) {
-        params.set("from", fromValue);
+  const loadTransactions = useCallback(
+    async (options?: {
+      reset?: boolean;
+      overrides?: { from?: string; to?: string; costOnly?: boolean };
+    }) => {
+      if (!isValidPatientId) return;
+      const reset = options?.reset ?? false;
+      if (!reset && !transactionsNextCursor) return;
+      setTransactionsLoading(true);
+      setTransactionsError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        const fromValue = options?.overrides?.from ?? transactionsFrom;
+        const toValue = options?.overrides?.to ?? transactionsTo;
+        const costOnlyValue = options?.overrides?.costOnly ?? transactionsCostOnly;
+        if (fromValue) {
+          params.set("from", fromValue);
+        }
+        if (toValue) {
+          params.set("to", toValue);
+        }
+        if (costOnlyValue) {
+          params.set("cost_only", "true");
+        }
+        if (!reset && transactionsNextCursor) {
+          params.set("cursor", transactionsNextCursor);
+        }
+        const res = await apiFetch(
+          `/api/patients/${patientId}/treatment-transactions?${params.toString()}`
+        );
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || `Failed to load transactions (HTTP ${res.status})`);
+        }
+        const data = (await res.json()) as TreatmentTransactionResponse;
+        setTransactions((prev) => (reset ? data.items : [...prev, ...data.items]));
+        setTransactionsNextCursor(data.next_cursor);
+        setTransactionsLoaded(true);
+      } catch (err) {
+        setTransactionsError(
+          err instanceof Error ? err.message : "Failed to load transactions"
+        );
+        if (reset) {
+          setTransactions([]);
+          setTransactionsNextCursor(null);
+        }
+      } finally {
+        setTransactionsLoading(false);
       }
-      if (toValue) {
-        params.set("to", toValue);
-      }
-      if (costOnlyValue) {
-        params.set("cost_only", "true");
-      }
-      if (!reset && transactionsNextCursor) {
-        params.set("cursor", transactionsNextCursor);
-      }
-      const res = await apiFetch(
-        `/api/patients/${patientId}/treatment-transactions?${params.toString()}`
-      );
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to load transactions (HTTP ${res.status})`);
-      }
-      const data = (await res.json()) as TreatmentTransactionResponse;
-      setTransactions((prev) => (reset ? data.items : [...prev, ...data.items]));
-      setTransactionsNextCursor(data.next_cursor);
-      setTransactionsLoaded(true);
-    } catch (err) {
-      setTransactionsError(err instanceof Error ? err.message : "Failed to load transactions");
-      if (reset) {
-        setTransactions([]);
-        setTransactionsNextCursor(null);
-      }
-    } finally {
-      setTransactionsLoading(false);
-    }
-  }
+    },
+    [
+      isValidPatientId,
+      patientId,
+      router,
+      transactionsCostOnly,
+      transactionsFrom,
+      transactionsNextCursor,
+      transactionsTo,
+    ]
+  );
 
-  async function loadFinanceSummary() {
+  const loadFinanceSummary = useCallback(async () => {
     setFinanceSummaryLoading(true);
     setFinanceSummaryError(null);
     try {
@@ -1075,9 +1138,9 @@ export default function PatientDetailClient({
     } finally {
       setFinanceSummaryLoading(false);
     }
-  }
+  }, [patientId, router]);
 
-  async function loadRecalls() {
+  const loadRecalls = useCallback(async () => {
     setRecallsLoading(true);
     setRecallsError(null);
     try {
@@ -1098,7 +1161,7 @@ export default function PatientDetailClient({
     } finally {
       setRecallsLoading(false);
     }
-  }
+  }, [patientId, router]);
 
   async function loadRecallCommunications(recallId: number) {
     setRecallCommLoadingId(recallId);
@@ -1183,7 +1246,7 @@ export default function PatientDetailClient({
     }
   }
 
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     try {
       const res = await apiFetch("/api/users");
       if (res.status === 401) {
@@ -1198,9 +1261,9 @@ export default function PatientDetailClient({
     } catch {
       setUsers([]);
     }
-  }
+  }, [router]);
 
-  async function loadTimeline() {
+  const loadTimeline = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/patients/${patientId}/timeline`);
       if (res.status === 401) {
@@ -1215,9 +1278,9 @@ export default function PatientDetailClient({
     } catch {
       setTimeline([]);
     }
-  }
+  }, [patientId, router]);
 
-  async function loadInvoices() {
+  const loadInvoices = useCallback(async () => {
     setLoadingInvoices(true);
     setInvoiceError(null);
     try {
@@ -1237,7 +1300,7 @@ export default function PatientDetailClient({
     } finally {
       setLoadingInvoices(false);
     }
-  }
+  }, [patientId, router]);
 
   async function loadInvoiceDetail(invoiceId: number) {
     setInvoiceError(null);
@@ -1271,7 +1334,7 @@ export default function PatientDetailClient({
     }
   }
 
-  async function loadTreatments() {
+  const loadTreatments = useCallback(async () => {
     try {
       const res = await apiFetch("/api/treatments?include_inactive=1");
       if (res.status === 401) {
@@ -1286,9 +1349,9 @@ export default function PatientDetailClient({
     } catch {
       setTreatments([]);
     }
-  }
+  }, [router]);
 
-  async function loadEstimates() {
+  const loadEstimates = useCallback(async () => {
     setLoadingEstimates(true);
     setEstimateError(null);
     try {
@@ -1312,7 +1375,7 @@ export default function PatientDetailClient({
     } finally {
       setLoadingEstimates(false);
     }
-  }
+  }, [patientId, router, selectedEstimate]);
 
   async function loadEstimateDetail(estimateId: number) {
     setEstimateError(null);
@@ -1475,7 +1538,7 @@ export default function PatientDetailClient({
     }
   }
 
-  async function loadClinicalSummary() {
+  const loadClinicalSummary = useCallback(async () => {
     setClinicalLoading(true);
     setClinicalError(null);
     try {
@@ -1500,7 +1563,7 @@ export default function PatientDetailClient({
     } finally {
       setClinicalLoading(false);
     }
-  }
+  }, [patientId, router]);
 
   async function loadChartingConfig() {
     try {
@@ -1779,25 +1842,25 @@ export default function PatientDetailClient({
     return links;
   }
 
-  async function postChartingAudit(
-    action: "viewer_opened" | "share_link_copied",
-    section?: string
-  ) {
-    if (!chartingViewerEnabled) return;
-    try {
-      const res = await apiFetch(`/api/patients/${patientId}/charting/audit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, section }),
-      });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
+  const postChartingAudit = useCallback(
+    async (action: "viewer_opened" | "share_link_copied", section?: string) => {
+      if (!chartingViewerEnabled) return;
+      try {
+        const res = await apiFetch(`/api/patients/${patientId}/charting/audit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, section }),
+        });
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+        }
+      } catch {
+        // Ignore audit logging failures.
       }
-    } catch {
-      // Ignore audit logging failures.
-    }
-  }
+    },
+    [chartingViewerEnabled, patientId, router]
+  );
 
   function applyPerioFilters(payload: Record<string, unknown>) {
     setPerioFilterFrom(String(payload.from ?? ""));
@@ -1947,7 +2010,6 @@ export default function PatientDetailClient({
       chartingLoadInFlight.current = false;
     }
   }, [
-    apiFetch,
     buildBpeParams,
     buildNotesParams,
     buildPerioParams,
@@ -2027,31 +2089,34 @@ export default function PatientDetailClient({
     }
   }
 
-  async function loadToothHistory(tooth: string) {
-    setToothHistoryLoading(true);
-    try {
-      const res = await apiFetch(
-        `/api/patients/${patientId}/tooth-history?tooth=${encodeURIComponent(tooth)}`
-      );
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
+  const loadToothHistory = useCallback(
+    async (tooth: string) => {
+      setToothHistoryLoading(true);
+      try {
+        const res = await apiFetch(
+          `/api/patients/${patientId}/tooth-history?tooth=${encodeURIComponent(tooth)}`
+        );
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Failed to load tooth history (HTTP ${res.status})`);
+        }
+        const data = (await res.json()) as ToothHistory;
+        setToothHistory({
+          notes: data.notes ?? [],
+          procedures: data.procedures ?? [],
+        });
+      } catch {
+        setToothHistory({ notes: [], procedures: [] });
+      } finally {
+        setToothHistoryLoading(false);
       }
-      if (!res.ok) {
-        throw new Error(`Failed to load tooth history (HTTP ${res.status})`);
-      }
-      const data = (await res.json()) as ToothHistory;
-      setToothHistory({
-        notes: data.notes ?? [],
-        procedures: data.procedures ?? [],
-      });
-    } catch {
-      setToothHistory({ notes: [], procedures: [] });
-    } finally {
-      setToothHistoryLoading(false);
-    }
-  }
+    },
+    [patientId, router]
+  );
 
   async function submitChartNote() {
     if (!selectedTooth || !chartNoteBody.trim()) return;
@@ -2467,7 +2532,21 @@ export default function PatientDetailClient({
     void loadLedgerBalance();
     void loadFinanceSummary();
     void loadRecalls();
-  }, [isValidPatientId, patientId]);
+  }, [
+    isValidPatientId,
+    loadAppointments,
+    loadEstimates,
+    loadFinanceSummary,
+    loadInvoices,
+    loadLedger,
+    loadLedgerBalance,
+    loadNotes,
+    loadPatient,
+    loadRecalls,
+    loadTimeline,
+    loadTreatments,
+    loadUsers,
+  ]);
 
   useEffect(() => {
     void loadChartingConfig();
@@ -2552,14 +2631,83 @@ export default function PatientDetailClient({
       setSelectedTooth(upperTeeth[0]);
       setNotesTooth(upperTeeth[0]);
     }
-  }, [tab, patientId]);
+  }, [tab, loadClinicalSummary, selectedTooth]);
 
   useEffect(() => {
     if (tab !== "transactions") return;
     if (transactionsLoaded) return;
     const fromUrl = getTransactionFiltersFromParams(searchParams);
     void loadTransactions({ reset: true, overrides: fromUrl });
-  }, [tab, transactionsLoaded, patientId, searchParams]);
+  }, [tab, transactionsLoaded, searchParams, loadTransactions]);
+
+  const applyChartingFiltersFromParams = useCallback((params: URLSearchParams) => {
+    const chartingKeys = Array.from(params.keys()).filter(
+      (key) => key === "v" || key.startsWith("charting_")
+    );
+    if (chartingKeys.length === 0) {
+      return;
+    }
+    if (chartingKeys.length > maxChartingLinkParams) {
+      setChartingLinkNotice("Charting link ignored (too many parameters).");
+      return;
+    }
+    const versionRaw = params.get("v");
+    if (versionRaw && versionRaw !== String(chartingLinkVersion)) {
+      setChartingLinkNotice(`Unsupported charting link version (${versionRaw}).`);
+      return;
+    }
+    setChartingLinkNotice(null);
+    const hasPerioParams = [
+      "charting_perio_from",
+      "charting_perio_to",
+      "charting_perio_tooth",
+      "charting_perio_site",
+      "charting_perio_bleeding",
+      "charting_perio_plaque",
+    ].some((key) => params.has(key));
+    if (hasPerioParams) {
+      setPerioFilterFrom(parseChartingDateParam(params.get("charting_perio_from")));
+      setPerioFilterTo(parseChartingDateParam(params.get("charting_perio_to")));
+      setPerioFilterTooth(parseChartingIntParam(params.get("charting_perio_tooth")));
+      setPerioFilterSite(parseChartingPerioSite(params.get("charting_perio_site")));
+      setPerioFilterBleeding(params.get("charting_perio_bleeding") === "1");
+      setPerioFilterPlaque(params.get("charting_perio_plaque") === "1");
+    }
+
+    const hasBpeParams = [
+      "charting_bpe_from",
+      "charting_bpe_to",
+      "charting_bpe_latest",
+    ].some((key) => params.has(key));
+    if (hasBpeParams) {
+      setBpeFilterFrom(parseChartingDateParam(params.get("charting_bpe_from")));
+      setBpeFilterTo(parseChartingDateParam(params.get("charting_bpe_to")));
+      setBpeLatestOnly(params.get("charting_bpe_latest") === "1");
+    }
+
+    const hasNotesParams = [
+      "charting_notes_from",
+      "charting_notes_to",
+      "charting_notes_category",
+      "charting_notes_q_inc",
+      "charting_notes_q",
+    ].some((key) => params.has(key));
+    if (hasNotesParams) {
+      setNotesFilterFrom(parseChartingDateParam(params.get("charting_notes_from")));
+      setNotesFilterTo(parseChartingDateParam(params.get("charting_notes_to")));
+      setNotesFilterCategory(parseChartingIntParam(params.get("charting_notes_category")));
+      const includeText = params.get("charting_notes_q_inc") === "1";
+      setNotesIncludeTextInLink(includeText);
+      if (includeText) {
+        const query = sanitizeNotesQuery(params.get("charting_notes_q") ?? "");
+        setNotesFilterQuery(query);
+        setNotesFilterQueryDebounced(query);
+      } else {
+        setNotesFilterQuery("");
+        setNotesFilterQueryDebounced("");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!chartingViewerEnabled) return;
@@ -2635,7 +2783,7 @@ export default function PatientDetailClient({
     if (chartingAuditSent.current) return;
     chartingAuditSent.current = true;
     void postChartingAudit("viewer_opened");
-  }, [tab, chartingViewerEnabled, chartingLoaded, patientId]);
+  }, [tab, chartingViewerEnabled, chartingLoaded, postChartingAudit]);
 
   useEffect(() => {
     if (tab !== "charting") return;
@@ -2773,7 +2921,48 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (tab !== "clinical" || !selectedTooth) return;
     void loadToothHistory(selectedTooth);
-  }, [tab, selectedTooth, patientId]);
+  }, [tab, selectedTooth, loadToothHistory]);
+
+  function getDefaultBookingSlot() {
+    const next = new Date();
+    const minutes = Math.ceil(next.getMinutes() / 10) * 10;
+    next.setMinutes(minutes, 0, 0);
+    const date = next.toLocaleDateString("en-CA");
+    const time = next.toTimeString().slice(0, 5);
+    return { date, time };
+  }
+
+  const scrollToAnchor = useCallback(function scrollToAnchor(id: string, attempts = 8) {
+    const target = document.getElementById(id);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      const focusable = target.querySelector("input, select, textarea") as
+        | HTMLElement
+        | null;
+      focusable?.focus();
+      return;
+    }
+    if (attempts <= 0) return;
+    requestAnimationFrame(() => scrollToAnchor(id, attempts - 1));
+  }, []);
+
+  const openBookingModal = useCallback(() => {
+    const slot = getDefaultBookingSlot();
+    setBookingDate(slot.date);
+    setBookingTime(slot.time);
+    setBookingDuration("30");
+    setBookingClinicianUserId("");
+    setBookingAppointmentType("");
+    setBookingLocation("");
+    if (patient?.care_setting && patient.care_setting !== "CLINIC") {
+      setBookingLocationType("visit");
+      setBookingLocationText(patient.visit_address_text || "");
+    } else {
+      setBookingLocationType("clinic");
+      setBookingLocationText("");
+    }
+    setShowBookingModal(true);
+  }, [patient]);
 
   useEffect(() => {
     if (!patient) return;
@@ -2785,7 +2974,7 @@ export default function PatientDetailClient({
       setRecallStatus("due");
     }
     setBookingMarkRecall(Boolean(patient.recall_due_date));
-  }, [patient?.id]);
+  }, [patient]);
 
   useEffect(() => {
     if (!patient || handledBookParam) return;
@@ -2795,7 +2984,7 @@ export default function PatientDetailClient({
       setPendingScrollTarget("patient-book-appointment");
       setHandledBookParam(true);
     }
-  }, [patient, handledBookParam, searchParams]);
+  }, [patient, handledBookParam, searchParams, openBookingModal]);
 
   useEffect(() => {
     if (!pendingScrollTarget) return;
@@ -2803,7 +2992,7 @@ export default function PatientDetailClient({
     if (pendingScrollTarget === "patient-book-appointment" && !showBookingModal) return;
     scrollToAnchor(pendingScrollTarget);
     setPendingScrollTarget(null);
-  }, [pendingScrollTarget, tab, showBookingModal]);
+  }, [pendingScrollTarget, tab, showBookingModal, scrollToAnchor]);
 
   const alerts = [
     patient?.allergies ? { label: "Allergies", tone: "danger" } : null,
@@ -2876,104 +3065,6 @@ export default function PatientDetailClient({
     void loadTransactions({ reset: true, overrides: next });
   }
 
-  function parseChartingDateParam(value: string | null) {
-    if (!value) return "";
-    const trimmed = value.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return "";
-    return trimmed;
-  }
-
-  function parseChartingIntParam(value: string | null) {
-    if (!value) return "";
-    const trimmed = value.trim();
-    if (!/^\d+$/.test(trimmed)) return "";
-    return trimmed;
-  }
-
-  function parseChartingPerioSite(value: string | null) {
-    const parsed = parseChartingIntParam(value);
-    if (!parsed) return "";
-    const numeric = Number(parsed);
-    if (!Number.isFinite(numeric) || !perioSiteLabels[numeric]) return "";
-    return String(numeric);
-  }
-
-  function sanitizeNotesQuery(value: string) {
-    return value
-      .replace(/[\x00-\x1F\x7F]/g, "")
-      .trim()
-      .slice(0, maxNotesQueryLength);
-  }
-
-  function applyChartingFiltersFromParams(params: URLSearchParams) {
-    const chartingKeys = Array.from(params.keys()).filter(
-      (key) => key === "v" || key.startsWith("charting_")
-    );
-    if (chartingKeys.length === 0) {
-      return;
-    }
-    if (chartingKeys.length > maxChartingLinkParams) {
-      setChartingLinkNotice("Charting link ignored (too many parameters).");
-      return;
-    }
-    const versionRaw = params.get("v");
-    if (versionRaw && versionRaw !== String(chartingLinkVersion)) {
-      setChartingLinkNotice(`Unsupported charting link version (${versionRaw}).`);
-      return;
-    }
-    setChartingLinkNotice(null);
-    const hasPerioParams = [
-      "charting_perio_from",
-      "charting_perio_to",
-      "charting_perio_tooth",
-      "charting_perio_site",
-      "charting_perio_bleeding",
-      "charting_perio_plaque",
-    ].some((key) => params.has(key));
-    if (hasPerioParams) {
-      setPerioFilterFrom(parseChartingDateParam(params.get("charting_perio_from")));
-      setPerioFilterTo(parseChartingDateParam(params.get("charting_perio_to")));
-      setPerioFilterTooth(parseChartingIntParam(params.get("charting_perio_tooth")));
-      setPerioFilterSite(parseChartingPerioSite(params.get("charting_perio_site")));
-      setPerioFilterBleeding(params.get("charting_perio_bleeding") === "1");
-      setPerioFilterPlaque(params.get("charting_perio_plaque") === "1");
-    }
-
-    const hasBpeParams = [
-      "charting_bpe_from",
-      "charting_bpe_to",
-      "charting_bpe_latest",
-    ].some((key) => params.has(key));
-    if (hasBpeParams) {
-      setBpeFilterFrom(parseChartingDateParam(params.get("charting_bpe_from")));
-      setBpeFilterTo(parseChartingDateParam(params.get("charting_bpe_to")));
-      setBpeLatestOnly(params.get("charting_bpe_latest") === "1");
-    }
-
-    const hasNotesParams = [
-      "charting_notes_from",
-      "charting_notes_to",
-      "charting_notes_category",
-      "charting_notes_q_inc",
-      "charting_notes_q",
-    ].some((key) => params.has(key));
-    if (hasNotesParams) {
-      setNotesFilterFrom(parseChartingDateParam(params.get("charting_notes_from")));
-      setNotesFilterTo(parseChartingDateParam(params.get("charting_notes_to")));
-      setNotesFilterCategory(parseChartingIntParam(params.get("charting_notes_category")));
-      const includeText = params.get("charting_notes_q_inc") === "1";
-      setNotesIncludeTextInLink(includeText);
-      if (includeText) {
-        const query = sanitizeNotesQuery(params.get("charting_notes_q") ?? "");
-        setNotesFilterQuery(query);
-        setNotesFilterQueryDebounced(query);
-      } else {
-        setNotesFilterQuery("");
-        setNotesFilterQueryDebounced("");
-      }
-    }
-  }
-
   useEffect(() => {
     const fromUrl = searchParams?.get("clinicalView");
     if (fromUrl === "current" || fromUrl === "planned" || fromUrl === "history") {
@@ -2985,7 +3076,7 @@ export default function PatientDetailClient({
     if (stored === "current" || stored === "planned" || stored === "history") {
       if (stored !== clinicalViewMode) setClinicalViewMode(stored);
     }
-  }, [searchParams]);
+  }, [searchParams, clinicalViewMode]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -3194,24 +3285,6 @@ export default function PatientDetailClient({
     return "No records in the latest charting import.";
   }
 
-  const perioSiteLabels: Record<number, string> = {
-    1: "MB",
-    2: "B",
-    3: "DB",
-    4: "ML",
-    5: "L",
-    6: "DL",
-  };
-
-  const perioSiteSort: Record<number, number> = {
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 4,
-    5: 5,
-    6: 6,
-  };
-
   function formatPerioSite(value?: number | null) {
     if (value === null || value === undefined) return "—";
     const label = perioSiteLabels[value];
@@ -3288,29 +3361,6 @@ export default function PatientDetailClient({
     gap: 8,
     alignItems: "center",
   } as const;
-
-  function scrollToAnchor(id: string, attempts = 8) {
-    const target = document.getElementById(id);
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-      const focusable = target.querySelector("input, select, textarea") as
-        | HTMLElement
-        | null;
-      focusable?.focus();
-      return;
-    }
-    if (attempts <= 0) return;
-    requestAnimationFrame(() => scrollToAnchor(id, attempts - 1));
-  }
-
-  function getDefaultBookingSlot() {
-    const next = new Date();
-    const minutes = Math.ceil(next.getMinutes() / 10) * 10;
-    next.setMinutes(minutes, 0, 0);
-    const date = next.toLocaleDateString("en-CA");
-    const time = next.toTimeString().slice(0, 5);
-    return { date, time };
-  }
 
   async function copyAddress() {
     if (!patient) return;
@@ -4033,24 +4083,6 @@ export default function PatientDetailClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to restore patient");
     }
-  }
-
-  function openBookingModal() {
-    const slot = getDefaultBookingSlot();
-    setBookingDate(slot.date);
-    setBookingTime(slot.time);
-    setBookingDuration("30");
-    setBookingClinicianUserId("");
-    setBookingAppointmentType("");
-    setBookingLocation("");
-    if (patient?.care_setting && patient.care_setting !== "CLINIC") {
-      setBookingLocationType("visit");
-      setBookingLocationText(patient.visit_address_text || "");
-    } else {
-      setBookingLocationType("clinic");
-      setBookingLocationText("");
-    }
-    setShowBookingModal(true);
   }
 
   async function createBooking(e: React.FormEvent) {

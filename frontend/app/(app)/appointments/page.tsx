@@ -1062,7 +1062,7 @@ export default function AppointmentsPage() {
     setModalLocationText(locationText);
     setModalLocation(location);
     setBookingSubmitError(null);
-  }, [showNewModal]);
+  }, [showNewModal, clinicianUserId, locationType, locationText, location]);
 
   useEffect(() => {
     if (!conflictWarning && bookingSubmitError?.toLowerCase().includes("conflict")) {
@@ -1124,54 +1124,6 @@ export default function AppointmentsPage() {
     }, 3000);
     return () => window.clearTimeout(timeout);
   }, [highlightedAppointmentId]);
-
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement ||
-        event.target instanceof HTMLSelectElement
-      ) {
-        return;
-      }
-      if (event.key === "Delete" && selectedAppointmentId) {
-        const appt = appointments.find((item) => item.id === selectedAppointmentId);
-        if (appt) {
-          setCancelTarget(appt);
-          setCancelReason("");
-          setShowCancelModal(true);
-        }
-        return;
-      }
-      const isCmd = event.metaKey || event.ctrlKey;
-      if (!isCmd) return;
-      if (event.key.toLowerCase() === "c" && selectedAppointmentId) {
-        const appt = appointments.find((item) => item.id === selectedAppointmentId);
-        if (appt) {
-          setClipboard({ mode: "copy", appointment: appt });
-          setNotice("Copied appointment. Select a slot to paste.");
-        }
-        return;
-      }
-      if (event.key.toLowerCase() === "x" && selectedAppointmentId) {
-        const appt = appointments.find((item) => item.id === selectedAppointmentId);
-        if (appt) {
-          setClipboard({ mode: "cut", appointment: appt });
-          setNotice("Cut appointment. Select a slot to paste.");
-        }
-        return;
-      }
-      if (event.key.toLowerCase() === "v" && clipboard) {
-        if (lastSelectedSlot) {
-          void pasteAppointment(lastSelectedSlot);
-        } else {
-          setError("Select a slot before pasting.");
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [appointments, clipboard, lastSelectedSlot, pasteAppointment, selectedAppointmentId]);
 
   const { minTime, maxTime } = useMemo(() => {
     if (!schedule) return { minTime: undefined, maxTime: undefined };
@@ -1362,37 +1314,36 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function updateAppointmentTimes(
-    appointmentId: number,
-    startsAt: Date,
-    endsAt: Date
-  ) {
-    const res = await apiFetch(`/api/appointments/${appointmentId}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        starts_at: startsAt.toISOString(),
-        ends_at: endsAt.toISOString(),
-      }),
-    });
-    if (res.status === 401) {
-      clearToken();
-      router.replace("/login");
-      return null;
-    }
-    if (!res.ok) {
-      const raw = await res.text();
-      const conflictData = parseConflictResponse(raw);
-      if (res.status === 409 && conflictData?.conflicts?.length) {
-        const items = toConflictItems(conflictData.conflicts);
-        setConflictWarning(buildConflictWarning(items, null));
-        throw new Error(
-          conflictData.detail || conflictData.message || "Conflicts detected."
-        );
+  const updateAppointmentTimes = useCallback(
+    async (appointmentId: number, startsAt: Date, endsAt: Date) => {
+      const res = await apiFetch(`/api/appointments/${appointmentId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          starts_at: startsAt.toISOString(),
+          ends_at: endsAt.toISOString(),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return null;
       }
-      throw new Error(raw || `Failed to update appointment (HTTP ${res.status})`);
-    }
-    return (await res.json()) as Appointment;
-  }
+      if (!res.ok) {
+        const raw = await res.text();
+        const conflictData = parseConflictResponse(raw);
+        if (res.status === 409 && conflictData?.conflicts?.length) {
+          const items = toConflictItems(conflictData.conflicts);
+          setConflictWarning(buildConflictWarning(items, null));
+          throw new Error(
+            conflictData.detail || conflictData.message || "Conflicts detected."
+          );
+        }
+        throw new Error(raw || `Failed to update appointment (HTTP ${res.status})`);
+      }
+      return (await res.json()) as Appointment;
+    },
+    [buildConflictWarning, router]
+  );
 
   async function createEstimateForAppointment(appt: Appointment) {
     setError(null);
@@ -1492,7 +1443,7 @@ export default function AppointmentsPage() {
         setModalLocationText("");
       }
     }
-  }, [selectedPatientId, patients, locationText]);
+  }, [selectedPatientId, patients, locationText, showNewModal]);
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
@@ -1884,65 +1835,116 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function pasteAppointment(targetStart: Date) {
-    if (!clipboard) return;
-    const appt = clipboard.appointment;
-    const originalStart = new Date(appt.starts_at);
-    const originalEnd = new Date(appt.ends_at);
-    const durationMs = originalEnd.getTime() - originalStart.getTime();
-    const targetEnd = new Date(targetStart.getTime() + durationMs);
-    if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
-      setError("Paste time is outside of working hours.");
-      return;
-    }
-    const actionLabel = clipboard.mode === "cut" ? "Move" : "Copy";
-    if (!window.confirm(`${actionLabel} this appointment to the selected slot?`)) {
-      return;
-    }
-    try {
-      if (clipboard.mode === "cut") {
-        const updated = await updateAppointmentTimes(appt.id, targetStart, targetEnd);
-        if (updated) {
-          setAppointments((prev) =>
-            prev.map((item) => (item.id === updated.id ? updated : item))
-          );
+  const pasteAppointment = useCallback(
+    async (targetStart: Date) => {
+      if (!clipboard) return;
+      const appt = clipboard.appointment;
+      const originalStart = new Date(appt.starts_at);
+      const originalEnd = new Date(appt.ends_at);
+      const durationMs = originalEnd.getTime() - originalStart.getTime();
+      const targetEnd = new Date(targetStart.getTime() + durationMs);
+      if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
+        setError("Paste time is outside of working hours.");
+        return;
+      }
+      const actionLabel = clipboard.mode === "cut" ? "Move" : "Copy";
+      if (!window.confirm(`${actionLabel} this appointment to the selected slot?`)) {
+        return;
+      }
+      try {
+        if (clipboard.mode === "cut") {
+          const updated = await updateAppointmentTimes(appt.id, targetStart, targetEnd);
+          if (updated) {
+            setAppointments((prev) =>
+              prev.map((item) => (item.id === updated.id ? updated : item))
+            );
+          }
+        } else {
+          const res = await apiFetch("/api/appointments", {
+            method: "POST",
+            body: JSON.stringify({
+              patient_id: appt.patient.id,
+              clinician_user_id: appt.clinician_user_id ?? undefined,
+              starts_at: targetStart.toISOString(),
+              ends_at: targetEnd.toISOString(),
+              status: "booked",
+              appointment_type: appt.appointment_type ?? undefined,
+              clinician: appt.clinician ?? undefined,
+              location: appt.location ?? undefined,
+              location_type: appt.location_type,
+              location_text: appt.location_text ?? undefined,
+              is_domiciliary: appt.is_domiciliary,
+              visit_address: appt.visit_address ?? undefined,
+            }),
+          });
+          if (res.status === 401) {
+            clearToken();
+            router.replace("/login");
+            return;
+          }
+          if (!res.ok) {
+            const msg = await res.text();
+            throw new Error(msg || `Failed to copy appointment (HTTP ${res.status})`);
+          }
         }
-      } else {
-        const res = await apiFetch("/api/appointments", {
-          method: "POST",
-          body: JSON.stringify({
-            patient_id: appt.patient.id,
-            clinician_user_id: appt.clinician_user_id ?? undefined,
-            starts_at: targetStart.toISOString(),
-            ends_at: targetEnd.toISOString(),
-            status: "booked",
-            appointment_type: appt.appointment_type ?? undefined,
-            clinician: appt.clinician ?? undefined,
-            location: appt.location ?? undefined,
-            location_type: appt.location_type,
-            location_text: appt.location_text ?? undefined,
-            is_domiciliary: appt.is_domiciliary,
-            visit_address: appt.visit_address ?? undefined,
-          }),
-        });
-        if (res.status === 401) {
-          clearToken();
-          router.replace("/login");
-          return;
+        setNotice(`${actionLabel}d appointment.`);
+        setClipboard(null);
+        await loadAppointments();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to paste appointment");
+        await loadAppointments();
+      }
+    },
+    [clipboard, loadAppointments, router, schedule, updateAppointmentTimes]
+  );
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === "Delete" && selectedAppointmentId) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          setCancelTarget(appt);
+          setCancelReason("");
+          setShowCancelModal(true);
         }
-        if (!res.ok) {
-          const msg = await res.text();
-          throw new Error(msg || `Failed to copy appointment (HTTP ${res.status})`);
+        return;
+      }
+      const isCmd = event.metaKey || event.ctrlKey;
+      if (!isCmd) return;
+      if (event.key.toLowerCase() === "c" && selectedAppointmentId) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          setClipboard({ mode: "copy", appointment: appt });
+          setNotice("Copied appointment. Select a slot to paste.");
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === "x" && selectedAppointmentId) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          setClipboard({ mode: "cut", appointment: appt });
+          setNotice("Cut appointment. Select a slot to paste.");
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === "v" && clipboard) {
+        if (lastSelectedSlot) {
+          void pasteAppointment(lastSelectedSlot);
+        } else {
+          setError("Select a slot before pasting.");
         }
       }
-      setNotice(`${actionLabel}d appointment.`);
-      setClipboard(null);
-      await loadAppointments();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to paste appointment");
-      await loadAppointments();
-    }
-  }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [appointments, clipboard, lastSelectedSlot, pasteAppointment, selectedAppointmentId]);
 
   function updateRange(start: Date, end: Date, view: View, anchor: Date) {
     const normalizedEnd = normalizeRangeEnd(start, end);

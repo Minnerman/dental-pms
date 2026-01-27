@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -34,7 +34,7 @@ export default function PracticeProfileSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -54,7 +54,7 @@ export default function PracticeProfileSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router]);
 
   async function saveProfile() {
     setSaving(true);
@@ -86,7 +86,7 @@ export default function PracticeProfileSettingsPage() {
 
   useEffect(() => {
     void loadProfile();
-  }, []);
+  }, [loadProfile]);
 
   return (
     <div className="app-grid">

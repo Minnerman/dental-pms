@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import HeaderBar from "@/components/ui/HeaderBar";
@@ -83,7 +83,7 @@ export default function TemplatesPage() {
 
   const selected = templates.find((item) => item.id === selectedId) || null;
 
-  async function loadMe() {
+  const loadMe = useCallback(async () => {
     try {
       const res = await apiFetch("/api/me");
       if (res.status === 401 || res.status === 403) {
@@ -99,9 +99,9 @@ export default function TemplatesPage() {
     } catch {
       setIsSuperadmin(false);
     }
-  }
+  }, [router]);
 
-  async function loadTemplates() {
+  const loadTemplates = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -136,7 +136,7 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [kindFilter, router, selectedId]);
 
   function selectTemplate(template: DocumentTemplate) {
     setSelectedId(template.id);
@@ -290,11 +290,11 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     void loadTemplates();
-  }, [kindFilter]);
+  }, [kindFilter, loadTemplates]);
 
   useEffect(() => {
     void loadMe();
-  }, []);
+  }, [loadMe]);
 
   return (
     <div className="app-grid">
