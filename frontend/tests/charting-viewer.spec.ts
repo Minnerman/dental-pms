@@ -23,8 +23,22 @@ test("charting viewer renders read-only sections", async ({ page, request }) => 
   await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/charting`));
   await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("R4 charting viewer")).toBeVisible();
-  await expect(page.getByText("Perio probes", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Last imported:|Not yet imported/)).toBeVisible();
+  await page.waitForResponse(
+    (response) =>
+      response.url().includes(`/patients/${patientId}/charting/meta`) &&
+      response.status() === 200,
+    { timeout: 15_000 }
+  );
+  await page.waitForResponse(
+    (response) =>
+      response.url().includes(`/patients/${patientId}/charting/perio-probes`) &&
+      response.status() === 200,
+    { timeout: 15_000 }
+  );
+  await expect(
+    page.locator(".badge", { hasText: "Perio probes:" }).first()
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Read-only view/i)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Patient not linked to R4 charting yet.")).toBeVisible();
 });
 

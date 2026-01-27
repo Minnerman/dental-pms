@@ -791,6 +791,9 @@ export default function PatientDetailClient({
   const chartingAuditSent = useRef(false);
   const notesFilterDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chartingRequestId = useRef(0);
+  const chartingLoadInFlight = useRef(false);
+  const chartingLastFiltersRef = useRef<string | null>(null);
+  const chartingPendingFiltersRef = useRef<string | null>(null);
   const perioLoadMoreRequestId = useRef(0);
   const surfacesLoadMoreRequestId = useRef(0);
   const chartingPresetVersion = 1;
@@ -822,6 +825,39 @@ export default function PatientDetailClient({
     {}
   );
   const [chartingUrlApplied, setChartingUrlApplied] = useState(false);
+  const chartingFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        perio_from: perioFilterFrom,
+        perio_to: perioFilterTo,
+        perio_tooth: perioFilterTooth,
+        perio_site: perioFilterSite,
+        perio_bleeding: perioFilterBleeding,
+        perio_plaque: perioFilterPlaque,
+        bpe_from: bpeFilterFrom,
+        bpe_to: bpeFilterTo,
+        bpe_latest: bpeLatestOnly,
+        notes_from: notesFilterFrom,
+        notes_to: notesFilterTo,
+        notes_category: notesFilterCategory,
+        notes_q: notesFilterQueryDebounced,
+      }),
+    [
+      perioFilterFrom,
+      perioFilterTo,
+      perioFilterTooth,
+      perioFilterSite,
+      perioFilterBleeding,
+      perioFilterPlaque,
+      bpeFilterFrom,
+      bpeFilterTo,
+      bpeLatestOnly,
+      notesFilterFrom,
+      notesFilterTo,
+      notesFilterCategory,
+      notesFilterQueryDebounced,
+    ]
+  );
 
   async function loadPatient() {
     setLoading(true);
@@ -1616,28 +1652,38 @@ export default function PatientDetailClient({
     return parsePreset(section, raw);
   }
 
-  function buildPerioParams(offset: number) {
-    const params = new URLSearchParams();
-    params.set("limit", String(chartingPageSize));
-    params.set("offset", String(offset));
-    if (perioFilterFrom) params.set("from", perioFilterFrom);
-    if (perioFilterTo) params.set("to", perioFilterTo);
-    if (perioFilterTooth.trim()) params.set("tooth", perioFilterTooth.trim());
-    if (perioFilterSite) params.set("site", perioFilterSite);
-    if (perioFilterBleeding) params.set("bleeding", "1");
-    if (perioFilterPlaque) params.set("plaque", "1");
-    return params;
-  }
+  const buildPerioParams = useCallback(
+    (offset: number) => {
+      const params = new URLSearchParams();
+      params.set("limit", String(chartingPageSize));
+      params.set("offset", String(offset));
+      if (perioFilterFrom) params.set("from", perioFilterFrom);
+      if (perioFilterTo) params.set("to", perioFilterTo);
+      if (perioFilterTooth.trim()) params.set("tooth", perioFilterTooth.trim());
+      if (perioFilterSite) params.set("site", perioFilterSite);
+      if (perioFilterBleeding) params.set("bleeding", "1");
+      if (perioFilterPlaque) params.set("plaque", "1");
+      return params;
+    },
+    [
+      perioFilterBleeding,
+      perioFilterFrom,
+      perioFilterPlaque,
+      perioFilterSite,
+      perioFilterTo,
+      perioFilterTooth,
+    ]
+  );
 
-  function buildBpeParams() {
+  const buildBpeParams = useCallback(() => {
     const params = new URLSearchParams();
     if (bpeFilterFrom) params.set("from", bpeFilterFrom);
     if (bpeFilterTo) params.set("to", bpeFilterTo);
     if (bpeLatestOnly) params.set("latest_only", "1");
     return params;
-  }
+  }, [bpeFilterFrom, bpeFilterTo, bpeLatestOnly]);
 
-  function buildNotesParams() {
+  const buildNotesParams = useCallback(() => {
     const params = new URLSearchParams();
     if (notesFilterFrom) params.set("from", notesFilterFrom);
     if (notesFilterTo) params.set("to", notesFilterTo);
@@ -1645,7 +1691,7 @@ export default function PatientDetailClient({
     if (query) params.set("q", query);
     if (notesFilterCategory) params.set("category", notesFilterCategory);
     return params;
-  }
+  }, [notesFilterCategory, notesFilterFrom, notesFilterQueryDebounced, notesFilterTo]);
 
   function buildChartingShareParams(
     section: "perio" | "bpe" | "furcations" | "notes",
@@ -1776,8 +1822,10 @@ export default function PatientDetailClient({
     setNotesFilterCategory(String(payload.category ?? ""));
   }
 
-  async function loadCharting() {
+  const loadCharting = useCallback(async () => {
     if (!chartingViewerEnabled) return;
+    if (chartingLoadInFlight.current) return;
+    chartingLoadInFlight.current = true;
     const requestId = ++chartingRequestId.current;
     setChartingLoading(true);
     setChartingError(null);
@@ -1896,8 +1944,17 @@ export default function PatientDetailClient({
       if (requestId === chartingRequestId.current) {
         setChartingLoading(false);
       }
+      chartingLoadInFlight.current = false;
     }
-  }
+  }, [
+    apiFetch,
+    buildBpeParams,
+    buildNotesParams,
+    buildPerioParams,
+    chartingViewerEnabled,
+    patientId,
+    router,
+  ]);
 
   async function loadMorePerioProbes() {
     if (!perioProbeHasMore || perioProbeLoadingMore) return;
@@ -2456,6 +2513,8 @@ export default function PatientDetailClient({
   useEffect(() => {
     setChartingLoaded(false);
     chartingFiltersInitialized.current = false;
+    chartingLastFiltersRef.current = null;
+    chartingPendingFiltersRef.current = null;
     setPerioProbes([]);
     setPerioProbeTotal(0);
     setPerioProbeHasMore(false);
@@ -2555,10 +2614,19 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (tab !== "charting") return;
     if (chartingLoaded) return;
+    if (chartingLoading) return;
     if (!chartingViewerEnabled) return;
     if (!chartingFiltersReady) return;
     void loadCharting();
-  }, [tab, chartingLoaded, patientId, chartingViewerEnabled, chartingFiltersReady]);
+  }, [
+    tab,
+    chartingLoaded,
+    chartingLoading,
+    patientId,
+    chartingViewerEnabled,
+    chartingFiltersReady,
+    loadCharting,
+  ]);
 
   useEffect(() => {
     if (tab !== "charting") return;
@@ -2575,6 +2643,15 @@ export default function PatientDetailClient({
     if (!chartingFiltersReady) return;
     if (!chartingFiltersInitialized.current) {
       chartingFiltersInitialized.current = true;
+      chartingLastFiltersRef.current = chartingFiltersKey;
+      return;
+    }
+    if (chartingLastFiltersRef.current === chartingFiltersKey) {
+      return;
+    }
+    chartingLastFiltersRef.current = chartingFiltersKey;
+    if (chartingLoading) {
+      chartingPendingFiltersRef.current = chartingFiltersKey;
       return;
     }
     setChartingNotesExpanded(false);
@@ -2583,6 +2660,8 @@ export default function PatientDetailClient({
     tab,
     chartingViewerEnabled,
     chartingFiltersReady,
+    chartingFiltersKey,
+    chartingLoading,
     perioFilterFrom,
     perioFilterTo,
     perioFilterTooth,
@@ -2598,6 +2677,14 @@ export default function PatientDetailClient({
     notesFilterTo,
     loadCharting,
   ]);
+
+  useEffect(() => {
+    if (!chartingPendingFiltersRef.current) return;
+    if (chartingLoading) return;
+    chartingPendingFiltersRef.current = null;
+    setChartingNotesExpanded(false);
+    void loadCharting();
+  }, [chartingLoading, loadCharting]);
 
   useEffect(() => {
     if (!chartingFiltersReady) return;

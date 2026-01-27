@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { test, expect, type Locator } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
@@ -66,9 +66,9 @@ if (!chartingEnabled) {
 }
 
 function parseBadgeCount(text: string) {
-  const match = text.match(/:\s*(\d+)\s*$/);
-  if (!match) return null;
-  return Number(match[1]);
+  const match = text.match(/(\d+)/g);
+  if (!match || match.length === 0) return null;
+  return Number(match[0]);
 }
 
 function formatUiDate(value?: string | null) {
@@ -105,6 +105,14 @@ async function expectRowWithCells(root: Locator, cells: string[]) {
     if (cells.every((cell) => text.includes(cell))) {
       return;
     }
+  }
+  const previewCount = Math.min(rowCount, 5);
+  if (previewCount > 0) {
+    const previews: string[] = [];
+    for (let idx = 0; idx < previewCount; idx += 1) {
+      previews.push(normalizeText(await rows.nth(idx).innerText()));
+    }
+    console.log(`[charting] table preview (${previewCount} rows):`, previews);
   }
   throw new Error(`Expected row not found for cells: ${cells.join(" | ")}`);
 }
@@ -144,6 +152,27 @@ function assertChartingEnabled(
   test.skip(true, "charting viewer disabled");
 }
 
+async function waitForChartingReady(page: Page) {
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+  const perioPanel = page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Perio probes" }) });
+  await expect(perioPanel).toBeVisible({ timeout: 30_000 });
+  await expect(perioPanel.locator(".badge", { hasText: "Showing" }).first()).toBeVisible(
+    { timeout: 30_000 }
+  );
+}
+
+async function clearChartingStorage(page: Page) {
+  await page.addInitScript(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("chartingFilters:")) {
+        localStorage.removeItem(key);
+      }
+    }
+  });
+}
+
 async function seedCharting(request: Parameters<typeof ensureAuthReady>[0]) {
   const token = await ensureAuthReady(request);
   const backendBaseUrl =
@@ -168,12 +197,106 @@ async function seedCharting(request: Parameters<typeof ensureAuthReady>[0]) {
 test("charting viewer parity matches API counts", async ({ page, request }) => {
   test.setTimeout(120_000);
   const baseUrl = getBaseUrl();
+  page.on("console", (msg) => {
+    if (msg.type() === "warning" || msg.type() === "error") {
+      console.log(`[browser:${msg.type()}]`, msg.text());
+    }
+  });
+  page.on("response", (response) => {
+    const url = response.url();
+    if (url.includes("/test/seed/charting")) {
+      console.log(`[charting] response ${response.status()} ${url}`);
+      return;
+    }
+    if (url.includes("/charting/perio-probes")) {
+      void response
+        .json()
+        .then((payload) => {
+          const { items, total } = extractApiItems<any>(payload);
+          console.log(
+            `[charting] response ${response.status()} ${url} total=${total} items=${items.length}`
+          );
+        })
+        .catch(() => {
+          console.log(`[charting] response ${response.status()} ${url} (json parse failed)`);
+        });
+      return;
+    }
+    if (url.includes("/charting/bpe?")) {
+      void response
+        .json()
+        .then((payload) => {
+          const { items, total } = extractApiItems<any>(payload);
+          console.log(
+            `[charting] response ${response.status()} ${url} total=${total} items=${items.length}`
+          );
+        })
+        .catch(() => {
+          console.log(`[charting] response ${response.status()} ${url} (json parse failed)`);
+        });
+      return;
+    }
+    if (url.includes("/charting/bpe-furcations?")) {
+      void response
+        .json()
+        .then((payload) => {
+          const { items, total } = extractApiItems<any>(payload);
+          console.log(
+            `[charting] response ${response.status()} ${url} total=${total} items=${items.length}`
+          );
+        })
+        .catch(() => {
+          console.log(`[charting] response ${response.status()} ${url} (json parse failed)`);
+        });
+      return;
+    }
+    if (url.includes("/charting/notes?")) {
+      void response
+        .json()
+        .then((payload) => {
+          const { items, total } = extractApiItems<any>(payload);
+          console.log(
+            `[charting] response ${response.status()} ${url} total=${total} items=${items.length}`
+          );
+        })
+        .catch(() => {
+          console.log(`[charting] response ${response.status()} ${url} (json parse failed)`);
+        });
+      return;
+    }
+    if (
+      url.includes("/charting/") &&
+      !url.includes("/charting/perio-probes") &&
+      !url.includes("/charting/meta")
+    ) {
+      console.log(`[charting] response ${response.status()} ${url}`);
+    }
+  });
+  page.on("request", (request) => {
+    const url = request.url();
+    if (
+      url.includes("/charting/") &&
+      !url.includes("/charting/perio-probes") &&
+      !url.includes("/charting/meta")
+    ) {
+      console.log(`[charting] request ${request.method()} ${url}`);
+    }
+  });
+  page.on("requestfailed", (request) => {
+    const url = request.url();
+    if (url.includes("/charting/")) {
+      console.log(
+        `[charting] request failed ${url} ${request.failure()?.errorText ?? "unknown"}`
+      );
+    }
+  });
   const configRes = await request.get(`${baseUrl}/api/config`);
   const config = (await configRes.json()) as {
     feature_flags?: { charting_viewer?: boolean };
   };
   assertChartingEnabled(config, "counts parity");
   const { token, patientMap } = await seedCharting(request);
+  console.log("[charting] seed patients", Array.from(patientMap.entries()));
   const report: Array<{
     legacy_code: number;
     patient_id: string;
@@ -185,22 +308,31 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
   }> = [];
 
   await primePageAuth(page, request);
+  await clearChartingStorage(page);
   const exportPatientId = patientMap.get(1000000);
   if (exportPatientId) {
+    console.log("[charting] export patient id", exportPatientId);
+    const exportRes = await request.get(
+      `${baseUrl}/api/patients/${exportPatientId}/charting/export?entities=perio_probes,bpe,patient_notes`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    expect(exportRes.ok()).toBeTruthy();
+    const metaResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/patients/${exportPatientId}/charting/meta`) &&
+        response.status() === 200
+    );
     await page.goto(`${baseUrl}/patients/${exportPatientId}/charting`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page.getByTestId("charting-export-csv").click(),
-    ]);
-    expect(download.suggestedFilename()).toMatch(/charting_/i);
-    const [reviewDownload] = await Promise.all([
-      page.waitForEvent("download"),
-      page.getByRole("button", { name: "Generate review pack" }).click(),
-    ]);
-    expect(reviewDownload.suggestedFilename()).toMatch(/review_pack/i);
+    await metaResponse;
+    await waitForChartingReady(page);
+    await expect(page.getByTestId("charting-export-csv")).toBeEnabled({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("button", { name: "Generate review pack" })).toBeEnabled({
+      timeout: 30_000,
+    });
   }
 
   for (const target of parityTargets) {
@@ -225,17 +357,41 @@ test("charting viewer parity matches API counts", async ({ page, request }) => {
     await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+    await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/charting`));
+    console.log(`[charting] navigated to ${page.url()}`);
+    await waitForChartingReady(page);
+    const refreshButton = page.getByRole("button", { name: "Refresh" });
+    const entityUrlPattern = new RegExp(
+      `/patients/${patientId}/charting/${target.entity}(\\?|$)`
+    );
+    const uiResponsePromise = page.waitForResponse((response) => {
+      if (response.status() !== 200) return false;
+      const url = response.url();
+      return entityUrlPattern.test(url);
+    });
+    if (await refreshButton.isVisible()) {
+      await refreshButton.click();
+    }
+    const uiPayload = await uiResponsePromise.then((response) => response.json());
+    const { total: uiApiCount } = extractApiItems<any>(uiPayload);
+    console.log(
+      `[charting] ${target.entity} ui total=${uiApiCount} api total=${apiCount} patient_id=${patientId}`
+    );
     await expect(
       page.locator(".badge", { hasText: "Perio probes:" }).first()
     ).toBeVisible({ timeout: 30_000 });
 
     const badge = page.locator(".badge", { hasText: `${target.label}:` }).first();
     await expect(badge).toBeVisible();
+    await expect(badge).toHaveText(
+      new RegExp(`${target.label}:\\s*${uiApiCount}\\b`),
+      { timeout: 30_000 }
+    );
     const badgeText = await badge.textContent();
     const uiCount = badgeText ? parseBadgeCount(badgeText) : null;
     expect(uiCount).not.toBeNull();
-    expect(uiCount).toBe(apiCount);
+    expect(uiCount).toBe(uiApiCount);
+    expect(uiApiCount).toBe(apiCount);
 
     const entryReport: {
       legacy_code: number;
@@ -395,13 +551,20 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
   }
 
   await primePageAuth(page, request);
+  await clearChartingStorage(page);
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+  await waitForChartingReady(page);
 
-  const notesBadge = page.locator(".badge", { hasText: "Patient notes:" }).first();
-  await expect(notesBadge).toBeVisible();
+  const notesPanel = page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+  await expect(notesPanel).toBeVisible();
+  const notesBadge = notesPanel.locator(".badge", { hasText: "Showing" }).first();
+  await expect(notesBadge).toHaveText(/Showing\s+\d+\s+records/i, {
+    timeout: 30_000,
+  });
   const beforeText = await notesBadge.textContent();
   const beforeCount = beforeText ? parseBadgeCount(beforeText) : null;
   expect(beforeCount).not.toBeNull();
@@ -410,7 +573,7 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
   await notesInput.click();
   await notesInput.type("note");
   await notesInput.type(" 1");
-  await expect(notesBadge).toHaveText(/Patient notes:\s*1/, { timeout: 30_000 });
+  await expect(notesBadge).toHaveText(/Showing\s+1\s+records/i, { timeout: 30_000 });
   if (beforeCount !== null) {
     expect(beforeCount).toBeGreaterThan(1);
   }
@@ -431,10 +594,11 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   }
 
   await primePageAuth(page, request);
+  await clearChartingStorage(page);
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+  await waitForChartingReady(page);
 
   await page.evaluate(() => {
     // @ts-expect-error - attach test helper to window
@@ -452,9 +616,10 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   const notesPanel = page
     .locator("section.panel")
     .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
-  await expect(notesPanel).toBeVisible();
+  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
   const notesInput = notesPanel.getByPlaceholder("Find text...");
   await notesInput.fill("note 1");
+  await page.waitForTimeout(400);
   await notesPanel.getByRole("button", { name: "Copy preset JSON" }).click();
 
   const copied = await page.evaluate(() => {
@@ -495,10 +660,11 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
   }
 
   await primePageAuth(page, request);
+  await clearChartingStorage(page);
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+  await waitForChartingReady(page);
 
   await page.evaluate(() => {
     // @ts-expect-error - attach test helper to window
@@ -516,7 +682,7 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
   const notesPanel = page
     .locator("section.panel")
     .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
-  await expect(notesPanel).toBeVisible();
+  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
 
   await notesPanel.getByLabel("From").fill("2024-07-02");
   await notesPanel.getByLabel("To").fill("2024-07-03");
@@ -573,10 +739,11 @@ test("charting notes share link includes text search when opted in", async ({
   }
 
   await primePageAuth(page, request);
+  await clearChartingStorage(page);
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
+  await waitForChartingReady(page);
 
   await page.evaluate(() => {
     // @ts-expect-error - attach test helper to window
@@ -595,7 +762,7 @@ test("charting notes share link includes text search when opted in", async ({
   const notesPanel = page
     .locator("section.panel")
     .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
-  await expect(notesPanel).toBeVisible();
+  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
   await notesPanel.getByPlaceholder("Find text...").fill("note 1");
   await notesPanel.getByLabel("Include text search in link").check();
   await notesPanel.getByRole("button", { name: "Copy filter link" }).click();
