@@ -40,6 +40,9 @@ Run Playwright tests inside a container with the required system libraries:
 If you want a clean database for Playwright, prefix the command with
 `PLAYWRIGHT_CLEAN=1` (this removes Docker volumes for the stack).
 
+If a run needs more time, set `PLAYWRIGHT_TIMEOUT=900` (seconds) or
+`PLAYWRIGHT_TIMEOUT=0` to disable the wrapper timeout.
+
 ## R4 imports (safe defaults)
 - Without R4 connectivity, use fixtures: `--source fixtures`.
 - `--dry-run`/`--apply` are supported only with `--source sqlserver`.

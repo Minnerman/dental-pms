@@ -13,4 +13,10 @@ if [ "${PLAYWRIGHT_CLEAN:-}" = "1" ]; then
 fi
 
 docker compose "${COMPOSE_FILES[@]}" up -d backend frontend
-docker compose "${COMPOSE_FILES[@]}" run --rm playwright "$@"
+
+PLAYWRIGHT_TIMEOUT="${PLAYWRIGHT_TIMEOUT:-900}"
+if [ "$PLAYWRIGHT_TIMEOUT" = "0" ]; then
+  docker compose "${COMPOSE_FILES[@]}" run --rm playwright "$@"
+else
+  timeout "${PLAYWRIGHT_TIMEOUT}"s docker compose "${COMPOSE_FILES[@]}" run --rm playwright "$@"
+fi
