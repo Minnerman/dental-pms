@@ -119,7 +119,51 @@ def _query_candidates(surname: str, limit: int) -> list[dict[str, object]]:
     return _pg_query(sql, {"surname": surname, "limit": limit})
 
 
-def _render_table(rows: list[dict[str, object]]) -> str:
+def _mask_phone(value: str | None, level: str) -> str | None:
+    if value is None:
+        return None
+    digits = _phone_digits(value)
+    if not digits:
+        return None
+    if level == "full":
+        return None
+    if len(digits) <= 2:
+        return "*" * len(digits)
+    return "*" * (len(digits) - 2) + digits[-2:]
+
+
+def _mask_postcode(value: str | None, level: str) -> str | None:
+    if value is None:
+        return None
+    if level == "full":
+        return None
+    outward = _postcode_outward(value)
+    return outward or None
+
+
+def _mask_name(first: str | None, last: str | None, level: str) -> str:
+    if level == "full":
+        return "[REDACTED]"
+    first_initial = (first or "").strip()[:1]
+    last_initial = (last or "").strip()[:1]
+    if not first_initial and not last_initial:
+        return "-"
+    if first_initial and last_initial:
+        return f"{first_initial}. {last_initial}."
+    if first_initial:
+        return f"{first_initial}."
+    return f"{last_initial}."
+
+
+def _mask_email(value: str | None, level: str) -> str | None:
+    if value is None:
+        return None
+    if level == "full":
+        return None
+    return "[REDACTED]"
+
+
+def _render_table(rows: list[dict[str, object]], redact: bool, redact_level: str) -> str:
     if not rows:
         return "_No candidates found._\n"
     lines = [
@@ -127,19 +171,34 @@ def _render_table(rows: list[dict[str, object]]) -> str:
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in rows:
-        name = " ".join(
-            [str(row.get("first_name") or "").strip(), str(row.get("last_name") or "").strip()]
-        ).strip() or "-"
+        if redact:
+            name = _mask_name(
+                str(row.get("first_name") or ""),
+                str(row.get("last_name") or ""),
+                redact_level,
+            )
+            postcode = _mask_postcode(str(row.get("postcode") or ""), redact_level) or "-"
+            phone = _mask_phone(str(row.get("phone") or ""), redact_level) or "-"
+            email = _mask_email(str(row.get("email") or ""), redact_level) or "-"
+            dob = "-" if redact_level == "full" else (row.get("date_of_birth") or "-")
+        else:
+            name = " ".join(
+                [str(row.get("first_name") or "").strip(), str(row.get("last_name") or "").strip()]
+            ).strip() or "-"
+            postcode = row.get("postcode") or "-"
+            phone = row.get("phone") or "-"
+            email = row.get("email") or "-"
+            dob = row.get("date_of_birth") or "-"
         lines.append(
             "| {pid} | {ls} | {lid} | {name} | {dob} | {pc} | {phone} | {email} | {score} |".format(
                 pid=row.get("id"),
                 ls=row.get("legacy_source") or "-",
                 lid=row.get("legacy_id") or "-",
                 name=name,
-                dob=row.get("date_of_birth") or "-",
-                pc=row.get("postcode") or "-",
-                phone=row.get("phone") or "-",
-                email=row.get("email") or "-",
+                dob=dob,
+                pc=postcode,
+                phone=phone,
+                email=email,
                 score=row.get("match_score") or 0,
             )
         )
@@ -206,17 +265,31 @@ def _print_lookup(
     postcode: str | None,
     phone: str | None,
     limit: int,
+    redact: bool,
+    redact_level: str,
 ) -> None:
     rows = _run_lookup(surname, dob, postcode, phone, limit)
     print(heading)
-    print(f"- surname: {surname}")
+    if redact and redact_level == "full":
+        print("- surname: [REDACTED]")
+    else:
+        print(f"- surname: {surname}")
     if dob:
-        print(f"- dob: {dob}")
+        if redact and redact_level == "full":
+            print("- dob: [REDACTED]")
+        else:
+            print(f"- dob: {dob}")
     if postcode:
-        print(f"- postcode: {postcode}")
+        if redact:
+            print(f"- postcode: {_mask_postcode(postcode, redact_level)}")
+        else:
+            print(f"- postcode: {postcode}")
     if phone:
-        print(f"- phone_last6: {_phone_last6(phone)}")
-    print(_render_table(rows).rstrip())
+        if redact:
+            print(f"- phone_last6: {_mask_phone(phone, redact_level)}")
+        else:
+            print(f"- phone_last6: {_phone_last6(phone)}")
+    print(_render_table(rows, redact, redact_level).rstrip())
     print("")
 
 
@@ -228,6 +301,13 @@ def main() -> int:
     parser.add_argument("--phone", help="Phone number (any format).")
     parser.add_argument("--limit", type=int, default=10, help="Limit candidates (default 10).")
     parser.add_argument("--from-worklog", help="Path to worklog markdown.")
+    parser.add_argument("--redact", action="store_true", help="Redact personal fields.")
+    parser.add_argument(
+        "--redact-level",
+        choices=("light", "full"),
+        default="light",
+        help="Redaction level (default: light).",
+    )
     args = parser.parse_args()
 
     if args.from_worklog:
@@ -247,6 +327,8 @@ def main() -> int:
                 postcode=row.postcode or None,
                 phone=row.phone_last6 or None,
                 limit=args.limit,
+                redact=args.redact,
+                redact_level=args.redact_level,
             )
         return 0
 
@@ -260,6 +342,8 @@ def main() -> int:
         postcode=args.postcode,
         phone=args.phone,
         limit=args.limit,
+        redact=args.redact,
+        redact_level=args.redact_level,
     )
     return 0
 
