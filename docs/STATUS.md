@@ -61,6 +61,9 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-01-28: Stage 168 R4 linkage quality report (appointments → mappings).
+  - Added `backend/app/scripts/r4_linkage_report.py` to summarize linkage, reasons, and top unmapped patient codes (JSON + optional CSV).
+  - Run: `docker compose exec -T backend python -m app.scripts.r4_linkage_report --output-json /tmp/r4_linkage.json --output-csv /tmp/r4_unmapped.csv`.
 - 2026-01-28: Stage 167 recalls test seeding + charting test stability.
   - Recalls API tests now self-seed and scope queries to seeded data; no reliance on global seeds.
   - Charting note category/fixed note test data made idempotent; external-role charting test now seeds a patient.
