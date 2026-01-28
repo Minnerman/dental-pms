@@ -61,6 +61,8 @@ from app.models.r4_charting import (
 from app.models.r4_treatment_transaction import R4TreatmentTransaction
 from app.models.r4_user import R4User
 from app.models.r4_patient_mapping import R4PatientMapping
+from app.models.r4_linkage_issue import R4LinkageIssue
+from app.models.r4_manual_mapping import R4ManualMapping
 
 __all__ = [
     "Base",
@@ -137,4 +139,6 @@ __all__ = [
     "R4Appointment",
     "R4AppointmentPatientLink",
     "R4PatientMapping",
+    "R4LinkageIssue",
+    "R4ManualMapping",
 ]
