@@ -99,3 +99,27 @@ curl "$API_URL/admin/r4/manual-mappings?legacy_patient_code=1012195" \
 Use the internal admin page:
 - `/admin/r4/manual-mappings`
 - View, add, and delete manual mappings (no PHI shown).
+
+## Stage 173 remediation pass (2026-01-28 14:23 UTC)
+
+- Mappings added (safe exact legacy_id match): 0
+- Needs review list: `docs/r4/R4_MANUAL_MAPPINGS_NEEDS_REVIEW_2026-01-28.csv`
+- Safe mappings file (empty): `docs/r4/R4_MANUAL_MAPPINGS_SAFE_2026-01-28.csv`
+- Report after: `docs/r4/R4_LINKAGE_REPORT_2025-01-01_2026-01-28_AFTER_2026-01-28.json`
+
+Before → After (same window):
+- missing_patient_mapping: 45 → 45
+- missing_patient_code: 5 → 5
+- mapped: 0 → 0
+
+Top remaining unmapped codes (after):
+- 1012195 (10)
+- 1007995 (2)
+- 1016090 (1)
+- 1015376 (1)
+- 1011407 (1)
+- 1012098 (1)
+- 1010864 (1)
+- 1013684 (1)
+- 1015469 (1)
+- 1012223 (1)
