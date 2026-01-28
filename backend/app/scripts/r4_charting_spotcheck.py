@@ -16,7 +16,9 @@ from app.models.r4_charting import (
     R4BPEFurcation,
     R4ChartHealingAction,
     R4FixedNote,
+    R4NoteCategory,
     R4PatientNote,
+    R4PerioPlaque,
     R4PerioProbe,
     R4TemporaryNote,
     R4ToothSurface,
@@ -230,6 +232,10 @@ def _sqlserver_perio_probes(source: R4SqlServerSource, patient_code: int, limit:
     return _normalize_rows(source._query(query, [limit, patient_code]))
 
 
+def _sqlserver_perio_plaque(source: R4SqlServerSource, patient_code: int, limit: int):
+    return _normalize_rows(source.list_perio_plaque(patient_code, patient_code, limit))
+
+
 def _sqlserver_tooth_surfaces(source: R4SqlServerSource, limit: int):
     return _normalize_rows(source.list_tooth_surfaces(limit))
 
@@ -270,6 +276,10 @@ def _sqlserver_fixed_notes_for_codes(
     return _normalize_rows(source._query(query, [limit, *codes]))
 
 
+def _sqlserver_note_categories(source: R4SqlServerSource, limit: int):
+    return _normalize_rows(source.list_note_categories(limit))
+
+
 def _parse_entities(raw: str | None, available: dict[str, str]) -> list[str]:
     if not raw:
         return sorted(set(available.values()))
@@ -294,8 +304,10 @@ ENTITY_ALIASES = {
     "bpe_entries": "bpe",
     "bpe_furcations": "bpe_furcations",
     "perio_probes": "perio_probes",
+    "perio_plaque": "perio_plaque",
     "tooth_surfaces": "tooth_surfaces",
     "fixed_notes": "fixed_notes",
+    "note_categories": "note_categories",
 }
 
 ENTITY_COLUMNS = {
@@ -356,6 +368,15 @@ ENTITY_COLUMNS = {
         "bleeding",
         "plaque",
     ],
+    "perio_plaque": [
+        "patient_code",
+        "legacy_plaque_key",
+        "legacy_trans_id",
+        "recorded_at",
+        "tooth",
+        "plaque",
+        "bleeding",
+    ],
     "tooth_surfaces": [
         "legacy_tooth_id",
         "legacy_surface_no",
@@ -372,6 +393,11 @@ ENTITY_COLUMNS = {
         "tooth",
         "surface",
     ],
+    "note_categories": [
+        "patient_code",
+        "legacy_category_number",
+        "description",
+    ],
 }
 
 ENTITY_SORT_KEYS = {
@@ -382,8 +408,10 @@ ENTITY_SORT_KEYS = {
     "bpe": ["patient_code", "recorded_at", "legacy_bpe_id", "legacy_bpe_key"],
     "bpe_furcations": ["patient_code", "recorded_at", "legacy_bpe_id", "tooth", "furcation"],
     "perio_probes": ["patient_code", "recorded_at", "tooth", "probing_point", "legacy_trans_id"],
+    "perio_plaque": ["patient_code", "recorded_at", "tooth", "legacy_trans_id"],
     "tooth_surfaces": ["legacy_tooth_id", "legacy_surface_no"],
     "fixed_notes": ["patient_code", "legacy_fixed_note_code"],
+    "note_categories": ["patient_code", "legacy_category_number"],
 }
 
 ENTITY_DATE_FIELDS = {
@@ -394,6 +422,7 @@ ENTITY_DATE_FIELDS = {
     "bpe": ["recorded_at"],
     "bpe_furcations": ["recorded_at"],
     "perio_probes": ["recorded_at"],
+    "perio_plaque": ["recorded_at"],
 }
 
 ENTITY_LINKAGE = {
@@ -404,8 +433,10 @@ ENTITY_LINKAGE = {
     "bpe": "bpe.patient_code_or_bpe_id",
     "bpe_furcations": "bpefurcation.bpe_id_join",
     "perio_probes": "transactions.ref_id_join",
+    "perio_plaque": "transactions.ref_id_join",
     "tooth_surfaces": "global_lookup",
     "fixed_notes": "fixed_note_code_lookup",
+    "note_categories": "note_categories.global_lookup",
 }
 
 
@@ -449,6 +480,14 @@ def _normalize_entity_rows(
                     payload.get("tooth"),
                     probing_point,
                 )
+        elif entity == "perio_plaque":
+            trans_id = payload.get("legacy_trans_id") or payload.get("trans_id") or payload.get("transid")
+            payload["legacy_trans_id"] = trans_id
+            if payload.get("legacy_plaque_key") is None:
+                payload["legacy_plaque_key"] = _build_legacy_key(
+                    trans_id,
+                    payload.get("tooth"),
+                )
         elif entity == "bpe":
             bpe_id = payload.get("legacy_bpe_id") or payload.get("bpe_id")
             payload["legacy_bpe_id"] = bpe_id
@@ -487,6 +526,9 @@ def _normalize_entity_rows(
         elif entity == "fixed_notes":
             if payload.get("legacy_fixed_note_code") is None and payload.get("fixed_note_code") is not None:
                 payload["legacy_fixed_note_code"] = payload.get("fixed_note_code")
+        elif entity == "note_categories":
+            if payload.get("legacy_category_number") is None and payload.get("category_number") is not None:
+                payload["legacy_category_number"] = payload.get("category_number")
         elif entity == "tooth_surfaces":
             if payload.get("legacy_tooth_id") is None and payload.get("tooth_id") is not None:
                 payload["legacy_tooth_id"] = payload.get("tooth_id")
@@ -692,6 +734,22 @@ def main() -> int:
                 "postgres_duplicate_count": 0,
             }
 
+        if "perio_plaque" in entities:
+            sqlserver["perio_plaque"] = _sqlserver_perio_plaque(source, patient_code, args.limit)
+            postgres["perio_plaque"] = _pg_rows(
+                session,
+                select(
+                    R4PerioPlaque.legacy_patient_code.label("patient_code"),
+                    R4PerioPlaque.legacy_plaque_key.label("legacy_plaque_key"),
+                    R4PerioPlaque.legacy_trans_id.label("legacy_trans_id"),
+                    R4PerioPlaque.recorded_at.label("recorded_at"),
+                    R4PerioPlaque.tooth.label("tooth"),
+                    R4PerioPlaque.plaque.label("plaque"),
+                    R4PerioPlaque.bleeding.label("bleeding"),
+                ).where(R4PerioPlaque.legacy_patient_code == patient_code),
+                args.limit,
+            )
+
         if "tooth_surfaces" in entities:
             sqlserver["tooth_surfaces"] = _sqlserver_tooth_surfaces(source, args.limit)
             postgres["tooth_surfaces"] = _pg_rows(
@@ -728,6 +786,17 @@ def main() -> int:
                     R4FixedNote.tooth.label("tooth"),
                     R4FixedNote.surface.label("surface"),
                 ).where(R4FixedNote.legacy_fixed_note_code.in_(fixed_note_codes)),
+                args.limit,
+            )
+
+        if "note_categories" in entities:
+            sqlserver["note_categories"] = _sqlserver_note_categories(source, args.limit)
+            postgres["note_categories"] = _pg_rows(
+                session,
+                select(
+                    R4NoteCategory.legacy_category_number.label("legacy_category_number"),
+                    R4NoteCategory.description.label("description"),
+                ),
                 args.limit,
             )
     finally:

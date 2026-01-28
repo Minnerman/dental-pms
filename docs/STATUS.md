@@ -62,6 +62,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 -## Recent fixes
 -## Recent fixes
+- 2026-01-28: Stage 166 R4 charting import completeness (Perio/BPE/Notes).
+  - Added PerioPlaque, fixed notes, and note category API coverage; export now includes these entities.
+  - BPE/BPEFurcation importer now captures notes/user/sextant/recorded_at where available; PerioPlaque link via Transactions.
+  - Tests: `docker compose exec -T backend pytest -q` (recalls tests failed: missing seeded recalls).
 - 2026-01-27: Stage 165 dockerized Playwright runner for local Linux.
   - Added `docker-compose.playwright.yml` and `ops/playwright_docker.sh` to run Playwright in a container.
   - Documented `PLAYWRIGHT_CLEAN=1` for a clean DB when needed.

@@ -12,7 +12,10 @@ from app.models.r4_charting import (
     R4BPEEntry,
     R4BPEFurcation,
     R4ChartingImportState,
+    R4FixedNote,
+    R4NoteCategory,
     R4PatientNote,
+    R4PerioPlaque,
     R4PerioProbe,
 )
 from app.models.capability import UserCapability
@@ -56,6 +59,11 @@ def _cleanup(session, patient_id: int | None, legacy_code: int) -> None:
     session.execute(
         delete(R4PatientNote).where(R4PatientNote.legacy_patient_code == legacy_code)
     )
+    session.execute(
+        delete(R4PerioPlaque).where(R4PerioPlaque.legacy_patient_code == legacy_code)
+    )
+    session.execute(delete(R4FixedNote))
+    session.execute(delete(R4NoteCategory))
     if patient_id is not None:
         session.execute(
             delete(R4ChartingImportState).where(
@@ -134,6 +142,19 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
             )
         )
         session.add(
+            R4PerioPlaque(
+                legacy_source="r4",
+                legacy_plaque_key=f"{legacy_code}:3:{uuid4().hex[:6]}",
+                legacy_trans_id=200,
+                legacy_patient_code=legacy_code,
+                tooth=3,
+                plaque=1,
+                bleeding=0,
+                recorded_at=created_at,
+                created_by_user_id=actor_id,
+            )
+        )
+        session.add(
             R4PerioProbe(
                 legacy_source="r4",
                 legacy_probe_key=probe_key_older,
@@ -145,6 +166,26 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
                 bleeding=0,
                 plaque=1,
                 recorded_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                created_by_user_id=actor_id,
+            )
+        )
+        session.add(
+            R4NoteCategory(
+                legacy_source="r4",
+                legacy_category_number=10,
+                description="General",
+                created_by_user_id=actor_id,
+            )
+        )
+        session.add(
+            R4FixedNote(
+                legacy_source="r4",
+                legacy_fixed_note_code=500,
+                category_number=10,
+                description="Post-op",
+                note="Post-op instructions",
+                tooth=11,
+                surface=1,
                 created_by_user_id=actor_id,
             )
         )
@@ -205,6 +246,14 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         assert limited_payload["total"] == 2
         assert len(limited_payload["items"]) == 1
 
+        plaque_res = api_client.get(
+            f"/patients/{patient.id}/charting/perio-plaque", headers=auth_headers
+        )
+        assert plaque_res.status_code == 200, plaque_res.text
+        plaque_payload = plaque_res.json()
+        assert plaque_payload["total"] == 1
+        assert plaque_payload["items"][0]["tooth"] == 3
+
         bpe_res = api_client.get(
             f"/patients/{patient.id}/charting/bpe", headers=auth_headers
         )
@@ -222,6 +271,18 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         )
         assert notes_res.status_code == 200, notes_res.text
         assert notes_res.json()[0]["legacy_note_key"] == note_key
+
+        categories_res = api_client.get(
+            f"/patients/{patient.id}/charting/note-categories", headers=auth_headers
+        )
+        assert categories_res.status_code == 200, categories_res.text
+        assert categories_res.json()[0]["legacy_category_number"] == 10
+
+        fixed_res = api_client.get(
+            f"/patients/{patient.id}/charting/fixed-notes", headers=auth_headers
+        )
+        assert fixed_res.status_code == 200, fixed_res.text
+        assert fixed_res.json()[0]["legacy_fixed_note_code"] == 500
     finally:
         session.rollback()
         if legacy_code is not None:
@@ -601,9 +662,12 @@ def test_charting_export_truncates_rows(api_client, auth_headers, monkeypatch):
     "endpoint",
     [
         "/patients/1/charting/perio-probes",
+        "/patients/1/charting/perio-plaque",
         "/patients/1/charting/bpe",
         "/patients/1/charting/bpe-furcations",
         "/patients/1/charting/notes",
+        "/patients/1/charting/note-categories",
+        "/patients/1/charting/fixed-notes",
         "/patients/1/charting/tooth-surfaces",
         "/patients/1/charting/meta",
     ],

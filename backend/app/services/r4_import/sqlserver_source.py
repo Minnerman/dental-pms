@@ -3204,6 +3204,8 @@ class R4SqlServerSource:
         patient_col = self._pick_column("BPE", ["PatientCode"])
         bpe_id_col = self._pick_column("BPE", ["BPEID", "BPEId", "ID"])
         date_col = self._pick_column("BPE", ["Date", "BPEDate", "RecordedDate", "EntryDate"])
+        notes_col = self._pick_column("BPE", ["Notes", "Note", "Description"])
+        user_col = self._pick_column("BPE", ["UserCode", "EnteredBy"])
         sextant_cols = [
             self._pick_column("BPE", [f"Sextant{i}", f"Sextant{i}Score"]) for i in range(1, 7)
         ]
@@ -3248,6 +3250,10 @@ class R4SqlServerSource:
                 select_cols.append(f"{patient_col} AS patient_code")
             if date_col:
                 select_cols.append(f"{date_col} AS recorded_at")
+            if notes_col:
+                select_cols.append(f"{notes_col} AS notes")
+            if user_col:
+                select_cols.append(f"{user_col} AS user_code")
             for idx, col in enumerate(sextant_cols, start=1):
                 if col:
                     select_cols.append(f"{col} AS sextant_{idx}")
@@ -3277,6 +3283,8 @@ class R4SqlServerSource:
                     sextant_4=int(row["sextant_4"]) if row.get("sextant_4") is not None else None,
                     sextant_5=int(row["sextant_5"]) if row.get("sextant_5") is not None else None,
                     sextant_6=int(row["sextant_6"]) if row.get("sextant_6") is not None else None,
+                    notes=(row.get("notes") or "").strip() or None,
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
                 )
                 if remaining is not None:
                     remaining -= 1
@@ -3292,6 +3300,10 @@ class R4SqlServerSource:
         bpe_id_col = self._pick_column("BPEFurcation", ["BPEID", "BPEId"])
         tooth_col = self._pick_column("BPEFurcation", ["Tooth"])
         furcation_col = self._pick_column("BPEFurcation", ["Furcation", "FurcationScore"])
+        sextant_col = self._pick_column("BPEFurcation", ["Sextant", "SextantScore"])
+        date_col = self._pick_column("BPEFurcation", ["Date", "RecordedDate", "EntryDate"])
+        notes_col = self._pick_column("BPEFurcation", ["Notes", "Note", "Description"])
+        user_col = self._pick_column("BPEFurcation", ["UserCode", "EnteredBy"])
         bpe_patient_col = None
         bpe_id_join_col = None
         join_sql = ""
@@ -3361,6 +3373,14 @@ class R4SqlServerSource:
                 select_cols.append(f"bf.{tooth_col} AS tooth")
             if furcation_col:
                 select_cols.append(f"bf.{furcation_col} AS furcation")
+            if sextant_col:
+                select_cols.append(f"bf.{sextant_col} AS sextant")
+            if date_col:
+                select_cols.append(f"bf.{date_col} AS recorded_at")
+            if notes_col:
+                select_cols.append(f"bf.{notes_col} AS notes")
+            if user_col:
+                select_cols.append(f"bf.{user_col} AS user_code")
             rows = self._query(
                 f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.BPEFurcation bf WITH (NOLOCK) "
                 f"{join_sql} {where_sql} ORDER BY bf.{id_col or bpe_id_col} ASC",
@@ -3385,6 +3405,10 @@ class R4SqlServerSource:
                     patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
                     tooth=int(tooth) if tooth is not None else None,
                     furcation=int(furcation) if furcation is not None else None,
+                    sextant=int(row["sextant"]) if row.get("sextant") is not None else None,
+                    recorded_at=row.get("recorded_at"),
+                    notes=(row.get("notes") or "").strip() or None,
+                    user_code=int(row["user_code"]) if row.get("user_code") is not None else None,
                 )
                 if remaining is not None:
                     remaining -= 1
@@ -3505,6 +3529,24 @@ class R4SqlServerSource:
         plaque_col = self._pick_column("PerioPlaque", ["Plaque", "PlaqueScore"])
         bleed_col = self._pick_column("PerioPlaque", ["Bleeding", "BleedingScore"])
         date_col = self._pick_column("PerioPlaque", ["Date", "RecordedDate"])
+        join_sql = ""
+        patient_expr = None
+        if patient_col:
+            patient_expr = f"pp.{patient_col}"
+        else:
+            trans_ref_col = self._pick_column("Transactions", ["RefId"])
+            trans_patient_col = self._pick_column("Transactions", ["PatientCode"])
+            if trans_ref_col and trans_patient_col:
+                join_sql = (
+                    "JOIN ("
+                    f"SELECT {trans_ref_col} AS ref_id, MIN({trans_patient_col}) AS patient_code "
+                    "FROM dbo.Transactions WITH (NOLOCK) "
+                    f"WHERE {trans_patient_col} IS NOT NULL "
+                    f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {trans_patient_col}) = 1"
+                    ") t ON t.ref_id = pp."
+                    + trans_col
+                )
+                patient_expr = "t.patient_code"
         last_trans: int | None = None
         last_tooth: int | None = None
         remaining = limit
@@ -3516,9 +3558,9 @@ class R4SqlServerSource:
                 batch_size = min(batch_size, remaining)
             where_parts: list[str] = []
             params: list[Any] = []
-            if patient_col:
+            if patient_expr:
                 range_clause, range_params = self._build_range_filter(
-                    patient_col,
+                    patient_expr,
                     patients_from,
                     patients_to,
                 )
@@ -3531,18 +3573,18 @@ class R4SqlServerSource:
                 )
                 params.extend([last_trans, last_trans, last_tooth])
             where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
-            select_cols = [f"{trans_col} AS trans_id", f"{tooth_col} AS tooth"]
-            if patient_col:
-                select_cols.append(f"{patient_col} AS patient_code")
+            select_cols = [f"pp.{trans_col} AS trans_id", f"pp.{tooth_col} AS tooth"]
+            if patient_expr:
+                select_cols.append(f"{patient_expr} AS patient_code")
             if plaque_col:
-                select_cols.append(f"{plaque_col} AS plaque")
+                select_cols.append(f"pp.{plaque_col} AS plaque")
             if bleed_col:
-                select_cols.append(f"{bleed_col} AS bleeding")
+                select_cols.append(f"pp.{bleed_col} AS bleeding")
             if date_col:
-                select_cols.append(f"{date_col} AS recorded_at")
+                select_cols.append(f"pp.{date_col} AS recorded_at")
             rows = self._query(
-                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioPlaque WITH (NOLOCK) "
-                f"{where_sql} ORDER BY {trans_col} ASC, {tooth_col} ASC",
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.PerioPlaque pp WITH (NOLOCK) "
+                f"{join_sql} {where_sql} ORDER BY pp.{trans_col} ASC, pp.{tooth_col} ASC",
                 [batch_size, *params],
             )
             if not rows:

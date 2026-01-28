@@ -6,6 +6,8 @@
     "tooth": 16,
     "furcation": 2,
     "sextant": 1,
-    "recorded_at": "2026-01-03T09:00:00Z"
+    "recorded_at": "2026-01-03T09:00:00Z",
+    "notes": "Furcation detail",
+    "user_code": 702
   }
 ]
