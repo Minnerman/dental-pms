@@ -1,0 +1,67 @@
+{
+  "appointments_imported": 0,
+  "appointments_mapped": 10,
+  "appointments_missing_patient_code": 5,
+  "appointments_not_imported": 50,
+  "appointments_total": 50,
+  "appointments_unmapped": 40,
+  "appointments_with_patient_code": 45,
+  "generated_at": "2026-01-28T16:26:25+00:00",
+  "source": "sqlserver",
+  "top_unmapped_patient_codes": [
+    {
+      "count": 2,
+      "patient_code": 1007995
+    },
+    {
+      "count": 1,
+      "patient_code": 1016090
+    },
+    {
+      "count": 1,
+      "patient_code": 1015376
+    },
+    {
+      "count": 1,
+      "patient_code": 1011407
+    },
+    {
+      "count": 1,
+      "patient_code": 1012098
+    },
+    {
+      "count": 1,
+      "patient_code": 1010864
+    },
+    {
+      "count": 1,
+      "patient_code": 1013684
+    },
+    {
+      "count": 1,
+      "patient_code": 1015469
+    },
+    {
+      "count": 1,
+      "patient_code": 1012223
+    },
+    {
+      "count": 1,
+      "patient_code": 1014004
+    }
+  ],
+  "unmapped_reason_definitions": {
+    "mapped_to_deleted_patient": "Mapping points to a soft-deleted patient.",
+    "missing_patient_code": "R4 appointment row has no patient code.",
+    "missing_patient_mapping": "No r4_patient_mappings entry for patient_code."
+  },
+  "unmapped_reasons": {
+    "missing_patient_code": 5,
+    "missing_patient_mapping": 35
+  },
+  "window": {
+    "from": "2025-01-01",
+    "limit": 50,
+    "to": "2026-01-28"
+  }
+}
