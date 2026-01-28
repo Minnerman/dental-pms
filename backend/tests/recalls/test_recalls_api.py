@@ -1,17 +1,84 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 import re
+from uuid import uuid4
 
 import httpx
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
+from sqlalchemy import select
 
 from app.routers import recalls as recalls_router
+from app.db.session import SessionLocal
+from app.models.patient import Patient
+from app.models.patient_recall import PatientRecall, PatientRecallKind, PatientRecallStatus
+from app.models.patient_recall_communication import (
+    PatientRecallCommunication,
+    PatientRecallCommunicationChannel,
+    PatientRecallCommunicationDirection,
+    PatientRecallCommunicationStatus,
+)
+from app.models.user import User
+
+SEED_DUE_DATE = date(2099, 1, 15)
 
 
-def _get_first_recall_id(client: httpx.Client, headers: dict[str, str]) -> int:
-    response = client.get("/recalls", headers=headers, params={"limit": 1})
+@pytest.fixture(scope="module")
+def recall_seed():
+    session = SessionLocal()
+    try:
+        actor = session.scalar(select(User).order_by(User.id.asc()).limit(1))
+        assert actor is not None
+        patient = Patient(
+            first_name="Recall",
+            last_name=f"Seed-{uuid4().hex[:8]}",
+            created_by_user_id=actor.id,
+            updated_by_user_id=actor.id,
+        )
+        session.add(patient)
+        session.flush()
+        recall = PatientRecall(
+            patient_id=patient.id,
+            kind=PatientRecallKind.exam,
+            due_date=SEED_DUE_DATE,
+            status=PatientRecallStatus.due,
+            notes="Seeded recall",
+            created_by_user_id=actor.id,
+            updated_by_user_id=actor.id,
+        )
+        session.add(recall)
+        session.flush()
+        contact = PatientRecallCommunication(
+            patient_id=patient.id,
+            recall_id=recall.id,
+            channel=PatientRecallCommunicationChannel.email,
+            direction=PatientRecallCommunicationDirection.outbound,
+            status=PatientRecallCommunicationStatus.sent,
+            notes="seeded",
+            contacted_at=datetime.now(timezone.utc) - timedelta(days=2),
+            created_by_user_id=actor.id,
+        )
+        session.add(contact)
+        session.commit()
+        return {"recall_id": recall.id, "due_date": SEED_DUE_DATE}
+    finally:
+        session.close()
+
+
+@pytest.fixture(scope="module")
+def recall_params(recall_seed):
+    due_date = recall_seed["due_date"]
+    return {"start": due_date.isoformat(), "end": due_date.isoformat()}
+
+
+def _get_first_recall_id(
+    client: httpx.Client, headers: dict[str, str], params: dict | None = None
+) -> int:
+    merged_params = {"limit": 1}
+    if params:
+        merged_params.update(params)
+    response = client.get("/recalls", headers=headers, params=merged_params)
     assert response.status_code == 200, response.text
     data = response.json()
     assert isinstance(data, list)
@@ -31,27 +98,35 @@ def _assert_safe_filename(value: str) -> None:
     assert len(value) <= recalls_router.MAX_EXPORT_FILENAME_LENGTH
 
 
-def test_recalls_list_returns_rows(api_client, auth_headers):
-    response = api_client.get("/recalls", headers=auth_headers, params={"limit": 1})
+def test_recalls_list_returns_rows(api_client, auth_headers, recall_params):
+    response = api_client.get(
+        "/recalls", headers=auth_headers, params={**recall_params, "limit": 1}
+    )
     assert response.status_code == 200, response.text
     data = response.json()
     assert isinstance(data, list)
     assert data, "Expected seeded recalls"
 
 
-def test_export_count_returns_int(api_client, auth_headers):
-    response = api_client.get("/recalls/export_count", headers=auth_headers)
+def test_export_count_returns_int(api_client, auth_headers, recall_params):
+    response = api_client.get(
+        "/recalls/export_count", headers=auth_headers, params=recall_params
+    )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert isinstance(payload.get("count"), int)
 
-    response_repeat = api_client.get("/recalls/export_count", headers=auth_headers)
+    response_repeat = api_client.get(
+        "/recalls/export_count", headers=auth_headers, params=recall_params
+    )
     assert response_repeat.status_code == 200, response_repeat.text
     assert response_repeat.json().get("count") == payload.get("count")
 
 
-def test_export_count_filter_affects_results(api_client, auth_headers):
-    total_resp = api_client.get("/recalls/export_count", headers=auth_headers)
+def test_export_count_filter_affects_results(api_client, auth_headers, recall_params):
+    total_resp = api_client.get(
+        "/recalls/export_count", headers=auth_headers, params=recall_params
+    )
     assert total_resp.status_code == 200, total_resp.text
     total = total_resp.json().get("count")
     assert isinstance(total, int)
@@ -60,7 +135,7 @@ def test_export_count_filter_affects_results(api_client, auth_headers):
     contacted_resp = api_client.get(
         "/recalls/export_count",
         headers=auth_headers,
-        params={"contact_state": "contacted"},
+        params={**recall_params, "contact_state": "contacted"},
     )
     assert contacted_resp.status_code == 200, contacted_resp.text
     contacted = contacted_resp.json().get("count")
@@ -70,7 +145,7 @@ def test_export_count_filter_affects_results(api_client, auth_headers):
     never_resp = api_client.get(
         "/recalls/export_count",
         headers=auth_headers,
-        params={"contact_state": "never"},
+        params={**recall_params, "contact_state": "never"},
     )
     assert never_resp.status_code == 200, never_resp.text
     never = never_resp.json().get("count")
@@ -78,8 +153,10 @@ def test_export_count_filter_affects_results(api_client, auth_headers):
     assert never == 0
 
 
-def test_export_count_includes_filenames(api_client, auth_headers):
-    response = api_client.get("/recalls/export_count", headers=auth_headers)
+def test_export_count_includes_filenames(api_client, auth_headers, recall_params):
+    response = api_client.get(
+        "/recalls/export_count", headers=auth_headers, params=recall_params
+    )
     assert response.status_code == 200, response.text
     payload = response.json()
     csv_name = payload.get("suggested_filename_csv")
@@ -92,11 +169,11 @@ def test_export_count_includes_filenames(api_client, auth_headers):
     _assert_safe_filename(zip_name)
 
 
-def test_recalls_list_includes_last_contact_fields(api_client, auth_headers):
+def test_recalls_list_includes_last_contact_fields(api_client, auth_headers, recall_params):
     response = api_client.get(
         "/recalls",
         headers=auth_headers,
-        params={"contact_state": "contacted", "limit": 5},
+        params={**recall_params, "contact_state": "contacted", "limit": 5},
     )
     assert response.status_code == 200, response.text
     data = response.json()
@@ -105,8 +182,8 @@ def test_recalls_list_includes_last_contact_fields(api_client, auth_headers):
     assert any(row.get("last_contacted_at") for row in data)
 
 
-def test_recalls_last_contact_filters(api_client, auth_headers):
-    recall_id = _get_first_recall_id(api_client, auth_headers)
+def test_recalls_last_contact_filters(api_client, auth_headers, recall_params):
+    recall_id = _get_first_recall_id(api_client, auth_headers, recall_params)
     contacted_at = datetime.now(timezone.utc).isoformat()
     response = api_client.post(
         f"/recalls/{recall_id}/contact",
@@ -118,7 +195,7 @@ def test_recalls_last_contact_filters(api_client, auth_headers):
     recent = api_client.get(
         "/recalls",
         headers=auth_headers,
-        params={"last_contact": "7d", "method": "phone"},
+        params={**recall_params, "last_contact": "7d", "method": "phone"},
     )
     assert recent.status_code == 200, recent.text
     recent_ids = {row.get("id") for row in recent.json()}
@@ -127,15 +204,15 @@ def test_recalls_last_contact_filters(api_client, auth_headers):
     older = api_client.get(
         "/recalls",
         headers=auth_headers,
-        params={"last_contact": "older30d", "method": "phone"},
+        params={**recall_params, "last_contact": "older30d", "method": "phone"},
     )
     assert older.status_code == 200, older.text
     older_ids = {row.get("id") for row in older.json()}
     assert recall_id not in older_ids
 
 
-def test_contact_validation_other_detail(api_client, auth_headers):
-    recall_id = _get_first_recall_id(api_client, auth_headers)
+def test_contact_validation_other_detail(api_client, auth_headers, recall_params):
+    recall_id = _get_first_recall_id(api_client, auth_headers, recall_params)
 
     missing_detail = api_client.post(
         f"/recalls/{recall_id}/contact",
@@ -152,8 +229,10 @@ def test_contact_validation_other_detail(api_client, auth_headers):
     assert valid.status_code == 200, valid.text
 
 
-def test_export_csv_returns_csv(api_client, auth_headers):
-    response = api_client.get("/recalls/export.csv", headers=auth_headers)
+def test_export_csv_returns_csv(api_client, auth_headers, recall_params):
+    response = api_client.get(
+        "/recalls/export.csv", headers=auth_headers, params=recall_params
+    )
     assert response.status_code == 200, response.text
     content_type = response.headers.get("content-type", "")
     assert "text/csv" in content_type
@@ -162,11 +241,11 @@ def test_export_csv_returns_csv(api_client, auth_headers):
     assert "patient_id" in body[0]
 
 
-def test_export_filenames_match_suggested(api_client, auth_headers):
+def test_export_filenames_match_suggested(api_client, auth_headers, recall_params):
     count_resp = api_client.get(
         "/recalls/export_count",
         headers=auth_headers,
-        params={"page_only": True},
+        params={**recall_params, "page_only": True},
     )
     assert count_resp.status_code == 200, count_resp.text
     payload = count_resp.json()
@@ -176,7 +255,7 @@ def test_export_filenames_match_suggested(api_client, auth_headers):
     export_csv_resp = api_client.get(
         "/recalls/export.csv",
         headers=auth_headers,
-        params={"page_only": True},
+        params={**recall_params, "page_only": True},
     )
     assert export_csv_resp.status_code == 200, export_csv_resp.text
     assert _get_filename_from_disposition(export_csv_resp.headers) == suggested_csv
@@ -184,14 +263,16 @@ def test_export_filenames_match_suggested(api_client, auth_headers):
     export_zip_resp = api_client.get(
         "/recalls/letters.zip",
         headers=auth_headers,
-        params={"page_only": True},
+        params={**recall_params, "page_only": True},
     )
     assert export_zip_resp.status_code == 200, export_zip_resp.text
     assert _get_filename_from_disposition(export_zip_resp.headers) == suggested_zip
 
 
-def test_export_csv_creates_audit_log(api_client, auth_headers):
-    export_resp = api_client.get("/recalls/export.csv", headers=auth_headers)
+def test_export_csv_creates_audit_log(api_client, auth_headers, recall_params):
+    export_resp = api_client.get(
+        "/recalls/export.csv", headers=auth_headers, params=recall_params
+    )
     assert export_resp.status_code == 200, export_resp.text
 
     audit_resp = api_client.get(
@@ -204,11 +285,11 @@ def test_export_csv_creates_audit_log(api_client, auth_headers):
     assert any(log.get("action") == "recalls.export_csv" for log in logs)
 
 
-def test_export_csv_respects_contact_filters(api_client, auth_headers):
+def test_export_csv_respects_contact_filters(api_client, auth_headers, recall_params):
     contacted_resp = api_client.get(
         "/recalls/export.csv",
         headers=auth_headers,
-        params={"contact_state": "contacted"},
+        params={**recall_params, "contact_state": "contacted"},
     )
     assert contacted_resp.status_code == 200, contacted_resp.text
     contacted_lines = contacted_resp.text.strip().splitlines()
@@ -217,7 +298,7 @@ def test_export_csv_respects_contact_filters(api_client, auth_headers):
     never_resp = api_client.get(
         "/recalls/export.csv",
         headers=auth_headers,
-        params={"contact_state": "never"},
+        params={**recall_params, "contact_state": "never"},
     )
     assert never_resp.status_code == 200, never_resp.text
     never_lines = never_resp.text.strip().splitlines()
@@ -270,18 +351,24 @@ def _assert_export_audit_payload(entry: dict, export_type: str):
         assert key in after_json
 
 
-def test_export_csv_audit_entry(api_client, auth_headers):
-    response = api_client.get("/recalls/export.csv", headers=auth_headers)
+def test_export_csv_audit_entry(api_client, auth_headers, recall_params):
+    response = api_client.get(
+        "/recalls/export.csv", headers=auth_headers, params=recall_params
+    )
     assert response.status_code == 200, response.text
     entry = _fetch_export_audit(api_client, auth_headers, "csv")
     _assert_export_audit_payload(entry, "csv")
 
 
-def test_export_csv_audit_includes_filters(api_client, auth_headers):
+def test_export_csv_audit_includes_filters(api_client, auth_headers, recall_params):
     response = api_client.get(
         "/recalls/export.csv",
         headers=auth_headers,
-        params={"contact_state": "contacted", "last_contact": "7d"},
+        params={
+            **recall_params,
+            "contact_state": "contacted",
+            "last_contact": "7d",
+        },
     )
     assert response.status_code == 200, response.text
     entry = _fetch_export_audit(api_client, auth_headers, "csv")
@@ -290,8 +377,10 @@ def test_export_csv_audit_includes_filters(api_client, auth_headers):
     assert filters.get("last_contact") == "7d"
 
 
-def test_export_letters_zip_audit_entry(api_client, auth_headers):
-    response = api_client.get("/recalls/letters.zip", headers=auth_headers)
+def test_export_letters_zip_audit_entry(api_client, auth_headers, recall_params):
+    response = api_client.get(
+        "/recalls/letters.zip", headers=auth_headers, params=recall_params
+    )
     assert response.status_code == 200, response.text
     entry = _fetch_export_audit(api_client, auth_headers, "letters_zip")
     _assert_export_audit_payload(entry, "letters_zip")
