@@ -135,3 +135,25 @@ Top remaining unmapped codes (after):
 - 1013684 (1)
 - 1015469 (1)
 - 1012223 (1)
+
+## Stage 173c remediation pass (2026-01-28)
+
+- Mappings added: 1 (legacy_patient_code 1012195 -> patient_id 321)
+- Report after: `docs/r4/R4_LINKAGE_REPORT_2025-01-01_2026-01-28_AFTER_1012195_2026-01-28.json`
+
+Before → After (same window):
+- missing_patient_mapping: 45 → 35
+- missing_patient_code: 5 → 5
+- mapped: 0 → 10
+
+Top remaining unmapped codes (after):
+- 1007995 (2)
+- 1016090 (1)
+- 1015376 (1)
+- 1011407 (1)
+- 1012098 (1)
+- 1010864 (1)
+- 1013684 (1)
+- 1015469 (1)
+- 1012223 (1)
+- 1014004 (1)
