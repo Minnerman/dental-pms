@@ -61,6 +61,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-01-28: Stage 169 linkage remediation queue + manual override scaffolding.
+  - Added Postgres tables `r4_linkage_issues` and `r4_manual_mappings` with idempotent loader script.
+  - New loader: `backend/app/scripts/r4_linkage_queue_load.py` (reads report CSV/JSON or runs report).
+  - Pilot report outputs stored in `docs/r4/R4_LINKAGE_REPORT_2025-01-01_2026-01-28.json` + `.csv`.
+  - Doc: `docs/r4/R4_LINKAGE_REMEDIATION.md`.
 - 2026-01-28: Stage 168 R4 linkage quality report (appointments → mappings).
   - Added `backend/app/scripts/r4_linkage_report.py` to summarize linkage, reasons, and top unmapped patient codes (JSON + optional CSV).
   - Run: `docker compose exec -T backend python -m app.scripts.r4_linkage_report --output-json /tmp/r4_linkage.json --output-csv /tmp/r4_unmapped.csv`.
