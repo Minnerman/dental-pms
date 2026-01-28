@@ -60,3 +60,20 @@ Use `r4_manual_mappings` for a small, explicit set of mappings:
 - One row per legacy patient code (or person key).
 - Include a note with the decision rationale and source evidence.
 - Do not auto-guess mappings; only human-confirmed entries go here.
+
+### SQL example (manual override)
+```
+insert into r4_manual_mappings (id, legacy_source, legacy_patient_code, target_patient_id, note)
+values (
+  gen_random_uuid(),
+  'r4',
+  1012195,
+  12345,
+  'Manual override: verified in PMS'
+);
+```
+
+### Effect on report/queue/import
+- Linkage report treats override-resolved patient codes as mapped.
+- Queue loader skips missing mappings when an override resolves the patient code.
+- R4 charting and treatment plan imports treat override-resolved codes as mapped (no skips).

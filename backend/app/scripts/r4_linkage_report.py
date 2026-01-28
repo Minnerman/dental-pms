@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.models.patient import Patient
 from app.models.r4_appointment import R4Appointment
+from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.linkage_report import (
@@ -33,6 +34,16 @@ def _load_patient_mappings(session, legacy_source: str) -> dict[int, int]:
     rows = session.execute(
         select(R4PatientMapping.legacy_patient_code, R4PatientMapping.patient_id).where(
             R4PatientMapping.legacy_source == legacy_source
+        )
+    ).all()
+    return {int(code): int(patient_id) for code, patient_id in rows}
+
+
+def _load_manual_mappings(session, legacy_source: str) -> dict[int, int]:
+    rows = session.execute(
+        select(R4ManualMapping.legacy_patient_code, R4ManualMapping.target_patient_id).where(
+            R4ManualMapping.legacy_source == legacy_source,
+            R4ManualMapping.legacy_patient_code.is_not(None),
         )
     ).all()
     return {int(code): int(patient_id) for code, patient_id in rows}
@@ -140,6 +151,7 @@ def main() -> int:
     session = SessionLocal()
     try:
         patient_mappings = _load_patient_mappings(session, args.legacy_source)
+        manual_mappings = _load_manual_mappings(session, args.legacy_source)
         deleted_patient_ids = _load_deleted_patient_ids(session)
         imported_appointment_ids = _load_imported_appointment_ids(
             session, args.legacy_source
@@ -149,6 +161,7 @@ def main() -> int:
 
     report = R4LinkageReportBuilder(
         patient_mappings=patient_mappings,
+        manual_mappings=manual_mappings,
         deleted_patient_ids=deleted_patient_ids,
         imported_appointment_ids=imported_appointment_ids,
         top_limit=args.top,

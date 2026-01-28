@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-01-28: Stage 170 manual mapping overrides applied to linkage resolution.
+  - Manual mappings now resolve patient codes in linkage report/queue and R4 charting/treatment plan imports.
+  - Added resolver utility with override logging (non-PHI).
+  - Docs updated with override SQL example.
 - 2026-01-28: Stage 169 linkage remediation queue + manual override scaffolding.
   - Added Postgres tables `r4_linkage_issues` and `r4_manual_mappings` with idempotent loader script.
   - New loader: `backend/app/scripts/r4_linkage_queue_load.py` (reads report CSV/JSON or runs report).

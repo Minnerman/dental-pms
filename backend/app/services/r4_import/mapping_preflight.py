@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.r4_patient_mapping import R4PatientMapping
+from app.services.r4_import.mapping_resolver import resolve_patient_id_from_r4_patient_code
 from app.services.r4_import.patient_importer import import_r4_patients
 from app.services.r4_import.source import R4Source
 
 
 def mapping_exists(session: Session, legacy_source: str, patient_code: int) -> bool:
     return (
-        session.scalar(
-            select(R4PatientMapping.id).where(
-                R4PatientMapping.legacy_source == legacy_source,
-                R4PatientMapping.legacy_patient_code == patient_code,
-            )
+        resolve_patient_id_from_r4_patient_code(
+            session, patient_code, legacy_source=legacy_source
         )
         is not None
     )

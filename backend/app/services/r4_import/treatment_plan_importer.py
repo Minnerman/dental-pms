@@ -25,6 +25,7 @@ from app.services.r4_import.types import (
     R4TreatmentPlanItem as R4TreatmentPlanItemPayload,
     R4TreatmentPlanReview as R4TreatmentPlanReviewPayload,
 )
+from app.services.r4_import.mapping_resolver import resolve_patient_id_from_r4_patient_code
 
 
 @dataclass
@@ -601,6 +602,13 @@ def _resolve_patient(
 ) -> Patient | None:
     if patient_code in patients_by_code:
         return patients_by_code[patient_code]
+    manual_or_mapping_id = resolve_patient_id_from_r4_patient_code(
+        session, patient_code, legacy_source=legacy_source
+    )
+    if manual_or_mapping_id is not None:
+        patient = session.get(Patient, manual_or_mapping_id)
+        patients_by_code[patient_code] = patient
+        return patient
     patient = session.scalar(
         select(Patient).where(
             Patient.legacy_source == legacy_source,
