@@ -63,6 +63,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 ## Recent fixes
 - 2026-01-28: Stage 172 admin UI for R4 manual mappings.
   - Added minimal admin page to list/create/delete manual mappings.
+- 2026-01-28: Stage 173c manual mapping resolution report.
+  - PR #172 merged.
+  - Report: `docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md`.
+  - Summary: total=10 resolved=2 none=8.
 - 2026-01-28: Stage 171 admin API for R4 manual mappings.
   - Added admin-only endpoints for listing/creating manual overrides (external role blocked).
   - Docs updated with curl examples for the override API.
