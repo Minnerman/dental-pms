@@ -267,6 +267,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       ? [
           { href: "/admin/r4/treatment-plans", label: "R4 Plans" },
           { href: "/admin/r4/patient-mappings", label: "R4 Mappings" },
+          { href: "/admin/r4/manual-mappings", label: "R4 Manual Mappings" },
         ]
       : []),
     ...(isSuperadmin ? [{ href: "/settings/profile", label: "Practice profile" }] : []),

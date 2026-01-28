@@ -94,3 +94,8 @@ List overrides:
 curl "$API_URL/admin/r4/manual-mappings?legacy_patient_code=1012195" \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+### UI option (staff only)
+Use the internal admin page:
+- `/admin/r4/manual-mappings`
+- View, add, and delete manual mappings (no PHI shown).
