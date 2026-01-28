@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timezone
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
@@ -10,6 +11,7 @@ from app.deps import require_admin
 from app.models.appointment import Appointment
 from app.models.legacy_resolution_event import LegacyResolutionEvent
 from app.models.patient import Patient
+from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import (
     R4TreatmentPlan,
@@ -30,6 +32,10 @@ from app.schemas.r4_admin import (
     R4TreatmentPlanDetail,
     R4TreatmentPlanSummary,
     R4UnmappedPlanPatientCode,
+)
+from app.schemas.r4_manual_mappings import (
+    R4ManualMappingCreate,
+    R4ManualMappingOut,
 )
 from app.services.r4_import.treatment_plan_importer import (
     backfill_r4_treatment_plan_patients_chunked,
@@ -307,6 +313,85 @@ def create_r4_patient_mapping(
     db.commit()
     db.refresh(mapping)
     return mapping
+
+
+@r4_router.get("/manual-mappings", response_model=list[R4ManualMappingOut])
+def list_r4_manual_mappings(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+    legacy_patient_code: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    stmt = select(R4ManualMapping).where(R4ManualMapping.legacy_source == "r4")
+    if legacy_patient_code is not None:
+        stmt = stmt.where(R4ManualMapping.legacy_patient_code == legacy_patient_code)
+    stmt = stmt.order_by(R4ManualMapping.created_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
+
+
+@r4_router.post("/manual-mappings", response_model=R4ManualMappingOut)
+def create_r4_manual_mapping(
+    payload: R4ManualMappingCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    patient = db.get(Patient, payload.target_patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    existing = db.scalar(
+        select(R4ManualMapping).where(
+            R4ManualMapping.legacy_source == "r4",
+            R4ManualMapping.legacy_patient_code == payload.legacy_patient_code,
+        )
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="Manual mapping already exists for legacy patient code"
+        )
+
+    mapping = R4ManualMapping(
+        legacy_source="r4",
+        legacy_patient_code=payload.legacy_patient_code,
+        target_patient_id=payload.target_patient_id,
+        note=payload.note,
+    )
+    db.add(mapping)
+    db.commit()
+    db.refresh(mapping)
+
+    logger.info(
+        "R4 manual mapping created",
+        extra={
+            "actor_id": admin.id,
+            "legacy_patient_code": payload.legacy_patient_code,
+            "target_patient_id": payload.target_patient_id,
+        },
+    )
+    return mapping
+
+
+@r4_router.delete("/manual-mappings/{mapping_id}", status_code=204)
+def delete_r4_manual_mapping(
+    mapping_id: UUID,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    mapping = db.get(R4ManualMapping, mapping_id)
+    if not mapping or mapping.legacy_source != "r4":
+        raise HTTPException(status_code=404, detail="Manual mapping not found")
+
+    db.delete(mapping)
+    db.commit()
+    logger.info(
+        "R4 manual mapping deleted",
+        extra={
+            "actor_id": admin.id,
+            "legacy_patient_code": mapping.legacy_patient_code,
+            "target_patient_id": mapping.target_patient_id,
+        },
+    )
+    return None
 
 
 @r4_router.post(

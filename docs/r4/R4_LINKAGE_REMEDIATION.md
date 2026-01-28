@@ -77,3 +77,20 @@ values (
 - Linkage report treats override-resolved patient codes as mapped.
 - Queue loader skips missing mappings when an override resolves the patient code.
 - R4 charting and treatment plan imports treat override-resolved codes as mapped (no skips).
+
+### Admin API (staff only)
+Requires an admin/staff role (external users are blocked with 403).
+
+Create override:
+```
+curl -X POST "$API_URL/admin/r4/manual-mappings" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"legacy_patient_code":1012195,"target_patient_id":12345,"note":"Manual override"}'
+```
+
+List overrides:
+```
+curl "$API_URL/admin/r4/manual-mappings?legacy_patient_code=1012195" \
+  -H "Authorization: Bearer $TOKEN"
+```
