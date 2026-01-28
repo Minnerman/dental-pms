@@ -61,6 +61,9 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-01-28: Stage 171 admin API for R4 manual mappings.
+  - Added admin-only endpoints for listing/creating manual overrides (external role blocked).
+  - Docs updated with curl examples for the override API.
 - 2026-01-28: Stage 170 manual mapping overrides applied to linkage resolution.
   - Manual mappings now resolve patient codes in linkage report/queue and R4 charting/treatment plan imports.
   - Added resolver utility with override logging (non-PHI).
