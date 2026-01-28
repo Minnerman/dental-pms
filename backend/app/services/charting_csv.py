@@ -29,7 +29,10 @@ ENTITY_ALIASES = {
     "bpe_entries": "bpe",
     "bpe_furcations": "bpe_furcations",
     "perio_probes": "perio_probes",
+    "perio_plaque": "perio_plaque",
     "tooth_surfaces": "tooth_surfaces",
+    "fixed_notes": "fixed_notes",
+    "note_categories": "note_categories",
 }
 
 ENTITY_COLUMNS = {
@@ -77,12 +80,35 @@ ENTITY_COLUMNS = {
         "bleeding",
         "plaque",
     ],
+    "perio_plaque": [
+        "patient_code",
+        "legacy_plaque_key",
+        "legacy_trans_id",
+        "recorded_at",
+        "tooth",
+        "plaque",
+        "bleeding",
+    ],
     "tooth_surfaces": [
         "legacy_tooth_id",
         "legacy_surface_no",
         "label",
         "short_label",
         "sort_order",
+    ],
+    "fixed_notes": [
+        "patient_code",
+        "legacy_fixed_note_code",
+        "category_number",
+        "description",
+        "note",
+        "tooth",
+        "surface",
+    ],
+    "note_categories": [
+        "patient_code",
+        "legacy_category_number",
+        "description",
     ],
 }
 
@@ -91,7 +117,10 @@ ENTITY_SORT_KEYS = {
     "bpe": ["patient_code", "recorded_at", "legacy_bpe_id", "legacy_bpe_key"],
     "bpe_furcations": ["patient_code", "recorded_at", "legacy_bpe_id", "tooth", "furcation"],
     "perio_probes": ["patient_code", "recorded_at", "tooth", "probing_point", "legacy_trans_id"],
+    "perio_plaque": ["patient_code", "recorded_at", "tooth", "legacy_trans_id"],
     "tooth_surfaces": ["legacy_tooth_id", "legacy_surface_no"],
+    "fixed_notes": ["patient_code", "legacy_fixed_note_code"],
+    "note_categories": ["patient_code", "legacy_category_number"],
 }
 
 ENTITY_DATE_FIELDS = {
@@ -99,6 +128,7 @@ ENTITY_DATE_FIELDS = {
     "bpe": ["recorded_at"],
     "bpe_furcations": ["recorded_at"],
     "perio_probes": ["recorded_at"],
+    "perio_plaque": ["recorded_at"],
 }
 
 ENTITY_LINKAGE = {
@@ -106,7 +136,10 @@ ENTITY_LINKAGE = {
     "bpe": "bpe.patient_code_or_bpe_id",
     "bpe_furcations": "bpefurcation.bpe_id_join",
     "perio_probes": "transactions.ref_id_join",
+    "perio_plaque": "transactions.ref_id_join",
     "tooth_surfaces": "global_lookup",
+    "fixed_notes": "fixed_note_code_lookup",
+    "note_categories": "note_categories.global_lookup",
 }
 
 
@@ -172,6 +205,20 @@ def normalize_entity_rows(
                     payload.get("patient_code") or patient_code,
                     payload.get("note_number") or payload.get("note_date"),
                 )
+        elif entity == "perio_plaque":
+            trans_id = payload.get("legacy_trans_id") or payload.get("trans_id") or payload.get("transid")
+            payload["legacy_trans_id"] = trans_id
+            if payload.get("legacy_plaque_key") is None:
+                payload["legacy_plaque_key"] = build_legacy_key(
+                    trans_id,
+                    payload.get("tooth"),
+                )
+        elif entity == "fixed_notes":
+            if payload.get("legacy_fixed_note_code") is None and payload.get("fixed_note_code") is not None:
+                payload["legacy_fixed_note_code"] = payload.get("fixed_note_code")
+        elif entity == "note_categories":
+            if payload.get("legacy_category_number") is None and payload.get("category_number") is not None:
+                payload["legacy_category_number"] = payload.get("category_number")
         elif entity == "tooth_surfaces":
             if payload.get("legacy_tooth_id") is None and payload.get("tooth_id") is not None:
                 payload["legacy_tooth_id"] = payload.get("tooth_id")

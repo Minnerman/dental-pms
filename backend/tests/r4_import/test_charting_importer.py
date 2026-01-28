@@ -143,11 +143,28 @@ def test_r4_charting_import_idempotent_and_updates():
         assert stats_first.bpe_created == 1
         assert stats_first.bpe_date_min == "2026-01-03T09:00:00+00:00"
         assert stats_first.bpe_date_max == "2026-01-03T09:00:00+00:00"
+        assert stats_first.perio_plaque_created == 1
+        assert stats_first.fixed_notes_created == 1
+        assert stats_first.note_categories_created == 1
 
         system = session.scalar(
             select(R4ToothSystem).where(R4ToothSystem.legacy_tooth_system_id == 1)
         )
         assert system is not None
+
+        bpe_entry = session.scalar(
+            select(R4BPEEntry).where(R4BPEEntry.legacy_bpe_id == 3001)
+        )
+        assert bpe_entry is not None
+        assert bpe_entry.notes == "BPE summary"
+        assert bpe_entry.user_code == 701
+
+        furcation = session.scalar(
+            select(R4BPEFurcation).where(R4BPEFurcation.legacy_bpe_id == 3001)
+        )
+        assert furcation is not None
+        assert furcation.notes == "Furcation detail"
+        assert furcation.user_code == 702
         system.name = "Legacy"
         system.updated_by_user_id = actor_id
         session.commit()

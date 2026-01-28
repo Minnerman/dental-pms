@@ -81,6 +81,9 @@ class ChartingImportStats:
     perio_plaque_created: int = 0
     perio_plaque_updated: int = 0
     perio_plaque_skipped: int = 0
+    perio_plaque_unlinked_patients: int = 0
+    perio_plaque_null_patients: int = 0
+    perio_plaque_unmapped_patients: int = 0
     patient_notes_created: int = 0
     patient_notes_updated: int = 0
     patient_notes_skipped: int = 0
@@ -238,6 +241,23 @@ def import_r4_charting(
         patients_to=patients_to,
         limit=limit,
     ):
+        if plaque.patient_code is None:
+            stats.perio_plaque_null_patients += 1
+            stats.perio_plaque_unlinked_patients += 1
+            stats.perio_plaque_skipped += 1
+            _log_unlinked_patient("perio_plaque", plaque.trans_id, "null")
+            continue
+        if plaque.patient_code is not None and not _is_patient_mapped(
+            session,
+            legacy_source,
+            plaque.patient_code,
+            mapped_patient_cache,
+        ):
+            stats.perio_plaque_unmapped_patients += 1
+            stats.perio_plaque_unlinked_patients += 1
+            stats.perio_plaque_skipped += 1
+            _log_unlinked_patient("perio_plaque", plaque.trans_id, plaque.patient_code)
+            continue
         _track_patient_code(
             session, legacy_source, plaque.patient_code, mapped_patient_cache, imported_patient_codes
         )

@@ -8,7 +8,7 @@ import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import and_, func, nullslast, select
+from sqlalchemy import and_, func, literal, nullslast, select
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings
@@ -20,7 +20,10 @@ from app.models.r4_charting import (
     R4BPEEntry,
     R4BPEFurcation,
     R4ChartingImportState,
+    R4FixedNote,
+    R4NoteCategory,
     R4PatientNote,
+    R4PerioPlaque,
     R4PerioProbe,
     R4ToothSurface,
 )
@@ -41,11 +44,15 @@ from app.services.audit import log_event
 from app.schemas.r4_charting import (
     ChartingAuditIn,
     PaginatedR4PerioProbeOut,
+    PaginatedR4PerioPlaqueOut,
     PaginatedR4ToothSurfaceOut,
     R4BPEEntryOut,
     R4BPEFurcationOut,
     R4ChartingMetaOut,
+    R4FixedNoteOut,
+    R4NoteCategoryOut,
     R4PatientNoteOut,
+    R4PerioPlaqueOut,
     R4PerioProbeOut,
     R4ToothSurfaceOut,
 )
@@ -259,6 +266,118 @@ def list_perio_probes(
         items = list(db.scalars(stmt))
         has_more = offset + len(items) < total
         payload = PaginatedR4PerioProbeOut(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_more=has_more,
+        ).model_dump()
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=200,
+            duration_ms=duration_ms,
+        )
+        return payload
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
+@router.get("/perio-plaque", response_model=PaginatedR4PerioPlaqueOut)
+def list_perio_plaque(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None, alias="to"),
+    tooth: int | None = Query(default=None, ge=1),
+    plaque: int | None = Query(default=None, ge=0, le=1),
+    bleeding: int | None = Query(default=None, ge=0, le=1),
+) -> dict[str, object]:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        patient_code = _resolve_legacy_patient_code(db, patient_id)
+        if patient_code is None:
+            payload = PaginatedR4PerioPlaqueOut(
+                items=[],
+                total=0,
+                limit=limit,
+                offset=offset,
+                has_more=False,
+            ).model_dump()
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_id,
+                path=request.url.path,
+                method=request.method,
+                status_code=200,
+                duration_ms=duration_ms,
+            )
+            return payload
+        filters = [R4PerioPlaque.legacy_patient_code == patient_code]
+        if from_:
+            filters.append(R4PerioPlaque.recorded_at >= from_)
+        if to:
+            filters.append(R4PerioPlaque.recorded_at <= to)
+        if tooth is not None:
+            filters.append(R4PerioPlaque.tooth == tooth)
+        if plaque is not None:
+            if plaque == 1:
+                filters.append(
+                    and_(
+                        R4PerioPlaque.plaque.is_not(None),
+                        R4PerioPlaque.plaque > 0,
+                    )
+                )
+            else:
+                filters.append(R4PerioPlaque.plaque == 0)
+        if bleeding is not None:
+            if bleeding == 1:
+                filters.append(
+                    and_(
+                        R4PerioPlaque.bleeding.is_not(None),
+                        R4PerioPlaque.bleeding > 0,
+                    )
+                )
+            else:
+                filters.append(R4PerioPlaque.bleeding == 0)
+        total = db.scalar(select(func.count()).select_from(R4PerioPlaque).where(*filters))
+        total = int(total or 0)
+        stmt = (
+            select(R4PerioPlaque)
+            .where(*filters)
+            .order_by(
+                nullslast(R4PerioPlaque.recorded_at.asc()),
+                nullslast(R4PerioPlaque.tooth.asc()),
+                nullslast(R4PerioPlaque.legacy_trans_id.asc()),
+                R4PerioPlaque.legacy_plaque_key.asc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        items = list(db.scalars(stmt))
+        has_more = offset + len(items) < total
+        payload = PaginatedR4PerioPlaqueOut(
             items=items,
             total=total,
             limit=limit,
@@ -507,6 +626,117 @@ def list_patient_notes(
         raise
 
 
+@router.get("/note-categories", response_model=list[R4NoteCategoryOut])
+def list_note_categories(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+) -> list[R4NoteCategory]:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        patient_code = _resolve_legacy_patient_code(db, patient_id)
+        if patient_code is None:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_id,
+                path=request.url.path,
+                method=request.method,
+                status_code=200,
+                duration_ms=duration_ms,
+            )
+            return []
+        stmt = select(R4NoteCategory).order_by(R4NoteCategory.legacy_category_number.asc())
+        payload = list(db.scalars(stmt))
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=200,
+            duration_ms=duration_ms,
+        )
+        return payload
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
+@router.get("/fixed-notes", response_model=list[R4FixedNoteOut])
+def list_fixed_notes(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+    category: int | None = Query(default=None, ge=0),
+) -> list[R4FixedNote]:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        patient_code = _resolve_legacy_patient_code(db, patient_id)
+        if patient_code is None:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_id,
+                path=request.url.path,
+                method=request.method,
+                status_code=200,
+                duration_ms=duration_ms,
+            )
+            return []
+        filters = []
+        if category is not None:
+            filters.append(R4FixedNote.category_number == category)
+        stmt = (
+            select(R4FixedNote)
+            .where(*filters)
+            .order_by(
+                nullslast(R4FixedNote.category_number.asc()),
+                R4FixedNote.legacy_fixed_note_code.asc(),
+            )
+        )
+        payload = list(db.scalars(stmt))
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=200,
+            duration_ms=duration_ms,
+        )
+        return payload
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
 @router.get("/tooth-surfaces", response_model=PaginatedR4ToothSurfaceOut)
 def list_tooth_surfaces(
     patient_id: int,
@@ -686,6 +916,58 @@ def _export_rows_for_entity(
             R4PerioProbe.bleeding.label("bleeding"),
             R4PerioProbe.plaque.label("plaque"),
         ).where(R4PerioProbe.legacy_patient_code == patient_code)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
+    if entity == "perio_plaque":
+        stmt = select(
+            R4PerioPlaque.legacy_patient_code.label("patient_code"),
+            R4PerioPlaque.legacy_plaque_key.label("legacy_plaque_key"),
+            R4PerioPlaque.legacy_trans_id.label("legacy_trans_id"),
+            R4PerioPlaque.recorded_at.label("recorded_at"),
+            R4PerioPlaque.tooth.label("tooth"),
+            R4PerioPlaque.plaque.label("plaque"),
+            R4PerioPlaque.bleeding.label("bleeding"),
+        ).where(R4PerioPlaque.legacy_patient_code == patient_code)
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
+    if entity == "fixed_notes":
+        codes = list(
+            db.scalars(
+                select(func.distinct(R4PatientNote.fixed_note_code)).where(
+                    R4PatientNote.legacy_patient_code == patient_code,
+                    R4PatientNote.fixed_note_code.is_not(None),
+                )
+            )
+        )
+        if not codes:
+            return [], 0
+        stmt = select(
+            literal(patient_code).label("patient_code"),
+            R4FixedNote.legacy_fixed_note_code.label("legacy_fixed_note_code"),
+            R4FixedNote.category_number.label("category_number"),
+            R4FixedNote.description.label("description"),
+            R4FixedNote.note.label("note"),
+            R4FixedNote.tooth.label("tooth"),
+            R4FixedNote.surface.label("surface"),
+        ).where(R4FixedNote.legacy_fixed_note_code.in_(codes))
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
+    if entity == "note_categories":
+        categories = list(
+            db.scalars(
+                select(func.distinct(R4PatientNote.category_number)).where(
+                    R4PatientNote.legacy_patient_code == patient_code,
+                    R4PatientNote.category_number.is_not(None),
+                )
+            )
+        )
+        if not categories:
+            return [], 0
+        stmt = select(
+            literal(patient_code).label("patient_code"),
+            R4NoteCategory.legacy_category_number.label("legacy_category_number"),
+            R4NoteCategory.description.label("description"),
+        ).where(R4NoteCategory.legacy_category_number.in_(categories))
         total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
         return _pg_rows(db, stmt.limit(EXPORT_MAX_ROWS)), total
     if entity == "tooth_surfaces":

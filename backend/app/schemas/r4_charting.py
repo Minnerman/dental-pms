@@ -22,6 +22,21 @@ class R4PerioProbeOut(BaseModel):
     updated_at: datetime
 
 
+class R4PerioPlaqueOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    legacy_source: str
+    legacy_plaque_key: str
+    legacy_trans_id: int | None = None
+    legacy_patient_code: int | None = None
+    tooth: int | None = None
+    plaque: int | None = None
+    bleeding: int | None = None
+    recorded_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class R4BPEEntryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +92,30 @@ class R4PatientNoteOut(BaseModel):
     updated_at: datetime
 
 
+class R4NoteCategoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    legacy_source: str
+    legacy_category_number: int
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class R4FixedNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    legacy_source: str
+    legacy_fixed_note_code: int
+    category_number: int | None = None
+    description: str | None = None
+    note: str | None = None
+    tooth: int | None = None
+    surface: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class R4ToothSurfaceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -92,6 +131,14 @@ class R4ToothSurfaceOut(BaseModel):
 
 class PaginatedR4PerioProbeOut(BaseModel):
     items: list[R4PerioProbeOut]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class PaginatedR4PerioPlaqueOut(BaseModel):
+    items: list[R4PerioPlaqueOut]
     total: int
     limit: int
     offset: int
