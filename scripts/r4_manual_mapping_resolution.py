@@ -39,6 +39,35 @@ from app.services.r4_import.sqlserver_source import (  # noqa: E402
 
 
 CODE_RE = re.compile(r"^###\s+legacy_patient_code\s+(\d+)\s*$", re.MULTILINE)
+UNRESOLVED_RE = re.compile(r"^###\s+legacy_patient_code\s+(\d+)\s*$", re.MULTILINE)
+
+ADDRESS_STOPWORDS = {
+    "ROAD",
+    "RD",
+    "STREET",
+    "ST",
+    "AVENUE",
+    "AVE",
+    "FLAT",
+    "APARTMENT",
+    "HOUSE",
+    "BUILDING",
+    "THE",
+    "OF",
+    "LANE",
+    "LN",
+    "DRIVE",
+    "DR",
+    "COURT",
+    "CT",
+    "WAY",
+    "PLACE",
+    "PL",
+    "CLOSE",
+    "CL",
+    "TERRACE",
+    "TER",
+}
 
 
 @dataclass
@@ -53,7 +82,22 @@ class Candidate:
     phone: str | None
     email: str | None
     patient_category: str | None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
     match_reasons: set[str] = field(default_factory=set)
+
+    def postcode_outward(self) -> str | None:
+        return _postcode_outward(self.postcode)
+
+    def phone_digits(self) -> str | None:
+        return _phone_digits(self.phone)
+
+    def phone_last6_set(self) -> set[str]:
+        digits = self.phone_digits()
+        if not digits or len(digits) < 6:
+            return set()
+        return {digits[-6:]}
 
 
 @dataclass
@@ -66,6 +110,7 @@ class Resolution:
     proposed_patient_id: int | None
     confidence: str | None
     rationale: str | None
+    pass2_candidates: dict[str, list[Candidate]] = field(default_factory=dict)
 
 
 def _log(message: str, verbose: bool) -> None:
@@ -81,6 +126,19 @@ def parse_codes(path: Path) -> list[int]:
         code = int(match.group(1))
         if code not in seen:
             seen.add(code)
+            codes.append(code)
+    return codes
+
+
+def parse_unresolved_codes(path: Path) -> list[int]:
+    text_content = path.read_text(encoding="utf-8")
+    sections = UNRESOLVED_RE.split(text_content)
+    # split yields: [preface, code1, section1, code2, section2, ...]
+    codes: list[int] = []
+    for idx in range(1, len(sections), 2):
+        code = int(sections[idx])
+        body = sections[idx + 1] if idx + 1 < len(sections) else ""
+        if "UNRESOLVED" in body or "none" in body.lower():
             codes.append(code)
     return codes
 
@@ -106,6 +164,41 @@ def _normalize_postcode(value: str | None) -> str | None:
     return re.sub(r"\s+", "", value).upper()
 
 
+def _postcode_outward(value: str | None) -> str | None:
+    if not value:
+        return None
+    compact = value.strip().upper()
+    if not compact:
+        return None
+    if " " in compact:
+        return compact.split()[0]
+    return compact
+
+
+def _phone_digits(value: str | None) -> str | None:
+    if not value:
+        return None
+    digits = re.sub(r"\D+", "", value)
+    return digits if digits else None
+
+
+def _phone_last6_set(*values: str | None) -> set[str]:
+    last6: set[str] = set()
+    for value in values:
+        digits = _phone_digits(value)
+        if digits and len(digits) >= 6:
+            last6.add(digits[-6:])
+    return last6
+
+
+def _address_tokens(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    cleaned = re.sub(r"[^A-Z0-9]", " ", value.upper())
+    tokens = {t for t in cleaned.split() if t and t not in ADDRESS_STOPWORDS}
+    return {t for t in tokens if len(t) >= 3 and not t.isdigit()}
+
+
 def build_sqlserver_source() -> R4SqlServerSource:
     config = R4SqlServerConfig.from_env()
     config.require_enabled()
@@ -123,6 +216,10 @@ def _sqlserver_patient_details(source: R4SqlServerSource, code: int) -> dict[str
         ["Phone", "Telephone", "Tel", "HomePhone", "PhoneNumber"],
     )
     mobile_col = source._pick_column("Patients", ["MobileNo", "Mobile", "MobileNumber"])
+    work_phone_col = source._pick_column(
+        "Patients",
+        ["WorkPhone", "WorkTelephone", "WorkTel", "BusinessPhone"],
+    )
     email_col = source._pick_column("Patients", ["EMail", "Email", "EmailAddress"])
     postcode_col = source._pick_column(
         "Patients",
@@ -142,6 +239,18 @@ def _sqlserver_patient_details(source: R4SqlServerSource, code: int) -> dict[str
     )
     town_col = source._pick_column("Patients", ["Town", "City", "District", "Locality"])
     county_col = source._pick_column("Patients", ["County", "State", "Region"])
+    nhs_col = source._pick_column(
+        "Patients",
+        ["NHSNumber", "NHSNo", "NHSNo.", "NHS_Number", "NHS"],
+    )
+    chart_col = source._pick_column(
+        "Patients",
+        ["ChartNo", "ChartNumber", "ChartNo.", "Chart", "ChartNum"],
+    )
+    external_id_col = source._pick_column(
+        "Patients",
+        ["ExternalID", "ExternalId", "ExternalRef", "ExternalRefId"],
+    )
 
     select_cols = [f"{patient_code_col} AS patient_code"]
     if first_name_col:
@@ -156,6 +265,8 @@ def _sqlserver_patient_details(source: R4SqlServerSource, code: int) -> dict[str
         select_cols.append(f"{phone_col} AS phone")
     if mobile_col:
         select_cols.append(f"{mobile_col} AS mobile")
+    if work_phone_col:
+        select_cols.append(f"{work_phone_col} AS work_phone")
     if email_col:
         select_cols.append(f"{email_col} AS email")
     if postcode_col:
@@ -170,6 +281,12 @@ def _sqlserver_patient_details(source: R4SqlServerSource, code: int) -> dict[str
         select_cols.append(f"{town_col} AS town")
     if county_col:
         select_cols.append(f"{county_col} AS county")
+    if nhs_col:
+        select_cols.append(f"{nhs_col} AS nhs_number")
+    if chart_col:
+        select_cols.append(f"{chart_col} AS chart_number")
+    if external_id_col:
+        select_cols.append(f"{external_id_col} AS external_id")
 
     sql = (
         f"SELECT {', '.join(select_cols)} FROM dbo.Patients WITH (NOLOCK) "
@@ -180,6 +297,23 @@ def _sqlserver_patient_details(source: R4SqlServerSource, code: int) -> dict[str
         return None
     row = rows[0]
     row["date_of_birth"] = _format_dt(row.get("date_of_birth"))
+    row["phone_digits"] = _phone_digits(row.get("phone"))
+    row["mobile_digits"] = _phone_digits(row.get("mobile"))
+    row["work_phone_digits"] = _phone_digits(row.get("work_phone"))
+    row["phone_last6"] = sorted(
+        _phone_last6_set(row.get("phone"), row.get("mobile"), row.get("work_phone"))
+    )
+    row["postcode_outward"] = _postcode_outward(row.get("postcode"))
+    address_bits = [
+        row.get("address_line1"),
+        row.get("address_line2"),
+        row.get("address_line3"),
+        row.get("town"),
+        row.get("county"),
+    ]
+    row["address_tokens"] = sorted(
+        _address_tokens(" ".join([bit for bit in address_bits if bit]))
+    )
     return row
 
 
@@ -261,6 +395,9 @@ def _candidate_rows_from_query(sql: str, params: dict[str, Any], reason: str) ->
             phone=row.get("phone"),
             email=row.get("email"),
             patient_category=row.get("patient_category"),
+            address_line1=row.get("address_line1"),
+            address_line2=row.get("address_line2"),
+            city=row.get("city"),
             match_reasons={reason},
         )
         candidates.append(candidate)
@@ -272,7 +409,7 @@ def _ng_candidates(r4_patient: dict[str, Any] | None, code: int) -> list[Candida
 
     legacy_sql = (
         "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
-        "postcode, phone, email, patient_category "
+        "postcode, phone, email, patient_category, address_line1, address_line2, city "
         "FROM patients WHERE legacy_id = :code"
     )
     for candidate in _candidate_rows_from_query(legacy_sql, {"code": str(code)}, "legacy_id"):
@@ -285,7 +422,7 @@ def _ng_candidates(r4_patient: dict[str, Any] | None, code: int) -> list[Candida
     if last_name and dob:
         name_dob_sql = (
             "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
-            "postcode, phone, email, patient_category "
+            "postcode, phone, email, patient_category, address_line1, address_line2, city "
             "FROM patients WHERE LOWER(last_name) = LOWER(:last_name) AND date_of_birth = :dob"
         )
         for candidate in _candidate_rows_from_query(
@@ -302,7 +439,7 @@ def _ng_candidates(r4_patient: dict[str, Any] | None, code: int) -> list[Candida
     if last_name and postcode:
         surname_postcode_sql = (
             "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
-            "postcode, phone, email, patient_category "
+            "postcode, phone, email, patient_category, address_line1, address_line2, city "
             "FROM patients WHERE LOWER(last_name) = LOWER(:last_name) "
             "AND UPPER(REPLACE(COALESCE(postcode, ''), ' ', '')) = :postcode"
         )
@@ -320,16 +457,90 @@ def _ng_candidates(r4_patient: dict[str, Any] | None, code: int) -> list[Candida
     return list(candidates_by_id.values())
 
 
+def _ng_candidates_pass2(r4_patient: dict[str, Any] | None) -> dict[str, list[Candidate]]:
+    buckets: dict[str, list[Candidate]] = {"rule_a": [], "rule_b": [], "rule_c": []}
+    if not r4_patient:
+        return buckets
+
+    last_name = _first_nonempty(r4_patient.get("last_name"))
+    if not last_name:
+        return buckets
+
+    phone_last6 = set(r4_patient.get("phone_last6") or [])
+    postcode_outward = r4_patient.get("postcode_outward")
+    dob = r4_patient.get("date_of_birth")
+    address_tokens = set(r4_patient.get("address_tokens") or [])
+
+    base_sql = (
+        "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
+        "postcode, phone, email, patient_category, address_line1, address_line2, city "
+        "FROM patients WHERE LOWER(last_name) = LOWER(:last_name)"
+    )
+    rows = _pg_query(base_sql, {"last_name": last_name})
+    candidates: list[Candidate] = []
+    for row in rows:
+        candidates.append(
+            Candidate(
+                patient_id=row["id"],
+                legacy_source=row.get("legacy_source"),
+                legacy_id=row.get("legacy_id"),
+                first_name=row.get("first_name"),
+                last_name=row.get("last_name"),
+                date_of_birth=row.get("date_of_birth"),
+                postcode=row.get("postcode"),
+                phone=row.get("phone"),
+                email=row.get("email"),
+                patient_category=row.get("patient_category"),
+                address_line1=row.get("address_line1"),
+                address_line2=row.get("address_line2"),
+                city=row.get("city"),
+            )
+        )
+
+    # Rule A: surname + outward postcode; require DOB match OR phone last6 match to propose.
+    if postcode_outward:
+        for cand in candidates:
+            if cand.postcode_outward() == postcode_outward:
+                cand.match_reasons.add("surname_postcode_outward")
+                buckets["rule_a"].append(cand)
+
+    # Rule B: surname + phone last6; require DOB match OR outward postcode match to propose.
+    if phone_last6:
+        for cand in candidates:
+            cand_last6 = cand.phone_last6_set()
+            if cand_last6 and cand_last6.intersection(phone_last6):
+                cand.match_reasons.add("surname_phone_last6")
+                buckets["rule_b"].append(cand)
+
+    # Rule C: address token overlap (review-only).
+    if address_tokens:
+        for cand in candidates:
+            cand_address = " ".join(
+                [part for part in [cand.address_line1, cand.address_line2, cand.city] if part]
+            )
+            tokens = _address_tokens(cand_address)
+            overlap = address_tokens.intersection(tokens)
+            if len(overlap) >= 2:
+                cand.match_reasons.add(f"address_overlap({len(overlap)})")
+                buckets["rule_c"].append(cand)
+
+    return buckets
+
+
 def resolve_code(
     source: R4SqlServerSource,
     code: int,
     verbose: bool,
+    pass2: bool,
 ) -> Resolution:
     r4_patient = _sqlserver_patient_details(source, code)
     r4_appt_range = _sqlserver_appt_range(source, code)
     existing_mapping = _existing_mapping(code)
 
     candidates = _ng_candidates(r4_patient, code)
+    pass2_candidates: dict[str, list[Candidate]] = {}
+    if pass2:
+        pass2_candidates = _ng_candidates_pass2(r4_patient)
     proposed_patient_id: int | None = None
     confidence: str | None = None
     rationale: str | None = None
@@ -356,6 +567,37 @@ def resolve_code(
         confidence = "none"
         rationale = "No candidate matches"
 
+    if pass2 and proposed_patient_id is None:
+        rule_a = pass2_candidates.get("rule_a", [])
+        rule_b = pass2_candidates.get("rule_b", [])
+        rule_c = pass2_candidates.get("rule_c", [])
+
+        # Rule A: surname + outward postcode, require DOB or phone last6 match.
+        if len(rule_a) == 1 and r4_patient:
+            cand = rule_a[0]
+            dob_match = r4_patient.get("date_of_birth") == cand.date_of_birth
+            phone_match = bool(
+                set(r4_patient.get("phone_last6") or []).intersection(cand.phone_last6_set())
+            )
+            if dob_match or phone_match:
+                proposed_patient_id = cand.patient_id
+                confidence = "high"
+                rationale = "Rule A: surname + postcode outward + (DOB or phone last6)"
+
+        # Rule B: surname + phone last6, require DOB or postcode outward match.
+        if proposed_patient_id is None and len(rule_b) == 1 and r4_patient:
+            cand = rule_b[0]
+            dob_match = r4_patient.get("date_of_birth") == cand.date_of_birth
+            postcode_match = r4_patient.get("postcode_outward") == cand.postcode_outward()
+            if dob_match or postcode_match:
+                proposed_patient_id = cand.patient_id
+                confidence = "high"
+                rationale = "Rule B: surname + phone last6 + (DOB or postcode outward)"
+
+        if proposed_patient_id is None and (rule_a or rule_b or rule_c):
+            confidence = "ambiguous" if (rule_a or rule_b) else "none"
+            rationale = "Pass2 candidates require manual review"
+
     _log(
         f"code={code} candidates={len(candidates)} proposed={proposed_patient_id}",
         verbose,
@@ -367,6 +609,7 @@ def resolve_code(
         r4_appt_range=r4_appt_range,
         existing_mapping=existing_mapping,
         candidates=sorted(candidates, key=lambda c: c.patient_id),
+        pass2_candidates=pass2_candidates,
         proposed_patient_id=proposed_patient_id,
         confidence=confidence,
         rationale=rationale,
@@ -418,10 +661,22 @@ def _render_r4_details(r4_patient: dict[str, Any] | None, r4_appt_range: dict[st
         parts.append(f"- Phone: {r4_patient.get('phone')}")
     if r4_patient.get("mobile"):
         parts.append(f"- Mobile: {r4_patient.get('mobile')}")
+    if r4_patient.get("work_phone"):
+        parts.append(f"- Work phone: {r4_patient.get('work_phone')}")
     if r4_patient.get("email"):
         parts.append(f"- Email: {r4_patient.get('email')}")
     if r4_patient.get("postcode"):
-        parts.append(f"- Postcode: {r4_patient.get('postcode')}")
+        parts.append(
+            f"- Postcode: {r4_patient.get('postcode')} (outward: {r4_patient.get('postcode_outward')})"
+        )
+    if r4_patient.get("phone_last6"):
+        parts.append(f"- Phone last6: {', '.join(r4_patient.get('phone_last6'))}")
+    if r4_patient.get("nhs_number"):
+        parts.append(f"- NHS number: {r4_patient.get('nhs_number')}")
+    if r4_patient.get("chart_number"):
+        parts.append(f"- Chart number: {r4_patient.get('chart_number')}")
+    if r4_patient.get("external_id"):
+        parts.append(f"- External ID: {r4_patient.get('external_id')}")
     address_bits = [
         r4_patient.get("address_line1"),
         r4_patient.get("address_line2"),
@@ -450,7 +705,7 @@ def _render_proposed(resolution: Resolution) -> str:
     return f"- UNRESOLVED ({resolution.rationale})\n"
 
 
-def generate_report(resolutions: list[Resolution], out_path: Path) -> str:
+def generate_report(resolutions: list[Resolution], out_path: Path, pass2: bool) -> str:
     total = len(resolutions)
     resolved = len(
         [
@@ -462,12 +717,17 @@ def generate_report(resolutions: list[Resolution], out_path: Path) -> str:
     ambiguous = len([r for r in resolutions if r.confidence == "ambiguous"])
     no_match = len([r for r in resolutions if r.confidence == "none"])
 
+    title = (
+        "# R4 manual mapping resolution report (2026-01-28 PASS2)"
+        if pass2
+        else "# R4 manual mapping resolution report (2026-01-28)"
+    )
     lines = [
-        "# R4 manual mapping resolution report (2026-01-28)",
+        title,
         "",
         "How to review:",
-        "- `rg -n \"legacy_patient_code 1016090\" docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md`",
-        "- `less +/legacy_patient_code\\ 1016090 docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md`",
+        f"- `rg -n \"legacy_patient_code 1016090\" {out_path}`",
+        f"- `less +/legacy_patient_code\\ 1016090 {out_path}`",
         "",
         "Summary:",
         f"- total codes: {total}",
@@ -485,8 +745,26 @@ def generate_report(resolutions: list[Resolution], out_path: Path) -> str:
                 "R4 details:",
                 _render_r4_details(resolution.r4_patient, resolution.r4_appt_range).rstrip(),
                 "",
-                "NG candidates (patients table):",
+                "NG candidates (baseline):",
                 _render_candidate_table(resolution.candidates).rstrip(),
+            ]
+        )
+        if pass2:
+            lines.extend(
+                [
+                    "",
+                    "NG candidates (Rule A: surname + postcode outward):",
+                    _render_candidate_table(resolution.pass2_candidates.get("rule_a", [])).rstrip(),
+                    "",
+                    "NG candidates (Rule B: surname + phone last6):",
+                    _render_candidate_table(resolution.pass2_candidates.get("rule_b", [])).rstrip(),
+                    "",
+                    "NG candidates (Rule C: address token overlap, review only):",
+                    _render_candidate_table(resolution.pass2_candidates.get("rule_c", [])).rstrip(),
+                ]
+            )
+        lines.extend(
+            [
                 "",
                 "Proposed mapping:",
                 _render_proposed(resolution).rstrip(),
@@ -519,6 +797,21 @@ def main() -> int:
         default="",
         help="Optional comma-separated legacy patient codes (overrides candidates file).",
     )
+    parser.add_argument(
+        "--only-unresolved",
+        action="store_true",
+        help="Use unresolved codes from the previous report instead of candidates file.",
+    )
+    parser.add_argument(
+        "--previous-report",
+        default="docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md",
+        help="Path to previous resolution report for --only-unresolved.",
+    )
+    parser.add_argument(
+        "--pass2",
+        action="store_true",
+        help="Enable pass2 matching rules (postcode outward/phone/address).",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Run without writing output.")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging.")
     args = parser.parse_args()
@@ -531,6 +824,11 @@ def main() -> int:
             if not part:
                 continue
             codes.append(int(part))
+    elif args.only_unresolved:
+        previous_path = Path(args.previous_report)
+        if not previous_path.exists():
+            raise FileNotFoundError(f"Previous report not found: {previous_path}")
+        codes = parse_unresolved_codes(previous_path)
     else:
         if not candidates_path.exists():
             raise FileNotFoundError(f"Candidates file not found: {candidates_path}")
@@ -543,9 +841,10 @@ def main() -> int:
 
     source = build_sqlserver_source()
 
+    pass2 = args.pass2 or args.only_unresolved
     resolutions: list[Resolution] = []
     for code in codes:
-        resolutions.append(resolve_code(source, code, args.verbose))
+        resolutions.append(resolve_code(source, code, args.verbose, pass2))
 
     resolved = [
         r
@@ -584,7 +883,7 @@ def main() -> int:
         return 0
 
     out_path = Path(args.out)
-    generate_report(resolutions, out_path)
+    generate_report(resolutions, out_path, pass2)
     print(f"Wrote report: {out_path}")
     return 0
 
