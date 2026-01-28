@@ -100,6 +100,18 @@ Use the internal admin page:
 - `/admin/r4/manual-mappings`
 - View, add, and delete manual mappings (no PHI shown).
 
+### Finding patient UUIDs from demographics
+If you identify the patient in R4 by name/DOB, use this helper to find UUIDs:
+```
+docker compose exec -T backend python -m app.scripts.find_patient_uuid \\
+  --first "FIRST" --last "LAST" --dob YYYY-MM-DD
+```
+Optional filters: `--postcode`, `--email`, `--phone`.
+
+### Candidate packs
+Generated candidate packs based on internal signals:
+- `docs/r4/R4_MANUAL_MAPPING_CANDIDATES_2026-01-28.md`
+
 ## Stage 173 remediation pass (2026-01-28 14:23 UTC)
 
 - Mappings added (safe exact legacy_id match): 0
