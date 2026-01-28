@@ -22,7 +22,9 @@ from app.models.r4_charting import (
     R4ToothSystem,
     R4TreatmentNote,
 )
+from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.r4_patient_mapping import R4PatientMapping
+from app.services.r4_import.mapping_resolver import resolve_patient_id_from_r4_patient_code
 from app.services.r4_import.mapping_preflight import (
     ensure_mappings_for_range,
     mapping_exists,
@@ -909,32 +911,42 @@ def _record_charting_import_state(
 ) -> None:
     if not patient_codes:
         return
-    mappings = list(
-        session.scalars(
-            select(R4PatientMapping).where(
-                R4PatientMapping.legacy_source == legacy_source,
-                R4PatientMapping.legacy_patient_code.in_(patient_codes),
-            )
+    mappings = session.scalars(
+        select(R4PatientMapping).where(
+            R4PatientMapping.legacy_source == legacy_source,
+            R4PatientMapping.legacy_patient_code.in_(patient_codes),
         )
-    )
-    if not mappings:
+    ).all()
+    manual_rows = session.execute(
+        select(R4ManualMapping.legacy_patient_code, R4ManualMapping.target_patient_id).where(
+            R4ManualMapping.legacy_source == legacy_source,
+            R4ManualMapping.legacy_patient_code.in_(patient_codes),
+        )
+    ).all()
+    if not mappings and not manual_rows:
         return
     now = datetime.now(timezone.utc)
-    for mapping in mappings:
+    mapping_entries: list[tuple[int, int]] = [
+        (int(mapping.legacy_patient_code), int(mapping.patient_id)) for mapping in mappings
+    ]
+    mapping_entries.extend(
+        [(int(code), int(patient_id)) for code, patient_id in manual_rows]
+    )
+    for legacy_patient_code, patient_id in mapping_entries:
         record = session.scalar(
             select(R4ChartingImportState).where(
-                R4ChartingImportState.patient_id == mapping.patient_id
+                R4ChartingImportState.patient_id == patient_id
             )
         )
         if record:
-            record.legacy_patient_code = mapping.legacy_patient_code
+            record.legacy_patient_code = legacy_patient_code
             record.last_imported_at = now
             record.updated_by_user_id = actor_id
         else:
             session.add(
                 R4ChartingImportState(
-                    patient_id=mapping.patient_id,
-                    legacy_patient_code=mapping.legacy_patient_code,
+                    patient_id=patient_id,
+                    legacy_patient_code=legacy_patient_code,
                     last_imported_at=now,
                     created_by_user_id=actor_id,
                 )
@@ -951,11 +963,8 @@ def _is_patient_mapped(
     if cached is not None:
         return cached
     mapped = (
-        session.scalar(
-            select(R4PatientMapping.id).where(
-                R4PatientMapping.legacy_source == legacy_source,
-                R4PatientMapping.legacy_patient_code == patient_code,
-            )
+        resolve_patient_id_from_r4_patient_code(
+            session, patient_code, legacy_source=legacy_source
         )
         is not None
     )

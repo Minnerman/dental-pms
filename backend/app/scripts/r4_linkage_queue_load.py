@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.models.patient import Patient
 from app.models.r4_appointment import R4Appointment
+from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.linkage_queue import (
@@ -22,6 +23,7 @@ from app.services.r4_import.linkage_queue import (
     summarize_queue,
 )
 from app.services.r4_import.linkage_report import R4LinkageReportBuilder
+from app.services.r4_import.mapping_resolver import resolve_patient_id_from_r4_patient_code
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
 
@@ -35,6 +37,16 @@ def _load_patient_mappings(session, legacy_source: str) -> dict[int, int]:
     rows = session.execute(
         select(R4PatientMapping.legacy_patient_code, R4PatientMapping.patient_id).where(
             R4PatientMapping.legacy_source == legacy_source
+        )
+    ).all()
+    return {int(code): int(patient_id) for code, patient_id in rows}
+
+
+def _load_manual_mappings(session, legacy_source: str) -> dict[int, int]:
+    rows = session.execute(
+        select(R4ManualMapping.legacy_patient_code, R4ManualMapping.target_patient_id).where(
+            R4ManualMapping.legacy_source == legacy_source,
+            R4ManualMapping.legacy_patient_code.is_not(None),
         )
     ).all()
     return {int(code): int(patient_id) for code, patient_id in rows}
@@ -55,6 +67,7 @@ def _load_imported_appointment_ids(session, legacy_source: str) -> set[int]:
 
 
 def _iter_issues_from_csv(
+    session,
     path: Path,
     legacy_source: str,
     entity_type: str,
@@ -68,6 +81,12 @@ def _iter_issues_from_csv(
                 continue
             patient_code_raw = row.get("patient_code") or None
             patient_code = int(patient_code_raw) if patient_code_raw else None
+            if reason == "missing_patient_mapping" and patient_code is not None:
+                resolved_id = resolve_patient_id_from_r4_patient_code(
+                    session, patient_code, legacy_source
+                )
+                if resolved_id is not None:
+                    continue
             details = {
                 "appointment_id": row.get("appointment_id"),
                 "patient_code": patient_code,
@@ -98,6 +117,7 @@ def _iter_issues_from_source(
     session = SessionLocal()
     try:
         patient_mappings = _load_patient_mappings(session, legacy_source)
+        manual_mappings = _load_manual_mappings(session, legacy_source)
         deleted_patient_ids = _load_deleted_patient_ids(session)
         imported_appointment_ids = _load_imported_appointment_ids(session, legacy_source)
     finally:
@@ -105,6 +125,7 @@ def _iter_issues_from_source(
 
     report = R4LinkageReportBuilder(
         patient_mappings=patient_mappings,
+        manual_mappings=manual_mappings,
         deleted_patient_ids=deleted_patient_ids,
         imported_appointment_ids=imported_appointment_ids,
     )
@@ -194,9 +215,16 @@ def main() -> int:
     metadata: dict[str, object] | None = None
 
     if args.input_csv:
-        issues = _iter_issues_from_csv(
-            Path(args.input_csv), legacy_source=args.legacy_source, entity_type=args.entity_type
-        )
+        session = SessionLocal()
+        try:
+            issues = _iter_issues_from_csv(
+                session,
+                Path(args.input_csv),
+                legacy_source=args.legacy_source,
+                entity_type=args.entity_type,
+            )
+        finally:
+            session.close()
         if args.input_json:
             metadata = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
     else:
