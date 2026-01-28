@@ -35,6 +35,15 @@ Run:
     --phone "07..." \
     --limit 10
 
+If you need to share output externally, re-run with redaction:
+  bash ops/run_backend_script.sh scripts/ng_person_lookup.py \
+    --surname "SURNAME" \
+    --dob 1970-01-01 \
+    --postcode "BN11 1EG" \
+    --phone "07..." \
+    --limit 10 \
+    --redact
+
 Accept a mapping only if 2+ identifiers match:
 - surname + DOB (best)
 - surname + full postcode
@@ -45,6 +54,11 @@ If unclear, mark REVIEW and move on.
 Step 3: End-of-session batch check
   bash ops/run_backend_script.sh scripts/ng_person_lookup.py \
     --from-worklog docs/r4/R4_MANUAL_MAPPING_WORKLOG_2026-01-28.md
+
+Redacted batch (safe to share):
+  bash ops/run_backend_script.sh scripts/ng_person_lookup.py \
+    --from-worklog docs/r4/R4_MANUAL_MAPPING_WORKLOG_2026-01-28.md \
+    --redact
 
 Helper: print unresolved codes from worklog
   python3 scripts/print_unresolved_codes.py
