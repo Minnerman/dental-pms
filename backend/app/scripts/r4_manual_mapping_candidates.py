@@ -30,6 +30,12 @@ def _load_codes(report_path: Path, limit: int) -> list[int]:
     return codes
 
 
+def _parse_codes(value: str | None) -> list[int]:
+    if not value:
+        return []
+    return [int(code.strip()) for code in value.split(",") if code.strip()]
+
+
 def _format_patient(patient: Patient) -> dict[str, str | int | None]:
     return {
         "patient_id": patient.id,
@@ -52,6 +58,11 @@ def main() -> int:
         default="docs/r4/R4_LINKAGE_REPORT_2025-01-01_2026-01-28.json",
         help="Path to linkage report JSON.",
     )
+    parser.add_argument(
+        "--codes",
+        default=None,
+        help="Comma-separated legacy patient codes to use (overrides report).",
+    )
     parser.add_argument("--limit", type=int, default=10, help="Top N codes to include.")
     parser.add_argument(
         "--output",
@@ -61,10 +72,11 @@ def main() -> int:
     args = parser.parse_args()
 
     report_path = Path(args.report)
-    if not report_path.exists():
-        raise SystemExit(f"Report not found: {report_path}")
-
-    codes = _load_codes(report_path, args.limit)
+    codes = _parse_codes(args.codes)
+    if not codes:
+        if not report_path.exists():
+            raise SystemExit(f"Report not found: {report_path}")
+        codes = _load_codes(report_path, args.limit)
     if not codes:
         raise SystemExit("No codes found in report.")
 
