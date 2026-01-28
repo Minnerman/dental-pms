@@ -1,0 +1,593 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import random
+import re
+import sys
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Iterable
+
+
+def _ensure_app_importable() -> None:
+    root = Path(__file__).resolve().parents[1]
+    candidate_roots = [
+        root / "backend",
+        root,
+        Path("/app"),
+    ]
+    for base in candidate_roots:
+        if (base / "app").is_dir():
+            sys.path.insert(0, str(base))
+            return
+    sys.path.insert(0, str(root))
+
+
+_ensure_app_importable()
+
+from sqlalchemy import text  # noqa: E402
+
+from app.db.session import engine  # noqa: E402
+from app.services.r4_import.sqlserver_source import (  # noqa: E402
+    R4SqlServerConfig,
+    R4SqlServerSource,
+)
+
+
+CODE_RE = re.compile(r"^###\s+legacy_patient_code\s+(\d+)\s*$", re.MULTILINE)
+
+
+@dataclass
+class Candidate:
+    patient_id: int
+    legacy_source: str | None
+    legacy_id: str | None
+    first_name: str | None
+    last_name: str | None
+    date_of_birth: date | None
+    postcode: str | None
+    phone: str | None
+    email: str | None
+    patient_category: str | None
+    match_reasons: set[str] = field(default_factory=set)
+
+
+@dataclass
+class Resolution:
+    code: int
+    r4_patient: dict[str, Any] | None
+    r4_appt_range: dict[str, Any] | None
+    existing_mapping: int | None
+    candidates: list[Candidate]
+    proposed_patient_id: int | None
+    confidence: str | None
+    rationale: str | None
+
+
+def _log(message: str, verbose: bool) -> None:
+    if verbose:
+        print(message)
+
+
+def parse_codes(path: Path) -> list[int]:
+    text_content = path.read_text(encoding="utf-8")
+    codes: list[int] = []
+    seen: set[int] = set()
+    for match in CODE_RE.finditer(text_content):
+        code = int(match.group(1))
+        if code not in seen:
+            seen.add(code)
+            codes.append(code)
+    return codes
+
+
+def _format_dt(value: Any | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return str(value)
+
+
+def _first_nonempty(value: Any | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def _normalize_postcode(value: str | None) -> str | None:
+    if not value:
+        return None
+    return re.sub(r"\s+", "", value).upper()
+
+
+def build_sqlserver_source() -> R4SqlServerSource:
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    return R4SqlServerSource(config)
+
+
+def _sqlserver_patient_details(source: R4SqlServerSource, code: int) -> dict[str, Any] | None:
+    patient_code_col = source._require_column("Patients", ["PatientCode"])
+    first_name_col = source._pick_column("Patients", ["FirstName", "Forename"])
+    last_name_col = source._pick_column("Patients", ["LastName", "Surname"])
+    dob_col = source._pick_column("Patients", ["DOB", "DateOfBirth", "BirthDate"])
+    title_col = source._pick_column("Patients", ["Title"])
+    phone_col = source._pick_column(
+        "Patients",
+        ["Phone", "Telephone", "Tel", "HomePhone", "PhoneNumber"],
+    )
+    mobile_col = source._pick_column("Patients", ["MobileNo", "Mobile", "MobileNumber"])
+    email_col = source._pick_column("Patients", ["EMail", "Email", "EmailAddress"])
+    postcode_col = source._pick_column(
+        "Patients",
+        ["Postcode", "PostCode", "PostalCode", "Zip", "ZipCode"],
+    )
+    address1_col = source._pick_column(
+        "Patients",
+        ["Address1", "AddressLine1", "AddressLine_1", "AddressLineOne", "Address"],
+    )
+    address2_col = source._pick_column(
+        "Patients",
+        ["Address2", "AddressLine2", "AddressLine_2"],
+    )
+    address3_col = source._pick_column(
+        "Patients",
+        ["Address3", "AddressLine3", "AddressLine_3"],
+    )
+    town_col = source._pick_column("Patients", ["Town", "City", "District", "Locality"])
+    county_col = source._pick_column("Patients", ["County", "State", "Region"])
+
+    select_cols = [f"{patient_code_col} AS patient_code"]
+    if first_name_col:
+        select_cols.append(f"{first_name_col} AS first_name")
+    if last_name_col:
+        select_cols.append(f"{last_name_col} AS last_name")
+    if dob_col:
+        select_cols.append(f"{dob_col} AS date_of_birth")
+    if title_col:
+        select_cols.append(f"{title_col} AS title")
+    if phone_col:
+        select_cols.append(f"{phone_col} AS phone")
+    if mobile_col:
+        select_cols.append(f"{mobile_col} AS mobile")
+    if email_col:
+        select_cols.append(f"{email_col} AS email")
+    if postcode_col:
+        select_cols.append(f"{postcode_col} AS postcode")
+    if address1_col:
+        select_cols.append(f"{address1_col} AS address_line1")
+    if address2_col:
+        select_cols.append(f"{address2_col} AS address_line2")
+    if address3_col:
+        select_cols.append(f"{address3_col} AS address_line3")
+    if town_col:
+        select_cols.append(f"{town_col} AS town")
+    if county_col:
+        select_cols.append(f"{county_col} AS county")
+
+    sql = (
+        f"SELECT {', '.join(select_cols)} FROM dbo.Patients WITH (NOLOCK) "
+        f"WHERE {patient_code_col} = ?"
+    )
+    rows = source._query(sql, [code])
+    if not rows:
+        return None
+    row = rows[0]
+    row["date_of_birth"] = _format_dt(row.get("date_of_birth"))
+    return row
+
+
+def _sqlserver_appt_range(source: R4SqlServerSource, code: int) -> dict[str, Any] | None:
+    patient_col = source._require_column("Appts", ["PatientCode"])
+    date_col = source._pick_column(
+        "Appts",
+        ["Date", "ApptDate", "Start", "StartTime", "StartDateTime", "AppointmentDate"],
+    )
+    if not date_col:
+        return None
+    sql = (
+        f"SELECT MIN({date_col}) AS date_min, MAX({date_col}) AS date_max "
+        f"FROM dbo.Appts WITH (NOLOCK) WHERE {patient_col} = ?"
+    )
+    rows = source._query(sql, [code])
+    if not rows:
+        return None
+    row = rows[0]
+    return {
+        "date_min": _format_dt(row.get("date_min")),
+        "date_max": _format_dt(row.get("date_max")),
+    }
+
+
+def _pg_query(sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    with engine.connect() as conn:
+        result = conn.execute(text(sql), params)
+        return [dict(row._mapping) for row in result.fetchall()]
+
+
+def _existing_mapping(code: int) -> int | None:
+    rows = _pg_query(
+        "SELECT patient_id FROM r4_patient_mappings "
+        "WHERE legacy_source = 'r4' AND legacy_patient_code = :code",
+        {"code": code},
+    )
+    if not rows:
+        return None
+    return int(rows[0]["patient_id"])
+
+
+def _fetch_patient_by_id(patient_id: int) -> Candidate | None:
+    rows = _pg_query(
+        "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
+        "postcode, phone, email, patient_category "
+        "FROM patients WHERE id = :pid",
+        {"pid": patient_id},
+    )
+    if not rows:
+        return None
+    row = rows[0]
+    return Candidate(
+        patient_id=row["id"],
+        legacy_source=row.get("legacy_source"),
+        legacy_id=row.get("legacy_id"),
+        first_name=row.get("first_name"),
+        last_name=row.get("last_name"),
+        date_of_birth=row.get("date_of_birth"),
+        postcode=row.get("postcode"),
+        phone=row.get("phone"),
+        email=row.get("email"),
+        patient_category=row.get("patient_category"),
+    )
+
+
+def _candidate_rows_from_query(sql: str, params: dict[str, Any], reason: str) -> list[Candidate]:
+    rows = _pg_query(sql, params)
+    candidates: list[Candidate] = []
+    for row in rows:
+        candidate = Candidate(
+            patient_id=row["id"],
+            legacy_source=row.get("legacy_source"),
+            legacy_id=row.get("legacy_id"),
+            first_name=row.get("first_name"),
+            last_name=row.get("last_name"),
+            date_of_birth=row.get("date_of_birth"),
+            postcode=row.get("postcode"),
+            phone=row.get("phone"),
+            email=row.get("email"),
+            patient_category=row.get("patient_category"),
+            match_reasons={reason},
+        )
+        candidates.append(candidate)
+    return candidates
+
+
+def _ng_candidates(r4_patient: dict[str, Any] | None, code: int) -> list[Candidate]:
+    candidates_by_id: dict[int, Candidate] = {}
+
+    legacy_sql = (
+        "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
+        "postcode, phone, email, patient_category "
+        "FROM patients WHERE legacy_id = :code"
+    )
+    for candidate in _candidate_rows_from_query(legacy_sql, {"code": str(code)}, "legacy_id"):
+        candidates_by_id[candidate.patient_id] = candidate
+
+    last_name = _first_nonempty(r4_patient.get("last_name") if r4_patient else None)
+    dob = r4_patient.get("date_of_birth") if r4_patient else None
+    postcode = _normalize_postcode(_first_nonempty(r4_patient.get("postcode") if r4_patient else None))
+
+    if last_name and dob:
+        name_dob_sql = (
+            "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
+            "postcode, phone, email, patient_category "
+            "FROM patients WHERE LOWER(last_name) = LOWER(:last_name) AND date_of_birth = :dob"
+        )
+        for candidate in _candidate_rows_from_query(
+            name_dob_sql,
+            {"last_name": last_name, "dob": dob},
+            "surname_dob",
+        ):
+            existing = candidates_by_id.get(candidate.patient_id)
+            if existing:
+                existing.match_reasons.add("surname_dob")
+            else:
+                candidates_by_id[candidate.patient_id] = candidate
+
+    if last_name and postcode:
+        surname_postcode_sql = (
+            "SELECT id, legacy_source, legacy_id, first_name, last_name, date_of_birth, "
+            "postcode, phone, email, patient_category "
+            "FROM patients WHERE LOWER(last_name) = LOWER(:last_name) "
+            "AND UPPER(REPLACE(COALESCE(postcode, ''), ' ', '')) = :postcode"
+        )
+        for candidate in _candidate_rows_from_query(
+            surname_postcode_sql,
+            {"last_name": last_name, "postcode": postcode},
+            "surname_postcode",
+        ):
+            existing = candidates_by_id.get(candidate.patient_id)
+            if existing:
+                existing.match_reasons.add("surname_postcode")
+            else:
+                candidates_by_id[candidate.patient_id] = candidate
+
+    return list(candidates_by_id.values())
+
+
+def resolve_code(
+    source: R4SqlServerSource,
+    code: int,
+    verbose: bool,
+) -> Resolution:
+    r4_patient = _sqlserver_patient_details(source, code)
+    r4_appt_range = _sqlserver_appt_range(source, code)
+    existing_mapping = _existing_mapping(code)
+
+    candidates = _ng_candidates(r4_patient, code)
+    proposed_patient_id: int | None = None
+    confidence: str | None = None
+    rationale: str | None = None
+
+    if existing_mapping is not None:
+        proposed_patient_id = existing_mapping
+        confidence = "existing_mapping"
+        rationale = "Existing r4_patient_mappings row"
+    elif len(candidates) == 1:
+        proposed_patient_id = candidates[0].patient_id
+        if "legacy_id" in candidates[0].match_reasons:
+            confidence = "high"
+            rationale = "Matched legacy_id"
+        elif "surname_dob" in candidates[0].match_reasons:
+            confidence = "medium"
+            rationale = "Matched surname + DOB"
+        else:
+            confidence = "low"
+            rationale = "Matched surname + postcode"
+    elif len(candidates) > 1:
+        confidence = "ambiguous"
+        rationale = "Multiple candidate matches"
+    else:
+        confidence = "none"
+        rationale = "No candidate matches"
+
+    _log(
+        f"code={code} candidates={len(candidates)} proposed={proposed_patient_id}",
+        verbose,
+    )
+
+    return Resolution(
+        code=code,
+        r4_patient=r4_patient,
+        r4_appt_range=r4_appt_range,
+        existing_mapping=existing_mapping,
+        candidates=sorted(candidates, key=lambda c: c.patient_id),
+        proposed_patient_id=proposed_patient_id,
+        confidence=confidence,
+        rationale=rationale,
+    )
+
+
+def _render_candidate_table(candidates: list[Candidate]) -> str:
+    if not candidates:
+        return "_No candidates found._\n"
+    lines = [
+        "| patient_id | legacy_source | legacy_id | name | dob | postcode | phone | email | category | match_reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for cand in candidates:
+        name = " ".join(filter(None, [cand.first_name, cand.last_name])) or "-"
+        reasons = ", ".join(sorted(cand.match_reasons)) if cand.match_reasons else "-"
+        lines.append(
+            "| {pid} | {ls} | {lid} | {name} | {dob} | {pc} | {phone} | {email} | {cat} | {reason} |".format(
+                pid=cand.patient_id,
+                ls=cand.legacy_source or "-",
+                lid=cand.legacy_id or "-",
+                name=name,
+                dob=cand.date_of_birth or "-",
+                pc=cand.postcode or "-",
+                phone=cand.phone or "-",
+                email=cand.email or "-",
+                cat=cand.patient_category or "-",
+                reason=reasons,
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _render_r4_details(r4_patient: dict[str, Any] | None, r4_appt_range: dict[str, Any] | None) -> str:
+    if not r4_patient:
+        return "_No matching R4 patient record found._\n"
+    parts = []
+    parts.append(f"- PatientCode: {r4_patient.get('patient_code')}")
+    name = " ".join(
+        filter(None, [r4_patient.get("first_name"), r4_patient.get("last_name")])
+    )
+    if name:
+        parts.append(f"- Name: {name}")
+    if r4_patient.get("date_of_birth"):
+        parts.append(f"- DOB: {r4_patient.get('date_of_birth')}")
+    if r4_patient.get("title"):
+        parts.append(f"- Title: {r4_patient.get('title')}")
+    if r4_patient.get("phone"):
+        parts.append(f"- Phone: {r4_patient.get('phone')}")
+    if r4_patient.get("mobile"):
+        parts.append(f"- Mobile: {r4_patient.get('mobile')}")
+    if r4_patient.get("email"):
+        parts.append(f"- Email: {r4_patient.get('email')}")
+    if r4_patient.get("postcode"):
+        parts.append(f"- Postcode: {r4_patient.get('postcode')}")
+    address_bits = [
+        r4_patient.get("address_line1"),
+        r4_patient.get("address_line2"),
+        r4_patient.get("address_line3"),
+        r4_patient.get("town"),
+        r4_patient.get("county"),
+    ]
+    address = ", ".join([bit for bit in address_bits if bit])
+    if address:
+        parts.append(f"- Address: {address}")
+    if r4_appt_range:
+        parts.append(
+            f"- Appt date range: {r4_appt_range.get('date_min')} → {r4_appt_range.get('date_max')}"
+        )
+    return "\n".join(parts) + "\n"
+
+
+def _render_proposed(resolution: Resolution) -> str:
+    if resolution.existing_mapping is not None:
+        return f"- Proposed: patient_id {resolution.proposed_patient_id} (existing mapping)\n"
+    if resolution.proposed_patient_id is not None and resolution.confidence not in {"ambiguous", "none"}:
+        return (
+            f"- Proposed: patient_id {resolution.proposed_patient_id} "
+            f"(confidence: {resolution.confidence}; {resolution.rationale})\n"
+        )
+    return f"- UNRESOLVED ({resolution.rationale})\n"
+
+
+def generate_report(resolutions: list[Resolution], out_path: Path) -> str:
+    total = len(resolutions)
+    resolved = len(
+        [
+            r
+            for r in resolutions
+            if r.proposed_patient_id is not None and r.confidence not in {"ambiguous", "none"}
+        ]
+    )
+    ambiguous = len([r for r in resolutions if r.confidence == "ambiguous"])
+    no_match = len([r for r in resolutions if r.confidence == "none"])
+
+    lines = [
+        "# R4 manual mapping resolution report (2026-01-28)",
+        "",
+        "How to review:",
+        "- `rg -n \"legacy_patient_code 1016090\" docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md`",
+        "- `less +/legacy_patient_code\\ 1016090 docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md`",
+        "",
+        "Summary:",
+        f"- total codes: {total}",
+        f"- resolved (single confident match or existing mapping): {resolved}",
+        f"- ambiguous (multiple candidates): {ambiguous}",
+        f"- no match: {no_match}",
+        "",
+    ]
+
+    for resolution in resolutions:
+        lines.extend(
+            [
+                f"### legacy_patient_code {resolution.code}",
+                "",
+                "R4 details:",
+                _render_r4_details(resolution.r4_patient, resolution.r4_appt_range).rstrip(),
+                "",
+                "NG candidates (patients table):",
+                _render_candidate_table(resolution.candidates).rstrip(),
+                "",
+                "Proposed mapping:",
+                _render_proposed(resolution).rstrip(),
+                "",
+            ]
+        )
+
+    content = "\n".join(lines).rstrip() + "\n"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
+    return content
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Resolve R4 manual mapping candidates against R4 SQL Server and NG Postgres."
+    )
+    parser.add_argument(
+        "--candidates",
+        default="docs/r4/R4_MANUAL_MAPPING_CANDIDATES_2026-01-28.md",
+        help="Path to candidates markdown.",
+    )
+    parser.add_argument(
+        "--out",
+        default="docs/r4/R4_MANUAL_MAPPING_RESOLUTION_2026-01-28.md",
+        help="Output markdown path.",
+    )
+    parser.add_argument(
+        "--codes",
+        default="",
+        help="Optional comma-separated legacy patient codes (overrides candidates file).",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Run without writing output.")
+    parser.add_argument("--verbose", action="store_true", help="Verbose logging.")
+    args = parser.parse_args()
+
+    candidates_path = Path(args.candidates)
+    if args.codes:
+        codes = []
+        for part in args.codes.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            codes.append(int(part))
+    else:
+        if not candidates_path.exists():
+            raise FileNotFoundError(f"Candidates file not found: {candidates_path}")
+        codes = parse_codes(candidates_path)
+
+    if not codes:
+        raise RuntimeError("No legacy_patient_code values found.")
+
+    _log(f"codes extracted: {len(codes)}", args.verbose)
+
+    source = build_sqlserver_source()
+
+    resolutions: list[Resolution] = []
+    for code in codes:
+        resolutions.append(resolve_code(source, code, args.verbose))
+
+    resolved = [
+        r
+        for r in resolutions
+        if r.proposed_patient_id is not None and r.confidence not in {"ambiguous", "none"}
+    ]
+    ambiguous = [r for r in resolutions if r.confidence == "ambiguous"]
+    no_match = [r for r in resolutions if r.confidence == "none"]
+
+    print(f"total={len(resolutions)} resolved={len(resolved)} ambiguous={len(ambiguous)} none={len(no_match)}")
+
+    if resolved:
+        sample = random.sample(resolved, k=min(5, len(resolved)))
+        print("sample_resolved:")
+        for item in sample:
+            r4_name = ""
+            if item.r4_patient:
+                r4_name = " ".join(
+                    filter(None, [item.r4_patient.get("first_name"), item.r4_patient.get("last_name")])
+                )
+            print(
+                json.dumps(
+                    {
+                        "legacy_patient_code": item.code,
+                        "r4_name": r4_name or None,
+                        "r4_dob": item.r4_patient.get("date_of_birth") if item.r4_patient else None,
+                        "proposed_patient_id": item.proposed_patient_id,
+                        "confidence": item.confidence,
+                        "rationale": item.rationale,
+                    },
+                    default=str,
+                )
+            )
+
+    if args.dry_run:
+        return 0
+
+    out_path = Path(args.out)
+    generate_report(resolutions, out_path)
+    print(f"Wrote report: {out_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
