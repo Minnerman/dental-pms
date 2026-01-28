@@ -14,13 +14,14 @@ Summary:
 
 1) Fill in `docs/r4/R4_MANUAL_MAPPING_WORKLOG_2026-01-28.md` using R4 UI (surname, forenames, DOB, postcode, chart number, NHS number, phone last-6).
 2) Run a single lookup:
-   - `docker compose exec -T backend python scripts/ng_person_lookup.py --surname "SURNAME" --dob 19xx-xx-xx --postcode "BN11 1EG" --phone "07000 000000"`
+   - `bash ops/run_backend_script.sh scripts/ng_person_lookup.py --surname "SURNAME" --dob 19xx-xx-xx --postcode "BN11 1EG" --phone "07000 000000"`
 3) Or run against the worklog (rows with NG fields blank):
-   - `docker compose exec -T backend python scripts/ng_person_lookup.py --from-worklog docs/r4/R4_MANUAL_MAPPING_WORKLOG_2026-01-28.md`
+   - `bash ops/run_backend_script.sh scripts/ng_person_lookup.py --from-worklog docs/r4/R4_MANUAL_MAPPING_WORKLOG_2026-01-28.md`
 
 Notes:
 - This lookup is read-only against the NG Postgres database.
 - If postcode or phone are missing, leave those args out and rely on surname + DOB.
+- The wrapper avoids needing the backend container to mount the repo.
 
 ### legacy_patient_code 1016090
 
