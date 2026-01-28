@@ -46,6 +46,14 @@ def _create_patient(session, legacy_code: int, actor_id: int) -> Patient:
     return patient
 
 
+def _note_category_number(legacy_code: int) -> int:
+    return 1000 + (legacy_code % 100000)
+
+
+def _fixed_note_code(legacy_code: int) -> int:
+    return 500000 + (legacy_code % 100000)
+
+
 def _cleanup(session, patient_id: int | None, legacy_code: int) -> None:
     session.execute(
         delete(R4PerioProbe).where(R4PerioProbe.legacy_patient_code == legacy_code)
@@ -62,8 +70,16 @@ def _cleanup(session, patient_id: int | None, legacy_code: int) -> None:
     session.execute(
         delete(R4PerioPlaque).where(R4PerioPlaque.legacy_patient_code == legacy_code)
     )
-    session.execute(delete(R4FixedNote))
-    session.execute(delete(R4NoteCategory))
+    session.execute(
+        delete(R4FixedNote).where(
+            R4FixedNote.legacy_fixed_note_code == _fixed_note_code(legacy_code)
+        )
+    )
+    session.execute(
+        delete(R4NoteCategory).where(
+            R4NoteCategory.legacy_category_number == _note_category_number(legacy_code)
+        )
+    )
     if patient_id is not None:
         session.execute(
             delete(R4ChartingImportState).where(
@@ -117,6 +133,8 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
             return
         actor_id = resolve_actor_id(session)
         legacy_code = 990000000 + (uuid4().int % 100000)
+        category_number = _note_category_number(legacy_code)
+        fixed_note_code = _fixed_note_code(legacy_code)
         patient = _create_patient(session, legacy_code, actor_id)
         patient_id = patient.id
         created_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
@@ -172,7 +190,7 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         session.add(
             R4NoteCategory(
                 legacy_source="r4",
-                legacy_category_number=10,
+                legacy_category_number=category_number,
                 description="General",
                 created_by_user_id=actor_id,
             )
@@ -180,8 +198,8 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         session.add(
             R4FixedNote(
                 legacy_source="r4",
-                legacy_fixed_note_code=500,
-                category_number=10,
+                legacy_fixed_note_code=fixed_note_code,
+                category_number=category_number,
                 description="Post-op",
                 note="Post-op instructions",
                 tooth=11,
@@ -276,7 +294,10 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
             f"/patients/{patient.id}/charting/note-categories", headers=auth_headers
         )
         assert categories_res.status_code == 200, categories_res.text
-        assert categories_res.json()[0]["legacy_category_number"] == 10
+        categories = categories_res.json()
+        assert any(
+            item.get("legacy_category_number") == category_number for item in categories
+        )
 
         fixed_res = api_client.get(
             f"/patients/{patient.id}/charting/fixed-notes", headers=auth_headers
@@ -700,15 +721,23 @@ def test_charting_endpoints_require_auth(api_client, endpoint):
 def test_charting_endpoints_forbidden_for_external_role(api_client):
     session = SessionLocal()
     user = None
+    patient = None
     password = "ChartingPass123!"
     try:
         user = _create_test_user(session, role=Role.external, password=password)
         headers = _login(api_client, email=user.email, password=password)
-        res = api_client.get("/patients/1/charting/perio-probes", headers=headers)
+        actor_id = resolve_actor_id(session)
+        legacy_code = 980000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        session.commit()
+        res = api_client.get(f"/patients/{patient.id}/charting/perio-probes", headers=headers)
         assert res.status_code == 403, res.text
     finally:
         if user is not None:
             _cleanup_user(session, user)
+            session.commit()
+        if patient is not None:
+            session.execute(delete(Patient).where(Patient.id == patient.id))
             session.commit()
         session.close()
 

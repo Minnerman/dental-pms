@@ -60,8 +60,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - V1 finish line: `docs/V1_FINISH_LINE.md`
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
--## Recent fixes
--## Recent fixes
+## Recent fixes
+- 2026-01-28: Stage 167 recalls test seeding + charting test stability.
+  - Recalls API tests now self-seed and scope queries to seeded data; no reliance on global seeds.
+  - Charting note category/fixed note test data made idempotent; external-role charting test now seeds a patient.
+  - Tests: `docker compose exec -T backend pytest -q`, `bash ops/health.sh`.
 - 2026-01-28: Stage 166 R4 charting import completeness (Perio/BPE/Notes).
   - Added PerioPlaque, fixed notes, and note category API coverage; export now includes these entities.
   - BPE/BPEFurcation importer now captures notes/user/sextant/recorded_at where available; PerioPlaque link via Transactions.
