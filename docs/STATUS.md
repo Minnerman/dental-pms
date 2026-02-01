@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129G parity pack scaffold (PerioProbe).
+  - Added `backend/app/scripts/r4_perioprobe_parity_pack.py` for repeatable PerioProbe parity checks.
+  - Latest selection rule documented: `recorded_at+trans_id` when dated, else `trans_id`.
+  - Added runbook/checklist doc: `docs/r4/STAGE129G_PERIOPROBE_PARITY_PACK.md`.
 - 2026-02-01: Stage 129F BPE parity pack validated (5-patient spot-check).
   - Ran parity pack after importing mappings + canonical backfill for the 5-patient cohort.
   - For all 5 patients, latest SQL Server BPE date matched canonical latest date and sextant scores matched.
