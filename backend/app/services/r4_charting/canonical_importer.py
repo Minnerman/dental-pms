@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import hashlib
 import json
 from uuid import UUID
 from typing import Iterable, Protocol
@@ -64,7 +65,9 @@ def _json_sanitize(value):  # type: ignore[no-untyped-def]
 
 
 def _json_roundtrip(value: dict) -> dict:
-    return json.loads(json.dumps(value, default=_json_sanitize))
+    return json.loads(
+        json.dumps(value, default=_json_sanitize, sort_keys=True, separators=(",", ":"))
+    )
 
 
 def _model_payload(item) -> dict:
@@ -89,6 +92,25 @@ def _coerce_payload(payload):  # type: ignore[no-untyped-def]
     elif hasattr(payload, "dict"):
         payload = payload.dict()
     return _json_roundtrip(_json_sanitize(payload))
+
+
+def _compute_content_hash(record: CanonicalRecordInput) -> str:
+    payload = _coerce_payload(record.payload) if record.payload is not None else None
+    material = {
+        "domain": record.domain,
+        "r4_source": record.r4_source,
+        "r4_source_id": record.r4_source_id,
+        "legacy_patient_code": record.legacy_patient_code,
+        "recorded_at": _json_sanitize(record.recorded_at),
+        "entered_at": _json_sanitize(record.entered_at),
+        "tooth": record.tooth,
+        "surface": record.surface,
+        "code_id": record.code_id,
+        "status": record.status,
+        "payload": payload,
+    }
+    raw = json.dumps(material, sort_keys=True, separators=(",", ":"), default=_json_sanitize)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _build_unique_key(
@@ -506,7 +528,7 @@ def import_r4_charting_canonical(
 
     unique_keys = []
     now = datetime.now(timezone.utc)
-    prepared: list[tuple[CanonicalRecordInput, str, int | None]] = []
+    prepared: list[tuple[CanonicalRecordInput, str, int | None, str]] = []
     for record in records:
         patient_id = None
         if record.legacy_patient_code is not None:
@@ -521,7 +543,8 @@ def import_r4_charting_canonical(
             legacy_patient_code=record.legacy_patient_code,
         )
         unique_keys.append(unique_key)
-        prepared.append((record, unique_key, patient_id))
+        content_hash = _compute_content_hash(record)
+        prepared.append((record, unique_key, patient_id, content_hash))
 
     existing = {
         row.unique_key: row
@@ -532,7 +555,7 @@ def import_r4_charting_canonical(
         ).scalars()
     }
 
-    for record, unique_key, patient_id in prepared:
+    for record, unique_key, patient_id, content_hash in prepared:
         current = existing.get(unique_key)
         if current is None:
             session.add(
@@ -550,27 +573,14 @@ def import_r4_charting_canonical(
                     code_id=record.code_id,
                     status=record.status,
                     payload=_coerce_payload(record.payload),
+                    content_hash=content_hash,
                     extracted_at=now,
                 )
             )
             stats.created += 1
             continue
 
-        same = (
-            current.domain == record.domain
-            and current.r4_source == record.r4_source
-            and current.r4_source_id == record.r4_source_id
-            and current.legacy_patient_code == record.legacy_patient_code
-            and current.patient_id == patient_id
-            and current.recorded_at == record.recorded_at
-            and current.entered_at == record.entered_at
-            and current.tooth == record.tooth
-            and current.surface == record.surface
-            and current.code_id == record.code_id
-            and current.status == record.status
-            and current.payload == record.payload
-        )
-        if same:
+        if current.content_hash == content_hash:
             stats.skipped += 1
             continue
 
@@ -586,6 +596,7 @@ def import_r4_charting_canonical(
         current.code_id = record.code_id
         current.status = record.status
         current.payload = _coerce_payload(record.payload)
+        current.content_hash = content_hash
         current.extracted_at = now
         stats.updated += 1
 

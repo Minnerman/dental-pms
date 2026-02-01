@@ -39,6 +39,7 @@ class R4ChartingCanonicalRecord(Base):
     code_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str | None] = mapped_column(String(120), nullable=True)
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
