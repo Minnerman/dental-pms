@@ -61,3 +61,12 @@ docker compose exec -T backend python -m app.scripts.r4_perioprobe_parity_pack \
 2. Compare `latest_key` parity first.
 3. Compare latest digest parity (tooth/probing_point/depth/bleeding/plaque).
 4. If mismatched, inspect duplicate/raw vs distinct counts before changing mapping logic.
+
+## Validation result (2026-02-01)
+
+Validated against live R4 for the only PerioProbe-active patient in this environment (`PatientCode 1000000`):
+
+- SQL Server raw rows: 166; distinct unique keys: 117.
+- Canonical rows: 117; distinct unique keys: 117.
+- Latest key selection matched (`trans_id=4`; no `recorded_at` available).
+- Latest digest matched; parity pass.

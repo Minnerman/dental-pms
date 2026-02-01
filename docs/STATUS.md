@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129G PerioProbe parity validated (environment-constrained cohort).
+  - Validated against live R4 for the only PerioProbe-active patient in this environment (`PatientCode 1000000`).
+  - SQL Server raw rows 166 vs distinct unique keys 117; canonical rows 117 and distinct unique keys 117.
+  - Latest key matched (`trans_id=4`, no `recorded_at`) and latest digest matched (parity pass).
 - 2026-02-01: Stage 129G parity pack scaffold (PerioProbe).
   - Added `backend/app/scripts/r4_perioprobe_parity_pack.py` for repeatable PerioProbe parity checks.
   - Latest selection rule documented: `recorded_at+trans_id` when dated, else `trans_id`.
