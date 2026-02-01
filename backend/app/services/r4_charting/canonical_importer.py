@@ -108,6 +108,31 @@ def _build_unique_key(
     return f"{domain}|{r4_source}|{r4_source_id}|{suffix}"
 
 
+def _dedupe_records(
+    records: list[CanonicalRecordInput],
+) -> tuple[list[CanonicalRecordInput], int, list[str]]:
+    duplicate_unique_key = 0
+    duplicate_examples: list[str] = []
+    deduped: list[CanonicalRecordInput] = []
+    seen: set[str] = set()
+    for record in records:
+        unique_key = _build_unique_key(
+            domain=record.domain,
+            r4_source=record.r4_source,
+            r4_source_id=record.r4_source_id,
+            patient_id=None,
+            legacy_patient_code=record.legacy_patient_code,
+        )
+        if unique_key in seen:
+            duplicate_unique_key += 1
+            if len(duplicate_examples) < 5:
+                duplicate_examples.append(unique_key)
+            continue
+        seen.add(unique_key)
+        deduped.append(record)
+    return deduped, duplicate_unique_key, duplicate_examples
+
+
 def _ensure_select_only(source: object) -> None:
     if hasattr(source, "ensure_select_only"):
         source.ensure_select_only()
@@ -463,6 +488,7 @@ def import_r4_charting_canonical(
     else:
         records = list(_iter_from_r4_source(source, patients_from, patients_to, limit))
 
+    records, _, _ = _dedupe_records(records)
     stats = CanonicalImportStats(total=len(records))
     if not records:
         return stats
@@ -636,9 +662,16 @@ def import_r4_charting_canonical_report(
     else:
         records = list(_iter_from_r4_source(source, patients_from, patients_to, limit))
 
+    records, duplicate_unique_key, duplicate_examples = _dedupe_records(records)
     stats = CanonicalImportStats(total=len(records))
     if dry_run:
-        return stats, _build_canonical_report(records, stats, dropped=dropped)
+        report = _build_canonical_report(records, stats, dropped=dropped)
+        if duplicate_unique_key:
+            report.setdefault("dropped", {})
+            report["dropped"]["duplicate_unique_key"] = duplicate_unique_key
+            if duplicate_examples:
+                report["dropped"]["duplicate_unique_key_examples"] = duplicate_examples
+        return stats, report
 
     stats = import_r4_charting_canonical(
         session,
@@ -647,4 +680,10 @@ def import_r4_charting_canonical_report(
         patients_to=patients_to,
         limit=limit,
     )
-    return stats, _build_canonical_report(records, stats, dropped=dropped)
+    report = _build_canonical_report(records, stats, dropped=dropped)
+    if duplicate_unique_key:
+        report.setdefault("dropped", {})
+        report["dropped"]["duplicate_unique_key"] = duplicate_unique_key
+        if duplicate_examples:
+            report["dropped"]["duplicate_unique_key_examples"] = duplicate_examples
+    return stats, report
