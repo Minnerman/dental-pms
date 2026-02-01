@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
 
 from app.db.session import SessionLocal
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
@@ -114,5 +114,48 @@ def test_report_warns_on_undated_sources():
         assert report["dropped"]["undated_included"] == 2
         warnings = report.get("warnings", [])
         assert any("Undated rows included" in w for w in warnings)
+    finally:
+        session.close()
+
+
+class DuplicateKeySource:
+    select_only = True
+
+    def collect_canonical_records(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        date_from=None,
+        date_to=None,
+        limit: int | None = None,
+    ):
+        record = CanonicalRecordInput(
+            domain="perio_probe",
+            r4_source="dbo.PerioProbe",
+            r4_source_id="2:3:1",
+            legacy_patient_code=1000000,
+            recorded_at=None,
+            entered_at=None,
+            tooth=3,
+            surface=None,
+            code_id=None,
+            status=None,
+            payload={"note": "dup"},
+        )
+        return [record, record], {}
+
+
+def test_dedupes_duplicate_unique_key_in_apply():
+    session = SessionLocal()
+    try:
+        clear_canonical(session)
+        session.commit()
+        source = DuplicateKeySource()
+        stats, report = import_r4_charting_canonical_report(session, source, dry_run=False)
+        session.commit()
+        assert stats.created == 1
+        assert report["dropped"]["duplicate_unique_key"] == 1
+        total = session.scalar(select(func.count()).select_from(R4ChartingCanonicalRecord))
+        assert total == 1
     finally:
         session.close()
