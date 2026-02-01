@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129F parity pack scaffold (BPE).
+  - Added `backend/app/scripts/r4_bpe_parity_pack.py` for repeatable patient-level BPE timeline parity checks.
+  - Script reports canonical timeline + latest-row comparison to SQL Server (SELECT-only), with optional canonical-only mode.
+  - Added runbook/checklist doc: `docs/r4/STAGE129F_BPE_PARITY_PACK.md`.
 - 2026-02-01: Stage 129E-3 200-code cohort APPLY (BPE).
   - Generated 200 PatientCodes with BPE activity; imported patients via `--patient-codes` and confirmed mappings (200/200).
   - `charting_canonical` APPLY (SQL Server, SELECT-only) totals: created 499, updated 1, total_records 500, unmapped_patients 0, distinct_patients 124.
