@@ -41,6 +41,7 @@ class SqlServerChartingExtractor:
         self,
         patients_from: int | None = None,
         patients_to: int | None = None,
+        patient_codes: list[int] | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         limit: int | None = None,
@@ -48,9 +49,10 @@ class SqlServerChartingExtractor:
         records: list[CanonicalRecordInput] = []
         report = SqlServerExtractReport()
 
-        for item in self._source.list_bpe_entries(
+        for item in self._iter_bpe(
             patients_from=patients_from,
             patients_to=patients_to,
+            patient_codes=patient_codes,
             limit=limit,
         ):
             recorded_at = item.recorded_at
@@ -76,9 +78,10 @@ class SqlServerChartingExtractor:
                 )
             )
 
-        for item in self._source.list_perio_probes(
+        for item in self._iter_perio_probes(
             patients_from=patients_from,
             patients_to=patients_to,
+            patient_codes=patient_codes,
             limit=limit,
         ):
             recorded_at = item.recorded_at
@@ -107,6 +110,76 @@ class SqlServerChartingExtractor:
 
         return records, report.as_dict()
 
+    def _iter_bpe(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_bpe_entries(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_bpe_entries(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_perio_probes(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_perio_probes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_perio_probes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
 
 def _date_in_range(
     recorded_at,
@@ -127,3 +200,17 @@ def _date_in_range(
         report.out_of_range += 1
         return False
     return True
+
+
+def _chunk_codes(codes: list[int], *, size: int) -> Iterable[list[int]]:
+    if size <= 0:
+        raise ValueError("chunk size must be positive")
+    unique: list[int] = []
+    seen: set[int] = set()
+    for code in codes:
+        if code in seen:
+            continue
+        seen.add(code)
+        unique.append(code)
+    for idx in range(0, len(unique), size):
+        yield unique[idx : idx + size]

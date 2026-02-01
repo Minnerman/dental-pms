@@ -43,6 +43,48 @@ def test_cli_sqlserver_dry_run_no_import(monkeypatch):
     assert r4_import_script.main() == 0
 
 
+def test_parse_patient_codes_csv_ok():
+    parsed = r4_import_script._parse_patient_codes_csv("1000035, 1000036,1000035")
+    assert parsed == [1000035, 1000036]
+
+
+def test_parse_patient_codes_csv_invalid_token():
+    try:
+        r4_import_script._parse_patient_codes_csv("1000,abc,1002")
+    except RuntimeError as exc:
+        assert "Invalid patient code: abc" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected RuntimeError for invalid token")
+
+
+def test_parse_patient_codes_csv_empty_token():
+    try:
+        r4_import_script._parse_patient_codes_csv("1000,,1002")
+    except RuntimeError as exc:
+        assert "empty token" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected RuntimeError for empty token")
+
+
+def test_cli_rejects_patient_codes_with_range(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "patients",
+            "--patient-codes",
+            "1,2",
+            "--patients-from",
+            "1",
+            "--patients-to",
+            "2",
+        ],
+    )
+    assert r4_import_script.main() == 2
+
+
 def test_cli_sqlserver_apply_requires_confirm(monkeypatch):
     config = R4SqlServerConfig(
         enabled=True,
@@ -264,7 +306,7 @@ def test_cli_sqlserver_dry_run_patients_mapping_quality_out(tmp_path, monkeypatc
     assert r4_import_script.main() == 0
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["entity"] == "patients"
-    assert payload["window"] == {"patients_from": None, "patients_to": None}
+    assert payload["window"]["patient_filter_mode"] == "none"
     assert payload["mapping_quality"]["duplicates"]["email"]["count"] == 1
     assert payload["mapping_quality"]["duplicates"]["email"]["sample"] == ["a@example.com"]
 
@@ -516,3 +558,56 @@ def test_cli_sqlserver_dry_run_charting(monkeypatch):
     assert recorded["limit"] == 5
     assert recorded["patients_from"] == 100
     assert recorded["patients_to"] == 200
+
+
+def test_cli_charting_canonical_report_includes_patient_codes(tmp_path, monkeypatch):
+    captured = {}
+
+    class DummyStats:
+        def as_dict(self):
+            return {"created": 0, "updated": 0, "skipped": 0, "unmapped_patients": 0, "total": 1}
+
+    class DummySession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    def fake_import(*_args, **kwargs):
+        captured["patient_codes"] = kwargs.get("patient_codes")
+        return DummyStats(), {
+            "total_records": 1,
+            "distinct_patients": 1,
+            "missing_source_id": 0,
+            "missing_patient_code": 0,
+            "by_source": {"dbo.BPE": {"fetched": 1}},
+            "stats": {"created": 0, "updated": 0, "skipped": 0, "unmapped_patients": 0},
+        }
+
+    monkeypatch.setattr(r4_import_script, "SessionLocal", lambda: DummySession())
+    monkeypatch.setattr(r4_import_script, "resolve_actor_id", lambda _session: 1)
+    monkeypatch.setattr(r4_import_script, "import_r4_charting_canonical_report", fake_import)
+    output_path = tmp_path / "charting_codes.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "charting_canonical",
+            "--patient-codes",
+            "1000035,1000036",
+            "--output-json",
+            str(output_path),
+        ],
+    )
+    assert r4_import_script.main() == 0
+    assert captured["patient_codes"] == [1000035, 1000036]
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["patient_filter_mode"] == "codes"
+    assert payload["patient_codes_count"] == 2
+    assert payload["patient_codes_sample"] == [1000035, 1000036]
