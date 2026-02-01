@@ -23,7 +23,9 @@ def test_canonical_import_idempotent():
         session.commit()
 
         source = FixtureSource()
-        stats_first = import_r4_charting_canonical(session, source)
+        stats_first = import_r4_charting_canonical(
+            session, source, allow_unmapped_patients=True
+        )
         session.commit()
 
         assert stats_first.total > 0
@@ -31,7 +33,9 @@ def test_canonical_import_idempotent():
         assert stats_first.updated == 0
         assert stats_first.skipped == 0
 
-        stats_second = import_r4_charting_canonical(session, source)
+        stats_second = import_r4_charting_canonical(
+            session, source, allow_unmapped_patients=True
+        )
         session.commit()
 
         assert stats_second.total == stats_first.total
@@ -52,6 +56,36 @@ def test_canonical_report_includes_sources():
         by_source = report["by_source"]
         assert "dbo.BPE" in by_source
         assert "dbo.PerioProbe" in by_source
+    finally:
+        session.close()
+
+
+def test_canonical_import_skips_unmapped_by_default():
+    session = SessionLocal()
+    try:
+        clear_canonical(session)
+        session.commit()
+        source = FixtureSource()
+        stats = import_r4_charting_canonical(session, source)
+        session.commit()
+        assert stats.total > 0
+        assert stats.created == 0
+        assert stats.unmapped_patients == stats.total
+        assert stats.skipped == stats.total
+    finally:
+        session.close()
+
+
+def test_report_includes_unmapped_examples():
+    session = SessionLocal()
+    try:
+        source = FixtureSource()
+        stats, report = import_r4_charting_canonical_report(session, source, dry_run=True)
+        assert stats.unmapped_patients > 0
+        dropped = report.get("dropped", {})
+        assert dropped.get("unmapped_patients") == stats.unmapped_patients
+        examples = dropped.get("unmapped_patient_examples", [])
+        assert examples
     finally:
         session.close()
 
@@ -151,7 +185,9 @@ def test_dedupes_duplicate_unique_key_in_apply():
         clear_canonical(session)
         session.commit()
         source = DuplicateKeySource()
-        stats, report = import_r4_charting_canonical_report(session, source, dry_run=False)
+        stats, report = import_r4_charting_canonical_report(
+            session, source, dry_run=False, allow_unmapped_patients=True
+        )
         session.commit()
         assert stats.created == 1
         assert report["dropped"]["duplicate_unique_key"] == 1
@@ -199,9 +235,13 @@ def test_content_hash_prevents_updates_when_unchanged():
         clear_canonical(session)
         session.commit()
         source = FixtureSource()
-        stats, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        stats, _ = import_r4_charting_canonical_report(
+            session, source, dry_run=False, allow_unmapped_patients=True
+        )
         session.commit()
-        stats_rerun, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        stats_rerun, _ = import_r4_charting_canonical_report(
+            session, source, dry_run=False, allow_unmapped_patients=True
+        )
         session.commit()
         assert stats.created > 0
         assert stats_rerun.updated == 0
@@ -215,9 +255,13 @@ def test_content_hash_updates_on_change():
         clear_canonical(session)
         session.commit()
         source = MutatingSource()
-        stats_first, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        stats_first, _ = import_r4_charting_canonical_report(
+            session, source, dry_run=False, allow_unmapped_patients=True
+        )
         session.commit()
-        stats_second, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        stats_second, _ = import_r4_charting_canonical_report(
+            session, source, dry_run=False, allow_unmapped_patients=True
+        )
         session.commit()
         assert stats_first.created == 1
         assert stats_second.updated == 1

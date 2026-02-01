@@ -315,6 +315,11 @@ def main() -> int:
         help="Verify patients in Postgres for a window (no SQL Server connection).",
     )
     parser.add_argument(
+        "--allow-unmapped-patients",
+        action="store_true",
+        help="Allow charting imports for patients without mappings (default: false).",
+    )
+    parser.add_argument(
         "--connect-timeout-seconds",
         type=int,
         default=None,
@@ -509,6 +514,7 @@ def main() -> int:
                             date_to=args.charting_to,
                             limit=args.limit,
                             dry_run=False,
+                            allow_unmapped_patients=args.allow_unmapped_patients,
                         )
                         report = _finalize_charting_report(
                             report,
@@ -621,6 +627,7 @@ def main() -> int:
                         date_to=args.charting_to,
                         limit=args.limit,
                         dry_run=True,
+                        allow_unmapped_patients=args.allow_unmapped_patients,
                     )
                     report = _finalize_charting_report(
                         report,
@@ -714,6 +721,7 @@ def main() -> int:
                 date_to=args.charting_to,
                 limit=args.limit,
                 dry_run=False,
+                allow_unmapped_patients=args.allow_unmapped_patients,
             )
             report = _finalize_charting_report(
                 report,

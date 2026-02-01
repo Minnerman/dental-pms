@@ -130,6 +130,21 @@ def _build_unique_key(
     return f"{domain}|{r4_source}|{r4_source_id}|{suffix}"
 
 
+def _load_patient_mappings(
+    session: Session, patient_codes: set[int]
+) -> dict[int, int]:
+    mappings: dict[int, int] = {}
+    if patient_codes:
+        for mapping in session.execute(
+            select(R4PatientMapping).where(
+                R4PatientMapping.legacy_source == "r4",
+                R4PatientMapping.legacy_patient_code.in_(patient_codes),
+            )
+        ).scalars():
+            mappings[int(mapping.legacy_patient_code)] = int(mapping.patient_id)
+    return mappings
+
+
 def _dedupe_records(
     records: list[CanonicalRecordInput],
 ) -> tuple[list[CanonicalRecordInput], int, list[str]]:
@@ -494,6 +509,7 @@ def import_r4_charting_canonical(
     patients_from: int | None = None,
     patients_to: int | None = None,
     limit: int | None = None,
+    allow_unmapped_patients: bool = False,
 ) -> CanonicalImportStats:
     _ensure_select_only(source)
 
@@ -516,15 +532,7 @@ def import_r4_charting_canonical(
         return stats
 
     patient_codes = {r.legacy_patient_code for r in records if r.legacy_patient_code is not None}
-    mappings = {}
-    if patient_codes:
-        for mapping in session.execute(
-            select(R4PatientMapping).where(
-                R4PatientMapping.legacy_source == "r4",
-                R4PatientMapping.legacy_patient_code.in_(patient_codes),
-            )
-        ).scalars():
-            mappings[int(mapping.legacy_patient_code)] = int(mapping.patient_id)
+    mappings = _load_patient_mappings(session, {int(code) for code in patient_codes})
 
     unique_keys = []
     now = datetime.now(timezone.utc)
@@ -533,8 +541,10 @@ def import_r4_charting_canonical(
         patient_id = None
         if record.legacy_patient_code is not None:
             patient_id = mappings.get(int(record.legacy_patient_code))
-            if patient_id is None:
+            if patient_id is None and not allow_unmapped_patients:
                 stats.unmapped_patients += 1
+                stats.skipped += 1
+                continue
         unique_key = _build_unique_key(
             domain=record.domain,
             r4_source=record.r4_source,
@@ -656,6 +666,7 @@ def import_r4_charting_canonical_report(
     date_to: date | None = None,
     limit: int | None = None,
     dry_run: bool = False,
+    allow_unmapped_patients: bool = False,
 ) -> tuple[CanonicalImportStats, dict[str, object]]:
     _ensure_select_only(source)
 
@@ -675,6 +686,22 @@ def import_r4_charting_canonical_report(
 
     records, duplicate_unique_key, duplicate_examples = _dedupe_records(records)
     stats = CanonicalImportStats(total=len(records))
+    unmapped_examples: list[int] = []
+    if records and not allow_unmapped_patients:
+        patient_codes = {
+            int(r.legacy_patient_code)
+            for r in records
+            if r.legacy_patient_code is not None
+        }
+        mappings = _load_patient_mappings(session, patient_codes)
+        for record in records:
+            if record.legacy_patient_code is None:
+                continue
+            if int(record.legacy_patient_code) not in mappings:
+                stats.unmapped_patients += 1
+                stats.skipped += 1
+                if len(unmapped_examples) < 5:
+                    unmapped_examples.append(int(record.legacy_patient_code))
     if dry_run:
         report = _build_canonical_report(records, stats, dropped=dropped)
         if duplicate_unique_key:
@@ -682,6 +709,11 @@ def import_r4_charting_canonical_report(
             report["dropped"]["duplicate_unique_key"] = duplicate_unique_key
             if duplicate_examples:
                 report["dropped"]["duplicate_unique_key_examples"] = duplicate_examples
+        if stats.unmapped_patients:
+            report.setdefault("dropped", {})
+            report["dropped"]["unmapped_patients"] = stats.unmapped_patients
+            if unmapped_examples:
+                report["dropped"]["unmapped_patient_examples"] = unmapped_examples
         return stats, report
 
     stats = import_r4_charting_canonical(
@@ -690,6 +722,7 @@ def import_r4_charting_canonical_report(
         patients_from=patients_from,
         patients_to=patients_to,
         limit=limit,
+        allow_unmapped_patients=allow_unmapped_patients,
     )
     report = _build_canonical_report(records, stats, dropped=dropped)
     if duplicate_unique_key:
@@ -697,4 +730,9 @@ def import_r4_charting_canonical_report(
         report["dropped"]["duplicate_unique_key"] = duplicate_unique_key
         if duplicate_examples:
             report["dropped"]["duplicate_unique_key_examples"] = duplicate_examples
+    if stats.unmapped_patients:
+        report.setdefault("dropped", {})
+        report["dropped"]["unmapped_patients"] = stats.unmapped_patients
+        if unmapped_examples:
+            report["dropped"]["unmapped_patient_examples"] = unmapped_examples
     return stats, report
