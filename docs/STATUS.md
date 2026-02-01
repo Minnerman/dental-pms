@@ -61,6 +61,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129J parity consolidation runner.
+  - Added `r4_parity_run.py` to run BPE/PerioProbe/PatientNotes/TreatmentNotes parity packs in one pass.
+  - Added deterministic active cohort selectors for PatientNotes and TreatmentNotes alongside BPE.
+  - Consolidated reporting includes per-domain status (`pass`/`fail`/`no_data`) and overall pass/fail + has_data flag.
+  - Documented usage and known limitations in `docs/r4/STAGE129J_PARITY_CONSOLIDATION.md`.
 - 2026-02-01: Stage 129I TreatmentNotes canonical ingestion + parity validation.
   - Added SQL Server canonical extraction for `dbo.TreatmentNotes` (patient-scoped, dated by `DateAdded`, SELECT-only).
   - 5-patient apply+rerrun was idempotent (`created=7/0`, `updated=0/0`, `skipped=0/7`, `unmapped_patients=0`).

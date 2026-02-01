@@ -362,6 +362,107 @@ def get_distinct_bpe_patient_codes(
         codes.append(code)
     return codes
 
+
+def get_distinct_patient_notes_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("PatientNotes", ["PatientCode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "PatientNotes", ["Date", "NoteDate", "CreatedDate", "CreatedOn"]
+    )
+    if not patient_col or not date_col:
+        raise RuntimeError("PatientNotes missing PatientCode/Date columns; cannot fetch distinct codes.")
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.PatientNotes WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
+def get_distinct_treatment_notes_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("TreatmentNotes", ["PatientCode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "TreatmentNotes",
+        ["Date", "NoteDate", "DateAdded", "CreatedDate", "CreatedOn"],
+    )
+    if not patient_col or not date_col:
+        raise RuntimeError("TreatmentNotes missing PatientCode/Date columns; cannot fetch distinct codes.")
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.TreatmentNotes WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
 def _date_in_range(
     recorded_at,
     date_from: date | None,
