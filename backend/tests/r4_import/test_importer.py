@@ -4,6 +4,7 @@ from app.db.session import SessionLocal
 from app.models.appointment import Appointment
 from app.models.patient import Patient
 from app.models.r4_charting import R4ChartingImportState
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import R4TreatmentPlan
 from app.models.user import User
@@ -32,6 +33,11 @@ def clear_r4(session) -> None:
     )
     session.execute(
         delete(R4PatientMapping).where(R4PatientMapping.patient_id.in_(r4_patient_ids))
+    )
+    session.execute(
+        delete(R4ChartingCanonicalRecord).where(
+            R4ChartingCanonicalRecord.patient_id.in_(r4_patient_ids)
+        )
     )
     session.execute(delete(Appointment).where(Appointment.legacy_source == "r4"))
     session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
