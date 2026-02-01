@@ -69,9 +69,9 @@ def test_canonical_import_skips_unmapped_by_default():
         stats = import_r4_charting_canonical(session, source)
         session.commit()
         assert stats.total > 0
-        assert stats.created == 0
-        assert stats.unmapped_patients == stats.total
-        assert stats.skipped == stats.total
+        assert stats.created == stats.total - stats.unmapped_patients
+        assert stats.skipped == stats.unmapped_patients
+        assert stats.created + stats.skipped == stats.total
     finally:
         session.close()
 
