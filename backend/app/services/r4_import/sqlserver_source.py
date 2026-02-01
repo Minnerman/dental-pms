@@ -173,10 +173,16 @@ class R4SqlServerConfig:
 
 
 class R4SqlServerSource:
+    select_only = True
+
     def __init__(self, config: R4SqlServerConfig) -> None:
         self._config = config
         self._columns_cache: dict[str, list[str]] = {}
         self._tcp_checked = False
+
+    def ensure_select_only(self) -> None:
+        if not self.select_only:
+            raise RuntimeError("R4 SQL Server source must be SELECT-only.")
 
     def dry_run_summary(
         self,
