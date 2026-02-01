@@ -806,3 +806,6 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## 2026-02-01
 - Stage 129 started: canonical charting plan doc + canonical records table + SELECT-only importer scaffolding (no R4 writes).
+
+## 2026-02-01
+- Stage 129C: added SELECT-only SQL Server charting canonical extractor (BPE + PerioProbe) with bounded pilot/reporting; CLI supports charting_canonical with dry-run/report output; tests green.
