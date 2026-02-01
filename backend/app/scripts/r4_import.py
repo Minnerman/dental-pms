@@ -20,7 +20,11 @@ from app.services.r4_import.postgres_verify import verify_patients_window
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 from app.services.r4_import.r4_user_importer import import_r4_users
 from app.services.r4_import.charting_importer import import_r4_charting
-from app.services.r4_charting.canonical_importer import import_r4_charting_canonical
+from app.services.r4_charting.canonical_importer import (
+    import_r4_charting_canonical,
+    import_r4_charting_canonical_report,
+)
+from app.services.r4_charting.sqlserver_extract import SqlServerChartingExtractor
 from app.services.r4_import.treatment_transactions_importer import (
     import_r4_treatment_transactions,
 )
@@ -93,6 +97,61 @@ def _write_stats_file(path: str, payload: dict[str, object]) -> None:
         handle.write("\n")
         tmp_path = handle.name
     os.replace(tmp_path, target)
+
+
+def _write_report_file(path: str, payload: dict[str, object]) -> None:
+    target = Path(path)
+    parent = target.parent
+    if parent and not parent.exists():
+        raise RuntimeError(f"Report output directory does not exist: {parent}")
+    data = json.dumps(payload, indent=2, sort_keys=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        delete=False,
+        dir=str(parent) if parent else None,
+    ) as handle:
+        handle.write(data)
+        handle.write("\n")
+        tmp_path = handle.name
+    os.replace(tmp_path, target)
+
+
+def _finalize_charting_report(
+    report: dict[str, object],
+    *,
+    source: str,
+    entity: str,
+    patients_from: int | None,
+    patients_to: int | None,
+    charting_from: date | None,
+    charting_to: date | None,
+    limit: int | None,
+    mode: str,
+) -> dict[str, object]:
+    totals = {
+        "total_records": report.get("total_records"),
+        "distinct_patients": report.get("distinct_patients"),
+        "missing_source_id": report.get("missing_source_id"),
+        "missing_patient_code": report.get("missing_patient_code"),
+    }
+    stats = report.get("stats") or {}
+    for key in ("created", "updated", "skipped", "unmapped_patients"):
+        totals[key] = stats.get(key)
+    report.update(
+        {
+            "mode": mode,
+            "source": source,
+            "entity": entity,
+            "patients_from": patients_from,
+            "patients_to": patients_to,
+            "charting_from": charting_from.isoformat() if charting_from else None,
+            "charting_to": charting_to.isoformat() if charting_to else None,
+            "limit": limit,
+            "totals": totals,
+        }
+    )
+    return report
 
 
 def _maybe_write_mapping_quality(
@@ -201,6 +260,20 @@ def main() -> int:
         help="Exclude dates before this floor when reporting dry-run date ranges.",
     )
     parser.add_argument(
+        "--charting-from",
+        dest="charting_from",
+        type=_parse_date_arg,
+        default=None,
+        help="Filter charting rows from YYYY-MM-DD (inclusive).",
+    )
+    parser.add_argument(
+        "--charting-to",
+        dest="charting_to",
+        type=_parse_date_arg,
+        default=None,
+        help="Filter charting rows to YYYY-MM-DD (inclusive).",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -229,6 +302,12 @@ def main() -> int:
         dest="stats_out",
         default=None,
         help="Write final import stats JSON to PATH (apply/fixture runs).",
+    )
+    parser.add_argument(
+        "--output-json",
+        dest="output_json",
+        default=None,
+        help="Write charting canonical report JSON to PATH.",
     )
     parser.add_argument(
         "--verify-postgres",
@@ -287,6 +366,9 @@ def main() -> int:
 
     if args.mapping_quality_out and args.entity != "patients":
         print("--mapping-quality-out is only supported for --entity patients.")
+        return 2
+    if args.output_json and args.entity != "charting_canonical":
+        print("--output-json is only supported for --entity charting_canonical.")
         return 2
     if args.verify_postgres and args.entity != "patients":
         print("--verify-postgres is only supported for --entity patients.")
@@ -417,8 +499,30 @@ def main() -> int:
                             limit=args.limit,
                         )
                     elif args.entity == "charting_canonical":
-                        print("Canonical charting import is fixtures-only for now.")
-                        return 2
+                        extractor = SqlServerChartingExtractor(config)
+                        stats, report = import_r4_charting_canonical_report(
+                            session,
+                            extractor,
+                            patients_from=args.patients_from,
+                            patients_to=args.patients_to,
+                            date_from=args.charting_from,
+                            date_to=args.charting_to,
+                            limit=args.limit,
+                            dry_run=False,
+                        )
+                        report = _finalize_charting_report(
+                            report,
+                            source="sqlserver",
+                            entity="charting_canonical",
+                            patients_from=args.patients_from,
+                            patients_to=args.patients_to,
+                            charting_from=args.charting_from,
+                            charting_to=args.charting_to,
+                            limit=args.limit,
+                            mode="apply",
+                        )
+                        if args.output_json:
+                            _write_report_file(args.output_json, report)
                     else:
                         stats = import_r4_treatment_plans(
                             session,
@@ -505,8 +609,35 @@ def main() -> int:
                     patients_to=args.patients_to,
                 )
             elif args.entity == "charting_canonical":
-                print("Canonical charting dry-run is fixtures-only for now.")
-                return 2
+                session = SessionLocal()
+                try:
+                    extractor = SqlServerChartingExtractor(config)
+                    stats, report = import_r4_charting_canonical_report(
+                        session,
+                        extractor,
+                        patients_from=args.patients_from,
+                        patients_to=args.patients_to,
+                        date_from=args.charting_from,
+                        date_to=args.charting_to,
+                        limit=args.limit,
+                        dry_run=True,
+                    )
+                    report = _finalize_charting_report(
+                        report,
+                        source="sqlserver",
+                        entity="charting_canonical",
+                        patients_from=args.patients_from,
+                        patients_to=args.patients_to,
+                        charting_from=args.charting_from,
+                        charting_to=args.charting_to,
+                        limit=args.limit,
+                        mode="dry_run",
+                    )
+                    summary = report
+                    if args.output_json:
+                        _write_report_file(args.output_json, report)
+                finally:
+                    session.close()
             else:
                 summary = source.dry_run_summary_treatment_plans(
                     limit=args.limit or 10,
@@ -574,13 +705,29 @@ def main() -> int:
                 limit=args.limit,
             )
         elif args.entity == "charting_canonical":
-            stats = import_r4_charting_canonical(
+            stats, report = import_r4_charting_canonical_report(
                 session,
                 source,
                 patients_from=args.patients_from,
                 patients_to=args.patients_to,
+                date_from=args.charting_from,
+                date_to=args.charting_to,
                 limit=args.limit,
+                dry_run=False,
             )
+            report = _finalize_charting_report(
+                report,
+                source="fixtures",
+                entity="charting_canonical",
+                patients_from=args.patients_from,
+                patients_to=args.patients_to,
+                charting_from=args.charting_from,
+                charting_to=args.charting_to,
+                limit=args.limit,
+                mode="apply",
+            )
+            if args.output_json:
+                _write_report_file(args.output_json, report)
         else:
             stats = import_r4_treatment_plans(
                 session,

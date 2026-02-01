@@ -125,6 +125,7 @@ class R4SqlServerConfig:
     trust_cert: bool
     timeout_seconds: int
     trust_cert_set: bool | None = None
+    readonly: bool | None = None
 
     @classmethod
     def from_env(cls, environ: dict[str, str] | None = None) -> "R4SqlServerConfig":
@@ -133,6 +134,7 @@ class R4SqlServerConfig:
         trust_cert_raw = env.get("R4_SQLSERVER_TRUST_CERT")
         if trust_cert_raw is None:
             trust_cert_raw = env.get("R4_SQLSERVER_TRUST_SERVER_CERT")
+        readonly_raw = env.get("R4_SQLSERVER_READONLY")
         return cls(
             enabled=_parse_bool(env.get("R4_SQLSERVER_ENABLED"), default=False),
             host=env.get("R4_SQLSERVER_HOST"),
@@ -147,6 +149,7 @@ class R4SqlServerConfig:
             else False,
             timeout_seconds=int(env.get("R4_SQLSERVER_TIMEOUT_SECONDS", "8")),
             trust_cert_set=trust_cert_raw is not None,
+            readonly=_parse_bool(readonly_raw, default=False) if readonly_raw is not None else None,
         )
 
     def require_enabled(self) -> None:
@@ -169,6 +172,12 @@ class R4SqlServerConfig:
         if missing:
             raise RuntimeError(
                 "Missing required SQL Server env vars: " + ", ".join(missing)
+            )
+
+    def require_readonly(self) -> None:
+        if self.readonly is not True:
+            raise RuntimeError(
+                "R4 SQL Server read-only mode is required (set R4_SQLSERVER_READONLY=true)."
             )
 
 

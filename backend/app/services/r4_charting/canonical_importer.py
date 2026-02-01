@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
@@ -13,39 +12,10 @@ from sqlalchemy.orm import Session
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.services.r4_import.source import R4Source
-
-
-@dataclass
-class CanonicalImportStats:
-    total: int = 0
-    created: int = 0
-    updated: int = 0
-    skipped: int = 0
-    unmapped_patients: int = 0
-
-    def as_dict(self) -> dict[str, int]:
-        return {
-            "total": self.total,
-            "created": self.created,
-            "updated": self.updated,
-            "skipped": self.skipped,
-            "unmapped_patients": self.unmapped_patients,
-        }
-
-
-@dataclass
-class CanonicalRecordInput:
-    domain: str
-    r4_source: str
-    r4_source_id: str
-    legacy_patient_code: int | None
-    recorded_at: datetime | None
-    entered_at: datetime | None
-    tooth: int | None
-    surface: int | None
-    code_id: int | None
-    status: str | None
-    payload: dict | None
+from app.services.r4_charting.canonical_types import (
+    CanonicalImportStats,
+    CanonicalRecordInput,
+)
 
 
 class CanonicalChartingSource(Protocol):
@@ -57,6 +27,16 @@ class CanonicalChartingSource(Protocol):
         patients_to: int | None = None,
         limit: int | None = None,
     ) -> Iterable[CanonicalRecordInput]:
+        raise NotImplementedError
+
+    def collect_canonical_records(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> tuple[list[CanonicalRecordInput], dict[str, int]]:
         raise NotImplementedError
 
 
@@ -470,7 +450,15 @@ def import_r4_charting_canonical(
 ) -> CanonicalImportStats:
     _ensure_select_only(source)
 
-    if hasattr(source, "iter_canonical_records"):
+    if hasattr(source, "collect_canonical_records"):
+        records, _ = source.collect_canonical_records(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            date_from=None,
+            date_to=None,
+            limit=limit,
+        )
+    elif hasattr(source, "iter_canonical_records"):
         records = list(source.iter_canonical_records(patients_from, patients_to, limit))
     else:
         records = list(_iter_from_r4_source(source, patients_from, patients_to, limit))
@@ -576,3 +564,87 @@ def import_r4_charting_canonical(
         stats.updated += 1
 
     return stats
+
+
+def _build_canonical_report(
+    records: list[CanonicalRecordInput],
+    stats: CanonicalImportStats,
+    *,
+    dropped: dict[str, int] | None = None,
+) -> dict[str, object]:
+    per_source: dict[str, dict[str, int]] = {}
+    missing_source_id = 0
+    missing_patient_code = 0
+    patient_codes: set[int] = set()
+    for record in records:
+        bucket = per_source.get(record.r4_source)
+        if bucket is None:
+            bucket = {"fetched": 0}
+            per_source[record.r4_source] = bucket
+        bucket["fetched"] += 1
+        if not record.r4_source_id or record.r4_source_id == "unknown":
+            missing_source_id += 1
+        if record.legacy_patient_code is None:
+            missing_patient_code += 1
+        else:
+            patient_codes.add(int(record.legacy_patient_code))
+    report: dict[str, object] = {
+        "total_records": len(records),
+        "distinct_patients": len(patient_codes),
+        "missing_source_id": missing_source_id,
+        "missing_patient_code": missing_patient_code,
+        "by_source": per_source,
+        "stats": stats.as_dict(),
+    }
+    if dropped:
+        report["dropped"] = dropped
+        warnings: list[str] = []
+        undated = dropped.get("undated_included") if isinstance(dropped, dict) else None
+        if undated:
+            warnings.append(
+                "Undated rows included from sources without date columns; date bounds not applied."
+            )
+        if warnings:
+            report["warnings"] = warnings
+    return report
+
+
+def import_r4_charting_canonical_report(
+    session: Session,
+    source: CanonicalChartingSource | R4Source,
+    *,
+    patients_from: int | None = None,
+    patients_to: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int | None = None,
+    dry_run: bool = False,
+) -> tuple[CanonicalImportStats, dict[str, object]]:
+    _ensure_select_only(source)
+
+    dropped: dict[str, int] | None = None
+    if hasattr(source, "collect_canonical_records"):
+        records, dropped = source.collect_canonical_records(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    elif hasattr(source, "iter_canonical_records"):
+        records = list(source.iter_canonical_records(patients_from, patients_to, limit))
+    else:
+        records = list(_iter_from_r4_source(source, patients_from, patients_to, limit))
+
+    stats = CanonicalImportStats(total=len(records))
+    if dry_run:
+        return stats, _build_canonical_report(records, stats, dropped=dropped)
+
+    stats = import_r4_charting_canonical(
+        session,
+        source,
+        patients_from=patients_from,
+        patients_to=patients_to,
+        limit=limit,
+    )
+    return stats, _build_canonical_report(records, stats, dropped=dropped)
