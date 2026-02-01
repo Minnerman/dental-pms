@@ -52,3 +52,15 @@ For each patient in the report:
    - differing sextant values,
    - date mismatch (timezone/day boundary).
 4. Record findings in `docs/STATUS.md` before widening scope.
+
+## Validation result (2026-02-01)
+
+- Cohort: 5 patients (`1000035,1000036,1000037,1000363,1000365`).
+- After patient mapping + canonical backfill, parity pack reported:
+  - `canonical_count == sqlserver_count` for all 5 patients.
+  - Latest BPE `recorded_at` matched for all 5.
+  - Latest sextant values matched for all 5.
+  - No parity warnings.
+- Import stability for this cohort:
+  - first apply: rows created/updated as expected,
+  - rerun: `updated=0` (idempotent).
