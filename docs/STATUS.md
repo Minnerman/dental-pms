@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129E-2 mapped active cohort APPLY (BPE).
+  - Selected 50 PatientCodes with BPE activity; imported patients via `--patient-codes` and confirmed mappings (50/50).
+  - `charting_canonical` APPLY (SQL Server, SELECT-only) succeeded with totals: created 130, updated 1, total_records 131, unmapped_patients 0.
+  - Immediate rerun was idempotent: updated 0, skipped 131; by_source showed `dbo.BPE` fetched 131.
 - 2026-01-28: Stage 172 admin UI for R4 manual mappings.
   - Added minimal admin page to list/create/delete manual mappings.
 - 2026-01-28: Stage 173c manual mapping resolution report.
