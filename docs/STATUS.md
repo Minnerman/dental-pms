@@ -61,6 +61,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129E-3 200-code cohort APPLY (BPE).
+  - Generated 200 PatientCodes with BPE activity; imported patients via `--patient-codes` and confirmed mappings (200/200).
+  - `charting_canonical` APPLY (SQL Server, SELECT-only) totals: created 499, updated 1, total_records 500, unmapped_patients 0, distinct_patients 124.
+  - Immediate rerun was idempotent: updated 0, skipped 500.
+  - by_source: `dbo.BPE` fetched 500.
+  - Note: `limit=500` bounds fetched rows; not all requested codes necessarily appear in a single run.
 - 2026-02-01: Stage 129E-2 mapped active cohort APPLY (BPE).
   - Selected 50 PatientCodes with BPE activity; imported patients via `--patient-codes` and confirmed mappings (50/50).
   - `charting_canonical` APPLY (SQL Server, SELECT-only) succeeded with totals: created 130, updated 1, total_records 131, unmapped_patients 0.
