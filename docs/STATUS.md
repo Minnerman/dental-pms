@@ -61,6 +61,9 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129H scaffold started (PatientNotes parity pack).
+  - Selected `dbo.PatientNotes` as next safest source (direct `PatientCode` + dated rows).
+  - Added scaffold script/test/doc for `patient_note` parity checks; no extractor wiring changes in this scaffold.
 - 2026-02-01: Stage 129G PerioProbe parity validated (environment-constrained cohort).
   - Validated against live R4 for the only PerioProbe-active patient in this environment (`PatientCode 1000000`).
   - SQL Server raw rows 166 vs distinct unique keys 117; canonical rows 117 and distinct unique keys 117.
