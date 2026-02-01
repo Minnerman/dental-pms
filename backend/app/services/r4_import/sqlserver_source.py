@@ -1151,7 +1151,10 @@ class R4SqlServerSource:
         patients_from: int | None = None,
         patients_to: int | None = None,
     ) -> dict[str, str] | None:
-        date_col = self._pick_column("TreatmentNotes", ["Date", "NoteDate", "CreatedDate"])
+        date_col = self._pick_column(
+            "TreatmentNotes",
+            ["Date", "NoteDate", "DateAdded", "CreatedDate", "CreatedOn"],
+        )
         if not date_col:
             return None
         patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
@@ -1980,7 +1983,10 @@ class R4SqlServerSource:
     ) -> list[dict[str, Any]]:
         note_id_col = self._require_column("TreatmentNotes", ["NoteID", "NoteId"])
         patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
-        date_col = self._pick_column("TreatmentNotes", ["Date", "NoteDate", "CreatedDate"])
+        date_col = self._pick_column(
+            "TreatmentNotes",
+            ["Date", "NoteDate", "DateAdded", "CreatedDate", "CreatedOn"],
+        )
         note_col = self._pick_column("TreatmentNotes", ["Note", "Notes", "NoteText", "NoteBody"])
         select_cols = [f"{note_id_col} AS note_id"]
         if patient_col:
@@ -3815,7 +3821,10 @@ class R4SqlServerSource:
         patient_col = self._pick_column("TreatmentNotes", ["PatientCode"])
         tp_col = self._pick_column("TreatmentNotes", ["TPNumber", "TPNum", "TPNo"])
         tp_item_col = self._pick_column("TreatmentNotes", ["TPItem", "TPItemNo"])
-        date_col = self._pick_column("TreatmentNotes", ["Date", "NoteDate", "CreatedDate"])
+        date_col = self._pick_column(
+            "TreatmentNotes",
+            ["Date", "NoteDate", "DateAdded", "CreatedDate", "CreatedOn"],
+        )
         note_col = self._pick_column("TreatmentNotes", ["Note", "Notes", "NoteText", "NoteBody"])
         user_col = self._pick_column("TreatmentNotes", ["UserCode", "EnteredBy"])
         last_id: int | None = None
