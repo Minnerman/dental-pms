@@ -63,6 +63,7 @@ from app.models.r4_user import R4User
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_linkage_issue import R4LinkageIssue
 from app.models.r4_manual_mapping import R4ManualMapping
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 
 __all__ = [
     "Base",
@@ -141,4 +142,5 @@ __all__ = [
     "R4PatientMapping",
     "R4LinkageIssue",
     "R4ManualMapping",
+    "R4ChartingCanonicalRecord",
 ]

@@ -32,6 +32,8 @@ from app.services.r4_import.types import (
 
 
 class FixtureSource(R4Source):
+    select_only = True
+
     def __init__(self, base_path: Path | None = None) -> None:
         if base_path is None:
             base_path = Path(__file__).resolve().parent / "fixtures"
