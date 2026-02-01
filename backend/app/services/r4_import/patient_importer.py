@@ -36,6 +36,7 @@ def import_r4_patients(
     legacy_source: str = "r4",
     patients_from: int | None = None,
     patients_to: int | None = None,
+    patient_codes: list[int] | None = None,
     limit: int | None = None,
     progress_every: int | None = None,
 ) -> PatientImportStats:
@@ -44,11 +45,16 @@ def import_r4_patients(
     processed = 0
     last_code: int | None = None
     started_at = time.monotonic()
-    for patient in source.stream_patients(
-        patients_from=patients_from,
-        patients_to=patients_to,
-        limit=limit,
-    ):
+    if patient_codes:
+        iterator = _stream_patients_for_codes(source, patient_codes, limit=limit)
+    else:
+        iterator = source.stream_patients(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            limit=limit,
+        )
+
+    for patient in iterator:
         processed += 1
         last_code = patient.patient_code
         report.ingest(patient)
@@ -65,6 +71,30 @@ def import_r4_patients(
         )
     stats.mapping_quality = report.finalize()
     return stats
+
+
+def _stream_patients_for_codes(
+    source: R4Source,
+    patient_codes: list[int],
+    *,
+    limit: int | None,
+):
+    remaining = limit
+    seen: set[int] = set()
+    for code in patient_codes:
+        if code in seen:
+            continue
+        seen.add(code)
+        if remaining is not None and remaining <= 0:
+            break
+        for patient in source.stream_patients(
+            patients_from=code,
+            patients_to=code,
+            limit=1,
+        ):
+            yield patient
+            if remaining is not None:
+                remaining -= 1
 
 
 def _upsert_patient(

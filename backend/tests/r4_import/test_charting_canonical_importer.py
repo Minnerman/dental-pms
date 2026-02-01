@@ -90,6 +90,55 @@ def test_report_includes_unmapped_examples():
         session.close()
 
 
+class PatientCodesSource:
+    select_only = True
+
+    def __init__(self) -> None:
+        self.seen_codes: list[int] | None = None
+
+    def collect_canonical_records(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        patient_codes: list[int] | None = None,
+        date_from=None,
+        date_to=None,
+        limit: int | None = None,
+    ):
+        self.seen_codes = patient_codes
+        return [
+            CanonicalRecordInput(
+                domain="bpe_entry",
+                r4_source="dbo.BPE",
+                r4_source_id="1000035:1",
+                legacy_patient_code=1000035,
+                recorded_at=None,
+                entered_at=None,
+                tooth=None,
+                surface=None,
+                code_id=None,
+                status=None,
+                payload={"note": "x"},
+            )
+        ], {}
+
+
+def test_codes_mode_passes_patient_codes_to_source():
+    session = SessionLocal()
+    try:
+        source = PatientCodesSource()
+        stats, _ = import_r4_charting_canonical_report(
+            session,
+            source,
+            patient_codes=[1000035, 1000036],
+            dry_run=True,
+        )
+        assert stats.total == 1
+        assert source.seen_codes == [1000035, 1000036]
+    finally:
+        session.close()
+
+
 class UndatedSource:
     select_only = True
 

@@ -47,20 +47,91 @@ def _parse_date_arg(value: str) -> date:
     return date.fromisoformat(value)
 
 
+def _parse_patient_codes_csv(raw: str | None) -> list[int] | None:
+    if raw is None:
+        return None
+    tokens = raw.split(",")
+    seen: set[int] = set()
+    parsed: list[int] = []
+    for token in tokens:
+        value = token.strip()
+        if not value:
+            raise RuntimeError("Invalid --patient-codes value: empty token.")
+        try:
+            code = int(value)
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid patient code: {value}") from exc
+        if code in seen:
+            continue
+        seen.add(code)
+        parsed.append(code)
+    if not parsed:
+        raise RuntimeError("Invalid --patient-codes value: no patient codes provided.")
+    return parsed
+
+
 def _build_patients_mapping_quality(
     source,
     patients_from: int | None,
     patients_to: int | None,
+    patient_codes: list[int] | None,
     limit: int | None,
 ) -> dict[str, object]:
     report = PatientMappingQualityReportBuilder()
-    for patient in source.stream_patients(
-        patients_from=patients_from,
-        patients_to=patients_to,
-        limit=limit,
-    ):
-        report.ingest(patient)
+    if patient_codes:
+        remaining = limit
+        for code in patient_codes:
+            if remaining is not None and remaining <= 0:
+                break
+            for patient in source.stream_patients(
+                patients_from=code,
+                patients_to=code,
+                limit=1,
+            ):
+                report.ingest(patient)
+                if remaining is not None:
+                    remaining -= 1
+    else:
+        for patient in source.stream_patients(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            limit=limit,
+        ):
+            report.ingest(patient)
     return report.finalize()
+
+
+def _patient_filter_metadata(
+    *,
+    patients_from: int | None,
+    patients_to: int | None,
+    patient_codes: list[int] | None,
+) -> dict[str, object]:
+    if patient_codes:
+        return {
+            "patient_filter_mode": "codes",
+            "patient_codes_count": len(patient_codes),
+            "patient_codes_sample": patient_codes[:10],
+        }
+    if patients_from is not None or patients_to is not None:
+        return {
+            "patient_filter_mode": "range",
+            "patients_from": patients_from,
+            "patients_to": patients_to,
+        }
+    return {"patient_filter_mode": "none"}
+
+
+def _validate_patient_filters(
+    *,
+    patients_from: int | None,
+    patients_to: int | None,
+    patient_codes: list[int] | None,
+) -> None:
+    if patient_codes and (patients_from is not None or patients_to is not None):
+        raise RuntimeError(
+            "--patient-codes cannot be used with --patients-from/--patients-to."
+        )
 
 
 def _write_mapping_quality_file(path: str, payload: dict[str, object]) -> None:
@@ -124,6 +195,7 @@ def _finalize_charting_report(
     entity: str,
     patients_from: int | None,
     patients_to: int | None,
+    patient_codes: list[int] | None,
     charting_from: date | None,
     charting_to: date | None,
     limit: int | None,
@@ -143,12 +215,15 @@ def _finalize_charting_report(
             "mode": mode,
             "source": source,
             "entity": entity,
-            "patients_from": patients_from,
-            "patients_to": patients_to,
             "charting_from": charting_from.isoformat() if charting_from else None,
             "charting_to": charting_to.isoformat() if charting_to else None,
             "limit": limit,
             "totals": totals,
+            **_patient_filter_metadata(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+            ),
         }
     )
     return report
@@ -159,6 +234,7 @@ def _maybe_write_mapping_quality(
     mapping_quality: dict[str, object] | None,
     patients_from: int | None,
     patients_to: int | None,
+    patient_codes: list[int] | None = None,
 ) -> None:
     if not path:
         return
@@ -166,10 +242,11 @@ def _maybe_write_mapping_quality(
         raise RuntimeError("Mapping quality output requested, but no report was generated.")
     payload = {
         "entity": "patients",
-        "window": {
-            "patients_from": patients_from,
-            "patients_to": patients_to,
-        },
+        "window": _patient_filter_metadata(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            patient_codes=patient_codes,
+        ),
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "mapping_quality": mapping_quality,
     }
@@ -182,6 +259,7 @@ def _maybe_write_stats(
     stats: dict[str, object],
     patients_from: int | None,
     patients_to: int | None,
+    patient_codes: list[int] | None = None,
     appts_from: date | None = None,
     appts_to: date | None = None,
 ) -> None:
@@ -193,10 +271,11 @@ def _maybe_write_stats(
             "appts_to": appts_to.isoformat() if appts_to else None,
         }
     else:
-        window = {
-            "patients_from": patients_from,
-            "patients_to": patients_to,
-        }
+        window = _patient_filter_metadata(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            patient_codes=patient_codes,
+        )
     payload = {
         "entity": entity,
         "window": window,
@@ -340,6 +419,12 @@ def main() -> int:
         help="Filter treatment plans/items to patient code (inclusive).",
     )
     parser.add_argument(
+        "--patient-codes",
+        dest="patient_codes",
+        default=None,
+        help="Comma-separated patient codes for exact cohort selection.",
+    )
+    parser.add_argument(
         "--tp-from",
         dest="tp_from",
         type=int,
@@ -368,6 +453,16 @@ def main() -> int:
         help="Filter appointments to YYYY-MM-DD (inclusive).",
     )
     args = parser.parse_args()
+    try:
+        patient_codes = _parse_patient_codes_csv(args.patient_codes)
+        _validate_patient_filters(
+            patients_from=args.patients_from,
+            patients_to=args.patients_to,
+            patient_codes=patient_codes,
+        )
+    except RuntimeError as exc:
+        print(str(exc))
+        return 2
 
     if args.mapping_quality_out and args.entity != "patients":
         print("--mapping-quality-out is only supported for --entity patients.")
@@ -443,6 +538,7 @@ def main() -> int:
                             legacy_source="r4",
                             patients_from=args.patients_from,
                             patients_to=args.patients_to,
+                            patient_codes=patient_codes,
                             limit=args.limit,
                             progress_every=args.progress_every,
                         )
@@ -510,6 +606,7 @@ def main() -> int:
                             extractor,
                             patients_from=args.patients_from,
                             patients_to=args.patients_to,
+                            patient_codes=patient_codes,
                             date_from=args.charting_from,
                             date_to=args.charting_to,
                             limit=args.limit,
@@ -522,6 +619,7 @@ def main() -> int:
                             entity="charting_canonical",
                             patients_from=args.patients_from,
                             patients_to=args.patients_to,
+                            patient_codes=patient_codes,
                             charting_from=args.charting_from,
                             charting_to=args.charting_to,
                             limit=args.limit,
@@ -554,6 +652,7 @@ def main() -> int:
                         stats.mapping_quality,
                         args.patients_from,
                         args.patients_to,
+                        patient_codes=patient_codes,
                     )
                 _maybe_write_stats(
                     args.stats_out,
@@ -561,6 +660,7 @@ def main() -> int:
                     stats.as_dict(),
                     args.patients_from,
                     args.patients_to,
+                    patient_codes,
                     args.appts_from,
                     args.appts_to,
                 )
@@ -577,6 +677,7 @@ def main() -> int:
                         source,
                         patients_from=args.patients_from,
                         patients_to=args.patients_to,
+                        patient_codes=patient_codes,
                         limit=None,
                     )
                     _maybe_write_mapping_quality(
@@ -584,6 +685,7 @@ def main() -> int:
                         mapping_quality,
                         args.patients_from,
                         args.patients_to,
+                        patient_codes=patient_codes,
                     )
             elif args.entity == "patients_appts":
                 summary = source.dry_run_summary(
@@ -623,6 +725,7 @@ def main() -> int:
                         extractor,
                         patients_from=args.patients_from,
                         patients_to=args.patients_to,
+                        patient_codes=patient_codes,
                         date_from=args.charting_from,
                         date_to=args.charting_to,
                         limit=args.limit,
@@ -635,6 +738,7 @@ def main() -> int:
                         entity="charting_canonical",
                         patients_from=args.patients_from,
                         patients_to=args.patients_to,
+                        patient_codes=patient_codes,
                         charting_from=args.charting_from,
                         charting_to=args.charting_to,
                         limit=args.limit,
@@ -674,6 +778,7 @@ def main() -> int:
                 actor_id,
                 patients_from=args.patients_from,
                 patients_to=args.patients_to,
+                patient_codes=patient_codes,
                 limit=args.limit,
                 progress_every=args.progress_every,
             )
@@ -717,6 +822,7 @@ def main() -> int:
                 source,
                 patients_from=args.patients_from,
                 patients_to=args.patients_to,
+                patient_codes=patient_codes,
                 date_from=args.charting_from,
                 date_to=args.charting_to,
                 limit=args.limit,
@@ -729,6 +835,7 @@ def main() -> int:
                 entity="charting_canonical",
                 patients_from=args.patients_from,
                 patients_to=args.patients_to,
+                patient_codes=patient_codes,
                 charting_from=args.charting_from,
                 charting_to=args.charting_to,
                 limit=args.limit,
@@ -758,6 +865,7 @@ def main() -> int:
                 stats.mapping_quality,
                 args.patients_from,
                 args.patients_to,
+                patient_codes=patient_codes,
             )
         _maybe_write_stats(
             args.stats_out,
@@ -765,6 +873,7 @@ def main() -> int:
             stats.as_dict(),
             args.patients_from,
             args.patients_to,
+            patient_codes,
             args.appts_from,
             args.appts_to,
         )

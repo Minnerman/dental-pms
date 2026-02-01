@@ -7,6 +7,7 @@ from app.db.session import SessionLocal
 from app.models.appointment import Appointment
 from app.models.patient import Patient
 from app.models.r4_charting import R4ChartingImportState
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import R4TreatmentPlan
 from app.models.user import User
@@ -35,6 +36,11 @@ def clear_r4(session) -> None:
     )
     session.execute(
         delete(R4PatientMapping).where(R4PatientMapping.patient_id.in_(r4_patient_ids))
+    )
+    session.execute(
+        delete(R4ChartingCanonicalRecord).where(
+            R4ChartingCanonicalRecord.patient_id.in_(r4_patient_ids)
+        )
     )
     session.execute(delete(Appointment).where(Appointment.legacy_source == "r4"))
     session.execute(delete(Patient).where(Patient.legacy_source == "r4"))
@@ -163,5 +169,31 @@ def test_r4_patient_import_normalizes_fields():
         )
         assert mapping is not None
         assert mapping.patient_id == patient.id
+    finally:
+        session.close()
+
+
+def test_r4_patient_import_patient_codes_filters_exact_cohort():
+    session = SessionLocal()
+    try:
+        clear_r4(session)
+        session.commit()
+
+        actor_id = resolve_actor_id(session)
+        source = FixtureSource()
+
+        stats = import_r4_patients(
+            session,
+            source,
+            actor_id,
+            patient_codes=[1002],
+        )
+        session.commit()
+
+        assert stats.patients_created == 1
+        imported = session.scalars(
+            select(Patient.legacy_id).where(Patient.legacy_source == "r4")
+        ).all()
+        assert imported == ["1002"]
     finally:
         session.close()

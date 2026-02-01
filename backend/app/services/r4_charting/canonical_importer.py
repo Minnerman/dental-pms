@@ -34,6 +34,7 @@ class CanonicalChartingSource(Protocol):
         self,
         patients_from: int | None = None,
         patients_to: int | None = None,
+        patient_codes: list[int] | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         limit: int | None = None,
@@ -508,15 +509,18 @@ def import_r4_charting_canonical(
     *,
     patients_from: int | None = None,
     patients_to: int | None = None,
+    patient_codes: list[int] | None = None,
     limit: int | None = None,
     allow_unmapped_patients: bool = False,
 ) -> CanonicalImportStats:
     _ensure_select_only(source)
 
     if hasattr(source, "collect_canonical_records"):
-        records, _ = source.collect_canonical_records(
+        records, _ = _collect_canonical_records(
+            source,
             patients_from=patients_from,
             patients_to=patients_to,
+            patient_codes=patient_codes,
             date_from=None,
             date_to=None,
             limit=limit,
@@ -662,6 +666,7 @@ def import_r4_charting_canonical_report(
     *,
     patients_from: int | None = None,
     patients_to: int | None = None,
+    patient_codes: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     limit: int | None = None,
@@ -672,9 +677,11 @@ def import_r4_charting_canonical_report(
 
     dropped: dict[str, int] | None = None
     if hasattr(source, "collect_canonical_records"):
-        records, dropped = source.collect_canonical_records(
+        records, dropped = _collect_canonical_records(
+            source,
             patients_from=patients_from,
             patients_to=patients_to,
+            patient_codes=patient_codes,
             date_from=date_from,
             date_to=date_to,
             limit=limit,
@@ -721,6 +728,7 @@ def import_r4_charting_canonical_report(
         source,
         patients_from=patients_from,
         patients_to=patients_to,
+        patient_codes=patient_codes,
         limit=limit,
         allow_unmapped_patients=allow_unmapped_patients,
     )
@@ -736,3 +744,36 @@ def import_r4_charting_canonical_report(
         if unmapped_examples:
             report["dropped"]["unmapped_patient_examples"] = unmapped_examples
     return stats, report
+
+
+def _collect_canonical_records(
+    source: CanonicalChartingSource | R4Source,
+    *,
+    patients_from: int | None,
+    patients_to: int | None,
+    patient_codes: list[int] | None,
+    date_from: date | None,
+    date_to: date | None,
+    limit: int | None,
+) -> tuple[list[CanonicalRecordInput], dict[str, int]]:
+    if patient_codes is None:
+        return source.collect_canonical_records(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    try:
+        return source.collect_canonical_records(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            patient_codes=patient_codes,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    except TypeError as exc:
+        raise RuntimeError(
+            "This charting source does not support --patient-codes."
+        ) from exc
