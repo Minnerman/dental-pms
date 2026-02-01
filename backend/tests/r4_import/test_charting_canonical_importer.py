@@ -165,7 +165,7 @@ class MutatingSource:
     select_only = True
 
     def __init__(self) -> None:
-        self._toggle = False
+        self._calls = 0
 
     def collect_canonical_records(
         self,
@@ -175,8 +175,8 @@ class MutatingSource:
         date_to=None,
         limit: int | None = None,
     ):
-        payload_note = "v1" if not self._toggle else "v2"
-        self._toggle = True
+        self._calls += 1
+        payload_note = "v1" if self._calls <= 2 else "v2"
         record = CanonicalRecordInput(
             domain="bpe_entry",
             r4_source="dbo.BPE",
