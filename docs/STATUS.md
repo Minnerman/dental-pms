@@ -803,3 +803,6 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - 2026-01-07 Patient recall fields + alert flags + recalls worklist UI
 - 2026-01-07 Patient ledger entries + quick payments + ledger tab
 - 2026-01-07 Cash-up report + ledger backfill script
+
+## 2026-02-01
+- Stage 129 started: canonical charting plan doc + canonical records table + SELECT-only importer scaffolding (no R4 writes).
