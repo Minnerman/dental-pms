@@ -128,6 +128,9 @@ class DummySourceForNotes:
             return rows
         return rows[:limit]
 
+    def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
+        return []
+
 
 def test_collect_canonical_records_includes_patient_notes_with_date_bounds():
     extractor = object.__new__(extract.SqlServerChartingExtractor)
@@ -169,3 +172,61 @@ def test_collect_canonical_records_patient_note_source_id_fallback_when_note_num
     assert len(records) == 1
     assert records[0].r4_source_id.startswith("1016312:2023-05-01 09:00:00:")
     assert dropped["missing_date"] == 0
+
+
+class DummyTreatmentNote:
+    def __init__(self, patient_code, note_id, note_date, note):
+        self.patient_code = patient_code
+        self.note_id = note_id
+        self.note_date = note_date
+        self.note = note
+        self.tp_number = 1
+        self.tp_item = 1
+        self.user_code = None
+
+    def model_dump(self):
+        return {
+            "patient_code": self.patient_code,
+            "note_id": self.note_id,
+            "note_date": self.note_date,
+            "note": self.note,
+            "tp_number": self.tp_number,
+            "tp_item": self.tp_item,
+            "user_code": self.user_code,
+        }
+
+
+def test_collect_canonical_records_includes_treatment_notes_with_date_bounds():
+    class TreatmentSource(DummySourceForNotes):
+        def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+        def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
+            return [
+                DummyTreatmentNote(
+                    patients_from,
+                    11,
+                    datetime(2023, 5, 1, 9, 0, 0),
+                    "in range",
+                ),
+                DummyTreatmentNote(
+                    patients_from,
+                    12,
+                    datetime(2001, 5, 1, 9, 0, 0),
+                    "out of range",
+                ),
+            ]
+
+    extractor = object.__new__(extract.SqlServerChartingExtractor)
+    extractor._source = TreatmentSource()
+    records, dropped = extractor.collect_canonical_records(
+        patient_codes=[1016312],
+        date_from=date(2010, 1, 1),
+        date_to=date(2026, 2, 1),
+        limit=10,
+    )
+    treatment = [r for r in records if r.r4_source == "dbo.TreatmentNotes"]
+    assert len(treatment) == 1
+    assert treatment[0].domain == "treatment_note"
+    assert treatment[0].r4_source_id == "11"
+    assert dropped["out_of_range"] == 1

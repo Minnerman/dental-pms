@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-01: Stage 129I TreatmentNotes canonical ingestion + parity validation.
+  - Added SQL Server canonical extraction for `dbo.TreatmentNotes` (patient-scoped, dated by `DateAdded`, SELECT-only).
+  - 5-patient apply+rerrun was idempotent (`created=7/0`, `updated=0/0`, `skipped=0/7`, `unmapped_patients=0`).
+  - TreatmentNotes parity pack passed for all 5 (`latest_key` and `latest_digest` matches).
 - 2026-02-01: Stage 129H-2 PatientNotes canonical ingestion + parity validation.
   - Added SQL Server canonical extraction for `dbo.PatientNotes` (dated, patient-scoped, SELECT-only).
   - 5-patient apply+rerrun was idempotent (`created=7/0`, `updated=0/0`, `skipped=0/7`, `unmapped_patients=0`).
