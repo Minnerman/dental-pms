@@ -159,3 +159,67 @@ def test_dedupes_duplicate_unique_key_in_apply():
         assert total == 1
     finally:
         session.close()
+
+
+class MutatingSource:
+    select_only = True
+
+    def __init__(self) -> None:
+        self._toggle = False
+
+    def collect_canonical_records(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        date_from=None,
+        date_to=None,
+        limit: int | None = None,
+    ):
+        payload_note = "v1" if not self._toggle else "v2"
+        self._toggle = True
+        record = CanonicalRecordInput(
+            domain="bpe_entry",
+            r4_source="dbo.BPE",
+            r4_source_id="1000035:2017-10-25 12:08:48",
+            legacy_patient_code=1000035,
+            recorded_at=None,
+            entered_at=None,
+            tooth=None,
+            surface=None,
+            code_id=None,
+            status=None,
+            payload={"note": payload_note},
+        )
+        return [record], {}
+
+
+def test_content_hash_prevents_updates_when_unchanged():
+    session = SessionLocal()
+    try:
+        clear_canonical(session)
+        session.commit()
+        source = FixtureSource()
+        stats, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        session.commit()
+        stats_rerun, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        session.commit()
+        assert stats.created > 0
+        assert stats_rerun.updated == 0
+    finally:
+        session.close()
+
+
+def test_content_hash_updates_on_change():
+    session = SessionLocal()
+    try:
+        clear_canonical(session)
+        session.commit()
+        source = MutatingSource()
+        stats_first, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        session.commit()
+        stats_second, _ = import_r4_charting_canonical_report(session, source, dry_run=False)
+        session.commit()
+        assert stats_first.created == 1
+        assert stats_second.updated == 1
+    finally:
+        session.close()
