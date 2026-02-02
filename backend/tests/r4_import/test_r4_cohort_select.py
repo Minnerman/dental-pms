@@ -83,6 +83,65 @@ def test_select_cohort_exclude_all_raises(monkeypatch):
         raise AssertionError("expected RuntimeError")
 
 
+def test_select_cohort_hashed_order_changes_with_seed_and_is_deterministic(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_domain_codes",
+        lambda domain, **kwargs: list(range(1, 101)),
+    )
+    first = r4_cohort_select.select_cohort(
+        domains=["bpe"],
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+        mode="union",
+        order="hashed",
+        seed=1,
+    )
+    second = r4_cohort_select.select_cohort(
+        domains=["bpe"],
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+        mode="union",
+        order="hashed",
+        seed=1,
+    )
+    third = r4_cohort_select.select_cohort(
+        domains=["bpe"],
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+        mode="union",
+        order="hashed",
+        seed=2,
+    )
+    assert first["patient_codes"] == second["patient_codes"]
+    assert first["patient_codes"] != third["patient_codes"]
+
+
+def test_select_cohort_hashed_order_requires_seed(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_domain_codes",
+        lambda domain, **kwargs: [1, 2, 3],
+    )
+    try:
+        r4_cohort_select.select_cohort(
+            domains=["bpe"],
+            date_from="2017-01-01",
+            date_to="2026-02-01",
+            limit=10,
+            mode="union",
+            order="hashed",
+            seed=None,
+        )
+    except RuntimeError as exc:
+        assert "--seed is required when --order=hashed." in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected RuntimeError")
+
+
 def test_parse_exclude_patient_codes_file_csv_and_newline(tmp_path):
     path = tmp_path / "exclude.csv"
     path.write_text("1,3\n2\n3\n", encoding="utf-8")
@@ -100,6 +159,8 @@ def test_main_writes_output_csv(monkeypatch, tmp_path):
             "date_from": "2017-01-01",
             "date_to": "2026-02-01",
             "limit": 3,
+            "order": "asc",
+            "seed": None,
             "exclude_count": 0,
             "remaining_after_exclude": 3,
             "selected_count": 3,
