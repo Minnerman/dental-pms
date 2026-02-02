@@ -118,6 +118,7 @@ def select_cohort(
 
     merged_codes = _order_patient_codes(merged_codes, order=order, seed=seed)
 
+    candidates_before_exclude = len(merged_codes)
     filtered_codes = [code for code in merged_codes if code not in excluded]
     if excluded and merged_codes and not filtered_codes:
         raise RuntimeError(
@@ -125,6 +126,7 @@ def select_cohort(
             "--exclude-patient-codes-file or selection parameters."
         )
     remaining_after_exclude = len(filtered_codes)
+    excluded_candidates_count = candidates_before_exclude - remaining_after_exclude
     final_codes = filtered_codes[:limit]
 
     return {
@@ -135,6 +137,9 @@ def select_cohort(
         "limit": limit,
         "order": order,
         "seed": seed,
+        "candidates_before_exclude": candidates_before_exclude,
+        "exclude_input_count": len(excluded),
+        "excluded_candidates_count": excluded_candidates_count,
         "exclude_count": len(excluded),
         "remaining_after_exclude": remaining_after_exclude,
         "selected_count": len(final_codes),
