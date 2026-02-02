@@ -163,6 +163,61 @@ def test_get_distinct_treatment_notes_patient_codes_dedupes_and_orders(monkeypat
     assert captured["params"][0] == 5
 
 
+def test_get_distinct_bpe_furcation_patient_codes_dedupes_and_orders(monkeypatch):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def _pick_column(self, table, candidates):
+            if table == "BPE":
+                for candidate in candidates:
+                    if candidate == "PatientCode":
+                        return "PatientCode"
+                    if candidate == "Date":
+                        return "Date"
+                    if candidate in {"BPEID", "ID"}:
+                        return "ID"
+            if table == "BPEFurcation":
+                for candidate in candidates:
+                    if candidate == "BPEID":
+                        return "BPEID"
+            return None
+
+        def _query(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return [
+                {"patient_code": 1000035},
+                {"patient_code": 1000036},
+                {"patient_code": 1000035},
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_bpe_furcation_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [1000035, 1000036]
+    assert "FROM dbo.BPE b" in captured["query"]
+    assert "JOIN dbo.BPEFurcation f" in captured["query"]
+    assert "GROUP BY b.PatientCode" in captured["query"]
+    assert captured["params"][0] == 5
+
+
 class DummyNote:
     def __init__(self, patient_code, note_number, note_date, note):
         self.patient_code = patient_code

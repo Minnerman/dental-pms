@@ -15,6 +15,7 @@ class _DummySession:
 def test_parse_domains_csv_defaults_all():
     assert r4_parity_run._parse_domains_csv(None) == [
         "bpe",
+        "bpe_furcation",
         "perioprobe",
         "patient_notes",
         "treatment_notes",
@@ -57,11 +58,14 @@ def test_run_parity_aggregates_statuses(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr(r4_parity_run, "SessionLocal", lambda: _DummySession())
     monkeypatch.setattr(r4_parity_run.r4_bpe_parity_pack, "build_parity_report", _build_with_data)
+    monkeypatch.setattr(
+        r4_parity_run.r4_bpe_furcation_parity_pack, "build_parity_report", _build_with_data
+    )
     monkeypatch.setattr(r4_parity_run.r4_perioprobe_parity_pack, "build_parity_report", _build_no_data)
 
     report = r4_parity_run.run_parity(
         patient_codes=[1000],
-        domains=["bpe", "perioprobe"],
+        domains=["bpe", "bpe_furcation", "perioprobe"],
         date_from=None,
         date_to=None,
         row_limit=10,
@@ -69,10 +73,12 @@ def test_run_parity_aggregates_statuses(monkeypatch, tmp_path: Path):
     )
 
     assert report["domain_summaries"]["bpe"]["status"] == "pass"
+    assert report["domain_summaries"]["bpe_furcation"]["status"] == "pass"
     assert report["domain_summaries"]["perioprobe"]["status"] == "no_data"
     assert report["overall"]["status"] == "pass"
     assert report["overall"]["has_data"] is True
     assert (tmp_path / "bpe.json").exists()
+    assert (tmp_path / "bpe_furcation.json").exists()
     assert (tmp_path / "perioprobe.json").exists()
 
 

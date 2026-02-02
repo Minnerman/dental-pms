@@ -61,6 +61,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 129K BPEFurcation canonical ingestion + parity validation.
+  - Added SQL Server canonical extraction for `dbo.BPEFurcation` using parent BPE linkage (`BPEFurcation.BPEID -> BPE.(BPEID|RefId|ID)`) to recover patient/date context.
+  - Added `r4_bpe_furcation_parity_pack.py` and integrated `bpe_furcation` into the consolidated `r4_parity_run.py`.
+  - Added deterministic selector helper `get_distinct_bpe_furcation_patient_codes(...)` for active furcation cohorts.
+  - Real 5-patient validation passed: apply+rerrun idempotent (`created=54/0`, `updated=0/0`, `skipped=0/54`, `unmapped_patients=0`) and parity latest key/digest matched for all 5.
 - 2026-02-01: Stage 129J parity consolidation runner.
   - Added `r4_parity_run.py` to run BPE/PerioProbe/PatientNotes/TreatmentNotes parity packs in one pass.
   - Added deterministic active cohort selectors for PatientNotes and TreatmentNotes alongside BPE.

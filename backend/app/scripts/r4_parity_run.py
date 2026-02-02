@@ -8,13 +8,14 @@ from pathlib import Path
 from app.db.session import SessionLocal
 from app.scripts import (
     r4_bpe_parity_pack,
+    r4_bpe_furcation_parity_pack,
     r4_patient_notes_parity_pack,
     r4_perioprobe_parity_pack,
     r4_treatment_notes_parity_pack,
 )
 
 
-ALL_DOMAINS = ("bpe", "perioprobe", "patient_notes", "treatment_notes")
+ALL_DOMAINS = ("bpe", "bpe_furcation", "perioprobe", "patient_notes", "treatment_notes")
 
 
 def _parse_patient_codes_csv(raw: str) -> list[int]:
@@ -158,6 +159,15 @@ def run_parity(
                     row_limit=row_limit,
                     include_sqlserver=True,
                 )
+            elif domain == "bpe_furcation":
+                domain_report = r4_bpe_furcation_parity_pack.build_parity_report(
+                    session,
+                    patient_codes=patient_codes,
+                    date_from=date_from,
+                    date_to=date_to,
+                    row_limit=row_limit,
+                    include_sqlserver=True,
+                )
             elif domain == "perioprobe":
                 domain_report = r4_perioprobe_parity_pack.build_parity_report(
                     session,
@@ -219,7 +229,10 @@ def main() -> int:
     parser.add_argument("--output-dir", help="Optional directory for per-domain JSON reports.")
     parser.add_argument(
         "--domains",
-        help="Comma-separated subset: bpe,perioprobe,patient_notes,treatment_notes (default all).",
+        help=(
+            "Comma-separated subset: "
+            "bpe,bpe_furcation,perioprobe,patient_notes,treatment_notes (default all)."
+        ),
     )
     parser.add_argument("--date-from", help="Inclusive start date (YYYY-MM-DD).")
     parser.add_argument("--date-to", help="Inclusive end date (YYYY-MM-DD).")

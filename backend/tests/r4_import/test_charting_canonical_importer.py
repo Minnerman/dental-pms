@@ -55,6 +55,7 @@ def test_canonical_report_includes_sources():
         assert report["total_records"] == stats.total
         by_source = report["by_source"]
         assert "dbo.BPE" in by_source
+        assert "dbo.BPEFurcation" in by_source
         assert "dbo.PerioProbe" in by_source
         assert "dbo.PatientNotes" in by_source
         assert "dbo.TreatmentNotes" in by_source
