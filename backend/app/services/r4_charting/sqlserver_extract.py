@@ -821,6 +821,57 @@ def get_distinct_treatment_plan_items_patient_codes(
     return codes
 
 
+def get_distinct_active_patient_codes(
+    active_from: date | str,
+    active_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    from_day = _coerce_date(active_from)
+    to_day = _coerce_date(active_to)
+    if to_day < from_day:
+        raise ValueError("active_to must be on or after active_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("vwAppointmentDetails", ["patientcode"])  # noqa: SLF001
+    date_col = source._pick_column("vwAppointmentDetails", ["appointmentDateTimevalue"])  # noqa: SLF001
+    if not patient_col or not date_col:
+        raise RuntimeError(
+            "vwAppointmentDetails missing patient/date columns; cannot fetch active patient codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.vwAppointmentDetails WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL "
+            f"AND {date_col} >= ? AND {date_col} <= ? "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, from_day, to_day],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
 def _date_in_range(
     recorded_at,
     date_from: date | None,

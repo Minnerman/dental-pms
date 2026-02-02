@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
+from datetime import date
 from pathlib import Path
 
 from app.scripts import r4_import as r4_import_script
 from app.services.r4_charting.sqlserver_extract import (
+    get_distinct_active_patient_codes,
     get_distinct_bpe_furcation_patient_codes,
     get_distinct_bpe_patient_codes,
     get_distinct_perioprobe_patient_codes,
@@ -62,6 +65,15 @@ def _build_domain_codes(
     raise RuntimeError(f"Unsupported domain: {domain}")
 
 
+def _build_active_patient_codes(
+    *,
+    active_from: str,
+    active_to: str,
+    limit: int,
+) -> list[int]:
+    return get_distinct_active_patient_codes(active_from, active_to, limit=limit)
+
+
 def _parse_exclude_patient_codes_file(path: str | None) -> set[int]:
     if not path:
         return set()
@@ -90,45 +102,76 @@ def _order_patient_codes(codes: list[int], *, order: str, seed: int | None) -> l
     raise RuntimeError("--order must be one of: asc, hashed.")
 
 
+def _subtract_months(day: date, months: int) -> date:
+    if months < 0:
+        raise RuntimeError("--active-months must be non-negative.")
+    month_index = day.month - 1 - months
+    year = day.year + (month_index // 12)
+    month = (month_index % 12) + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(day.day, last_day))
+
+
 def select_cohort(
     *,
     domains: list[str],
-    date_from: str,
+    date_from: str | None,
     date_to: str,
     limit: int,
     mode: str,
     excluded_patient_codes: set[int] | None = None,
     order: str = "asc",
     seed: int | None = None,
+    active_months: int = 24,
+    active_from_override: str | None = None,
 ) -> dict[str, object]:
     if limit <= 0:
         raise RuntimeError("--limit must be positive.")
-    if mode not in {"union", "intersection"}:
-        raise RuntimeError("--mode must be one of: union, intersection.")
+    if mode not in {"union", "intersection", "active_patients"}:
+        raise RuntimeError("--mode must be one of: union, intersection, active_patients.")
 
     domain_codes: dict[str, list[int]] = {}
     domain_errors: dict[str, str] = {}
-    for domain in domains:
-        try:
-            codes = _build_domain_codes(domain, date_from=date_from, date_to=date_to, limit=limit)
-            domain_codes[domain] = sorted(set(codes))
-        except RuntimeError as exc:
-            domain_codes[domain] = []
-            domain_errors[domain] = str(exc)
+    active_from: str | None = None
+    active_to: str | None = None
+
+    if mode == "active_patients":
+        if active_from_override:
+            active_from = active_from_override
+        else:
+            active_to_day = date.fromisoformat(date_to)
+            active_from = _subtract_months(active_to_day, active_months).isoformat()
+        active_to = date_to
+        merged_codes = _order_patient_codes(
+            _build_active_patient_codes(active_from=active_from, active_to=active_to, limit=limit),
+            order=order,
+            seed=seed,
+        )
+    else:
+        if not date_from:
+            raise RuntimeError("--date-from is required unless --mode=active_patients.")
+        for domain in domains:
+            try:
+                codes = _build_domain_codes(domain, date_from=date_from, date_to=date_to, limit=limit)
+                domain_codes[domain] = sorted(set(codes))
+            except RuntimeError as exc:
+                domain_codes[domain] = []
+                domain_errors[domain] = str(exc)
+
+        if not domains:
+            merged_codes = []
+        elif mode == "union":
+            merged = set().union(*(set(domain_codes[d]) for d in domains))
+            merged_codes = list(merged)
+        else:
+            merged = set(domain_codes[domains[0]])
+            for domain in domains[1:]:
+                merged &= set(domain_codes[domain])
+            merged_codes = list(merged)
+
+        merged_codes = _order_patient_codes(merged_codes, order=order, seed=seed)
 
     excluded = excluded_patient_codes or set()
-    if not domains:
-        merged_codes: list[int] = []
-    elif mode == "union":
-        merged = set().union(*(set(domain_codes[d]) for d in domains))
-        merged_codes = list(merged)
-    else:
-        merged = set(domain_codes[domains[0]])
-        for domain in domains[1:]:
-            merged &= set(domain_codes[domain])
-        merged_codes = list(merged)
-
-    merged_codes = _order_patient_codes(merged_codes, order=order, seed=seed)
 
     candidates_before_exclude = len(merged_codes)
     filtered_codes = [code for code in merged_codes if code not in excluded]
@@ -155,8 +198,13 @@ def select_cohort(
         "exclude_count": len(excluded),
         "remaining_after_exclude": remaining_after_exclude,
         "selected_count": len(final_codes),
-        "domain_counts": {domain: len(domain_codes[domain]) for domain in domains},
+        "domain_counts": (
+            {} if mode == "active_patients" else {domain: len(domain_codes[domain]) for domain in domains}
+        ),
         "domain_errors": domain_errors,
+        "active_from": active_from,
+        "active_to": active_to,
+        "active_months": active_months if mode == "active_patients" else None,
         "cohort_size": len(final_codes),
         "patient_codes": final_codes,
     }
@@ -171,14 +219,24 @@ def main() -> int:
         default="perioprobe,bpe,bpe_furcation,treatment_notes,treatment_plan_items",
         help="Comma-separated subset: perioprobe,bpe,bpe_furcation,treatment_notes,treatment_plan_items.",
     )
-    parser.add_argument("--date-from", required=True, help="Inclusive start date (YYYY-MM-DD).")
+    parser.add_argument("--date-from", help="Inclusive start date (YYYY-MM-DD).")
     parser.add_argument("--date-to", required=True, help="Exclusive end date (YYYY-MM-DD).")
     parser.add_argument("--limit", type=int, default=50, help="Maximum cohort size.")
     parser.add_argument(
         "--mode",
         default="union",
-        choices=("union", "intersection"),
-        help="How to combine per-domain sets (default: union).",
+        choices=("union", "intersection", "active_patients"),
+        help="How to combine per-domain sets, or select active patients (default: union).",
+    )
+    parser.add_argument(
+        "--active-months",
+        type=int,
+        default=24,
+        help="Months back from --date-to for --mode=active_patients (default: 24).",
+    )
+    parser.add_argument(
+        "--active-from",
+        help="Optional explicit active start date (YYYY-MM-DD) for --mode=active_patients.",
     )
     parser.add_argument(
         "--order",
@@ -209,6 +267,8 @@ def main() -> int:
         excluded_patient_codes=excluded_patient_codes,
         order=args.order,
         seed=args.seed,
+        active_months=args.active_months,
+        active_from_override=args.active_from,
     )
 
     out = Path(args.output)
