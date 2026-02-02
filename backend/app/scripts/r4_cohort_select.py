@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -61,6 +62,22 @@ def _parse_exclude_patient_codes_file(path: str | None) -> set[int]:
         raise
 
 
+def _stable_hash_key(patient_code: int, *, seed: int) -> int:
+    payload = f"{seed}:{patient_code}".encode("ascii")
+    digest = hashlib.blake2b(payload, digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=False)
+
+
+def _order_patient_codes(codes: list[int], *, order: str, seed: int | None) -> list[int]:
+    if order == "asc":
+        return sorted(codes)
+    if order == "hashed":
+        if seed is None:
+            raise RuntimeError("--seed is required when --order=hashed.")
+        return sorted(codes, key=lambda code: (_stable_hash_key(code, seed=seed), code))
+    raise RuntimeError("--order must be one of: asc, hashed.")
+
+
 def select_cohort(
     *,
     domains: list[str],
@@ -69,6 +86,8 @@ def select_cohort(
     limit: int,
     mode: str,
     excluded_patient_codes: set[int] | None = None,
+    order: str = "asc",
+    seed: int | None = None,
 ) -> dict[str, object]:
     if limit <= 0:
         raise RuntimeError("--limit must be positive.")
@@ -90,12 +109,14 @@ def select_cohort(
         merged_codes: list[int] = []
     elif mode == "union":
         merged = set().union(*(set(domain_codes[d]) for d in domains))
-        merged_codes = sorted(merged)
+        merged_codes = list(merged)
     else:
         merged = set(domain_codes[domains[0]])
         for domain in domains[1:]:
             merged &= set(domain_codes[domain])
-        merged_codes = sorted(merged)
+        merged_codes = list(merged)
+
+    merged_codes = _order_patient_codes(merged_codes, order=order, seed=seed)
 
     filtered_codes = [code for code in merged_codes if code not in excluded]
     if excluded and merged_codes and not filtered_codes:
@@ -112,6 +133,8 @@ def select_cohort(
         "date_from": date_from,
         "date_to": date_to,
         "limit": limit,
+        "order": order,
+        "seed": seed,
         "exclude_count": len(excluded),
         "remaining_after_exclude": remaining_after_exclude,
         "selected_count": len(final_codes),
@@ -141,6 +164,17 @@ def main() -> int:
         help="How to combine per-domain sets (default: union).",
     )
     parser.add_argument(
+        "--order",
+        default="asc",
+        choices=("asc", "hashed"),
+        help="How to order merged patient codes before exclusions/limit (default: asc).",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Required when --order=hashed; changes deterministic cohort ordering.",
+    )
+    parser.add_argument(
         "--exclude-patient-codes-file",
         help="Optional path to patient codes file (CSV/newline) to exclude before limit.",
     )
@@ -156,6 +190,8 @@ def main() -> int:
         limit=args.limit,
         mode=args.mode,
         excluded_patient_codes=excluded_patient_codes,
+        order=args.order,
+        seed=args.seed,
     )
 
     out = Path(args.output)
