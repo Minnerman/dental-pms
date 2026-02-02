@@ -57,6 +57,9 @@ def test_select_cohort_applies_exclusions_before_limit(monkeypatch):
         excluded_patient_codes={1, 2, 3},
     )
     assert report["patient_codes"] == [4, 5, 6, 7, 8]
+    assert report["candidates_before_exclude"] == 10
+    assert report["exclude_input_count"] == 3
+    assert report["excluded_candidates_count"] == 3
     assert report["exclude_count"] == 3
     assert report["remaining_after_exclude"] == 7
     assert report["selected_count"] == 5
@@ -161,6 +164,9 @@ def test_main_writes_output_csv(monkeypatch, tmp_path):
             "limit": 3,
             "order": "asc",
             "seed": None,
+            "candidates_before_exclude": 3,
+            "exclude_input_count": 0,
+            "excluded_candidates_count": 0,
             "exclude_count": 0,
             "remaining_after_exclude": 3,
             "selected_count": 3,
