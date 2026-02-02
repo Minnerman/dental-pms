@@ -45,3 +45,15 @@ def test_digest_for_trans_is_sorted_and_stable():
     digest = parity._digest_for_trans(rows, 10)
     assert digest[0]["tooth"] == 2
     assert digest[1]["tooth"] == 3
+
+
+def test_digest_for_trans_dedupes_duplicate_unique_keys():
+    rows = [
+        {"trans_id": 10, "tooth": 2, "probing_point": 6, "depth": 3, "bleeding": 1, "plaque": 0},
+        {"trans_id": 10, "tooth": 2, "probing_point": 6, "depth": 3, "bleeding": 1, "plaque": 0},
+        {"trans_id": 10, "tooth": 3, "probing_point": 2, "depth": 4, "bleeding": 0, "plaque": 1},
+    ]
+    digest = parity._digest_for_trans(rows, 10)
+    assert len(digest) == 2
+    assert digest[0]["tooth"] == 2
+    assert digest[1]["tooth"] == 3

@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 129Q PerioProbe parity digest dedupe at latest key.
+  - Updated `r4_perioprobe_parity_pack.py` to compare latest digests on distinct probe unique keys (`trans_id:tooth:probing_point`) to ignore raw SQL duplicate noise.
+  - Added unit test coverage for duplicate-row dedupe in latest-trans digest calculation.
+  - 6-patient rerun (`1000000..1000005`) now shows `latest_match=6/6` and `latest_digest_match=6/6`.
 - 2026-02-02: Stage 129P PerioProbe linkage fix (RefId-based fallback join).
   - Updated SQL Server PerioProbe linkage to prefer `PerioProbe.RefId -> Transactions.RefId` and fall back to `TransId -> RefId` when needed.
   - This resolves dataset under-linkage where `TransId -> RefId` alone returned one patient; diagnostics show RefId linkage expands to 6 patients (`1000000..1000005`).

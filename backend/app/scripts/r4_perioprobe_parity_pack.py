@@ -86,17 +86,25 @@ def _latest_key(row: dict[str, object] | None) -> dict[str, object] | None:
 def _digest_for_trans(rows: list[dict[str, object]], trans_id: int | None) -> list[dict[str, object]]:
     if trans_id is None:
         return []
-    matched = [
-        {
-            "tooth": row.get("tooth"),
-            "probing_point": row.get("probing_point"),
-            "depth": row.get("depth"),
-            "bleeding": row.get("bleeding"),
-            "plaque": row.get("plaque"),
-        }
-        for row in rows
-        if row.get("trans_id") == trans_id
-    ]
+    # Compare latest-trans digests on distinct probe keys to avoid raw SQL duplicate noise.
+    seen: set[str] = set()
+    matched: list[dict[str, object]] = []
+    for row in rows:
+        if row.get("trans_id") != trans_id:
+            continue
+        key = _probe_unique_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        matched.append(
+            {
+                "tooth": row.get("tooth"),
+                "probing_point": row.get("probing_point"),
+                "depth": row.get("depth"),
+                "bleeding": row.get("bleeding"),
+                "plaque": row.get("plaque"),
+            }
+        )
     matched.sort(key=lambda r: (int(r.get("tooth") or 0), int(r.get("probing_point") or 0)))
     return matched
 
