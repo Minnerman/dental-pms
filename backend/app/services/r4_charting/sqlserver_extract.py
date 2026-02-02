@@ -169,6 +169,48 @@ class SqlServerChartingExtractor:
                 )
             )
 
+        for row in self._iter_bpe_furcations(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            patient_codes=patient_codes,
+            limit=limit,
+        ):
+            recorded_at = row.get("recorded_at")
+            if not _date_in_range(recorded_at, date_from, date_to, report):
+                continue
+            bpe_id = row.get("bpe_id")
+            patient_code = row.get("patient_code")
+            if bpe_id is not None:
+                source_id = str(bpe_id)
+            elif row.get("pkey") is not None:
+                source_id = str(row.get("pkey"))
+            else:
+                source_id = f"{patient_code}:{recorded_at}"
+            records.append(
+                CanonicalRecordInput(
+                    domain="bpe_furcation",
+                    r4_source="dbo.BPEFurcation",
+                    r4_source_id=source_id,
+                    legacy_patient_code=int(patient_code) if patient_code is not None else None,
+                    recorded_at=recorded_at,
+                    entered_at=None,
+                    tooth=None,
+                    surface=None,
+                    code_id=None,
+                    status=None,
+                    payload={
+                        "bpe_id": bpe_id,
+                        "pkey": row.get("pkey"),
+                        "furcation_1": row.get("furcation_1"),
+                        "furcation_2": row.get("furcation_2"),
+                        "furcation_3": row.get("furcation_3"),
+                        "furcation_4": row.get("furcation_4"),
+                        "furcation_5": row.get("furcation_5"),
+                        "furcation_6": row.get("furcation_6"),
+                    },
+                )
+            )
+
         return records, report.as_dict()
 
     def _iter_bpe(
@@ -311,6 +353,105 @@ class SqlServerChartingExtractor:
                         if remaining <= 0:
                             break
 
+    def _iter_bpe_furcations(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not hasattr(self._source, "_pick_column") or not hasattr(self._source, "_query"):
+            return
+        bpe_id_col = self._source._pick_column("BPE", ["BPEID", "BPEId", "ID", "RefId", "RefID"])  # noqa: SLF001
+        patient_col = self._source._pick_column("BPE", ["PatientCode"])  # noqa: SLF001
+        date_col = self._source._pick_column("BPE", ["Date", "BPEDate", "RecordedDate", "EntryDate"])  # noqa: SLF001
+        furcation_bpe_col = self._source._pick_column("BPEFurcation", ["BPEID", "BPEId"])  # noqa: SLF001
+        pkey_col = self._source._pick_column("BPEFurcation", ["pKey", "ID", "BPEFurcationID"])  # noqa: SLF001
+        if not (bpe_id_col and patient_col and furcation_bpe_col):
+            return
+        fur_cols: list[tuple[str, str]] = []
+        for idx in range(1, 7):
+            col = self._source._pick_column("BPEFurcation", [f"Furcation{idx}"])  # noqa: SLF001
+            if col:
+                fur_cols.append((col, f"furcation_{idx}"))
+        if not fur_cols:
+            return
+
+        def _query_rows_for_code(code: int, batch_limit: int | None):
+            select_cols = [
+                f"b.{bpe_id_col} AS bpe_id",
+                f"b.{patient_col} AS patient_code",
+            ]
+            if date_col:
+                select_cols.append(f"b.{date_col} AS recorded_at")
+            if pkey_col:
+                select_cols.append(f"f.{pkey_col} AS pkey")
+            for src_col, alias in fur_cols:
+                select_cols.append(f"f.{src_col} AS {alias}")
+            query = (
+                f"SELECT TOP (?) {', '.join(select_cols)} "
+                "FROM dbo.BPE b WITH (NOLOCK) "
+                "JOIN dbo.BPEFurcation f WITH (NOLOCK) "
+                f"ON f.{furcation_bpe_col} = b.{bpe_id_col} "
+                f"WHERE b.{patient_col} = ? "
+                + (
+                    f"ORDER BY b.{date_col} ASC, b.{bpe_id_col} ASC"
+                    if date_col
+                    else f"ORDER BY b.{bpe_id_col} ASC"
+                )
+            )
+            params = [batch_limit if batch_limit is not None else 1000000, code]
+            return self._source._query(query, params)  # noqa: SLF001
+
+        if not patient_codes:
+            if patients_from is None or patients_to is None:
+                return
+            select_cols = [
+                f"b.{bpe_id_col} AS bpe_id",
+                f"b.{patient_col} AS patient_code",
+            ]
+            if date_col:
+                select_cols.append(f"b.{date_col} AS recorded_at")
+            if pkey_col:
+                select_cols.append(f"f.{pkey_col} AS pkey")
+            for src_col, alias in fur_cols:
+                select_cols.append(f"f.{src_col} AS {alias}")
+            query = (
+                f"SELECT TOP (?) {', '.join(select_cols)} "
+                "FROM dbo.BPE b WITH (NOLOCK) "
+                "JOIN dbo.BPEFurcation f WITH (NOLOCK) "
+                f"ON f.{furcation_bpe_col} = b.{bpe_id_col} "
+                f"WHERE b.{patient_col} >= ? AND b.{patient_col} <= ? "
+                + (
+                    f"ORDER BY b.{date_col} ASC, b.{bpe_id_col} ASC"
+                    if date_col
+                    else f"ORDER BY b.{bpe_id_col} ASC"
+                )
+            )
+            rows = self._source._query(  # noqa: SLF001
+                query,
+                [limit if limit is not None else 1000000, patients_from, patients_to],
+            )
+            for row in rows:
+                yield row
+            return
+
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                batch_limit = remaining if remaining is not None else None
+                for row in _query_rows_for_code(code, batch_limit):
+                    yield row
+                    if remaining is not None:
+                        remaining -= 1
+                        if remaining <= 0:
+                            break
+
 
 def get_distinct_bpe_patient_codes(
     charting_from: date | str,
@@ -345,6 +486,63 @@ def get_distinct_bpe_patient_codes(
             f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
             f"GROUP BY {patient_col} "
             f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
+def get_distinct_bpe_furcation_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("BPE", ["PatientCode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "BPE", ["Date", "BPEDate", "RecordedDate", "EntryDate"]
+    )
+    bpe_id_col = source._pick_column("BPE", ["BPEID", "BPEId", "ID", "RefId", "RefID"])  # noqa: SLF001
+    furcation_bpe_col = source._pick_column("BPEFurcation", ["BPEID", "BPEId"])  # noqa: SLF001
+    if not patient_col or not date_col or not bpe_id_col or not furcation_bpe_col:
+        raise RuntimeError(
+            "BPE/BPEFurcation missing linkage columns; cannot fetch distinct furcation codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"b.{patient_col} AS patient_code "
+            "FROM dbo.BPE b WITH (NOLOCK) "
+            "JOIN dbo.BPEFurcation f WITH (NOLOCK) "
+            f"ON f.{furcation_bpe_col} = b.{bpe_id_col} "
+            f"WHERE b.{patient_col} IS NOT NULL AND b.{date_col} >= ? AND b.{date_col} < ? "
+            f"GROUP BY b.{patient_col} "
+            f"ORDER BY MAX(b.{date_col}) DESC, b.{patient_col} ASC"
         ),
         [limit, date_from, date_to],
     )
@@ -462,6 +660,7 @@ def get_distinct_treatment_notes_patient_codes(
         seen.add(code)
         codes.append(code)
     return codes
+
 
 def _date_in_range(
     recorded_at,
