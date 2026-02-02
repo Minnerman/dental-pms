@@ -42,6 +42,53 @@ def test_select_cohort_intersection(monkeypatch):
     assert report["patient_codes"] == [3]
 
 
+def test_select_cohort_applies_exclusions_before_limit(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_domain_codes",
+        lambda domain, **kwargs: list(range(1, 11)),
+    )
+    report = r4_cohort_select.select_cohort(
+        domains=["bpe"],
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=5,
+        mode="union",
+        excluded_patient_codes={1, 2, 3},
+    )
+    assert report["patient_codes"] == [4, 5, 6, 7, 8]
+    assert report["exclude_count"] == 3
+    assert report["remaining_after_exclude"] == 7
+    assert report["selected_count"] == 5
+
+
+def test_select_cohort_exclude_all_raises(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_domain_codes",
+        lambda domain, **kwargs: [1, 2, 3],
+    )
+    try:
+        r4_cohort_select.select_cohort(
+            domains=["bpe"],
+            date_from="2017-01-01",
+            date_to="2026-02-01",
+            limit=10,
+            mode="union",
+            excluded_patient_codes={1, 2, 3},
+        )
+    except RuntimeError as exc:
+        assert "Exclusion removed all candidate patient codes" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected RuntimeError")
+
+
+def test_parse_exclude_patient_codes_file_csv_and_newline(tmp_path):
+    path = tmp_path / "exclude.csv"
+    path.write_text("1,3\n2\n3\n", encoding="utf-8")
+    assert r4_cohort_select._parse_exclude_patient_codes_file(str(path)) == {1, 2, 3}
+
+
 def test_main_writes_output_csv(monkeypatch, tmp_path):
     out = tmp_path / "codes.csv"
     monkeypatch.setattr(
@@ -53,6 +100,9 @@ def test_main_writes_output_csv(monkeypatch, tmp_path):
             "date_from": "2017-01-01",
             "date_to": "2026-02-01",
             "limit": 3,
+            "exclude_count": 0,
+            "remaining_after_exclude": 3,
+            "selected_count": 3,
             "domain_counts": {"perioprobe": 2, "bpe": 1, "bpe_furcation": 1},
             "cohort_size": 3,
             "patient_codes": [1000000, 1000001, 1000002],
