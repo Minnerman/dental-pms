@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from app.scripts import r4_import as r4_import_script
 from app.services.r4_charting.sqlserver_extract import (
     get_distinct_bpe_furcation_patient_codes,
     get_distinct_bpe_patient_codes,
@@ -48,6 +49,18 @@ def _build_domain_codes(
     raise RuntimeError(f"Unsupported domain: {domain}")
 
 
+def _parse_exclude_patient_codes_file(path: str | None) -> set[int]:
+    if not path:
+        return set()
+    try:
+        return set(r4_import_script._parse_patient_codes_file(path))
+    except RuntimeError as exc:
+        # Allow empty exclude files to behave as "no exclusions".
+        if "no patient codes provided" in str(exc):
+            return set()
+        raise
+
+
 def select_cohort(
     *,
     domains: list[str],
@@ -55,6 +68,7 @@ def select_cohort(
     date_to: str,
     limit: int,
     mode: str,
+    excluded_patient_codes: set[int] | None = None,
 ) -> dict[str, object]:
     if limit <= 0:
         raise RuntimeError("--limit must be positive.")
@@ -71,16 +85,26 @@ def select_cohort(
             domain_codes[domain] = []
             domain_errors[domain] = str(exc)
 
+    excluded = excluded_patient_codes or set()
     if not domains:
-        final_codes: list[int] = []
+        merged_codes: list[int] = []
     elif mode == "union":
         merged = set().union(*(set(domain_codes[d]) for d in domains))
-        final_codes = sorted(merged)[:limit]
+        merged_codes = sorted(merged)
     else:
         merged = set(domain_codes[domains[0]])
         for domain in domains[1:]:
             merged &= set(domain_codes[domain])
-        final_codes = sorted(merged)[:limit]
+        merged_codes = sorted(merged)
+
+    filtered_codes = [code for code in merged_codes if code not in excluded]
+    if excluded and merged_codes and not filtered_codes:
+        raise RuntimeError(
+            "Exclusion removed all candidate patient codes; adjust "
+            "--exclude-patient-codes-file or selection parameters."
+        )
+    remaining_after_exclude = len(filtered_codes)
+    final_codes = filtered_codes[:limit]
 
     return {
         "domains": domains,
@@ -88,6 +112,9 @@ def select_cohort(
         "date_from": date_from,
         "date_to": date_to,
         "limit": limit,
+        "exclude_count": len(excluded),
+        "remaining_after_exclude": remaining_after_exclude,
+        "selected_count": len(final_codes),
         "domain_counts": {domain: len(domain_codes[domain]) for domain in domains},
         "domain_errors": domain_errors,
         "cohort_size": len(final_codes),
@@ -113,16 +140,22 @@ def main() -> int:
         choices=("union", "intersection"),
         help="How to combine per-domain sets (default: union).",
     )
+    parser.add_argument(
+        "--exclude-patient-codes-file",
+        help="Optional path to patient codes file (CSV/newline) to exclude before limit.",
+    )
     parser.add_argument("--output", required=True, help="Path to output CSV file.")
     args = parser.parse_args()
 
     domains = _parse_domains_csv(args.domains)
+    excluded_patient_codes = _parse_exclude_patient_codes_file(args.exclude_patient_codes_file)
     report = select_cohort(
         domains=domains,
         date_from=args.date_from,
         date_to=args.date_to,
         limit=args.limit,
         mode=args.mode,
+        excluded_patient_codes=excluded_patient_codes,
     )
 
     out = Path(args.output)
