@@ -3453,19 +3453,28 @@ class R4SqlServerSource:
         if patient_col:
             patient_expr = f"pp.{patient_col}"
         else:
+            probe_ref_col = self._pick_column("PerioProbe", ["RefId", "RefID"])
             trans_ref_col = self._pick_column("Transactions", ["RefId"])
             trans_patient_col = self._pick_column("Transactions", ["PatientCode"])
             if trans_ref_col and trans_patient_col:
-                join_sql = (
-                    "JOIN ("
+                mapping_sql = (
+                    "("
                     f"SELECT {trans_ref_col} AS ref_id, MIN({trans_patient_col}) AS patient_code "
                     "FROM dbo.Transactions WITH (NOLOCK) "
                     f"WHERE {trans_patient_col} IS NOT NULL "
                     f"GROUP BY {trans_ref_col} HAVING COUNT(DISTINCT {trans_patient_col}) = 1"
-                    ") t ON t.ref_id = pp."
-                    + trans_col
+                    ")"
                 )
-                patient_expr = "t.patient_code"
+                if probe_ref_col:
+                    # Prefer PerioProbe.RefId linkage; fall back to TransId when RefId has no match.
+                    join_sql = (
+                        f"LEFT JOIN {mapping_sql} t_ref ON t_ref.ref_id = pp.{probe_ref_col} "
+                        f"LEFT JOIN {mapping_sql} t_trans ON t_trans.ref_id = pp.{trans_col}"
+                    )
+                    patient_expr = "COALESCE(t_ref.patient_code, t_trans.patient_code)"
+                else:
+                    join_sql = f"JOIN {mapping_sql} t_trans ON t_trans.ref_id = pp.{trans_col}"
+                    patient_expr = "t_trans.patient_code"
         last_trans: int | None = None
         last_tooth: int | None = None
         last_point: int | None = None
@@ -3479,6 +3488,7 @@ class R4SqlServerSource:
             where_parts: list[str] = []
             params: list[Any] = []
             if patient_expr:
+                where_parts.append(f"{patient_expr} IS NOT NULL")
                 range_clause, range_params = self._build_range_filter(
                     patient_expr,
                     patients_from,
