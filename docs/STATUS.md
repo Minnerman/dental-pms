@@ -61,6 +61,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 130 r4_import batching/resume + patient-codes-file (PR #202, master `480f72a`).
+  - Added CLI support for `--patient-codes-file` (CSV/newline), entity-aware batching defaults via `--batch-size`, resumable checkpoints via `--state-file` + `--resume`, and `--run-summary-out`.
+  - Stats/reporting counters are now unambiguous for charting runs: candidates vs imported (`created/updated`) vs dropped (`out_of_range`/missing date), with legacy keys retained for compatibility.
+  - Fixed charting date-window application in import flow so apply behavior aligns with reporting across dry-run/apply.
+  - Stage 130 runbook (container commands):
+    - Select cohort with data (read-only): `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains perioprobe,bpe,bpe_furcation --date-from 2017-01-01 --date-to 2026-02-01 --limit 100 --mode union --output /tmp/codes.csv`
+    - Import charting canonical with checkpointing: `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity charting_canonical --patient-codes-file /tmp/codes.csv --charting-from 2017-01-01 --charting-to 2026-02-01 --batch-size 50 --state-file /tmp/state.json --run-summary-out /tmp/run_summary.json --apply --confirm APPLY --stats-out /tmp/stats.json --output-json /tmp/report.json`
+    - Resume run: same import command plus `--resume`.
+  - Guardrail remains: set `R4_SQLSERVER_READONLY=true`; R4 SQL Server access is SELECT-only (no writes/schema/procs).
 - 2026-02-02: Stage 129W widened baseline refresh (perioprobe + bpe + bpe_furcation).
   - Cohort: `1000000..1000049` (50 patients), charting window `2017-01-01..2026-02-01`, SQL Server guardrail `R4_SQLSERVER_READONLY=true`.
   - Patients import stats: `created=44, skipped=6, updated=0`.
