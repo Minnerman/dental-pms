@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.db.session import SessionLocal
 from app.scripts import (
+    r4_import as r4_import_script,
     r4_bpe_parity_pack,
     r4_bpe_furcation_parity_pack,
     r4_patient_notes_parity_pack,
@@ -224,7 +225,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run consolidated R4 parity packs for selected domains and patients."
     )
-    parser.add_argument("--patient-codes", required=True, help="Comma-separated patient codes.")
+    patient_codes_group = parser.add_mutually_exclusive_group(required=True)
+    patient_codes_group.add_argument(
+        "--patient-codes",
+        help="Comma-separated patient codes.",
+    )
+    patient_codes_group.add_argument(
+        "--patient-codes-file",
+        help="Path to patient codes file (CSV and/or newline-separated).",
+    )
     parser.add_argument("--output-json", required=True, help="Path for combined JSON report.")
     parser.add_argument("--output-dir", help="Optional directory for per-domain JSON reports.")
     parser.add_argument(
@@ -242,10 +251,18 @@ def main() -> int:
     if args.row_limit <= 0:
         raise RuntimeError("--row-limit must be positive.")
 
-    patient_codes = _parse_patient_codes_csv(args.patient_codes)
+    patient_codes = r4_import_script._parse_patient_codes_arg(
+        args.patient_codes, args.patient_codes_file
+    )
+    if patient_codes is None:  # pragma: no cover - mutually exclusive group is required
+        raise RuntimeError("Either --patient-codes or --patient-codes-file is required.")
     domains = _parse_domains_csv(args.domains)
     date_from = _parse_day(args.date_from)
     date_to = _parse_day(args.date_to)
+    print(
+        f"resolved_patient_codes count={len(patient_codes)} "
+        f"first={patient_codes[0]} last={patient_codes[-1]}"
+    )
 
     combined = run_parity(
         patient_codes=patient_codes,

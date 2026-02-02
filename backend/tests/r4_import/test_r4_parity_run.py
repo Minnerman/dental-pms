@@ -102,3 +102,77 @@ def test_main_writes_output_json(monkeypatch, tmp_path: Path):
     assert r4_parity_run.main() == 0
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["overall"]["status"] == "pass"
+
+
+def test_main_accepts_patient_codes_file_csv(monkeypatch, tmp_path: Path):
+    out = tmp_path / "combined.json"
+    codes = tmp_path / "codes.csv"
+    codes.write_text("1002,1001,1002\n", encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def _fake_run_parity(**kwargs):
+        called.update(kwargs)
+        return {"overall": {"status": "pass"}, "domain_reports": {}, "domain_summaries": {}}
+
+    monkeypatch.setattr(r4_parity_run, "run_parity", _fake_run_parity)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "r4_parity_run.py",
+            "--patient-codes-file",
+            str(codes),
+            "--output-json",
+            str(out),
+        ],
+    )
+    assert r4_parity_run.main() == 0
+    assert called["patient_codes"] == [1001, 1002]
+
+
+def test_main_accepts_patient_codes_file_newline(monkeypatch, tmp_path: Path):
+    out = tmp_path / "combined.json"
+    codes = tmp_path / "codes.txt"
+    codes.write_text("1003\n1001\n# comment\n1003\n", encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def _fake_run_parity(**kwargs):
+        called.update(kwargs)
+        return {"overall": {"status": "pass"}, "domain_reports": {}, "domain_summaries": {}}
+
+    monkeypatch.setattr(r4_parity_run, "run_parity", _fake_run_parity)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "r4_parity_run.py",
+            "--patient-codes-file",
+            str(codes),
+            "--output-json",
+            str(out),
+        ],
+    )
+    assert r4_parity_run.main() == 0
+    assert called["patient_codes"] == [1001, 1003]
+
+
+def test_main_rejects_patient_codes_and_file_together(monkeypatch, tmp_path: Path):
+    out = tmp_path / "combined.json"
+    codes = tmp_path / "codes.csv"
+    codes.write_text("1001\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "r4_parity_run.py",
+            "--patient-codes",
+            "1001",
+            "--patient-codes-file",
+            str(codes),
+            "--output-json",
+            str(out),
+        ],
+    )
+    try:
+        r4_parity_run.main()
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:  # pragma: no cover
+        raise AssertionError("expected SystemExit")
