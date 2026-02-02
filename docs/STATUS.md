@@ -61,6 +61,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 129N consolidated baseline run (20-patient TreatmentNotes cohort).
+  - Cohort selection: `get_distinct_treatment_notes_patient_codes(2017-01-01..2026-02-01, limit=20)`.
+  - Patient import + canonical apply were clean and idempotent: first apply `created=49, updated=0, skipped=0, unmapped_patients=0`; rerun `created=0, updated=0, skipped=49, unmapped_patients=0`.
+  - Combined parity runner summary (`bpe,bpe_furcation,perioprobe,patient_notes,treatment_notes`): overall `pass`, `domains_failed=0`, `domains_no_data=1`.
+  - Domain coverage: `treatment_notes pass (20/20 with_data)`, `patient_notes pass (2/20)`, `bpe pass (3/20)`, `bpe_furcation pass (3/20)`, `perioprobe no_data (0/20)`.
+  - Artefacts saved under `/tmp/stage129n_*` and `/tmp/stage129n_domains/`.
 - 2026-02-02: Stage 129L consolidated baseline run (20-patient furcation cohort).
   - Cohort selection: `get_distinct_bpe_furcation_patient_codes(2017-01-01..2026-02-01, limit=20)`.
   - Patient import + canonical apply were clean and idempotent: first apply `created=217, updated=0, skipped=0, unmapped_patients=0`; rerun `created=0, updated=0, skipped=217, unmapped_patients=0`.
