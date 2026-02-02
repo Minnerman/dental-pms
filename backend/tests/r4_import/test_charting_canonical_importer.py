@@ -231,6 +231,63 @@ class DuplicateKeySource:
         return [record, record], {}
 
 
+class DateAwareSource:
+    select_only = True
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, object]] = []
+
+    def collect_canonical_records(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        patient_codes: list[int] | None = None,
+        date_from=None,
+        date_to=None,
+        limit: int | None = None,
+    ):
+        self.calls.append((date_from, date_to))
+        return [
+            CanonicalRecordInput(
+                domain="bpe_entry",
+                r4_source="dbo.BPE",
+                r4_source_id="1000035:1",
+                legacy_patient_code=1000035,
+                recorded_at=None,
+                entered_at=None,
+                tooth=None,
+                surface=None,
+                code_id=None,
+                status=None,
+                payload={"note": "dated"},
+            )
+        ], {}
+
+
+def test_apply_passes_date_bounds_to_collect_source():
+    session = SessionLocal()
+    try:
+        clear_canonical(session)
+        session.commit()
+        source = DateAwareSource()
+        import_r4_charting_canonical_report(
+            session,
+            source,
+            date_from=datetime(2017, 1, 1, tzinfo=timezone.utc).date(),
+            date_to=datetime(2026, 2, 1, tzinfo=timezone.utc).date(),
+            dry_run=False,
+            allow_unmapped_patients=True,
+        )
+        session.commit()
+        assert len(source.calls) == 2
+        assert source.calls[0][0] == datetime(2017, 1, 1, tzinfo=timezone.utc).date()
+        assert source.calls[0][1] == datetime(2026, 2, 1, tzinfo=timezone.utc).date()
+        assert source.calls[1][0] == datetime(2017, 1, 1, tzinfo=timezone.utc).date()
+        assert source.calls[1][1] == datetime(2026, 2, 1, tzinfo=timezone.utc).date()
+    finally:
+        session.close()
+
+
 def test_dedupes_duplicate_unique_key_in_apply():
     session = SessionLocal()
     try:

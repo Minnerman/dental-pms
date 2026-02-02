@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -47,27 +49,60 @@ def _parse_date_arg(value: str) -> date:
     return date.fromisoformat(value)
 
 
-def _parse_patient_codes_csv(raw: str | None) -> list[int] | None:
-    if raw is None:
-        return None
-    tokens = raw.split(",")
+def _parse_patient_code_tokens(tokens: list[str], *, label: str) -> list[int]:
     seen: set[int] = set()
     parsed: list[int] = []
     for token in tokens:
         value = token.strip()
         if not value:
-            raise RuntimeError("Invalid --patient-codes value: empty token.")
+            continue
         try:
             code = int(value)
         except ValueError as exc:
-            raise RuntimeError(f"Invalid patient code: {value}") from exc
+            raise RuntimeError(f"Invalid patient code in {label}: {value}") from exc
         if code in seen:
             continue
         seen.add(code)
         parsed.append(code)
     if not parsed:
-        raise RuntimeError("Invalid --patient-codes value: no patient codes provided.")
+        raise RuntimeError(f"Invalid {label} value: no patient codes provided.")
+    parsed.sort()
     return parsed
+
+
+def _parse_patient_codes_csv(raw: str | None) -> list[int] | None:
+    if raw is None:
+        return None
+    tokens = [token for token in raw.split(",")]
+    for token in tokens:
+        if not token.strip():
+            raise RuntimeError("Invalid --patient-codes value: empty token.")
+    return _parse_patient_code_tokens(tokens, label="--patient-codes")
+
+
+def _parse_patient_codes_file(path: str) -> list[int]:
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"Unable to read --patient-codes-file: {path}") from exc
+    tokens: list[str] = []
+    for line in raw.splitlines():
+        content = line.split("#", 1)[0]
+        if not content.strip():
+            continue
+        tokens.extend(content.split(","))
+    return _parse_patient_code_tokens(tokens, label="--patient-codes-file")
+
+
+def _parse_patient_codes_arg(
+    patient_codes_csv: str | None,
+    patient_codes_file: str | None,
+) -> list[int] | None:
+    if patient_codes_csv and patient_codes_file:
+        raise RuntimeError("--patient-codes and --patient-codes-file are mutually exclusive.")
+    if patient_codes_file:
+        return _parse_patient_codes_file(patient_codes_file)
+    return _parse_patient_codes_csv(patient_codes_csv)
 
 
 def _build_patients_mapping_quality(
@@ -130,7 +165,7 @@ def _validate_patient_filters(
 ) -> None:
     if patient_codes and (patients_from is not None or patients_to is not None):
         raise RuntimeError(
-            "--patient-codes cannot be used with --patients-from/--patients-to."
+            "--patient-codes/--patient-codes-file cannot be used with --patients-from/--patients-to."
         )
 
 
@@ -188,6 +223,149 @@ def _write_report_file(path: str, payload: dict[str, object]) -> None:
     os.replace(tmp_path, target)
 
 
+def _effective_batch_size(entity: str, requested: int | None) -> int:
+    if requested is not None:
+        return requested
+    if entity == "charting_canonical":
+        return 100
+    return 1000
+
+
+def _chunk_patient_codes(codes: list[int], *, batch_size: int) -> list[list[int]]:
+    if batch_size <= 0:
+        raise RuntimeError("--batch-size must be a positive integer.")
+    return [codes[i : i + batch_size] for i in range(0, len(codes), batch_size)]
+
+
+def _patient_codes_fingerprint(codes: list[int]) -> str:
+    material = ",".join(str(code) for code in codes)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _build_run_signature(
+    *,
+    source: str,
+    entity: str,
+    charting_from: date | None,
+    charting_to: date | None,
+    limit: int | None,
+    allow_unmapped_patients: bool,
+    batch_size: int,
+    patient_codes: list[int],
+) -> dict[str, object]:
+    return {
+        "source": source,
+        "entity": entity,
+        "charting_from": charting_from.isoformat() if charting_from else None,
+        "charting_to": charting_to.isoformat() if charting_to else None,
+        "limit": limit,
+        "allow_unmapped_patients": allow_unmapped_patients,
+        "batch_size": batch_size,
+        "patient_codes_count": len(patient_codes),
+        "patient_codes_first": patient_codes[0] if patient_codes else None,
+        "patient_codes_last": patient_codes[-1] if patient_codes else None,
+        "patient_codes_hash": _patient_codes_fingerprint(patient_codes),
+    }
+
+
+def _load_state_file(path: str) -> dict[str, object]:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RuntimeError(f"Unable to read --state-file: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON in --state-file: {path}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Invalid --state-file payload: {path}")
+    return payload
+
+
+def _write_state_file(path: str, payload: dict[str, object]) -> None:
+    _write_report_file(path, payload)
+
+
+def _validate_resume_state(
+    payload: dict[str, object],
+    *,
+    signature: dict[str, object],
+) -> int:
+    for key in (
+        "source",
+        "entity",
+        "charting_from",
+        "charting_to",
+        "limit",
+        "allow_unmapped_patients",
+        "batch_size",
+        "patient_codes_count",
+        "patient_codes_hash",
+    ):
+        expected = signature.get(key)
+        got = payload.get(key)
+        if expected != got:
+            raise RuntimeError(
+                f"--resume state mismatch for {key}: state={got!r}, current={expected!r}"
+            )
+    completed = payload.get("completed_batches", 0)
+    if not isinstance(completed, int) or completed < 0:
+        raise RuntimeError("Invalid completed_batches in --state-file.")
+    return completed
+
+
+def _int_value(value: object) -> int:
+    return int(value) if isinstance(value, int) else 0
+
+
+def _normalize_charting_stats(
+    *,
+    stats: dict[str, object],
+    report: dict[str, object],
+) -> dict[str, object]:
+    dropped = report.get("dropped")
+    if not isinstance(dropped, dict):
+        dropped = {}
+    candidates_total = _int_value(report.get("total_records"))
+    candidates_total += _int_value(dropped.get("out_of_range"))
+    candidates_total += _int_value(dropped.get("missing_date"))
+    candidates_total += _int_value(dropped.get("duplicate_unique_key"))
+
+    by_source = report.get("by_source")
+    if not isinstance(by_source, dict):
+        by_source = {}
+
+    normalized: dict[str, object] = {
+        "total": _int_value(stats.get("total")),
+        "created": _int_value(stats.get("created")),
+        "updated": _int_value(stats.get("updated")),
+        "skipped": _int_value(stats.get("skipped")),
+        "unmapped_patients": _int_value(stats.get("unmapped_patients")),
+        "candidates_total": candidates_total,
+        "imported_created_total": _int_value(stats.get("created")),
+        "imported_updated_total": _int_value(stats.get("updated")),
+        "skipped_total": _int_value(stats.get("skipped")),
+        "dropped_out_of_range_total": _int_value(dropped.get("out_of_range")),
+        "dropped_missing_date_total": _int_value(dropped.get("missing_date")),
+        "undated_included_total": _int_value(dropped.get("undated_included")),
+        "unmapped_patients_total": _int_value(stats.get("unmapped_patients")),
+        "by_source_fetched": by_source,
+    }
+    return normalized
+
+
+def _merge_by_source(
+    aggregate: dict[str, dict[str, int]],
+    current: dict[str, object] | None,
+) -> None:
+    if not isinstance(current, dict):
+        return
+    for source_name, payload in current.items():
+        if not isinstance(payload, dict):
+            continue
+        fetched = _int_value(payload.get("fetched"))
+        bucket = aggregate.setdefault(source_name, {"fetched": 0})
+        bucket["fetched"] += fetched
+
+
 def _finalize_charting_report(
     report: dict[str, object],
     *,
@@ -201,15 +379,29 @@ def _finalize_charting_report(
     limit: int | None,
     mode: str,
 ) -> dict[str, object]:
-    totals = {
-        "total_records": report.get("total_records"),
-        "distinct_patients": report.get("distinct_patients"),
-        "missing_source_id": report.get("missing_source_id"),
-        "missing_patient_code": report.get("missing_patient_code"),
-    }
     stats = report.get("stats") or {}
-    for key in ("created", "updated", "skipped", "unmapped_patients"):
-        totals[key] = stats.get(key)
+    dropped = report.get("dropped") or {}
+    totals = {
+        "total_records": _int_value(report.get("total_records")),
+        "distinct_patients": _int_value(report.get("distinct_patients")),
+        "missing_source_id": _int_value(report.get("missing_source_id")),
+        "missing_patient_code": _int_value(report.get("missing_patient_code")),
+        "created": _int_value(stats.get("created")),
+        "updated": _int_value(stats.get("updated")),
+        "skipped": _int_value(stats.get("skipped")),
+        "unmapped_patients": _int_value(stats.get("unmapped_patients")),
+        "candidates_total": _int_value(report.get("total_records"))
+        + _int_value(dropped.get("out_of_range"))
+        + _int_value(dropped.get("missing_date"))
+        + _int_value(dropped.get("duplicate_unique_key")),
+        "imported_created_total": _int_value(stats.get("created")),
+        "imported_updated_total": _int_value(stats.get("updated")),
+        "skipped_total": _int_value(stats.get("skipped")),
+        "dropped_out_of_range_total": _int_value(dropped.get("out_of_range")),
+        "dropped_missing_date_total": _int_value(dropped.get("missing_date")),
+        "undated_included_total": _int_value(dropped.get("undated_included")),
+        "unmapped_patients_total": _int_value(stats.get("unmapped_patients")),
+    }
     report.update(
         {
             "mode": mode,
@@ -285,6 +477,176 @@ def _maybe_write_stats(
     _write_stats_file(path, payload)
 
 
+def _run_charting_canonical_batched(
+    *,
+    session,
+    source: object,
+    source_name: str,
+    entity: str,
+    patient_codes: list[int],
+    patients_from: int | None,
+    patients_to: int | None,
+    charting_from: date | None,
+    charting_to: date | None,
+    limit: int | None,
+    allow_unmapped_patients: bool,
+    batch_size: int,
+    state_file: str | None,
+    resume: bool,
+    stop_after_batches: int | None,
+) -> tuple[dict[str, object], dict[str, object]]:
+    batches = _chunk_patient_codes(patient_codes, batch_size=batch_size)
+    signature = _build_run_signature(
+        source=source_name,
+        entity=entity,
+        charting_from=charting_from,
+        charting_to=charting_to,
+        limit=limit,
+        allow_unmapped_patients=allow_unmapped_patients,
+        batch_size=batch_size,
+        patient_codes=patient_codes,
+    )
+
+    start_batch = 0
+    if resume:
+        if not state_file:
+            raise RuntimeError("--resume requires --state-file.")
+        state_payload = _load_state_file(state_file)
+        start_batch = _validate_resume_state(state_payload, signature=signature)
+    elif state_file:
+        state_payload = {
+            **signature,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "total_batches": len(batches),
+            "completed_batches": 0,
+            "last_completed_patient_code": None,
+        }
+        _write_state_file(state_file, state_payload)
+
+    aggregate_old = {
+        "total": 0,
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "unmapped_patients": 0,
+    }
+    aggregate_new = {
+        "candidates_total": 0,
+        "imported_created_total": 0,
+        "imported_updated_total": 0,
+        "skipped_total": 0,
+        "dropped_out_of_range_total": 0,
+        "dropped_missing_date_total": 0,
+        "undated_included_total": 0,
+        "unmapped_patients_total": 0,
+    }
+    aggregate_by_source: dict[str, dict[str, int]] = {}
+    aggregate_dropped: dict[str, int] = {}
+    batch_reports: list[dict[str, object]] = []
+    seen_patients: set[int] = set()
+
+    completed_batches = start_batch
+    for batch_index in range(start_batch, len(batches)):
+        batch_codes = batches[batch_index]
+        stats_obj, report = import_r4_charting_canonical_report(
+            session,
+            source,
+            patients_from=patients_from,
+            patients_to=patients_to,
+            patient_codes=batch_codes,
+            date_from=charting_from,
+            date_to=charting_to,
+            limit=limit,
+            dry_run=False,
+            allow_unmapped_patients=allow_unmapped_patients,
+        )
+        stats = stats_obj.as_dict()
+        normalized = _normalize_charting_stats(stats=stats, report=report)
+
+        for key in aggregate_old:
+            aggregate_old[key] += _int_value(stats.get(key))
+        for key in aggregate_new:
+            aggregate_new[key] += _int_value(normalized.get(key))
+        _merge_by_source(aggregate_by_source, normalized.get("by_source_fetched"))
+
+        dropped = report.get("dropped")
+        if isinstance(dropped, dict):
+            for key, value in dropped.items():
+                if isinstance(value, int):
+                    aggregate_dropped[key] = aggregate_dropped.get(key, 0) + value
+
+        seen_patients.update(batch_codes)
+        batch_reports.append(
+            {
+                "batch_index": batch_index,
+                "patient_codes_count": len(batch_codes),
+                "patient_codes_first": batch_codes[0] if batch_codes else None,
+                "patient_codes_last": batch_codes[-1] if batch_codes else None,
+                "stats": normalized,
+            }
+        )
+        session.commit()
+        completed_batches = batch_index + 1
+
+        if state_file:
+            state_payload = {
+                **signature,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "total_batches": len(batches),
+                "completed_batches": completed_batches,
+                "last_completed_patient_code": batch_codes[-1] if batch_codes else None,
+            }
+            _write_state_file(state_file, state_payload)
+
+        if stop_after_batches is not None and completed_batches >= stop_after_batches:
+            break
+
+    final_stats: dict[str, object] = {
+        **aggregate_old,
+        **aggregate_new,
+        "by_source_fetched": aggregate_by_source,
+        "batches_total": len(batches),
+        "batches_completed": completed_batches,
+    }
+
+    final_report: dict[str, object] = {
+        "total_records": aggregate_old["total"],
+        "distinct_patients": len(seen_patients),
+        "missing_source_id": 0,
+        "missing_patient_code": 0,
+        "by_source": aggregate_by_source,
+        "stats": {
+            "total": aggregate_old["total"],
+            "created": aggregate_old["created"],
+            "updated": aggregate_old["updated"],
+            "skipped": aggregate_old["skipped"],
+            "unmapped_patients": aggregate_old["unmapped_patients"],
+        },
+        "dropped": aggregate_dropped,
+        "batches": batch_reports,
+    }
+    if completed_batches < len(batches):
+        final_report["resume_incomplete"] = True
+        final_report["warnings"] = [
+            f"Run stopped after {completed_batches} of {len(batches)} batches."
+        ]
+    final_report = _finalize_charting_report(
+        final_report,
+        source=source_name,
+        entity=entity,
+        patients_from=patients_from,
+        patients_to=patients_to,
+        patient_codes=patient_codes,
+        charting_from=charting_from,
+        charting_to=charting_to,
+        limit=limit,
+        mode="apply",
+    )
+    return final_stats, final_report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Import R4 data into the PMS.")
     parser.add_argument(
@@ -355,8 +717,8 @@ def main() -> int:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=1000,
-        help="Batch size for treatment plan imports (default: 1000).",
+        default=None,
+        help="Batch size for patient-scoped/bulk imports.",
     )
     parser.add_argument(
         "--sleep-ms",
@@ -387,6 +749,12 @@ def main() -> int:
         dest="output_json",
         default=None,
         help="Write charting canonical report JSON to PATH.",
+    )
+    parser.add_argument(
+        "--run-summary-out",
+        dest="run_summary_out",
+        default=None,
+        help="Write batch run summary JSON to PATH (charting_canonical only).",
     )
     parser.add_argument(
         "--verify-postgres",
@@ -425,6 +793,29 @@ def main() -> int:
         help="Comma-separated patient codes for exact cohort selection.",
     )
     parser.add_argument(
+        "--patient-codes-file",
+        dest="patient_codes_file",
+        default=None,
+        help="Path to CSV/newline patient code list.",
+    )
+    parser.add_argument(
+        "--state-file",
+        dest="state_file",
+        default=None,
+        help="State file path for batch resume progress.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from --state-file for batched imports.",
+    )
+    parser.add_argument(
+        "--stop-after-batches",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--tp-from",
         dest="tp_from",
         type=int,
@@ -454,7 +845,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        patient_codes = _parse_patient_codes_csv(args.patient_codes)
+        patient_codes = _parse_patient_codes_arg(args.patient_codes, args.patient_codes_file)
         _validate_patient_filters(
             patients_from=args.patients_from,
             patients_to=args.patients_to,
@@ -470,12 +861,32 @@ def main() -> int:
     if args.output_json and args.entity != "charting_canonical":
         print("--output-json is only supported for --entity charting_canonical.")
         return 2
+    if args.run_summary_out and args.entity != "charting_canonical":
+        print("--run-summary-out is only supported for --entity charting_canonical.")
+        return 2
     if args.verify_postgres and args.entity != "patients":
         print("--verify-postgres is only supported for --entity patients.")
         return 2
     if args.connect_timeout_seconds is not None and args.connect_timeout_seconds <= 0:
         print("--connect-timeout-seconds must be a positive integer.")
         return 2
+    if args.batch_size is not None and args.batch_size <= 0:
+        print("--batch-size must be a positive integer.")
+        return 2
+    if args.resume and not args.state_file:
+        print("--resume requires --state-file.")
+        return 2
+    if args.resume and (args.entity != "charting_canonical" or not patient_codes):
+        print("--resume is only supported for --entity charting_canonical with patient codes.")
+        return 2
+    if args.state_file and args.entity != "charting_canonical":
+        print("--state-file is only supported for --entity charting_canonical.")
+        return 2
+    if args.stop_after_batches is not None and args.stop_after_batches <= 0:
+        print("--stop-after-batches must be a positive integer.")
+        return 2
+
+    effective_batch_size = _effective_batch_size(args.entity, args.batch_size)
 
     if args.verify_postgres:
         session = SessionLocal()
@@ -601,32 +1012,58 @@ def main() -> int:
                         )
                     elif args.entity == "charting_canonical":
                         extractor = SqlServerChartingExtractor(config)
-                        stats, report = import_r4_charting_canonical_report(
-                            session,
-                            extractor,
-                            patients_from=args.patients_from,
-                            patients_to=args.patients_to,
-                            patient_codes=patient_codes,
-                            date_from=args.charting_from,
-                            date_to=args.charting_to,
-                            limit=args.limit,
-                            dry_run=False,
-                            allow_unmapped_patients=args.allow_unmapped_patients,
-                        )
-                        report = _finalize_charting_report(
-                            report,
-                            source="sqlserver",
-                            entity="charting_canonical",
-                            patients_from=args.patients_from,
-                            patients_to=args.patients_to,
-                            patient_codes=patient_codes,
-                            charting_from=args.charting_from,
-                            charting_to=args.charting_to,
-                            limit=args.limit,
-                            mode="apply",
-                        )
+                        if patient_codes:
+                            stats_payload, report = _run_charting_canonical_batched(
+                                session=session,
+                                source=extractor,
+                                source_name="sqlserver",
+                                entity="charting_canonical",
+                                patient_codes=patient_codes,
+                                patients_from=args.patients_from,
+                                patients_to=args.patients_to,
+                                charting_from=args.charting_from,
+                                charting_to=args.charting_to,
+                                limit=args.limit,
+                                allow_unmapped_patients=args.allow_unmapped_patients,
+                                batch_size=effective_batch_size,
+                                state_file=args.state_file,
+                                resume=args.resume,
+                                stop_after_batches=args.stop_after_batches,
+                            )
+                            stats = None
+                        else:
+                            stats, report = import_r4_charting_canonical_report(
+                                session,
+                                extractor,
+                                patients_from=args.patients_from,
+                                patients_to=args.patients_to,
+                                patient_codes=patient_codes,
+                                date_from=args.charting_from,
+                                date_to=args.charting_to,
+                                limit=args.limit,
+                                dry_run=False,
+                                allow_unmapped_patients=args.allow_unmapped_patients,
+                            )
+                            stats_payload = _normalize_charting_stats(
+                                stats=stats.as_dict(),
+                                report=report,
+                            )
+                            report = _finalize_charting_report(
+                                report,
+                                source="sqlserver",
+                                entity="charting_canonical",
+                                patients_from=args.patients_from,
+                                patients_to=args.patients_to,
+                                patient_codes=patient_codes,
+                                charting_from=args.charting_from,
+                                charting_to=args.charting_to,
+                                limit=args.limit,
+                                mode="apply",
+                            )
                         if args.output_json:
                             _write_report_file(args.output_json, report)
+                        if args.run_summary_out:
+                            _write_report_file(args.run_summary_out, report)
                     else:
                         stats = import_r4_treatment_plans(
                             session,
@@ -638,7 +1075,7 @@ def main() -> int:
                             tp_from=args.tp_from,
                             tp_to=args.tp_to,
                             limit=args.limit,
-                            batch_size=args.batch_size,
+                            batch_size=effective_batch_size,
                             sleep_ms=args.sleep_ms,
                             progress_every=args.progress_every,
                             progress_enabled=True,
@@ -654,17 +1091,20 @@ def main() -> int:
                         args.patients_to,
                         patient_codes=patient_codes,
                     )
+                stats_out_payload = (
+                    stats_payload if args.entity == "charting_canonical" else stats.as_dict()
+                )
                 _maybe_write_stats(
                     args.stats_out,
                     args.entity,
-                    stats.as_dict(),
+                    stats_out_payload,
                     args.patients_from,
                     args.patients_to,
                     patient_codes,
                     args.appts_from,
                     args.appts_to,
                 )
-                print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
+                print(json.dumps(stats_out_payload, indent=2, sort_keys=True))
                 return 0
             if args.entity == "patients":
                 summary = source.dry_run_summary_patients(
@@ -747,6 +1187,8 @@ def main() -> int:
                     summary = report
                     if args.output_json:
                         _write_report_file(args.output_json, report)
+                    if args.run_summary_out:
+                        _write_report_file(args.run_summary_out, report)
                 finally:
                     session.close()
             else:
@@ -817,32 +1259,58 @@ def main() -> int:
                 limit=args.limit,
             )
         elif args.entity == "charting_canonical":
-            stats, report = import_r4_charting_canonical_report(
-                session,
-                source,
-                patients_from=args.patients_from,
-                patients_to=args.patients_to,
-                patient_codes=patient_codes,
-                date_from=args.charting_from,
-                date_to=args.charting_to,
-                limit=args.limit,
-                dry_run=False,
-                allow_unmapped_patients=args.allow_unmapped_patients,
-            )
-            report = _finalize_charting_report(
-                report,
-                source="fixtures",
-                entity="charting_canonical",
-                patients_from=args.patients_from,
-                patients_to=args.patients_to,
-                patient_codes=patient_codes,
-                charting_from=args.charting_from,
-                charting_to=args.charting_to,
-                limit=args.limit,
-                mode="apply",
-            )
+            if patient_codes:
+                stats_payload, report = _run_charting_canonical_batched(
+                    session=session,
+                    source=source,
+                    source_name="fixtures",
+                    entity="charting_canonical",
+                    patient_codes=patient_codes,
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                    charting_from=args.charting_from,
+                    charting_to=args.charting_to,
+                    limit=args.limit,
+                    allow_unmapped_patients=args.allow_unmapped_patients,
+                    batch_size=effective_batch_size,
+                    state_file=args.state_file,
+                    resume=args.resume,
+                    stop_after_batches=args.stop_after_batches,
+                )
+                stats = None
+            else:
+                stats, report = import_r4_charting_canonical_report(
+                    session,
+                    source,
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                    patient_codes=patient_codes,
+                    date_from=args.charting_from,
+                    date_to=args.charting_to,
+                    limit=args.limit,
+                    dry_run=False,
+                    allow_unmapped_patients=args.allow_unmapped_patients,
+                )
+                stats_payload = _normalize_charting_stats(
+                    stats=stats.as_dict(),
+                    report=report,
+                )
+                report = _finalize_charting_report(
+                    report,
+                    source="fixtures",
+                    entity="charting_canonical",
+                    patients_from=args.patients_from,
+                    patients_to=args.patients_to,
+                    patient_codes=patient_codes,
+                    charting_from=args.charting_from,
+                    charting_to=args.charting_to,
+                    limit=args.limit,
+                    mode="apply",
+                )
             if args.output_json:
                 _write_report_file(args.output_json, report)
+            if args.run_summary_out:
+                _write_report_file(args.run_summary_out, report)
         else:
             stats = import_r4_treatment_plans(
                 session,
@@ -853,7 +1321,7 @@ def main() -> int:
                 tp_from=args.tp_from,
                 tp_to=args.tp_to,
                 limit=args.limit,
-                batch_size=args.batch_size,
+                batch_size=effective_batch_size,
                 sleep_ms=args.sleep_ms,
                 progress_every=args.progress_every,
                 progress_enabled=False,
@@ -867,17 +1335,18 @@ def main() -> int:
                 args.patients_to,
                 patient_codes=patient_codes,
             )
+        stats_out_payload = stats_payload if args.entity == "charting_canonical" else stats.as_dict()
         _maybe_write_stats(
             args.stats_out,
             args.entity,
-            stats.as_dict(),
+            stats_out_payload,
             args.patients_from,
             args.patients_to,
             patient_codes,
             args.appts_from,
             args.appts_to,
         )
-        print(json.dumps(stats.as_dict(), indent=2, sort_keys=True))
+        print(json.dumps(stats_out_payload, indent=2, sort_keys=True))
         return 0
     except Exception:
         session.rollback()

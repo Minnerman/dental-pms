@@ -52,7 +52,7 @@ def test_parse_patient_codes_csv_invalid_token():
     try:
         r4_import_script._parse_patient_codes_csv("1000,abc,1002")
     except RuntimeError as exc:
-        assert "Invalid patient code: abc" in str(exc)
+        assert "Invalid patient code in --patient-codes: abc" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected RuntimeError for invalid token")
 
@@ -64,6 +64,27 @@ def test_parse_patient_codes_csv_empty_token():
         assert "empty token" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected RuntimeError for empty token")
+
+
+def test_parse_patient_codes_file_csv_and_newline(tmp_path):
+    codes_file = tmp_path / "codes.txt"
+    codes_file.write_text(
+        "1000036,1000035\n# comment\n1000036\n1000037\n",
+        encoding="utf-8",
+    )
+    parsed = r4_import_script._parse_patient_codes_file(str(codes_file))
+    assert parsed == [1000035, 1000036, 1000037]
+
+
+def test_parse_patient_codes_arg_rejects_mutual_exclusion(tmp_path):
+    codes_file = tmp_path / "codes.txt"
+    codes_file.write_text("1000035\n", encoding="utf-8")
+    try:
+        r4_import_script._parse_patient_codes_arg("1000035", str(codes_file))
+    except RuntimeError as exc:
+        assert "mutually exclusive" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected RuntimeError for mutually exclusive args")
 
 
 def test_cli_rejects_patient_codes_with_range(monkeypatch):
@@ -80,6 +101,22 @@ def test_cli_rejects_patient_codes_with_range(monkeypatch):
             "1",
             "--patients-to",
             "2",
+        ],
+    )
+    assert r4_import_script.main() == 2
+
+
+def test_cli_rejects_resume_without_state_file(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "charting_canonical",
+            "--patient-codes",
+            "1000035,1000036",
+            "--resume",
         ],
     )
     assert r4_import_script.main() == 2
@@ -611,3 +648,151 @@ def test_cli_charting_canonical_report_includes_patient_codes(tmp_path, monkeypa
     assert payload["patient_filter_mode"] == "codes"
     assert payload["patient_codes_count"] == 2
     assert payload["patient_codes_sample"] == [1000035, 1000036]
+
+
+def test_cli_charting_canonical_resume_batches_from_state(tmp_path, monkeypatch):
+    class DummyStats:
+        def __init__(self, created=0, updated=0, skipped=0, unmapped=0, total=0):
+            self._payload = {
+                "created": created,
+                "updated": updated,
+                "skipped": skipped,
+                "unmapped_patients": unmapped,
+                "total": total,
+            }
+
+        def as_dict(self):
+            return dict(self._payload)
+
+    class DummySession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    calls: list[list[int]] = []
+
+    def fake_import(*_args, **kwargs):
+        batch_codes = kwargs.get("patient_codes") or []
+        calls.append(list(batch_codes))
+        return DummyStats(created=1, total=1), {
+            "total_records": 1,
+            "distinct_patients": len(batch_codes),
+            "missing_source_id": 0,
+            "missing_patient_code": 0,
+            "by_source": {"dbo.BPE": {"fetched": 1}},
+            "stats": {"created": 1, "updated": 0, "skipped": 0, "unmapped_patients": 0, "total": 1},
+            "dropped": {"out_of_range": 0, "missing_date": 0},
+        }
+
+    state_path = tmp_path / "state.json"
+    stats_path = tmp_path / "stats.json"
+
+    monkeypatch.setattr(r4_import_script, "SessionLocal", lambda: DummySession())
+    monkeypatch.setattr(r4_import_script, "resolve_actor_id", lambda _session: 1)
+    monkeypatch.setattr(r4_import_script, "FixtureSource", lambda: object())
+    monkeypatch.setattr(r4_import_script, "import_r4_charting_canonical_report", fake_import)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "charting_canonical",
+            "--patient-codes",
+            "1000003,1000001,1000002",
+            "--batch-size",
+            "2",
+            "--state-file",
+            str(state_path),
+            "--stats-out",
+            str(stats_path),
+            "--stop-after-batches",
+            "1",
+        ],
+    )
+    assert r4_import_script.main() == 0
+    assert calls == [[1000001, 1000002]]
+
+    calls.clear()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "charting_canonical",
+            "--patient-codes",
+            "1000003,1000001,1000002",
+            "--batch-size",
+            "2",
+            "--state-file",
+            str(state_path),
+            "--resume",
+            "--stats-out",
+            str(stats_path),
+        ],
+    )
+    assert r4_import_script.main() == 0
+    assert calls == [[1000003]]
+
+    payload = json.loads(stats_path.read_text(encoding="utf-8"))
+    assert payload["stats"]["imported_created_total"] == 1
+    assert payload["stats"]["candidates_total"] == 1
+
+
+def test_cli_charting_canonical_stats_out_separates_candidates_and_dropped(tmp_path, monkeypatch):
+    class DummyStats:
+        def as_dict(self):
+            return {"created": 0, "updated": 0, "skipped": 0, "unmapped_patients": 0, "total": 0}
+
+    class DummySession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    def fake_import(*_args, **kwargs):
+        return DummyStats(), {
+            "total_records": 0,
+            "distinct_patients": 0,
+            "missing_source_id": 0,
+            "missing_patient_code": 0,
+            "by_source": {},
+            "stats": {"created": 0, "updated": 0, "skipped": 0, "unmapped_patients": 0, "total": 0},
+            "dropped": {"out_of_range": 3, "missing_date": 2},
+        }
+
+    stats_path = tmp_path / "stats.json"
+    monkeypatch.setattr(r4_import_script, "SessionLocal", lambda: DummySession())
+    monkeypatch.setattr(r4_import_script, "resolve_actor_id", lambda _session: 1)
+    monkeypatch.setattr(r4_import_script, "FixtureSource", lambda: object())
+    monkeypatch.setattr(r4_import_script, "import_r4_charting_canonical_report", fake_import)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "charting_canonical",
+            "--patient-codes",
+            "1000001",
+            "--stats-out",
+            str(stats_path),
+        ],
+    )
+    assert r4_import_script.main() == 0
+    payload = json.loads(stats_path.read_text(encoding="utf-8"))
+    assert payload["stats"]["imported_created_total"] == 0
+    assert payload["stats"]["dropped_out_of_range_total"] == 3
+    assert payload["stats"]["dropped_missing_date_total"] == 2
+    assert payload["stats"]["candidates_total"] == 5
