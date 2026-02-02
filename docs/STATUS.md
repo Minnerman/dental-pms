@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 129P PerioProbe linkage fix (RefId-based fallback join).
+  - Updated SQL Server PerioProbe linkage to prefer `PerioProbe.RefId -> Transactions.RefId` and fall back to `TransId -> RefId` when needed.
+  - This resolves dataset under-linkage where `TransId -> RefId` alone returned one patient; diagnostics show RefId linkage expands to 6 patients (`1000000..1000005`).
+  - Added unit tests for join selection and fallback behavior in `test_sqlserver_source_perioprobe_linkage.py`.
 - 2026-02-02: Stage 129N consolidated baseline run (20-patient TreatmentNotes cohort).
   - Cohort selection: `get_distinct_treatment_notes_patient_codes(2017-01-01..2026-02-01, limit=20)`.
   - Patient import + canonical apply were clean and idempotent: first apply `created=49, updated=0, skipped=0, unmapped_patients=0`; rerun `created=0, updated=0, skipped=49, unmapped_patients=0`.
