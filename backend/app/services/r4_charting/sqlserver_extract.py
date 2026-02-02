@@ -504,6 +504,48 @@ def get_distinct_bpe_patient_codes(
     return codes
 
 
+def get_distinct_perioprobe_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    extractor = SqlServerChartingExtractor(config)
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in extractor._iter_perio_probes(  # noqa: SLF001
+        patients_from=None,
+        patients_to=None,
+        patient_codes=None,
+        limit=None,
+    ):
+        code = row.patient_code
+        if code is None or code in seen:
+            continue
+        # Keep selector semantics aligned with canonical importer:
+        # when bounds are set, undated perio rows are still eligible.
+        recorded_at = row.recorded_at
+        if recorded_at is not None:
+            day = recorded_at.date()
+            if day < date_from or day > date_to:
+                continue
+        seen.add(code)
+        codes.append(code)
+        if len(codes) >= limit:
+            break
+    codes.sort()
+    return codes
+
+
 def get_distinct_bpe_furcation_patient_codes(
     charting_from: date | str,
     charting_to: date | str,
