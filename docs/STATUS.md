@@ -61,6 +61,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 129R PerioProbe baseline refresh (6-patient cohort).
+  - Cohort: `1000000,1000001,1000002,1000003,1000004,1000005` with updated RefId-first linkage and dedupe-aware parity digest.
+  - Canonical run remained idempotent (`created=0, updated=0, skipped=174, unmapped_patients=0`; `dbo.PerioProbe fetched=155`).
+  - Consolidated runner (`perioprobe,bpe,bpe_furcation`) summary: overall `pass`, `domains_failed=0`, `domains_no_data=2`.
+  - Domain coverage: `perioprobe pass (6/6 with_data)`, `bpe no_data (0/6)`, `bpe_furcation no_data (0/6)`.
+  - Artefacts saved under `/tmp/stage129r_*` and `/tmp/stage129r_domains/`.
 - 2026-02-02: Stage 129Q PerioProbe parity digest dedupe at latest key.
   - Updated `r4_perioprobe_parity_pack.py` to compare latest digests on distinct probe unique keys (`trans_id:tooth:probing_point`) to ignore raw SQL duplicate noise.
   - Added unit test coverage for duplicate-row dedupe in latest-trans digest calculation.
