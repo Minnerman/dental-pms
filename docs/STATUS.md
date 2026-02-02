@@ -61,6 +61,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 129W widened baseline refresh (perioprobe + bpe + bpe_furcation).
+  - Cohort: `1000000..1000049` (50 patients), charting window `2017-01-01..2026-02-01`, SQL Server guardrail `R4_SQLSERVER_READONLY=true`.
+  - Patients import stats: `created=44, skipped=6, updated=0`.
+  - Canonical apply #1 stats: `created=54, updated=1, skipped=174, unmapped_patients=0`.
+  - Canonical apply #2 stats: `created=0, updated=0, skipped=229, unmapped_patients=0` (idempotent rerun).
+  - by_source fetched: `dbo.PerioProbe=155`, `dbo.BPE=21`, `dbo.BPEFurcation=21`, `dbo.TreatmentNotes=1`.
+  - Consolidated parity (`perioprobe,bpe,bpe_furcation`): overall `pass`, `domains_failed=0`, `domains_no_data=0`.
+  - Domain coverage: `perioprobe pass (6/50 with_data; 44 no_data)`, `bpe pass (3/50 with_data; 47 no_data)`, `bpe_furcation pass (3/50 with_data; 47 no_data)`.
+  - Artefacts (inside backend container): `/tmp/stage129w_patients_apply_stats.json`, `/tmp/stage129w_charting_apply1_stats.json`, `/tmp/stage129w_charting_apply2_stats.json`, `/tmp/stage129w_charting_apply1_report.json`, `/tmp/stage129w_charting_apply2_report.json`, `/tmp/stage129w_parity_combined.json`, `/tmp/stage129w_domains/{perioprobe.json,bpe.json,bpe_furcation.json}`.
 - 2026-02-02: Stage 129R PerioProbe baseline refresh (6-patient cohort).
   - Cohort: `1000000,1000001,1000002,1000003,1000004,1000005` with updated RefId-first linkage and dedupe-aware parity digest.
   - Canonical run remained idempotent (`created=0, updated=0, skipped=174, unmapped_patients=0`; `dbo.PerioProbe fetched=155`).
