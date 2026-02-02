@@ -1,6 +1,15 @@
 from app.scripts import r4_cohort_select
 
 
+def test_parse_domains_csv_defaults_include_treatment_plan_items():
+    assert r4_cohort_select._parse_domains_csv(None) == [
+        "perioprobe",
+        "bpe",
+        "bpe_furcation",
+        "treatment_plan_items",
+    ]
+
+
 def test_select_cohort_union(monkeypatch):
     monkeypatch.setattr(
         r4_cohort_select,

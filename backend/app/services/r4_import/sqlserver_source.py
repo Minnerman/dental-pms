@@ -2782,6 +2782,7 @@ class R4SqlServerSource:
         item_col = self._require_column("TreatmentPlanItems", ["TPItem", "TPItemNo", "TPItemNumber"])
         item_key_col = self._pick_column("TreatmentPlanItems", ["TPItemKey", "TPItemID"])
         code_col = self._pick_column("TreatmentPlanItems", ["CodeID"])
+        item_date_col = self._pick_column("TreatmentPlanItems", ["Date", "ItemDate", "RecordedDate"])
         tooth_col = self._pick_column("TreatmentPlanItems", ["Tooth"])
         surface_col = self._pick_column("TreatmentPlanItems", ["Surface"])
         appt_need_col = self._pick_column(
@@ -2842,6 +2843,8 @@ class R4SqlServerSource:
                 select_cols.append(f"{item_key_col} AS tp_item_key")
             if code_col:
                 select_cols.append(f"{code_col} AS code_id")
+            if item_date_col:
+                select_cols.append(f"{item_date_col} AS item_date")
             if tooth_col:
                 select_cols.append(f"{tooth_col} AS tooth")
             if surface_col:
@@ -2884,6 +2887,7 @@ class R4SqlServerSource:
                     tp_item=last_item,
                     tp_item_key=int(row["tp_item_key"]) if row.get("tp_item_key") is not None else None,
                     code_id=int(row["code_id"]) if row.get("code_id") is not None else None,
+                    item_date=row.get("item_date"),
                     tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
                     surface=int(row["surface"]) if row.get("surface") is not None else None,
                     appointment_need_id=(

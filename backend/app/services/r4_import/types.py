@@ -105,6 +105,7 @@ class R4TreatmentPlanItem(BaseModel):
     tooth: int | None = None
     surface: int | None = None
     appointment_need_id: int | None = None
+    item_date: datetime | None = None
     completed: bool = False
     completed_date: datetime | None = None
     patient_cost: float | None = None

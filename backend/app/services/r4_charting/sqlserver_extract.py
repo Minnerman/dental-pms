@@ -169,6 +169,35 @@ class SqlServerChartingExtractor:
                 )
             )
 
+        for item in self._iter_treatment_plan_items(
+            patients_from=patients_from,
+            patients_to=patients_to,
+            patient_codes=patient_codes,
+            limit=limit,
+        ):
+            item_date = item.item_date or item.completed_date
+            if not _date_in_range(item_date, date_from, date_to, report):
+                continue
+            if item.tp_item_key is not None:
+                source_id = str(item.tp_item_key)
+            else:
+                source_id = f"{item.patient_code}:{item.tp_number}:{item.tp_item}"
+            records.append(
+                CanonicalRecordInput(
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                    r4_source_id=source_id,
+                    legacy_patient_code=item.patient_code,
+                    recorded_at=item_date,
+                    entered_at=None,
+                    tooth=item.tooth,
+                    surface=item.surface,
+                    code_id=item.code_id,
+                    status="completed" if item.completed else "planned",
+                    payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                )
+            )
+
         for row in self._iter_bpe_furcations(
             patients_from=patients_from,
             patients_to=patients_to,
@@ -342,6 +371,41 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_treatment_notes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_treatment_plan_items(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_treatment_plan_items(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_treatment_plan_items(
                     patients_from=code,
                     patients_to=code,
                     limit=batch_limit,
@@ -684,6 +748,59 @@ def get_distinct_treatment_notes_patient_codes(
             "SELECT TOP (?) "
             f"{patient_col} AS patient_code "
             "FROM dbo.TreatmentNotes WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
+def get_distinct_treatment_plan_items_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("TreatmentPlanItems", ["PatientCode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "TreatmentPlanItems",
+        ["Date", "ItemDate", "RecordedDate"],
+    )
+    if not patient_col or not date_col:
+        raise RuntimeError(
+            "TreatmentPlanItems missing PatientCode/Date columns; cannot fetch distinct codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.TreatmentPlanItems WITH (NOLOCK) "
             f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
             f"GROUP BY {patient_col} "
             f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
