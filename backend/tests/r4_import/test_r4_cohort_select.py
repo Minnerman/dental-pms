@@ -6,6 +6,7 @@ def test_parse_domains_csv_defaults_include_treatment_plan_items():
         "perioprobe",
         "bpe",
         "bpe_furcation",
+        "treatment_notes",
         "treatment_plan_items",
     ]
 
@@ -152,6 +153,10 @@ def test_select_cohort_hashed_order_requires_seed(monkeypatch):
         assert "--seed is required when --order=hashed." in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected RuntimeError")
+
+
+def test_parse_domains_csv_accepts_treatment_notes():
+    assert r4_cohort_select._parse_domains_csv("treatment_notes") == ["treatment_notes"]
 
 
 def test_parse_exclude_patient_codes_file_csv_and_newline(tmp_path):

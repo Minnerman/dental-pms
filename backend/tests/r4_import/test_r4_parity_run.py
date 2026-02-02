@@ -117,6 +117,40 @@ def test_run_parity_treatment_plan_items_domain(monkeypatch, tmp_path: Path):
     assert (tmp_path / "treatment_plan_items.json").exists()
 
 
+def test_run_parity_treatment_notes_domain(monkeypatch, tmp_path: Path):
+    def _build_with_data(*args, **kwargs):
+        return {
+            "patients": [
+                {
+                    "patient_code": 1000,
+                    "sqlserver_total_rows": 1,
+                    "latest_match": True,
+                    "latest_digest_match": True,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(r4_parity_run, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(
+        r4_parity_run.r4_treatment_notes_parity_pack,
+        "build_parity_report",
+        _build_with_data,
+    )
+
+    report = r4_parity_run.run_parity(
+        patient_codes=[1000],
+        domains=["treatment_notes"],
+        date_from=None,
+        date_to=None,
+        row_limit=10,
+        output_dir=str(tmp_path),
+    )
+
+    assert report["domain_summaries"]["treatment_notes"]["status"] == "pass"
+    assert report["overall"]["status"] == "pass"
+    assert (tmp_path / "treatment_notes.json").exists()
+
+
 def test_main_writes_output_json(monkeypatch, tmp_path: Path):
     out = tmp_path / "combined.json"
 
