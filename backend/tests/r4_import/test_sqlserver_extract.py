@@ -73,6 +73,50 @@ def test_get_distinct_bpe_patient_codes_rejects_invalid_window(monkeypatch):
         raise AssertionError("expected ValueError for invalid date window")
 
 
+def test_get_distinct_perioprobe_patient_codes_dedupes_and_orders(monkeypatch):
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummyProbe:
+        def __init__(self, patient_code, recorded_at):
+            self.patient_code = patient_code
+            self.recorded_at = recorded_at
+
+    class DummyExtractor:
+        def __init__(self, _config):
+            self._config = _config
+
+        def _iter_perio_probes(
+            self,
+            *,
+            patients_from,
+            patients_to,
+            patient_codes,
+            limit,
+        ):
+            assert patients_from is None
+            assert patients_to is None
+            assert patient_codes is None
+            assert limit is None
+            return [
+                DummyProbe(1000003, datetime(2016, 12, 31, 10, 0, 0)),  # out of range
+                DummyProbe(1000000, datetime(2025, 1, 1, 10, 0, 0)),
+                DummyProbe(1000001, None),  # undated rows are included
+                DummyProbe(1000000, datetime(2025, 1, 2, 10, 0, 0)),  # duplicate code
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "SqlServerChartingExtractor", DummyExtractor)
+
+    result = extract.get_distinct_perioprobe_patient_codes("2017-01-01", "2026-02-01", limit=5)
+
+    assert result == [1000000, 1000001]
+
+
 def test_get_distinct_patient_notes_patient_codes_dedupes_and_orders(monkeypatch):
     captured = {}
 
