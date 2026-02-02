@@ -510,6 +510,8 @@ def import_r4_charting_canonical(
     patients_from: int | None = None,
     patients_to: int | None = None,
     patient_codes: list[int] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     limit: int | None = None,
     allow_unmapped_patients: bool = False,
 ) -> CanonicalImportStats:
@@ -521,8 +523,8 @@ def import_r4_charting_canonical(
             patients_from=patients_from,
             patients_to=patients_to,
             patient_codes=patient_codes,
-            date_from=None,
-            date_to=None,
+            date_from=date_from,
+            date_to=date_to,
             limit=limit,
         )
     elif hasattr(source, "iter_canonical_records"):
@@ -729,6 +731,8 @@ def import_r4_charting_canonical_report(
         patients_from=patients_from,
         patients_to=patients_to,
         patient_codes=patient_codes,
+        date_from=date_from,
+        date_to=date_to,
         limit=limit,
         allow_unmapped_patients=allow_unmapped_patients,
     )
