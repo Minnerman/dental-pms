@@ -68,6 +68,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Chunk outcomes: Stage134A selected `500` (hashed seed `1`); Stage134B selected remaining `215` (hashed seed `2`); exhaustion check (seed `3`, limit `5000`) hard-stopped with exclusion removing all candidates.
   - Gates remained green: overlap gate `0`, `unmapped_patients_total=0`, resume no-op, parity pass for `treatment_plan_items` and `treatment_notes`.
   - Host-persistent seen ledger used: `.run/seen_stage134_active.txt`; CI runner instability handled via local-first flow, with merge completed once Actions recovered.
+- 2026-02-03: Stage 135 kickoff (next charting domain slice, pre-implementation scope).
+  - Objective: implement the next highest-value R4 clinical domain after `treatment_plan_items` and `treatment_notes` using the hardened flow: selector → patients import (required) → canonical import (batch/state/resume) → resume no-op check → parity gate → host-persistent seen ledger.
+  - Guardrails: `R4_SQLSERVER_READONLY=true` for all live selector/import/parity runs; pre-append overlap gate must be `0`; `unmapped_patients_total` must be `0`; resume must be no-op; parity must pass for the scoped domain.
+  - Target window: `2017-01-01..2026-02-01` unless explicitly changed.
+  - Selection strategy: prefer `--order hashed --seed N`; use `--exclude-patient-codes-file` with host ledger under `.run/`; size `--limit` so `remaining_after_exclude >= desired_chunk_size` (else run a tail chunk and record exhaustion).
+  - Discovery requirement before implementation: run `r4_charting_inventory.py` and select the next domain by `patients_in_window`, `rows_in_window`, and clear date semantics.
+  - Note: CI runner instability was observed previously; local-first is acceptable, but implementation PRs should stay draft/unmerged until Actions are stable.
+  - Next action: choose Stage 135 domain from inventory and create `stage135-<domain>` branch for implementation.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
