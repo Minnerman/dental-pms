@@ -84,6 +84,7 @@ class R4User(BaseModel):
 class R4TreatmentPlan(BaseModel):
     patient_code: int = Field(..., ge=1)
     tp_number: int = Field(..., ge=1)
+    treatment_plan_id: int | None = None
     plan_index: int | None = None
     is_master: bool = False
     is_current: bool = False

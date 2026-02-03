@@ -105,6 +105,38 @@ def _parse_patient_codes_arg(
     return _parse_patient_codes_csv(patient_codes_csv)
 
 
+_CHARTING_CANONICAL_DOMAINS = {
+    "perioprobe",
+    "bpe",
+    "bpe_furcation",
+    "patient_notes",
+    "treatment_plans",
+    "treatment_notes",
+    "treatment_plan_items",
+}
+
+
+def _parse_charting_domains_arg(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    domains: list[str] = []
+    seen: set[str] = set()
+    for token in raw.split(","):
+        domain = token.strip().lower()
+        if not domain:
+            raise RuntimeError("Invalid --domains value: empty token.")
+        if domain not in _CHARTING_CANONICAL_DOMAINS:
+            allowed = ",".join(sorted(_CHARTING_CANONICAL_DOMAINS))
+            raise RuntimeError(f"Unsupported --domains value: {domain}. Allowed: {allowed}")
+        if domain in seen:
+            continue
+        seen.add(domain)
+        domains.append(domain)
+    if not domains:
+        raise RuntimeError("Invalid --domains value: no domains provided.")
+    return domains
+
+
 def _build_patients_mapping_quality(
     source,
     patients_from: int | None,
@@ -248,6 +280,7 @@ def _build_run_signature(
     entity: str,
     charting_from: date | None,
     charting_to: date | None,
+    charting_domains: list[str] | None,
     limit: int | None,
     allow_unmapped_patients: bool,
     batch_size: int,
@@ -258,6 +291,7 @@ def _build_run_signature(
         "entity": entity,
         "charting_from": charting_from.isoformat() if charting_from else None,
         "charting_to": charting_to.isoformat() if charting_to else None,
+        "charting_domains": charting_domains,
         "limit": limit,
         "allow_unmapped_patients": allow_unmapped_patients,
         "batch_size": batch_size,
@@ -294,6 +328,7 @@ def _validate_resume_state(
         "entity",
         "charting_from",
         "charting_to",
+        "charting_domains",
         "limit",
         "allow_unmapped_patients",
         "batch_size",
@@ -376,6 +411,7 @@ def _finalize_charting_report(
     patient_codes: list[int] | None,
     charting_from: date | None,
     charting_to: date | None,
+    charting_domains: list[str] | None,
     limit: int | None,
     mode: str,
 ) -> dict[str, object]:
@@ -409,6 +445,7 @@ def _finalize_charting_report(
             "entity": entity,
             "charting_from": charting_from.isoformat() if charting_from else None,
             "charting_to": charting_to.isoformat() if charting_to else None,
+            "domains": charting_domains,
             "limit": limit,
             "totals": totals,
             **_patient_filter_metadata(
@@ -488,6 +525,7 @@ def _run_charting_canonical_batched(
     patients_to: int | None,
     charting_from: date | None,
     charting_to: date | None,
+    charting_domains: list[str] | None,
     limit: int | None,
     allow_unmapped_patients: bool,
     batch_size: int,
@@ -501,6 +539,7 @@ def _run_charting_canonical_batched(
         entity=entity,
         charting_from=charting_from,
         charting_to=charting_to,
+        charting_domains=charting_domains,
         limit=limit,
         allow_unmapped_patients=allow_unmapped_patients,
         batch_size=batch_size,
@@ -557,6 +596,7 @@ def _run_charting_canonical_batched(
             patient_codes=batch_codes,
             date_from=charting_from,
             date_to=charting_to,
+            domains=charting_domains,
             limit=limit,
             dry_run=False,
             allow_unmapped_patients=allow_unmapped_patients,
@@ -641,6 +681,7 @@ def _run_charting_canonical_batched(
         patient_codes=patient_codes,
         charting_from=charting_from,
         charting_to=charting_to,
+        charting_domains=charting_domains,
         limit=limit,
         mode="apply",
     )
@@ -713,6 +754,15 @@ def main() -> int:
         type=_parse_date_arg,
         default=None,
         help="Filter charting rows to YYYY-MM-DD (inclusive).",
+    )
+    parser.add_argument(
+        "--domains",
+        dest="domains",
+        default=None,
+        help=(
+            "Optional comma-separated charting canonical domains "
+            "(perioprobe,bpe,bpe_furcation,patient_notes,treatment_plans,treatment_notes,treatment_plan_items)."
+        ),
     )
     parser.add_argument(
         "--batch-size",
@@ -846,6 +896,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         patient_codes = _parse_patient_codes_arg(args.patient_codes, args.patient_codes_file)
+        charting_domains = _parse_charting_domains_arg(args.domains)
         _validate_patient_filters(
             patients_from=args.patients_from,
             patients_to=args.patients_to,
@@ -863,6 +914,9 @@ def main() -> int:
         return 2
     if args.run_summary_out and args.entity != "charting_canonical":
         print("--run-summary-out is only supported for --entity charting_canonical.")
+        return 2
+    if charting_domains is not None and args.entity != "charting_canonical":
+        print("--domains is only supported for --entity charting_canonical.")
         return 2
     if args.verify_postgres and args.entity != "patients":
         print("--verify-postgres is only supported for --entity patients.")
@@ -1023,6 +1077,7 @@ def main() -> int:
                                 patients_to=args.patients_to,
                                 charting_from=args.charting_from,
                                 charting_to=args.charting_to,
+                                charting_domains=charting_domains,
                                 limit=args.limit,
                                 allow_unmapped_patients=args.allow_unmapped_patients,
                                 batch_size=effective_batch_size,
@@ -1040,6 +1095,7 @@ def main() -> int:
                                 patient_codes=patient_codes,
                                 date_from=args.charting_from,
                                 date_to=args.charting_to,
+                                domains=charting_domains,
                                 limit=args.limit,
                                 dry_run=False,
                                 allow_unmapped_patients=args.allow_unmapped_patients,
@@ -1057,6 +1113,7 @@ def main() -> int:
                                 patient_codes=patient_codes,
                                 charting_from=args.charting_from,
                                 charting_to=args.charting_to,
+                                charting_domains=charting_domains,
                                 limit=args.limit,
                                 mode="apply",
                             )
@@ -1168,6 +1225,7 @@ def main() -> int:
                         patient_codes=patient_codes,
                         date_from=args.charting_from,
                         date_to=args.charting_to,
+                        domains=charting_domains,
                         limit=args.limit,
                         dry_run=True,
                         allow_unmapped_patients=args.allow_unmapped_patients,
@@ -1181,6 +1239,7 @@ def main() -> int:
                         patient_codes=patient_codes,
                         charting_from=args.charting_from,
                         charting_to=args.charting_to,
+                        charting_domains=charting_domains,
                         limit=args.limit,
                         mode="dry_run",
                     )
@@ -1270,6 +1329,7 @@ def main() -> int:
                     patients_to=args.patients_to,
                     charting_from=args.charting_from,
                     charting_to=args.charting_to,
+                    charting_domains=charting_domains,
                     limit=args.limit,
                     allow_unmapped_patients=args.allow_unmapped_patients,
                     batch_size=effective_batch_size,
@@ -1287,6 +1347,7 @@ def main() -> int:
                     patient_codes=patient_codes,
                     date_from=args.charting_from,
                     date_to=args.charting_to,
+                    domains=charting_domains,
                     limit=args.limit,
                     dry_run=False,
                     allow_unmapped_patients=args.allow_unmapped_patients,
@@ -1304,6 +1365,7 @@ def main() -> int:
                     patient_codes=patient_codes,
                     charting_from=args.charting_from,
                     charting_to=args.charting_to,
+                    charting_domains=charting_domains,
                     limit=args.limit,
                     mode="apply",
                 )

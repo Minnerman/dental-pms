@@ -76,6 +76,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Discovery requirement before implementation: run `r4_charting_inventory.py` and select the next domain by `patients_in_window`, `rows_in_window`, and clear date semantics.
   - Note: CI runner instability was observed previously; local-first is acceptable, but implementation PRs should stay draft/unmerged until Actions are stable.
   - Next action: choose Stage 135 domain from inventory and create `stage135-<domain>` branch for implementation.
+- 2026-02-03: Stage 135 completed (`treatment_plans`, deterministic hashed cohorts, seeds `3..16`).
+  - Flow used throughout: selector with host-persistent exclusion ledger + fixed 200-cap cohort processing (tail chunk naturally smaller).
+  - Ledger reached full domain coverage: `.run/seen_stage135_treatment_plans.txt` grew from `0` to `3109` unique patient codes.
+  - Final sweep (`seed=16`) processed the remaining `109` patients (`remaining_after_exclude=109`, effective selection `109`).
+  - Gates stayed green across chunks: overlap `0`, patients import mapped for cohort, canonical `unmapped_patients_total=0`, parity latest + digest matches passed.
+  - Exhaustion verified: post-append remaining probe against full ledger returned `remaining_after_exclude=0`.
+  - Known reporting pattern (observed from seed 7 onward): resume no-op runs may report non-zero `candidates_total` while `imported_created_total=0` and `imported_updated_total=0`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
