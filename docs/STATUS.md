@@ -102,6 +102,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Gates green at close-out: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`, `candidates_total=0`), parity latest+digest `6/6`.
   - Exhaustion verified: probe raises expected zero-candidate exhaustion; equivalent count math confirms `excluded_candidates_count=6` and `remaining_after_exclude=0`.
   - Canonical note: perioprobe imported from `dbo.PerioProbe` (`fetched=155`, `candidates_total=166`, `imported_created_total=155`).
+- 2026-02-03: Stage 139 completed (`bpe`, deterministic hashed cohorts, seeds `1..6`).
+  - Selector baseline: `candidates_before_exclude=1108`; processed with cap `200` and tail `108`.
+  - Ledger reached full coverage: `.run/seen_stage139_bpe.txt` is `1108` on host and container.
+  - Gates green at close-out: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest all/all (`200/200` seeds, tail `108/108`).
+  - Exhaustion verified: probe raises expected zero-candidate exhaustion; equivalent count math confirms `excluded_candidates_count=1108` and `remaining_after_exclude=0`.
+  - Canonical provenance: imported from `dbo.BPE` (per-seed fetched counts recorded in run summaries).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
