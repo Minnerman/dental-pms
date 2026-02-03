@@ -126,6 +126,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Nightly smoke env/bootstrap failures addressed: `run 21019750369` ("env file .../.env not found") and `run 21617785605` (permission error creating `/home/amir/...`) are both handled by deterministic local `.env` bootstrap and no privileged path writes.
   - Workflow validation issue documented and re-baselined: `run 21016501636` (0s, likely workflow-file issue) no longer reflects current workflow set; subsequent PR checks on Stage 51 were green.
   - Gates green at close-out: local `ops/health.sh`, local `ops/verify.sh`, YAML parse sanity, and PR checks.
+- 2026-02-03: Stage 52 completed (deploy/runbook).
+  - Added `docs/DEPLOY_RUNBOOK.md` covering first-time setup, env validation, start/stop, migrations, logs/troubleshooting, rollback, and R4 read-only policy.
+  - Verified runbook commands on server: `bash ops/env_check.sh`, `docker compose up -d --build`, `docker compose ps`, `bash ops/health.sh`, and migration command (`python -m alembic upgrade head`).
+  - Backups section now references existing helper scripts; full restore drill remains Stage 53.
+  - Gates green at close-out: deploy commands successful, health green after deploy, migration command exit `0`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
@@ -939,6 +944,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - nightly smoke reliability improved (no env-related failures)
 - Stage 52: Production-ish deploy/runbook (MVP gate)
   - Aim: one documented path to run the stack on the server safely.
+  - Runbook: `docs/DEPLOY_RUNBOOK.md`
   - Deliverables:
     - a deploy/runbook (docker compose) covering: pull, env, migrations, start/stop, logs, backups, rollback plan
     - explicit statement of R4 SQL Server read-only policy and how it's enforced
