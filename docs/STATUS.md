@@ -84,6 +84,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Exhaustion verified: post-append remaining probe against full ledger returned `remaining_after_exclude=0`.
   - Known reporting pattern (observed from seed 7 onward): resume no-op runs may report non-zero `candidates_total` while `imported_created_total=0` and `imported_updated_total=0`.
   - Probe exhaustion behaviour: when exclusions remove all candidates, `r4_cohort_select` may raise/exit non-zero instead of writing an empty CSV; treat this as expected completion (`remaining_after_exclude=0`) when `excluded_candidates_count == candidates_before_exclude` (or equivalent count math).
+- 2026-02-03: Stage 136 completed (`treatment_plan_items`, deterministic hashed cohorts, seeds `1..16`).
+  - Flow used throughout: deterministic selector (`--order hashed --seed N`) + host-persistent exclusion ledger + fixed 200-cap chunks with final tail chunk.
+  - Date semantics fix landed mid-stage and remained green: TP-item range anchoring now uses parent `TreatmentPlans.CreationDate` (not item-level date), eliminating false `dropped_out_of_range` inflation.
+  - Full coverage achieved: `.run/seen_stage136_tp_items.txt` reached `3040` unique patient codes; final sweep (`seed=16`) processed tail cohort `40`.
+  - Gates stayed green across all seeds: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest all/all.
+  - Exhaustion verified at completion: direct probe command raised expected zero-candidate exhaustion; equivalent count math confirmed `excluded_candidates_count=3040` and `remaining_after_exclude=0`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
