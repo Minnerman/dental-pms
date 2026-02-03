@@ -320,6 +320,9 @@ class DummySourceForNotes:
     def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
         return []
 
+    def list_treatment_plan_items(self, patients_from=None, patients_to=None, limit=None):
+        return []
+
 
 def test_collect_canonical_records_includes_patient_notes_with_date_bounds():
     extractor = object.__new__(extract.SqlServerChartingExtractor)

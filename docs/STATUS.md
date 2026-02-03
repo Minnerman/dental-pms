@@ -61,6 +61,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
+  - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
+  - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
+  - Imported all eligible patients for this scope/window (`1114` total across chunks).
+  - Canonical runs were checkpointed and resumable; no-op resume checks passed.
+  - Parity gate remained green for populated domains (`bpe`, `bpe_furcation`), with expected `perioprobe` no-data in tail cohorts.
+  - Operational note: with exclude files, selector `--limit` must cover `seen + desired chunk` (or use high limit like `5000`).
 - 2026-02-02: Stage 130 r4_import batching/resume + patient-codes-file (PR #202, master `480f72a`).
   - Added CLI support for `--patient-codes-file` (CSV/newline), entity-aware batching defaults via `--batch-size`, resumable checkpoints via `--state-file` + `--resume`, and `--run-summary-out`.
   - Stats/reporting counters are now unambiguous for charting runs: candidates vs imported (`created/updated`) vs dropped (`out_of_range`/missing date), with legacy keys retained for compatibility.

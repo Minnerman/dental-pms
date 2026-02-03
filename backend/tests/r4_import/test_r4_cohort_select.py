@@ -1,6 +1,16 @@
 from app.scripts import r4_cohort_select
 
 
+def test_parse_domains_csv_defaults_include_treatment_plan_items():
+    assert r4_cohort_select._parse_domains_csv(None) == [
+        "perioprobe",
+        "bpe",
+        "bpe_furcation",
+        "treatment_notes",
+        "treatment_plan_items",
+    ]
+
+
 def test_select_cohort_union(monkeypatch):
     monkeypatch.setattr(
         r4_cohort_select,
@@ -141,6 +151,56 @@ def test_select_cohort_hashed_order_requires_seed(monkeypatch):
         )
     except RuntimeError as exc:
         assert "--seed is required when --order=hashed." in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected RuntimeError")
+
+
+def test_parse_domains_csv_accepts_treatment_notes():
+    assert r4_cohort_select._parse_domains_csv("treatment_notes") == ["treatment_notes"]
+
+
+def test_select_cohort_active_patients_mode_applies_exclusions_and_limit(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_active_patient_codes",
+        lambda **kwargs: list(range(1000, 1010)),
+    )
+    report = r4_cohort_select.select_cohort(
+        domains=["bpe"],
+        date_from=None,
+        date_to="2026-02-01",
+        limit=3,
+        mode="active_patients",
+        excluded_patient_codes={1000, 1001},
+        order="asc",
+        active_months=24,
+    )
+    assert report["patient_codes"] == [1002, 1003, 1004]
+    assert report["candidates_before_exclude"] == 10
+    assert report["excluded_candidates_count"] == 2
+    assert report["remaining_after_exclude"] == 8
+    assert report["selected_count"] == 3
+    assert report["active_from"] == "2024-02-01"
+    assert report["active_to"] == "2026-02-01"
+    assert report["active_months"] == 24
+
+
+def test_select_cohort_non_active_requires_date_from(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_domain_codes",
+        lambda domain, **kwargs: [1],
+    )
+    try:
+        r4_cohort_select.select_cohort(
+            domains=["bpe"],
+            date_from=None,
+            date_to="2026-02-01",
+            limit=10,
+            mode="union",
+        )
+    except RuntimeError as exc:
+        assert "--date-from is required unless --mode=active_patients." in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected RuntimeError")
 

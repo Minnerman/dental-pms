@@ -3068,15 +3068,15 @@ export default function PatientDetailClient({
   useEffect(() => {
     const fromUrl = searchParams?.get("clinicalView");
     if (fromUrl === "current" || fromUrl === "planned" || fromUrl === "history") {
-      if (fromUrl !== clinicalViewMode) setClinicalViewMode(fromUrl);
+      setClinicalViewMode((prev) => (prev === fromUrl ? prev : fromUrl));
       return;
     }
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem("clinicalViewMode");
     if (stored === "current" || stored === "planned" || stored === "history") {
-      if (stored !== clinicalViewMode) setClinicalViewMode(stored);
+      setClinicalViewMode((prev) => (prev === stored ? prev : stored));
     }
-  }, [searchParams, clinicalViewMode]);
+  }, [searchParams]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
