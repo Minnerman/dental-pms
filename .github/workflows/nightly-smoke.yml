@@ -24,6 +24,7 @@ jobs:
       - name: Prepare CI env
         run: |
           cp -f .env.example .env
+          sed -i '/^R4_SQLSERVER_/d' .env
           cat >> .env <<'EOF'
           APP_ENV=development
           ALLOW_DEV_SEED=1

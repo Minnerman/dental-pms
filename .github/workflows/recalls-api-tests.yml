@@ -47,6 +47,7 @@ jobs:
       - name: Write CI .env
         run: |
           cp -f .env.example .env
+          sed -i '/^R4_SQLSERVER_/d' .env
           cat <<'EOF' >> .env
           POSTGRES_DB=${POSTGRES_DB}
           POSTGRES_USER=${POSTGRES_USER}
