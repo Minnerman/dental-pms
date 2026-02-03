@@ -2797,6 +2797,8 @@ class R4SqlServerSource:
         patients_to: int | None = None,
         tp_from: int | None = None,
         tp_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         limit: int | None = None,
     ) -> Iterable[R4TreatmentPlanItem]:
         patient_col = self._require_column("TreatmentPlanItems", ["PatientCode"])
@@ -2824,6 +2826,25 @@ class R4SqlServerSource:
         )
         material_col = self._pick_column("TreatmentPlanItems", ["Material"])
         arch_col = self._pick_column("TreatmentPlanItems", ["ArchCode", "Arch"])
+        plan_patient_col = self._pick_column("TreatmentPlans", ["PatientCode"])
+        plan_tp_col = self._pick_column("TreatmentPlans", ["TPNumber", "TPNum", "TPNo"])
+        plan_creation_col = self._pick_column(
+            "TreatmentPlans",
+            ["CreationDate", "Date", "PlanDate"],
+        )
+        if (date_from is not None or date_to is not None) and (
+            not plan_patient_col or not plan_tp_col or not plan_creation_col
+        ):
+            raise RuntimeError(
+                "TreatmentPlans missing patient/TP/date columns; cannot date-filter TreatmentPlanItems."
+            )
+        join_sql = ""
+        if plan_patient_col and plan_tp_col:
+            join_sql = (
+                " LEFT JOIN dbo.TreatmentPlans tp WITH (NOLOCK) "
+                f"ON tp.{plan_patient_col} = ti.{patient_col} "
+                f"AND tp.{plan_tp_col} = ti.{tp_col}"
+            )
 
         last_patient: int | None = None
         last_tp: int | None = None
@@ -2838,58 +2859,78 @@ class R4SqlServerSource:
             where_parts: list[str] = []
             params: list[Any] = []
             range_clause, range_params = self._build_range_filter(
-                patient_col, patients_from, patients_to
+                f"ti.{patient_col}", patients_from, patients_to
             )
             if range_clause:
                 where_parts.append(range_clause.replace("WHERE", "").strip())
                 params.extend(range_params)
-            tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix="AND")
+            tp_clause, tp_params = self._build_range_filter(
+                f"ti.{tp_col}",
+                tp_from,
+                tp_to,
+                prefix="AND",
+            )
             if tp_clause:
                 where_parts.append(tp_clause.replace("AND", "").strip())
                 params.extend(tp_params)
+            if plan_creation_col:
+                date_clause, date_params = self._build_date_filter(
+                    f"tp.{plan_creation_col}",
+                    date_from,
+                    date_to,
+                )
+                if date_clause:
+                    where_parts.append(date_clause.replace("WHERE", "").strip())
+                    params.extend(date_params)
             if last_patient is not None and last_tp is not None and last_item is not None:
                 where_parts.append(
-                    f"({patient_col} > ? OR ({patient_col} = ? AND ({tp_col} > ? OR "
-                    f"({tp_col} = ? AND {item_col} > ?))))"
+                    f"(ti.{patient_col} > ? OR (ti.{patient_col} = ? AND (ti.{tp_col} > ? OR "
+                    f"(ti.{tp_col} = ? AND ti.{item_col} > ?))))"
                 )
                 params.extend(
                     [last_patient, last_patient, last_tp, last_tp, last_item]
                 )
             where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
             select_cols = [
-                f"{patient_col} AS patient_code",
-                f"{tp_col} AS tp_number",
-                f"{item_col} AS tp_item",
+                f"ti.{patient_col} AS patient_code",
+                f"ti.{tp_col} AS tp_number",
+                f"ti.{item_col} AS tp_item",
             ]
             if item_key_col:
-                select_cols.append(f"{item_key_col} AS tp_item_key")
+                select_cols.append(f"ti.{item_key_col} AS tp_item_key")
             if code_col:
-                select_cols.append(f"{code_col} AS code_id")
+                select_cols.append(f"ti.{code_col} AS code_id")
             if item_date_col:
-                select_cols.append(f"{item_date_col} AS item_date")
+                select_cols.append(f"ti.{item_date_col} AS item_date")
             if tooth_col:
-                select_cols.append(f"{tooth_col} AS tooth")
+                select_cols.append(f"ti.{tooth_col} AS tooth")
             if surface_col:
-                select_cols.append(f"{surface_col} AS surface")
+                select_cols.append(f"ti.{surface_col} AS surface")
             if appt_need_col:
-                select_cols.append(f"{appt_need_col} AS appointment_need_id")
+                select_cols.append(f"ti.{appt_need_col} AS appointment_need_id")
             if completed_col:
-                select_cols.append(f"{completed_col} AS completed")
+                select_cols.append(f"ti.{completed_col} AS completed")
             if completed_date_col:
-                select_cols.append(f"{completed_date_col} AS completed_date")
+                select_cols.append(f"ti.{completed_date_col} AS completed_date")
             if patient_cost_col:
-                select_cols.append(f"{patient_cost_col} AS patient_cost")
+                select_cols.append(f"ti.{patient_cost_col} AS patient_cost")
             if dpb_cost_col:
-                select_cols.append(f"{dpb_cost_col} AS dpb_cost")
+                select_cols.append(f"ti.{dpb_cost_col} AS dpb_cost")
             if discretionary_cost_col:
-                select_cols.append(f"{discretionary_cost_col} AS discretionary_cost")
+                select_cols.append(f"ti.{discretionary_cost_col} AS discretionary_cost")
             if material_col:
-                select_cols.append(f"{material_col} AS material")
+                select_cols.append(f"ti.{material_col} AS material")
             if arch_col:
-                select_cols.append(f"{arch_col} AS arch_code")
+                select_cols.append(f"ti.{arch_col} AS arch_code")
+            if plan_creation_col:
+                select_cols.append(f"tp.{plan_creation_col} AS plan_creation_date")
             rows = self._query(
-                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentPlanItems WITH (NOLOCK) "
-                f"{where_sql} ORDER BY {patient_col} ASC, {tp_col} ASC, {item_col} ASC",
+                "SELECT TOP (?) "
+                f"{', '.join(select_cols)} "
+                "FROM dbo.TreatmentPlanItems ti WITH (NOLOCK) "
+                f"{join_sql} "
+                f"{where_sql} "
+                f"ORDER BY ti.{patient_col} ASC, ti.{tp_col} ASC, ti.{item_col} ASC",
                 [batch_size, *params],
             )
             if not rows:
@@ -2910,6 +2951,7 @@ class R4SqlServerSource:
                     tp_item_key=int(row["tp_item_key"]) if row.get("tp_item_key") is not None else None,
                     code_id=int(row["code_id"]) if row.get("code_id") is not None else None,
                     item_date=row.get("item_date"),
+                    plan_creation_date=row.get("plan_creation_date"),
                     tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
                     surface=int(row["surface"]) if row.get("surface") is not None else None,
                     appointment_need_id=(

@@ -151,9 +151,11 @@ def _sqlserver_rows(
     for item in source.list_treatment_plan_items(
         patients_from=patient_code,
         patients_to=patient_code,
+        date_from=date_from,
+        date_to=date_to,
         limit=row_limit,
     ):
-        item_date = item.item_date or item.completed_date
+        item_date = item.plan_creation_date or item.item_date or item.completed_date
         if not _in_date_window(item_date, date_from, date_to):
             continue
         out.append(
