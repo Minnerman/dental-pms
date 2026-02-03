@@ -23,7 +23,7 @@ jobs:
 
       - name: Prepare CI env
         run: |
-          cp -f .env.example .env || true
+          cp -f .env.example .env
           cat >> .env <<'EOF'
           APP_ENV=development
           ALLOW_DEV_SEED=1
@@ -49,6 +49,9 @@ jobs:
           RESET_TOKEN_EXPIRE_MINUTES=60
           EOF
 
+      - name: Validate CI env
+        run: bash ops/env_check.sh
+
       - name: Load R4 env file if present
         shell: bash
         run: |
@@ -59,8 +62,7 @@ jobs:
             grep -vE '^\s*#' "$ENV_FILE" | grep -vE '^\s*$' >> "$GITHUB_ENV"
           else
             echo "R4 env file not found on this runner ($ENV_FILE). Running smoke without R4."
-            mkdir -p "$(dirname "$ENV_FILE")"
-            : > "$ENV_FILE"
+            echo "R4_SQLSERVER_ENABLED=false" >> "$GITHUB_ENV"
           fi
 
       - name: Start database

@@ -120,6 +120,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Documented minimal dev env bootstrap + validation commands in STATUS under the Stage 50 roadmap section.
   - CI workflow files were not changed in this stage; current workflows already materialize `.env` for CI runs.
   - Gates green: `bash ops/health.sh`, `bash ops/verify.sh`, and `docker compose exec -T backend pytest -q` (`213 passed, 2 skipped`).
+- 2026-02-03: Stage 51 completed (CI hygiene + deterministic workflows).
+  - Standardized CI env bootstrap in workflow jobs that run app/tests: `.env.example -> .env` plus explicit overrides, then `bash ops/env_check.sh` fail-fast validation.
+  - Updated workflows: `.github/workflows/nightly-smoke.yml`, `.github/workflows/playwright-smoke.yml`, `.github/workflows/recalls-api-tests.yml`.
+  - Nightly smoke env/bootstrap failures addressed: `run 21019750369` ("env file .../.env not found") and `run 21617785605` (permission error creating `/home/amir/...`) are both handled by deterministic local `.env` bootstrap and no privileged path writes.
+  - Workflow validation issue documented and re-baselined: `run 21016501636` (0s, likely workflow-file issue) no longer reflects current workflow set; subsequent PR checks on Stage 51 were green.
+  - Gates green at close-out: local `ops/health.sh`, local `ops/verify.sh`, YAML parse sanity, and PR checks.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
@@ -865,6 +871,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 ## CI hygiene
 - Nightly smoke (run 21019750369) failed during `docker compose up -d --build` because `.env` was missing and required vars were unset (POSTGRES_*, BACKEND_PORT/FRONTEND_PORT, SECRET/JWT, ADMIN_*). Error: `env file .../.env not found` with multiple "variable is not set" warnings.
 - Workflow validation failure (run 21016501636) is a 0s failure on `.github/workflows/recalls-api-tests.yml` (no logs). Likely workflow-file validation issue; latest master CI run is green.
+- Stage 51 remediation:
+  - Workflow jobs that run app/tests now bootstrap `.env` from `.env.example` and run `bash ops/env_check.sh` before compose/test commands.
+  - Nightly smoke no longer attempts to write runner-local `/home/amir/...` paths when R4 env file is absent.
+- CI debugging checklist:
+  - `gh run view <RUN_ID> --log-failed` to capture first failing step text.
+  - Confirm workflow job has env bootstrap (`cp .env.example .env` + overrides + `bash ops/env_check.sh`).
+  - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
 - P1: Clinical chart view mode toggle + tooth badges
