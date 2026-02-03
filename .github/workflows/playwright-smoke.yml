@@ -494,22 +494,3 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose --env-file .env down -v
-          try:
-            with urllib.request.urlopen(config_url, timeout=10) as resp:
-              config_status = resp.status
-              config_body = resp.read(1000).decode("utf-8", "replace")
-          except urllib.error.HTTPError as exc:
-            config_body = exc.read(1000).decode("utf-8", "replace")
-            print("config status", exc.code)
-            print(config_body)
-            raise SystemExit(1)
-          print("config status", config_status)
-          print(config_body)
-          if config_status != 200:
-            raise SystemExit(1)
-          try:
-            parsed_config = json.loads(config_body)
-          except json.JSONDecodeError:
-            raise SystemExit("config response is not valid JSON")
-          if not parsed_config.get("feature_flags", {}).get("charting_viewer"):
-            raise SystemExit("charting_viewer flag not enabled in /config")
