@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+bash ops/env_check.sh
+
 # Load .env without printing values
 if [ -f .env ]; then
   set -a

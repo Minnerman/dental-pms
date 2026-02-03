@@ -114,6 +114,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Gates green at close-out: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest `1108/1108`.
   - Exhaustion verified: probe raises expected zero-candidate exhaustion; equivalent count math confirms `excluded_candidates_count=1108` and `remaining_after_exclude=0`.
   - Canonical provenance: imported from `dbo.BPEFurcation` (`imported_created_total=2180`).
+- 2026-02-03: Stage 50 completed (env/config hardening).
+  - `.env.example` audited and expanded to cover backend/frontend/test/CI defaults, including charting toggles and SQL Server read-only keys.
+  - Added fail-fast env validation helper `ops/env_check.sh`; wired at the start of `ops/health.sh` and `ops/verify.sh` with actionable missing-var messages.
+  - Documented minimal dev env bootstrap + validation commands in STATUS under the Stage 50 roadmap section.
+  - CI workflow files were not changed in this stage; current workflows already materialize `.env` for CI runs.
+  - Gates green: `bash ops/health.sh`, `bash ops/verify.sh`, and `docker compose exec -T backend pytest -q` (`213 passed, 2 skipped`).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
@@ -954,6 +960,16 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ### "Done" definition for MVP
 - Stages 50-55 all closed with green gates and documented close-out notes.
+
+### Minimal dev env (Stage 50)
+- Bootstrap:
+  - `cp .env.example .env`
+  - set `SECRET_KEY` (>=32 chars), `JWT_SECRET` (>=32 chars), `ADMIN_EMAIL`, `ADMIN_PASSWORD` (>=12 chars)
+- Validation:
+  - `bash ops/health.sh`
+  - `bash ops/verify.sh`
+- Fail-fast behavior:
+  - `ops/env_check.sh` runs at the start of `ops/health.sh` and `ops/verify.sh` and exits with actionable missing-var messages.
 
 ## Stage 31 backlog
 - Appointments: booking modal reliability across refresh/tab changes.
