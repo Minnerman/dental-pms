@@ -3893,6 +3893,8 @@ class R4SqlServerSource:
         self,
         patients_from: int | None = None,
         patients_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         limit: int | None = None,
     ) -> Iterable[R4TreatmentNote]:
         note_id_col = self._require_column("TreatmentNotes", ["NoteID", "NoteId"])
@@ -3905,6 +3907,8 @@ class R4SqlServerSource:
         )
         note_col = self._pick_column("TreatmentNotes", ["Note", "Notes", "NoteText", "NoteBody"])
         user_col = self._pick_column("TreatmentNotes", ["UserCode", "EnteredBy"])
+        if (date_from is not None or date_to is not None) and not date_col:
+            raise RuntimeError("TreatmentNotes missing date column; cannot apply date filter.")
         last_id: int | None = None
         remaining = limit
         batch_size = 500
@@ -3924,6 +3928,11 @@ class R4SqlServerSource:
                 if range_clause:
                     where_parts.append(range_clause.replace("WHERE", "").strip())
                     params.extend(range_params)
+            if date_col:
+                date_clause, date_params = self._build_date_filter(date_col, date_from, date_to)
+                if date_clause:
+                    where_parts.append(date_clause.replace("WHERE", "").strip())
+                    params.extend(date_params)
             if last_id is not None:
                 where_parts.append(f"{note_id_col} > ?")
                 params.append(last_id)
