@@ -131,6 +131,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Verified runbook commands on server: `bash ops/env_check.sh`, `docker compose up -d --build`, `docker compose ps`, `bash ops/health.sh`, and migration command (`python -m alembic upgrade head`).
   - Backups section now references existing helper scripts; full restore drill remains Stage 53.
   - Gates green at close-out: deploy commands successful, health green after deploy, migration command exit `0`.
+- 2026-02-03: Stage 53 completed (backup + restore drill).
+  - Executed an isolated drill using `COMPOSE_PROJECT_NAME=dentalpms_drill_20260203234315` to avoid mutating default project volumes.
+  - Backups captured: DB logical dump (`.run/stage53/db_2026-02-03_234315.sql`, 50M) and attachments archive (`.run/stage53/uploads_2026-02-03_234315.tgz`, 122B).
+  - Restore validated with strict DB replay (`psql -v ON_ERROR_STOP=1`) after resetting schema (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`), then restoring attachments volume.
+  - Post-restore gates green: `ops/health.sh` passed, Alembic head present (`0048_r4_charting_canonical_content_hash`), and spot-check counts were sane (`patients=477`, `appointments=200`).
+  - Evidence recorded at `.run/stage53/REPORT.md` (binary backup artefacts remain uncommitted by design).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
