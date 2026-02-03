@@ -38,6 +38,7 @@ class CanonicalChartingSource(Protocol):
         date_from: date | None = None,
         date_to: date | None = None,
         limit: int | None = None,
+        domains: list[str] | None = None,
     ) -> tuple[list[CanonicalRecordInput], dict[str, int]]:
         raise NotImplementedError
 
@@ -512,6 +513,7 @@ def import_r4_charting_canonical(
     patient_codes: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    domains: list[str] | None = None,
     limit: int | None = None,
     allow_unmapped_patients: bool = False,
 ) -> CanonicalImportStats:
@@ -525,6 +527,7 @@ def import_r4_charting_canonical(
             patient_codes=patient_codes,
             date_from=date_from,
             date_to=date_to,
+            domains=domains,
             limit=limit,
         )
     elif hasattr(source, "iter_canonical_records"):
@@ -671,6 +674,7 @@ def import_r4_charting_canonical_report(
     patient_codes: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    domains: list[str] | None = None,
     limit: int | None = None,
     dry_run: bool = False,
     allow_unmapped_patients: bool = False,
@@ -686,6 +690,7 @@ def import_r4_charting_canonical_report(
             patient_codes=patient_codes,
             date_from=date_from,
             date_to=date_to,
+            domains=domains,
             limit=limit,
         )
     elif hasattr(source, "iter_canonical_records"):
@@ -733,6 +738,7 @@ def import_r4_charting_canonical_report(
         patient_codes=patient_codes,
         date_from=date_from,
         date_to=date_to,
+        domains=domains,
         limit=limit,
         allow_unmapped_patients=allow_unmapped_patients,
     )
@@ -758,16 +764,27 @@ def _collect_canonical_records(
     patient_codes: list[int] | None,
     date_from: date | None,
     date_to: date | None,
+    domains: list[str] | None,
     limit: int | None,
 ) -> tuple[list[CanonicalRecordInput], dict[str, int]]:
     if patient_codes is None:
-        return source.collect_canonical_records(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            date_from=date_from,
-            date_to=date_to,
-            limit=limit,
-        )
+        try:
+            return source.collect_canonical_records(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
+                domains=domains,
+                limit=limit,
+            )
+        except TypeError:
+            return source.collect_canonical_records(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
     try:
         return source.collect_canonical_records(
             patients_from=patients_from,
@@ -775,9 +792,20 @@ def _collect_canonical_records(
             patient_codes=patient_codes,
             date_from=date_from,
             date_to=date_to,
+            domains=domains,
             limit=limit,
         )
     except TypeError as exc:
-        raise RuntimeError(
-            "This charting source does not support --patient-codes."
-        ) from exc
+        try:
+            return source.collect_canonical_records(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
+        except TypeError:
+            raise RuntimeError(
+                "This charting source does not support --patient-codes."
+            ) from exc

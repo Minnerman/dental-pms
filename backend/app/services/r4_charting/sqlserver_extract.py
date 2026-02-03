@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 import hashlib
 from typing import Iterable
 
@@ -46,199 +46,247 @@ class SqlServerChartingExtractor:
         date_from: date | None = None,
         date_to: date | None = None,
         limit: int | None = None,
+        domains: list[str] | None = None,
     ) -> tuple[list[CanonicalRecordInput], dict[str, int]]:
         records: list[CanonicalRecordInput] = []
         report = SqlServerExtractReport()
+        domain_filter = {domain.strip().lower() for domain in (domains or []) if domain.strip()}
 
-        for item in self._iter_bpe(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            patient_codes=patient_codes,
-            limit=limit,
-        ):
-            recorded_at = item.recorded_at
-            if not _date_in_range(recorded_at, date_from, date_to, report):
-                continue
-            if item.bpe_id is not None:
-                source_id = str(item.bpe_id)
-            else:
-                source_id = f"{item.patient_code}:{recorded_at}"
-            records.append(
-                CanonicalRecordInput(
-                    domain="bpe_entry",
-                    r4_source="dbo.BPE",
-                    r4_source_id=source_id,
-                    legacy_patient_code=item.patient_code,
-                    recorded_at=recorded_at,
-                    entered_at=None,
-                    tooth=None,
-                    surface=None,
-                    code_id=None,
-                    status=None,
-                    payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
-                )
-            )
+        def _include(*names: str) -> bool:
+            if not domain_filter:
+                return True
+            return any(name.lower() in domain_filter for name in names)
 
-        for item in self._iter_perio_probes(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            patient_codes=patient_codes,
-            limit=limit,
-        ):
-            recorded_at = item.recorded_at
-            if date_from or date_to:
-                if recorded_at is None:
-                    report.undated_included += 1
+        if _include("bpe", "bpe_entry"):
+            for item in self._iter_bpe(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                recorded_at = item.recorded_at
+                if not _date_in_range(recorded_at, date_from, date_to, report):
+                    continue
+                if item.bpe_id is not None:
+                    source_id = str(item.bpe_id)
                 else:
-                    if not _date_in_range(recorded_at, date_from, date_to, report):
+                    source_id = f"{item.patient_code}:{recorded_at}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="bpe_entry",
+                        r4_source="dbo.BPE",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=recorded_at,
+                        entered_at=None,
+                        tooth=None,
+                        surface=None,
+                        code_id=None,
+                        status=None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
+        if _include("perioprobe", "perio_probe"):
+            for item in self._iter_perio_probes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                recorded_at = item.recorded_at
+                if date_from or date_to:
+                    if recorded_at is None:
+                        report.undated_included += 1
+                    else:
+                        if not _date_in_range(recorded_at, date_from, date_to, report):
+                            continue
+                source_id = f"{item.trans_id}:{item.tooth}:{item.probing_point}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="perio_probe",
+                        r4_source="dbo.PerioProbe",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=recorded_at,
+                        entered_at=None,
+                        tooth=item.tooth,
+                        surface=None,
+                        code_id=None,
+                        status=None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
+        if _include("patient_notes", "patient_note"):
+            for item in self._iter_patient_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                note_date = item.note_date
+                if not _date_in_range(note_date, date_from, date_to, report):
+                    continue
+                if item.note_number is not None:
+                    source_id = str(item.note_number)
+                else:
+                    note_digest = hashlib.sha1((item.note or "").encode("utf-8")).hexdigest()[:16]
+                    source_id = f"{item.patient_code}:{note_date}:{note_digest}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="patient_note",
+                        r4_source="dbo.PatientNotes",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=note_date,
+                        entered_at=None,
+                        tooth=item.tooth,
+                        surface=item.surface,
+                        code_id=item.fixed_note_code,
+                        status=None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
+        if _include("treatment_notes", "treatment_note"):
+            for item in self._iter_treatment_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                note_date = item.note_date
+                if not _date_in_range(note_date, date_from, date_to, report):
+                    continue
+                if item.note_id is not None:
+                    source_id = str(item.note_id)
+                else:
+                    note_digest = hashlib.sha1((item.note or "").encode("utf-8")).hexdigest()[:16]
+                    source_id = f"{item.patient_code}:{note_date}:{note_digest}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="treatment_note",
+                        r4_source="dbo.TreatmentNotes",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=note_date,
+                        entered_at=None,
+                        tooth=None,
+                        surface=None,
+                        code_id=None,
+                        status=None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
+        if _include("treatment_plans", "treatment_plan"):
+            for item in self._iter_treatment_plans(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            ):
+                recorded_at = item.creation_date
+                if date_from or date_to:
+                    if recorded_at is None:
+                        report.undated_included += 1
+                    elif not _date_in_range(recorded_at, date_from, date_to, report):
                         continue
-            source_id = f"{item.trans_id}:{item.tooth}:{item.probing_point}"
-            records.append(
-                CanonicalRecordInput(
-                    domain="perio_probe",
-                    r4_source="dbo.PerioProbe",
-                    r4_source_id=source_id,
-                    legacy_patient_code=item.patient_code,
-                    recorded_at=recorded_at,
-                    entered_at=None,
-                    tooth=item.tooth,
-                    surface=None,
-                    code_id=None,
-                    status=None,
-                    payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                if item.treatment_plan_id is not None:
+                    source_id = str(item.treatment_plan_id)
+                else:
+                    source_id = f"{item.patient_code}:{item.tp_number}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="treatment_plan",
+                        r4_source="dbo.TreatmentPlans",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=recorded_at,
+                        entered_at=item.acceptance_date,
+                        tooth=None,
+                        surface=None,
+                        code_id=None,
+                        status=str(item.status_code) if item.status_code is not None else None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
                 )
-            )
 
-        for item in self._iter_patient_notes(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            patient_codes=patient_codes,
-            limit=limit,
-        ):
-            note_date = item.note_date
-            if not _date_in_range(note_date, date_from, date_to, report):
-                continue
-            if item.note_number is not None:
-                source_id = str(item.note_number)
-            else:
-                note_digest = hashlib.sha1((item.note or "").encode("utf-8")).hexdigest()[:16]
-                source_id = f"{item.patient_code}:{note_date}:{note_digest}"
-            records.append(
-                CanonicalRecordInput(
-                    domain="patient_note",
-                    r4_source="dbo.PatientNotes",
-                    r4_source_id=source_id,
-                    legacy_patient_code=item.patient_code,
-                    recorded_at=note_date,
-                    entered_at=None,
-                    tooth=item.tooth,
-                    surface=item.surface,
-                    code_id=item.fixed_note_code,
-                    status=None,
-                    payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+        if _include("treatment_plan_items", "treatment_plan_item"):
+            for item in self._iter_treatment_plan_items(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                item_date = item.item_date or item.completed_date
+                if not _date_in_range(item_date, date_from, date_to, report):
+                    continue
+                if item.tp_item_key is not None:
+                    source_id = str(item.tp_item_key)
+                else:
+                    source_id = f"{item.patient_code}:{item.tp_number}:{item.tp_item}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="treatment_plan_item",
+                        r4_source="dbo.TreatmentPlanItems",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=item_date,
+                        entered_at=None,
+                        tooth=item.tooth,
+                        surface=item.surface,
+                        code_id=item.code_id,
+                        status="completed" if item.completed else "planned",
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
                 )
-            )
 
-        for item in self._iter_treatment_notes(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            patient_codes=patient_codes,
-            limit=limit,
-        ):
-            note_date = item.note_date
-            if not _date_in_range(note_date, date_from, date_to, report):
-                continue
-            if item.note_id is not None:
-                source_id = str(item.note_id)
-            else:
-                note_digest = hashlib.sha1((item.note or "").encode("utf-8")).hexdigest()[:16]
-                source_id = f"{item.patient_code}:{note_date}:{note_digest}"
-            records.append(
-                CanonicalRecordInput(
-                    domain="treatment_note",
-                    r4_source="dbo.TreatmentNotes",
-                    r4_source_id=source_id,
-                    legacy_patient_code=item.patient_code,
-                    recorded_at=note_date,
-                    entered_at=None,
-                    tooth=None,
-                    surface=None,
-                    code_id=None,
-                    status=None,
-                    payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+        if _include("bpe_furcation", "bpe_furcations"):
+            for row in self._iter_bpe_furcations(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                recorded_at = row.get("recorded_at")
+                if not _date_in_range(recorded_at, date_from, date_to, report):
+                    continue
+                bpe_id = row.get("bpe_id")
+                patient_code = row.get("patient_code")
+                if bpe_id is not None:
+                    source_id = str(bpe_id)
+                elif row.get("pkey") is not None:
+                    source_id = str(row.get("pkey"))
+                else:
+                    source_id = f"{patient_code}:{recorded_at}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="bpe_furcation",
+                        r4_source="dbo.BPEFurcation",
+                        r4_source_id=source_id,
+                        legacy_patient_code=int(patient_code) if patient_code is not None else None,
+                        recorded_at=recorded_at,
+                        entered_at=None,
+                        tooth=None,
+                        surface=None,
+                        code_id=None,
+                        status=None,
+                        payload={
+                            "bpe_id": bpe_id,
+                            "pkey": row.get("pkey"),
+                            "furcation_1": row.get("furcation_1"),
+                            "furcation_2": row.get("furcation_2"),
+                            "furcation_3": row.get("furcation_3"),
+                            "furcation_4": row.get("furcation_4"),
+                            "furcation_5": row.get("furcation_5"),
+                            "furcation_6": row.get("furcation_6"),
+                        },
+                    )
                 )
-            )
-
-        for item in self._iter_treatment_plan_items(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            patient_codes=patient_codes,
-            limit=limit,
-        ):
-            item_date = item.item_date or item.completed_date
-            if not _date_in_range(item_date, date_from, date_to, report):
-                continue
-            if item.tp_item_key is not None:
-                source_id = str(item.tp_item_key)
-            else:
-                source_id = f"{item.patient_code}:{item.tp_number}:{item.tp_item}"
-            records.append(
-                CanonicalRecordInput(
-                    domain="treatment_plan_item",
-                    r4_source="dbo.TreatmentPlanItems",
-                    r4_source_id=source_id,
-                    legacy_patient_code=item.patient_code,
-                    recorded_at=item_date,
-                    entered_at=None,
-                    tooth=item.tooth,
-                    surface=item.surface,
-                    code_id=item.code_id,
-                    status="completed" if item.completed else "planned",
-                    payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
-                )
-            )
-
-        for row in self._iter_bpe_furcations(
-            patients_from=patients_from,
-            patients_to=patients_to,
-            patient_codes=patient_codes,
-            limit=limit,
-        ):
-            recorded_at = row.get("recorded_at")
-            if not _date_in_range(recorded_at, date_from, date_to, report):
-                continue
-            bpe_id = row.get("bpe_id")
-            patient_code = row.get("patient_code")
-            if bpe_id is not None:
-                source_id = str(bpe_id)
-            elif row.get("pkey") is not None:
-                source_id = str(row.get("pkey"))
-            else:
-                source_id = f"{patient_code}:{recorded_at}"
-            records.append(
-                CanonicalRecordInput(
-                    domain="bpe_furcation",
-                    r4_source="dbo.BPEFurcation",
-                    r4_source_id=source_id,
-                    legacy_patient_code=int(patient_code) if patient_code is not None else None,
-                    recorded_at=recorded_at,
-                    entered_at=None,
-                    tooth=None,
-                    surface=None,
-                    code_id=None,
-                    status=None,
-                    payload={
-                        "bpe_id": bpe_id,
-                        "pkey": row.get("pkey"),
-                        "furcation_1": row.get("furcation_1"),
-                        "furcation_2": row.get("furcation_2"),
-                        "furcation_3": row.get("furcation_3"),
-                        "furcation_4": row.get("furcation_4"),
-                        "furcation_5": row.get("furcation_5"),
-                        "furcation_6": row.get("furcation_6"),
-                    },
-                )
-            )
 
         return records, report.as_dict()
 
@@ -408,6 +456,49 @@ class SqlServerChartingExtractor:
                 for item in self._source.list_treatment_plan_items(
                     patients_from=code,
                     patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_treatment_plans(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        date_from: date | None,
+        date_to: date | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_treatment_plans(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
+                include_undated=True,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_treatment_plans(
+                    patients_from=code,
+                    patients_to=code,
+                    date_from=date_from,
+                    date_to=date_to,
+                    include_undated=True,
                     limit=batch_limit,
                 ):
                     yield item
@@ -818,6 +909,49 @@ def get_distinct_treatment_plan_items_patient_codes(
             continue
         seen.add(code)
         codes.append(code)
+    return codes
+
+
+def get_distinct_treatment_plans_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    seen: set[int] = set()
+    codes: list[int] = []
+    # Pull wider than requested then sort by latest CreationDate for deterministic recency bias.
+    rows: list[tuple[int, datetime | None]] = []
+    scan_limit = max(limit * 5, limit)
+    for item in source.list_treatment_plans(
+        limit=scan_limit,
+        date_from=date_from,
+        date_to=date_to,
+        include_undated=False,
+    ):
+        if item.patient_code is None:
+            continue
+        rows.append((int(item.patient_code), item.creation_date))
+    rows.sort(key=lambda pair: ((pair[1] is not None), pair[1] or datetime.min), reverse=True)
+    for code, _ in rows:
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+        if len(codes) >= limit:
+            break
     return codes
 
 

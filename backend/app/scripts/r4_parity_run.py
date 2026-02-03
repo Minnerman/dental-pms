@@ -12,6 +12,7 @@ from app.scripts import (
     r4_bpe_furcation_parity_pack,
     r4_patient_notes_parity_pack,
     r4_perioprobe_parity_pack,
+    r4_treatment_plans_parity_pack,
     r4_treatment_plan_items_parity_pack,
     r4_treatment_notes_parity_pack,
 )
@@ -22,6 +23,7 @@ ALL_DOMAINS = (
     "bpe_furcation",
     "perioprobe",
     "patient_notes",
+    "treatment_plans",
     "treatment_notes",
     "treatment_plan_items",
 )
@@ -204,6 +206,15 @@ def run_parity(
                     row_limit=row_limit,
                     include_sqlserver=True,
                 )
+            elif domain == "treatment_plans":
+                domain_report = r4_treatment_plans_parity_pack.build_parity_report(
+                    session,
+                    patient_codes=patient_codes,
+                    date_from=date_from,
+                    date_to=date_to,
+                    row_limit=row_limit,
+                    include_sqlserver=True,
+                )
             elif domain == "treatment_plan_items":
                 domain_report = r4_treatment_plan_items_parity_pack.build_parity_report(
                     session,
@@ -257,7 +268,8 @@ def main() -> int:
         "--domains",
         help=(
             "Comma-separated subset: "
-            "bpe,bpe_furcation,perioprobe,patient_notes,treatment_notes,treatment_plan_items (default all)."
+            "bpe,bpe_furcation,perioprobe,patient_notes,treatment_plans,treatment_notes,treatment_plan_items "
+            "(default all)."
         ),
     )
     parser.add_argument("--date-from", help="Inclusive start date (YYYY-MM-DD).")

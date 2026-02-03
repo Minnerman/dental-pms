@@ -2665,6 +2665,9 @@ class R4SqlServerSource:
         patients_to: int | None = None,
         tp_from: int | None = None,
         tp_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        include_undated: bool = True,
         limit: int | None = None,
     ) -> Iterable[R4TreatmentPlan]:
         patient_col = self._require_column("TreatmentPlans", ["PatientCode"])
@@ -2688,6 +2691,7 @@ class R4SqlServerSource:
         status_col = self._pick_column("TreatmentPlans", ["StatusCode", "TPStatus", "Status"])
         reason_col = self._pick_column("TreatmentPlans", ["ReasonID", "ReasonCode"])
         group_col = self._pick_column("TreatmentPlans", ["TPGroup", "GroupCode", "GroupId"])
+        plan_id_col = self._pick_column("TreatmentPlans", ["RefId", "ID", "TreatmentPlanID", "PlanID"])
 
         last_patient: int | None = None
         last_tp: int | None = None
@@ -2710,6 +2714,19 @@ class R4SqlServerSource:
             if tp_clause:
                 where_parts.append(tp_clause.replace("AND", "").strip())
                 params.extend(tp_params)
+            if creation_col and (date_from is not None or date_to is not None):
+                date_predicates: list[str] = []
+                if date_from is not None:
+                    date_predicates.append(f"{creation_col} >= ?")
+                    params.append(date_from)
+                if date_to is not None:
+                    date_predicates.append(f"{creation_col} <= ?")
+                    params.append(date_to)
+                date_sql = " AND ".join(date_predicates)
+                if include_undated:
+                    where_parts.append(f"(({creation_col} IS NULL) OR ({date_sql}))")
+                else:
+                    where_parts.append(date_sql)
             if last_patient is not None and last_tp is not None:
                 where_parts.append(
                     f"({patient_col} > ? OR ({patient_col} = ? AND {tp_col} > ?))"
@@ -2738,6 +2755,8 @@ class R4SqlServerSource:
                 select_cols.append(f"{reason_col} AS reason_id")
             if group_col:
                 select_cols.append(f"{group_col} AS tp_group")
+            if plan_id_col:
+                select_cols.append(f"{plan_id_col} AS treatment_plan_id")
             rows = self._query(
                 f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.TreatmentPlans WITH (NOLOCK) "
                 f"{where_sql} ORDER BY {patient_col} ASC, {tp_col} ASC",
@@ -2755,6 +2774,9 @@ class R4SqlServerSource:
                 yield R4TreatmentPlan(
                     patient_code=last_patient,
                     tp_number=last_tp,
+                    treatment_plan_id=(
+                        int(row["treatment_plan_id"]) if row.get("treatment_plan_id") is not None else None
+                    ),
                     plan_index=int(row["plan_index"]) if row.get("plan_index") is not None else None,
                     is_master=_coerce_bool(row.get("is_master"), default=False),
                     is_current=_coerce_bool(row.get("is_current"), default=False),
