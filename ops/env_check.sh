@@ -13,10 +13,29 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Load .env to validate required keys in one place before health/verify work.
-set -a
-. "$ENV_FILE"
-set +a
+get_env_value() {
+  local key="$1"
+  local raw
+  raw="$(
+    awk -F= -v k="$key" '
+      /^[[:space:]]*#/ { next }
+      /^[[:space:]]*$/ { next }
+      $1 ~ "^[[:space:]]*" k "[[:space:]]*$" {
+        sub(/^[^=]*=/, "", $0)
+        print $0
+        exit
+      }
+    ' "$ENV_FILE"
+  )"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  if [[ "$raw" =~ ^\".*\"$ ]]; then
+    raw="${raw:1:${#raw}-2}"
+  elif [[ "$raw" =~ ^\'.*\'$ ]]; then
+    raw="${raw:1:${#raw}-2}"
+  fi
+  printf '%s' "$raw"
+}
 
 required_vars=(
   POSTGRES_DB
@@ -84,7 +103,7 @@ example_value() {
 }
 
 for var in "${required_vars[@]}"; do
-  value="${!var:-}"
+  value="$(get_env_value "$var")"
   if [ -z "$value" ]; then
     missing=1
     echo "Env check failed: missing $var"
@@ -97,7 +116,8 @@ if [ "${missing}" -ne 0 ]; then
   exit 1
 fi
 
-if [ "${#ADMIN_PASSWORD}" -lt 12 ]; then
+admin_password="$(get_env_value ADMIN_PASSWORD)"
+if [ "${#admin_password}" -lt 12 ]; then
   echo "Env check failed: ADMIN_PASSWORD must be at least 12 characters"
   exit 1
 fi
