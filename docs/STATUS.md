@@ -90,6 +90,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Full coverage achieved: `.run/seen_stage136_tp_items.txt` reached `3040` unique patient codes; final sweep (`seed=16`) processed tail cohort `40`.
   - Gates stayed green across all seeds: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest all/all.
   - Exhaustion verified at completion: direct probe command raised expected zero-candidate exhaustion; equivalent count math confirmed `excluded_candidates_count=3040` and `remaining_after_exclude=0`.
+- 2026-02-03: Stage 137 completed (`treatment_notes`, deterministic single-tail cohort).
+  - Selector baseline: `candidates_before_exclude=139` (`seed=1`); single-tail processed all `139` patients in one run.
+  - Ledger reached full coverage: `.run/seen_stage137_treatment_notes.txt` is `139` on host and container.
+  - Date semantics fix aligned selector/importer to the same TreatmentNotes note-date anchor and pushed date filtering into SQL fetch path; canonical `dropped_out_of_range_total` is now `0`.
+  - Gates green at close-out: overlap `0`, canonical `unmapped_patients_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest `139/139`.
+  - Exhaustion verified: probe raises expected zero-candidate exhaustion; equivalent count math confirms `excluded_candidates_count=139` and `remaining_after_exclude=0`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

@@ -370,7 +370,14 @@ class DummySourceForNotes:
             return rows
         return rows[:limit]
 
-    def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
+    def list_treatment_notes(
+        self,
+        patients_from=None,
+        patients_to=None,
+        date_from=None,
+        date_to=None,
+        limit=None,
+    ):
         return []
 
     def list_treatment_plan_items(
@@ -437,7 +444,14 @@ def test_collect_canonical_records_treatment_plan_items_use_plan_creation_date()
         def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
             return []
 
-        def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
+        def list_treatment_notes(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+        ):
             return []
 
         def list_treatment_plan_items(
@@ -545,19 +559,22 @@ def test_collect_canonical_records_includes_treatment_notes_with_date_bounds():
         def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
             return []
 
-        def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
+        def list_treatment_notes(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+        ):
+            assert date_from == date(2010, 1, 1)
+            assert date_to == date(2026, 2, 1)
             return [
                 DummyTreatmentNote(
                     patients_from,
                     11,
                     datetime(2023, 5, 1, 9, 0, 0),
                     "in range",
-                ),
-                DummyTreatmentNote(
-                    patients_from,
-                    12,
-                    datetime(2001, 5, 1, 9, 0, 0),
-                    "out of range",
                 ),
             ]
 
@@ -573,4 +590,4 @@ def test_collect_canonical_records_includes_treatment_notes_with_date_bounds():
     assert len(treatment) == 1
     assert treatment[0].domain == "treatment_note"
     assert treatment[0].r4_source_id == "11"
-    assert dropped["out_of_range"] == 1
+    assert dropped["out_of_range"] == 0

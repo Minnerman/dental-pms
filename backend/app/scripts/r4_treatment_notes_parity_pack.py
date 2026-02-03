@@ -150,6 +150,8 @@ def _sqlserver_rows(
     for item in source.list_treatment_notes(
         patients_from=patient_code,
         patients_to=patient_code,
+        date_from=date_from,
+        date_to=date_to,
         limit=row_limit,
     ):
         if not _in_date_window(item.note_date, date_from, date_to):

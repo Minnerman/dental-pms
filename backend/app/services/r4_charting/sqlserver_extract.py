@@ -154,6 +154,8 @@ class SqlServerChartingExtractor:
                 patients_from=patients_from,
                 patients_to=patients_to,
                 patient_codes=patient_codes,
+                date_from=date_from,
+                date_to=date_to,
                 limit=limit,
             ):
                 note_date = item.note_date
@@ -404,12 +406,16 @@ class SqlServerChartingExtractor:
         patients_from: int | None,
         patients_to: int | None,
         patient_codes: list[int] | None,
+        date_from: date | None,
+        date_to: date | None,
         limit: int | None,
     ):
         if not patient_codes:
             yield from self._source.list_treatment_notes(
                 patients_from=patients_from,
                 patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
                 limit=limit,
             )
             return
@@ -424,6 +430,8 @@ class SqlServerChartingExtractor:
                 for item in self._source.list_treatment_notes(
                     patients_from=code,
                     patients_to=code,
+                    date_from=date_from,
+                    date_to=date_to,
                     limit=batch_limit,
                 ):
                     yield item

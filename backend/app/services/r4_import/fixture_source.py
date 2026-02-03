@@ -332,11 +332,25 @@ class FixtureSource(R4Source):
         self,
         patients_from: int | None = None,
         patients_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         limit: int | None = None,
     ) -> list[R4TreatmentNote]:
         data = self._load_json("treatment_notes.json")
         items = [R4TreatmentNote.model_validate(item) for item in data]
         items = self._filter_patient_rows(items, patients_from, patients_to)
+        if date_from or date_to:
+            filtered: list[R4TreatmentNote] = []
+            for item in items:
+                if item.note_date is None:
+                    continue
+                note_day = item.note_date.date()
+                if date_from and note_day < date_from:
+                    continue
+                if date_to and note_day > date_to:
+                    continue
+                filtered.append(item)
+            items = filtered
         if limit is None:
             return items
         return items[:limit]
