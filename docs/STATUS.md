@@ -83,6 +83,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Gates stayed green across chunks: overlap `0`, patients import mapped for cohort, canonical `unmapped_patients_total=0`, parity latest + digest matches passed.
   - Exhaustion verified: post-append remaining probe against full ledger returned `remaining_after_exclude=0`.
   - Known reporting pattern (observed from seed 7 onward): resume no-op runs may report non-zero `candidates_total` while `imported_created_total=0` and `imported_updated_total=0`.
+  - Probe exhaustion behaviour: when exclusions remove all candidates, `r4_cohort_select` may raise/exit non-zero instead of writing an empty CSV; treat this as expected completion (`remaining_after_exclude=0`) when `excluded_candidates_count == candidates_before_exclude` (or equivalent count math).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
