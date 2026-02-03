@@ -61,6 +61,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-03: Stage 134 closed (active-patients cohort mode, local-first then merged).
+  - Added `r4_cohort_select --mode active_patients` with `--active-months` (default `24`) and `--active-from` override; reports include `active_from`, `active_to`, and `active_months`.
+  - Active cohort source uses `dbo.vwAppointmentDetails` (`get_distinct_active_patient_codes(...)`) under `R4_SQLSERVER_READONLY=true` (SELECT-only).
+  - Run window used: `active_from=2024-02-01`, `active_to=2026-02-01` (`active_months=24`); `candidates_before_exclude=715`.
+  - Chunk outcomes: Stage134A selected `500` (hashed seed `1`); Stage134B selected remaining `215` (hashed seed `2`); exhaustion check (seed `3`, limit `5000`) hard-stopped with exclusion removing all candidates.
+  - Gates remained green: overlap gate `0`, `unmapped_patients_total=0`, resume no-op, parity pass for `treatment_plan_items` and `treatment_notes`.
+  - Host-persistent seen ledger used: `.run/seen_stage134_active.txt`; CI runner instability handled via local-first flow, with merge completed once Actions recovered.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
