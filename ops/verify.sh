@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+bash ops/env_check.sh
+
 if [ "${SKIP_DOCKER_BUILD:-0}" != "1" ]; then
   echo "Building containers..."
   docker compose build
