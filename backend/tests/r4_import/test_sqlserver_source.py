@@ -27,18 +27,20 @@ def test_sqlserver_config_requires_fields_when_enabled(monkeypatch):
         config.require_enabled()
 
 
-def test_sqlserver_config_parses_env(monkeypatch):
-    monkeypatch.setenv("R4_SQLSERVER_ENABLED", "true")
-    monkeypatch.setenv("R4_SQLSERVER_HOST", "sql.example.local")
-    monkeypatch.setenv("R4_SQLSERVER_PORT", "1444")
-    monkeypatch.setenv("R4_SQLSERVER_DATABASE", "sys2000")
-    monkeypatch.setenv("R4_SQLSERVER_USER", "readonly")
-    monkeypatch.setenv("R4_SQLSERVER_PASSWORD", "secret")
-    monkeypatch.setenv("R4_SQLSERVER_DRIVER", "ODBC Driver 18 for SQL Server")
-    monkeypatch.setenv("R4_SQLSERVER_ENCRYPT", "false")
-    monkeypatch.setenv("R4_SQLSERVER_TRUST_SERVER_CERT", "true")
-    monkeypatch.setenv("R4_SQLSERVER_TIMEOUT_SECONDS", "12")
-    config = R4SqlServerConfig.from_env()
+def test_sqlserver_config_parses_env():
+    env = {
+        "R4_SQLSERVER_ENABLED": "true",
+        "R4_SQLSERVER_HOST": "sql.example.local",
+        "R4_SQLSERVER_PORT": "1444",
+        "R4_SQLSERVER_DATABASE": "sys2000",
+        "R4_SQLSERVER_USER": "readonly",
+        "R4_SQLSERVER_PASSWORD": "secret",
+        "R4_SQLSERVER_DRIVER": "ODBC Driver 18 for SQL Server",
+        "R4_SQLSERVER_ENCRYPT": "false",
+        "R4_SQLSERVER_TRUST_SERVER_CERT": "true",
+        "R4_SQLSERVER_TIMEOUT_SECONDS": "12",
+    }
+    config = R4SqlServerConfig.from_env(env)
     assert config.enabled is True
     assert config.host == "sql.example.local"
     assert config.port == 1444
@@ -52,16 +54,33 @@ def test_sqlserver_config_parses_env(monkeypatch):
     assert config.timeout_seconds == 12
 
 
-def test_sqlserver_config_accepts_legacy_aliases(monkeypatch):
-    monkeypatch.setenv("R4_SQLSERVER_ENABLED", "true")
-    monkeypatch.setenv("R4_SQLSERVER_HOST", "sql.example.local")
-    monkeypatch.setenv("R4_SQLSERVER_DB", "sys2000")
-    monkeypatch.setenv("R4_SQLSERVER_USER", "readonly")
-    monkeypatch.setenv("R4_SQLSERVER_PASSWORD", "secret")
-    monkeypatch.setenv("R4_SQLSERVER_TRUST_CERT", "false")
-    config = R4SqlServerConfig.from_env()
+def test_sqlserver_config_accepts_legacy_aliases():
+    env = {
+        "R4_SQLSERVER_ENABLED": "true",
+        "R4_SQLSERVER_HOST": "sql.example.local",
+        "R4_SQLSERVER_DB": "sys2000",
+        "R4_SQLSERVER_USER": "readonly",
+        "R4_SQLSERVER_PASSWORD": "secret",
+        "R4_SQLSERVER_TRUST_CERT": "false",
+    }
+    config = R4SqlServerConfig.from_env(env)
     assert config.database == "sys2000"
     assert config.trust_cert is False
+    assert config.trust_cert_set is True
+
+
+def test_sqlserver_config_prefers_trust_server_cert_over_legacy_alias():
+    env = {
+        "R4_SQLSERVER_ENABLED": "true",
+        "R4_SQLSERVER_HOST": "sql.example.local",
+        "R4_SQLSERVER_DATABASE": "sys2000",
+        "R4_SQLSERVER_USER": "readonly",
+        "R4_SQLSERVER_PASSWORD": "secret",
+        "R4_SQLSERVER_TRUST_SERVER_CERT": "true",
+        "R4_SQLSERVER_TRUST_CERT": "false",
+    }
+    config = R4SqlServerConfig.from_env(env)
+    assert config.trust_cert is True
     assert config.trust_cert_set is True
 
 

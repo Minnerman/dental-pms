@@ -131,9 +131,10 @@ class R4SqlServerConfig:
     def from_env(cls, environ: dict[str, str] | None = None) -> "R4SqlServerConfig":
         env = environ or os.environ
         database = env.get("R4_SQLSERVER_DATABASE") or env.get("R4_SQLSERVER_DB")
-        trust_cert_raw = env.get("R4_SQLSERVER_TRUST_CERT")
+        # Prefer the canonical key, then fall back to the legacy alias.
+        trust_cert_raw = env.get("R4_SQLSERVER_TRUST_SERVER_CERT")
         if trust_cert_raw is None:
-            trust_cert_raw = env.get("R4_SQLSERVER_TRUST_SERVER_CERT")
+            trust_cert_raw = env.get("R4_SQLSERVER_TRUST_CERT")
         readonly_raw = env.get("R4_SQLSERVER_READONLY")
         return cls(
             enabled=_parse_bool(env.get("R4_SQLSERVER_ENABLED"), default=False),
