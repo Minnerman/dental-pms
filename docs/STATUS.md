@@ -108,6 +108,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Gates green at close-out: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest all/all (`200/200` seeds, tail `108/108`).
   - Exhaustion verified: probe raises expected zero-candidate exhaustion; equivalent count math confirms `excluded_candidates_count=1108` and `remaining_after_exclude=0`.
   - Canonical provenance: imported from `dbo.BPE` (per-seed fetched counts recorded in run summaries).
+- 2026-02-03: Stage 140 completed (`bpe_furcation`, deterministic cohort).
+  - Selector baseline: `candidates_before_exclude=1108` (`seed=1`); processed all `1108` patients in one run.
+  - Ledger reached full coverage: `.run/seen_stage140_bpe_furcation.txt` is `1108` on host and container.
+  - Gates green at close-out: overlap `0`, canonical `unmapped_patients_total=0`, canonical `dropped_out_of_range_total=0`, resume no-op (`imported_created_total=0`, `imported_updated_total=0`), parity latest+digest `1108/1108`.
+  - Exhaustion verified: probe raises expected zero-candidate exhaustion; equivalent count math confirms `excluded_candidates_count=1108` and `remaining_after_exclude=0`.
+  - Canonical provenance: imported from `dbo.BPEFurcation` (`imported_created_total=2180`).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
