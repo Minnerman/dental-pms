@@ -59,7 +59,8 @@ jobs:
 
       - name: Write CI .env
         run: |
-          cat <<'EOF' > .env
+          cp -f .env.example .env
+          cat <<'EOF' >> .env
           POSTGRES_DB=${POSTGRES_DB}
           POSTGRES_USER=${POSTGRES_USER}
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -79,6 +80,9 @@ jobs:
           ADMIN_EMAIL=${ADMIN_EMAIL}
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
           EOF
+
+      - name: Validate CI env
+        run: bash ops/env_check.sh
 
       - name: Start database (retry)
         shell: bash
@@ -255,7 +259,8 @@ jobs:
 
       - name: Write CI .env
         run: |
-          cat <<'EOF' > .env
+          cp -f .env.example .env
+          cat <<'EOF' >> .env
           POSTGRES_DB=${POSTGRES_DB}
           POSTGRES_USER=${POSTGRES_USER}
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -278,6 +283,9 @@ jobs:
           FEATURE_CHARTING_VIEWER=${FEATURE_CHARTING_VIEWER}
           NEXT_PUBLIC_FEATURE_CHARTING_VIEWER=${NEXT_PUBLIC_FEATURE_CHARTING_VIEWER}
           EOF
+
+      - name: Validate CI env
+        run: bash ops/env_check.sh
 
       - name: Start database (retry)
         shell: bash
