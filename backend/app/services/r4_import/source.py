@@ -90,6 +90,8 @@ class R4Source(Protocol):
         patients_to: int | None = None,
         tp_from: int | None = None,
         tp_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         limit: int | None = None,
     ) -> Iterable[R4TreatmentPlanItem]:
         raise NotImplementedError

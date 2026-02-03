@@ -220,9 +220,12 @@ class SqlServerChartingExtractor:
                 patients_from=patients_from,
                 patients_to=patients_to,
                 patient_codes=patient_codes,
+                date_from=date_from,
+                date_to=date_to,
                 limit=limit,
             ):
-                item_date = item.item_date or item.completed_date
+                # Date semantics for TP items are anchored on the parent plan creation date.
+                item_date = item.plan_creation_date or item.item_date or item.completed_date
                 if not _date_in_range(item_date, date_from, date_to, report):
                     continue
                 if item.tp_item_key is not None:
@@ -436,12 +439,16 @@ class SqlServerChartingExtractor:
         patients_from: int | None,
         patients_to: int | None,
         patient_codes: list[int] | None,
+        date_from: date | None,
+        date_to: date | None,
         limit: int | None,
     ):
         if not patient_codes:
             yield from self._source.list_treatment_plan_items(
                 patients_from=patients_from,
                 patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
                 limit=limit,
             )
             return
@@ -456,6 +463,8 @@ class SqlServerChartingExtractor:
                 for item in self._source.list_treatment_plan_items(
                     patients_from=code,
                     patients_to=code,
+                    date_from=date_from,
+                    date_to=date_to,
                     limit=batch_limit,
                 ):
                     yield item
@@ -877,24 +886,37 @@ def get_distinct_treatment_plan_items_patient_codes(
     source = R4SqlServerSource(config)
     source.ensure_select_only()
 
-    patient_col = source._pick_column("TreatmentPlanItems", ["PatientCode"])  # noqa: SLF001
-    date_col = source._pick_column(  # noqa: SLF001
-        "TreatmentPlanItems",
-        ["Date", "ItemDate", "RecordedDate"],
+    item_patient_col = source._pick_column("TreatmentPlanItems", ["PatientCode"])  # noqa: SLF001
+    item_tp_col = source._pick_column("TreatmentPlanItems", ["TPNumber", "TPNum", "TPNo"])  # noqa: SLF001
+    plan_patient_col = source._pick_column("TreatmentPlans", ["PatientCode"])  # noqa: SLF001
+    plan_tp_col = source._pick_column("TreatmentPlans", ["TPNumber", "TPNum", "TPNo"])  # noqa: SLF001
+    plan_date_col = source._pick_column(  # noqa: SLF001
+        "TreatmentPlans",
+        ["CreationDate", "Date", "PlanDate"],
     )
-    if not patient_col or not date_col:
+    if (
+        not item_patient_col
+        or not item_tp_col
+        or not plan_patient_col
+        or not plan_tp_col
+        or not plan_date_col
+    ):
         raise RuntimeError(
-            "TreatmentPlanItems missing PatientCode/Date columns; cannot fetch distinct codes."
+            "TreatmentPlanItems/TreatmentPlans missing patient/TP/date columns; cannot fetch distinct codes."
         )
 
     rows = source._query(  # noqa: SLF001
         (
             "SELECT TOP (?) "
-            f"{patient_col} AS patient_code "
-            "FROM dbo.TreatmentPlanItems WITH (NOLOCK) "
-            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
-            f"GROUP BY {patient_col} "
-            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+            f"ti.{item_patient_col} AS patient_code "
+            "FROM dbo.TreatmentPlanItems ti WITH (NOLOCK) "
+            "JOIN dbo.TreatmentPlans tp WITH (NOLOCK) "
+            f"ON tp.{plan_patient_col} = ti.{item_patient_col} "
+            f"AND tp.{plan_tp_col} = ti.{item_tp_col} "
+            f"WHERE ti.{item_patient_col} IS NOT NULL "
+            f"AND tp.{plan_date_col} >= ? AND tp.{plan_date_col} < ? "
+            f"GROUP BY ti.{item_patient_col} "
+            f"ORDER BY MAX(tp.{plan_date_col}) DESC, ti.{item_patient_col} ASC"
         ),
         [limit, date_from, date_to],
     )

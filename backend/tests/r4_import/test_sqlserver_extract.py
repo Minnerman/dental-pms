@@ -262,6 +262,59 @@ def test_get_distinct_bpe_furcation_patient_codes_dedupes_and_orders(monkeypatch
     assert captured["params"][0] == 5
 
 
+def test_get_distinct_treatment_plan_items_patient_codes_uses_parent_plan_date(monkeypatch):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def _pick_column(self, table, candidates):
+            if table == "TreatmentPlanItems":
+                for candidate in candidates:
+                    if candidate == "PatientCode":
+                        return "PatientCode"
+                    if candidate in {"TPNumber", "TPNum", "TPNo"}:
+                        return "TPNumber"
+            if table == "TreatmentPlans":
+                for candidate in candidates:
+                    if candidate == "PatientCode":
+                        return "PatientCode"
+                    if candidate in {"TPNumber", "TPNum", "TPNo"}:
+                        return "TPNumber"
+                    if candidate in {"CreationDate", "Date", "PlanDate"}:
+                        return "CreationDate"
+            return None
+
+        def _query(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return [{"patient_code": 401}, {"patient_code": 402}, {"patient_code": 401}]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_treatment_plan_items_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [401, 402]
+    assert "FROM dbo.TreatmentPlanItems ti" in captured["query"]
+    assert "JOIN dbo.TreatmentPlans tp" in captured["query"]
+    assert "MAX(tp.CreationDate)" in captured["query"]
+    assert captured["params"][0] == 5
+
+
 class DummyNote:
     def __init__(self, patient_code, note_number, note_date, note):
         self.patient_code = patient_code
@@ -320,7 +373,14 @@ class DummySourceForNotes:
     def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
         return []
 
-    def list_treatment_plan_items(self, patients_from=None, patients_to=None, limit=None):
+    def list_treatment_plan_items(
+        self,
+        patients_from=None,
+        patients_to=None,
+        date_from=None,
+        date_to=None,
+        limit=None,
+    ):
         return []
 
     def list_treatment_plans(
@@ -333,6 +393,87 @@ class DummySourceForNotes:
         limit=None,
     ):
         return []
+
+
+def test_collect_canonical_records_treatment_plan_items_use_plan_creation_date():
+    class DummyItem:
+        def __init__(
+            self,
+            patient_code,
+            tp_number,
+            tp_item,
+            *,
+            tp_item_key=None,
+            item_date=None,
+            completed_date=None,
+            plan_creation_date=None,
+        ):
+            self.patient_code = patient_code
+            self.tp_number = tp_number
+            self.tp_item = tp_item
+            self.tp_item_key = tp_item_key
+            self.code_id = None
+            self.tooth = None
+            self.surface = None
+            self.completed = False
+            self.material = None
+            self.arch_code = None
+            self.item_date = item_date
+            self.completed_date = completed_date
+            self.plan_creation_date = plan_creation_date
+
+        def model_dump(self):
+            return {
+                "patient_code": self.patient_code,
+                "tp_number": self.tp_number,
+                "tp_item": self.tp_item,
+                "tp_item_key": self.tp_item_key,
+                "item_date": self.item_date,
+                "completed_date": self.completed_date,
+                "plan_creation_date": self.plan_creation_date,
+            }
+
+    class ItemSource(DummySourceForNotes):
+        def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+        def list_treatment_notes(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+        def list_treatment_plan_items(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+        ):
+            assert date_from == date(2017, 1, 1)
+            assert date_to == date(2026, 2, 1)
+            return [
+                DummyItem(
+                    patients_from,
+                    1,
+                    1,
+                    tp_item_key=9001,
+                    item_date=datetime(2001, 5, 1, 9, 0, 0),
+                    plan_creation_date=datetime(2025, 5, 1, 9, 0, 0),
+                )
+            ]
+
+    extractor = object.__new__(extract.SqlServerChartingExtractor)
+    extractor._source = ItemSource()
+    records, dropped = extractor.collect_canonical_records(
+        patient_codes=[1016312],
+        date_from=date(2017, 1, 1),
+        date_to=date(2026, 2, 1),
+        limit=10,
+    )
+
+    items = [r for r in records if r.domain == "treatment_plan_item"]
+    assert len(items) == 1
+    assert items[0].recorded_at == datetime(2025, 5, 1, 9, 0, 0)
+    assert dropped["out_of_range"] == 0
 
 
 def test_collect_canonical_records_includes_patient_notes_with_date_bounds():

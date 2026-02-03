@@ -193,6 +193,8 @@ class FixtureSource(R4Source):
         patients_to: int | None = None,
         tp_from: int | None = None,
         tp_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         limit: int | None = None,
     ) -> list[R4TreatmentPlanItem]:
         data = self._load_json("treatment_plan_items.json")
