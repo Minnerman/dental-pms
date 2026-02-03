@@ -186,6 +186,32 @@ def test_run_parity_treatment_plans_domain(monkeypatch, tmp_path: Path):
     assert (tmp_path / "treatment_plans.json").exists()
 
 
+def test_summary_accepts_structured_latest_match_and_digest_fallback():
+    summary = r4_parity_run._summary_from_report(
+        "bpe",
+        {
+            "patients": [
+                {
+                    "patient_code": 1000,
+                    "sqlserver_count": 2,
+                    "latest_match": {
+                        "recorded_at": True,
+                        "sextants": True,
+                        "all": True,
+                    },
+                    "latest_digest_match": None,
+                }
+            ]
+        },
+    )
+    assert summary["status"] == "pass"
+    assert summary["patients_with_data"] == 1
+    assert summary["latest_match"]["matched"] == 1
+    assert summary["latest_match"]["total"] == 1
+    assert summary["latest_digest_match"]["matched"] == 1
+    assert summary["latest_digest_match"]["total"] == 1
+
+
 def test_main_writes_output_json(monkeypatch, tmp_path: Path):
     out = tmp_path / "combined.json"
 

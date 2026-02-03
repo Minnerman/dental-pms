@@ -82,6 +82,16 @@ def _count_has_data(patient: dict[str, object]) -> bool:
     return False
 
 
+def _coerce_match_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        all_value = value.get("all")
+        if isinstance(all_value, bool):
+            return all_value
+    return None
+
+
 def _summary_from_report(domain: str, report: dict[str, object]) -> dict[str, object]:
     patients = report.get("patients") or []
     if not isinstance(patients, list):
@@ -93,18 +103,23 @@ def _summary_from_report(domain: str, report: dict[str, object]) -> dict[str, ob
     latest_matches: list[bool] = []
     digest_matches: list[bool] = []
     for patient in with_data:
-        latest = patient.get("latest_match")
-        if isinstance(latest, bool):
-            latest_matches.append(latest)
-        digest = patient.get("latest_digest_match")
-        if isinstance(digest, bool):
-            digest_matches.append(digest)
+        latest_ok = _coerce_match_bool(patient.get("latest_match"))
+        if latest_ok is not None:
+            latest_matches.append(latest_ok)
+        digest_ok = _coerce_match_bool(patient.get("latest_digest_match"))
+        if digest_ok is not None:
+            digest_matches.append(digest_ok)
+        elif latest_ok is not None:
+            # Some parity packs (for example bpe) only expose a single latest comparison.
+            digest_matches.append(latest_ok)
 
     latest_match_count = sum(1 for ok in latest_matches if ok)
     digest_match_count = sum(1 for ok in digest_matches if ok)
 
     if not with_data:
         status = "no_data"
+    elif not latest_matches or not digest_matches:
+        status = "fail"
     elif latest_match_count == len(latest_matches) and digest_match_count == len(digest_matches):
         status = "pass"
     else:
@@ -124,13 +139,10 @@ def _summary_from_report(domain: str, report: dict[str, object]) -> dict[str, ob
             "matched": digest_match_count,
             "total": len(digest_matches),
         },
-        "warnings": [
-            f"No SQL Server rows in bounds for {len(no_data_patients)} patient(s)."
-            if no_data_patients
-            else None
-        ][0:1]
-        if no_data_patients
-        else [],
+        "warnings": (
+            ([f"No SQL Server rows in bounds for {len(no_data_patients)} patient(s)."] if no_data_patients else [])
+            + (["Parity comparisons missing despite patients_with_data > 0."] if with_data and (not latest_matches or not digest_matches) else [])
+        ),
     }
 
 
