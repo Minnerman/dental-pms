@@ -894,8 +894,66 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 ## Roadmap (stages)
 - Stage 47: recall dashboard last contact and contact filters (completed)
 - Stage 48: recall dashboard pagination controls (completed)
-- Stage 49: developer workflow hardening (typecheck entrypoint + verify guidance)
-- Stage 50+: TBD
+- Stage 49: developer workflow hardening (typecheck entrypoint + verify guidance) (completed)
+
+### MVP definition
+- MVP = usable in a single practice for day-to-day operations: staff login + RBAC, patients, appointments (calendar + day sheet), clinical chart/notes/treatment plan, recalls + recall letters, documents/templates -> PDF, attachments, basic ledger/cash-up, audit trail.
+- Out of scope for MVP (for now): multi-site, advanced billing/claims, inventory, complex reporting expansions, external integrations beyond current scope.
+
+### Roadmap (stages)
+- Stage 50: Environment + config hardening (MVP gate)
+  - Aim: eliminate "missing `.env` / unset vars" class failures locally + CI.
+  - Deliverables:
+    - `.env.example` audited and complete for required variables (backend + frontend + CI).
+    - `ops/health.sh` and `ops/verify.sh` fail fast with actionable messages if required env is missing.
+    - Document "minimal required env for dev" in STATUS (or a referenced doc).
+  - Hard gates:
+    - fresh clone + `.env` from `.env.example` -> `bash ops/health.sh` passes
+    - CI no longer fails due to env omissions
+- Stage 51: CI hygiene + deterministic workflows (MVP gate)
+  - Aim: ensure workflows are valid and stable; remove "0s validation" class errors.
+  - Deliverables:
+    - fix/validate workflow files so CI always runs deterministically
+    - add a short "CI debugging checklist" to STATUS (or referenced doc)
+  - Hard gates:
+    - workflow validation errors eliminated
+    - nightly smoke reliability improved (no env-related failures)
+- Stage 52: Production-ish deploy/runbook (MVP gate)
+  - Aim: one documented path to run the stack on the server safely.
+  - Deliverables:
+    - a deploy/runbook (docker compose) covering: pull, env, migrations, start/stop, logs, backups, rollback plan
+    - explicit statement of R4 SQL Server read-only policy and how it's enforced
+  - Hard gates:
+    - follow runbook on a clean host/VM (or "new machine" test) and reach working UI + API
+    - database migrations applied successfully and repeatably
+- Stage 53: Data safety + backup/restore drill (MVP gate)
+  - Aim: prove we can recover.
+  - Deliverables:
+    - backup procedure (DB + uploaded files/attachments)
+    - restore drill instructions and evidence log (what was restored, when, and verification steps)
+  - Hard gates:
+    - restore drill completed successfully with verification (basic smoke + spot-check records)
+- Stage 54: Appointments reliability (Stage 31 backlog closure) (MVP gate)
+  - Aim: close the "appointments reliability/range/creation-flow" backlog with tests.
+  - Deliverables:
+    - fix the 3 Stage 31 bullets (booking modal reliability; calendar/range loading; creation flow when switching clinicians/locations)
+    - add or strengthen Playwright coverage for regressions
+  - Hard gates:
+    - Playwright scenario(s) added/updated and green
+    - manual repro steps no longer reproduce issues
+    - no regressions in existing appointment flows
+- Stage 55: Clinical trust polish (P1) (MVP gate)
+  - Aim: clinician confidence in chart view.
+  - Deliverables:
+    - clinical chart view mode toggle + tooth badges shipped with persistence behaviour defined
+    - parity/smoke coverage updated if needed
+  - Hard gates:
+    - persistence verified across refresh/navigation
+    - no parity regressions
+    - UX matches intended "planned/history" semantics
+
+### "Done" definition for MVP
+- Stages 50-55 all closed with green gates and documented close-out notes.
 
 ## Stage 31 backlog
 - Appointments: booking modal reliability across refresh/tab changes.
