@@ -953,7 +953,51 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage selection required (post Stage 128 closeout) — choose the next executable implementation stage using the operator checklist.
+- Stage 129 follow-on (`stage129-charting-import-parity`) — implement charting import closeout + canonical parity gates from discovery outputs.
+
+## Stage 129 follow-on definition (charting import + canonical parity)
+- Objective: implement the charting import follow-on so imported canonical charting data matches R4 for scoped entities with deterministic, idempotent runs.
+- User value: provides trustworthy charting data parity for operational use and removes ambiguity between discovery/prototype work and executable production workflow.
+- Dependencies:
+  - `docs/r4/R4_CHARTING_DISCOVERY.md` (source-of-truth discovery constraints).
+  - `docs/r4/STAGE129_CHARTING_CANONICAL_PLAN.md` and Stage 129 parity pack docs (`STAGE129F..K`).
+  - R4 SQL Server read-only mode: `R4_SQLSERVER_READONLY=true`.
+- In scope:
+  - Run deterministic cohort selection for a bounded pilot cohort (50-200 patients) in the charting window.
+  - Run `patients` import for the selected cohort, then run `charting_canonical` import (dry-run, apply, rerun idempotency).
+  - Run consolidated parity gate (`r4_parity_run`) for scoped domains and record pass/fail with with_data counts.
+  - Update `docs/STATUS.md` with completion note and evidence paths.
+- Out of scope:
+  - Frontend/UI changes.
+  - Appointment import changes and unrelated entities.
+  - SQL Server write/proc/DDL actions.
+- Acceptance criteria:
+  - Selected pilot cohort is imported without unmapped-patient failures.
+  - Immediate rerun is idempotent (`imported_created_total=0`, `imported_updated_total=0`).
+  - Parity run reports overall `pass` for scoped domains with explicit with_data/no_data counts.
+  - Evidence artefacts are present under `.run/stage129/`.
+- Hard gates (commands + pass criteria):
+  - `bash ops/health.sh` -> exits `0`.
+  - `bash ops/verify.sh` -> exits `0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains perioprobe,bpe,bpe_furcation,treatment_notes --date-from 2017-01-01 --date-to 2026-02-01 --limit 200 --mode union --order hashed --seed 1 --output /tmp/stage129_codes.csv` -> exits `0` and output has >=1 patient.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity patients --patient-codes-file /tmp/stage129_codes.csv --apply --confirm APPLY --stats-out /tmp/stage129_patients_apply_stats.json` -> exits `0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity charting_canonical --patient-codes-file /tmp/stage129_codes.csv --charting-from 2017-01-01 --charting-to 2026-02-01 --batch-size 50 --state-file /tmp/stage129_state.json --run-summary-out /tmp/stage129_run_summary_apply.json --apply --confirm APPLY --stats-out /tmp/stage129_charting_apply_stats.json --output-json /tmp/stage129_charting_apply_report.json` -> exits `0`, `unmapped_patients_total=0`.
+  - Rerun (same charting command with `--resume`) -> exits `0`, idempotent created/updated totals are `0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_parity_run --patient-codes-file /tmp/stage129_codes.csv --domains perioprobe,bpe,bpe_furcation,treatment_notes --date-from 2017-01-01 --date-to 2026-02-01 --output-json /tmp/stage129_parity_combined.json --output-dir /tmp/stage129_parity_domains` -> exits `0`, overall status `pass`.
+- Artefacts to capture:
+  - `.run/stage129/health.txt`
+  - `.run/stage129/verify.txt`
+  - `.run/stage129/cohort_select.txt`
+  - `.run/stage129/patients_apply_stats.json`
+  - `.run/stage129/charting_apply_stats.json`
+  - `.run/stage129/charting_rerun_stats.json`
+  - `.run/stage129/charting_apply_report.json`
+  - `.run/stage129/parity_combined.json`
+  - `.run/stage129/status_checks.txt`
+- Rollback / safety notes:
+  - Do not write to SQL Server under any circumstance; all SQL Server access remains SELECT-only.
+  - Use container-local `/tmp/stage129_*` working files and copy only evidence outputs into `.run/stage129/`.
+  - If gates fail, stop and record failure evidence before attempting any scope expansion.
 
 ## Stage 128 follow-on definition (charting discovery closeout)
 - Objective: close the stale Stage 128 "implementation not started" ambiguity by publishing an explicit post-discovery execution checklist tied to current charting parity tooling.
