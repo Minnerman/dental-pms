@@ -985,7 +985,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Hard gates (commands + pass criteria):
   - `bash ops/health.sh` -> exits `0`.
   - `bash ops/verify.sh` -> exits `0`.
-  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains perioprobe,bpe,bpe_furcation,treatment_notes --date-from 2017-01-01 --date-to 2026-02-01 --limit 200 --mode union --order hashed --seed 1 --output /tmp/stage129_codes.csv` -> exits `0` and output has >=1 patient.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains perioprobe,bpe,bpe_furcation,treatment_notes --date-from 2017-01-01 --date-to 2026-02-01 --limit 200 --mode union --order hashed --seed 1 --output /tmp/stage129_codes.csv` -> exits `0`; then `docker compose exec -T backend bash -lc 'python - <<PY\nimport csv\np=\"/tmp/stage129_codes.csv\"\nwith open(p, newline=\"\") as f:\n    rows=list(csv.reader(f))\ncodes=[c.strip() for r in rows for c in r if c.strip()]\nprint(\"codes_count:\", len(codes))\nprint(\"sample:\", codes[:5])\nassert len(codes) >= 1\nPY'` -> exits `0`.
   - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity patients --patient-codes-file /tmp/stage129_codes.csv --apply --confirm APPLY --stats-out /tmp/stage129_patients_apply_stats.json` -> exits `0`.
   - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity charting_canonical --patient-codes-file /tmp/stage129_codes.csv --charting-from 2017-01-01 --charting-to 2026-02-01 --batch-size 50 --state-file /tmp/stage129_state.json --run-summary-out /tmp/stage129_run_summary_apply.json --apply --confirm APPLY --stats-out /tmp/stage129_charting_apply_stats.json --output-json /tmp/stage129_charting_apply_report.json` -> exits `0`, `unmapped_patients_total=0`.
   - Rerun (same charting command with `--resume`) -> exits `0`, idempotent created/updated totals are `0`.
@@ -1007,6 +1007,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Implementation status:
   - 2026-02-04: Stage 129 follow-on completed on `stage129-charting-import-parity`.
   - Evidence directory: `.run/stage129/` (including `stage129_codes.csv`, apply/resume stats+reports, parity outputs, and `status_checks.txt`).
+  - Cohort file note: `/tmp/stage129_codes.csv` may be emitted as a single comma-separated line; gate checks must validate parsed code count (not `wc -l`).
   - Hard gates run/passed: `bash ops/health.sh`, `bash ops/verify.sh`, cohort select command, patients apply command, charting apply+resume commands, and consolidated parity command (`overall.status=pass`).
 
 ## Stage 128 follow-on definition (charting discovery closeout)
