@@ -493,7 +493,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - PR #114, merge SHA `1c0e077`. https://github.com/Minnerman/dental-pms/pull/114
 - 2026-01-23: Stage128 discovery complete (R4 charting notes).
   - PR #113, merge SHA `12e4af5`.
-  - Implementation not started; charting must match R4 exactly.
+  - Discovery closeout is now tracked by `Stage 128 follow-on definition (charting discovery closeout)` with explicit gates and artefacts.
 - 2026-01-23: Stage127 complete (link unlinked R4 appointments to patients).
   - PR #112, merge SHA `d4ff741`. https://github.com/Minnerman/dental-pms/pull/112
   - Precedence: link table -> patient_code -> unlinked.
@@ -953,7 +953,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 128 follow-on (`stage128-charting-discovery-closeout`) — execute the historical discovery closeout so selection and implementation state are explicit and testable.
+- Stage selection required (post Stage 128 closeout) — choose the next executable implementation stage using the operator checklist.
 
 ## Stage 128 follow-on definition (charting discovery closeout)
 - Objective: close the stale Stage 128 "implementation not started" ambiguity by publishing an explicit post-discovery execution checklist tied to current charting parity tooling.
@@ -974,10 +974,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - `docs/STATUS.md` no longer leaves Stage 128 in an ambiguous "implementation not started" state.
   - A reviewer can run one documented checklist and determine pass/fail from captured artefacts.
   - The checklist keeps R4 access strictly read-only.
+- Execution checklist (charting parity validation, read-only-safe):
+  - Confirm discovery/canonical references: `docs/r4/R4_CHARTING_DISCOVERY.md`, `docs/r4/STAGE129_CHARTING_CANONICAL_PLAN.md`.
+  - Validate script entrypoints exist: `python -m app.scripts.r4_cohort_select --help`, `python -m app.scripts.r4_import --help`, `python -m app.scripts.r4_parity_run --help`.
+  - For live runs, enforce `R4_SQLSERVER_READONLY=true` and keep SQL Server actions SELECT-only.
 - Hard gates (commands + pass criteria):
   - `bash ops/health.sh` -> exits `0`.
   - `bash ops/verify.sh` -> exits `0`.
-  - `rg -n "Stage128 discovery complete|Implementation not started; charting must match R4 exactly" docs/STATUS.md` -> replaced with explicit closeout wording.
+  - `sed -n '488,502p' docs/STATUS.md | rg -n "Implementation not started; charting must match R4 exactly"` -> returns no matches.
   - `rg -n "^## Stage 128 follow-on definition" docs/STATUS.md` -> returns exactly one match.
 - Artefacts to capture:
   - `.run/stage128/health.txt`
@@ -986,6 +990,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Rollback / safety notes:
   - Docs-only changes can be reverted via a single PR revert.
   - R4 SQL Server remains strictly SELECT-only (`R4_SQLSERVER_READONLY=true` for any live parity/import command).
+- Implementation status:
+  - 2026-02-04: Stage 128 follow-on completed on `stage128-charting-discovery-closeout` (docs-only closeout).
+  - Evidence directory: `.run/stage128/` (`health.txt`, `verify.txt`, `status_checks.txt`).
+  - Hard gates run/passed: `bash ops/health.sh`, `bash ops/verify.sh`, `sed -n '488,502p' docs/STATUS.md | rg -n "Implementation not started; charting must match R4 exactly"` (no matches), `rg -n "^## Stage 128 follow-on definition" docs/STATUS.md` (exactly one match).
 
 ## Stage 23 definition (scope approved for implementation)
 - Objective: remove roadmap ambiguity by converting Stage 23 from a TBD placeholder into an actionable, testable stage plan.
