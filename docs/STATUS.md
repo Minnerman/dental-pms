@@ -61,6 +61,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-04: Stage 129 follow-on completed (`stage129-charting-import-parity` pilot cohort + parity gates).
+  - Cohort select completed with deterministic hashed union selection (`seed=1`, `limit=200`), output captured at `.run/stage129/stage129_codes.csv`.
+  - Patients import apply completed (`patients_created=200`, `patients_updated=0`, `patients_skipped=0`) from `/tmp/stage129_codes.csv`.
+  - Charting canonical apply completed (`imported_created_total=6666`, `imported_updated_total=0`, `unmapped_patients_total=0`); resume rerun idempotent (`imported_created_total=0`, `imported_updated_total=0`).
+  - Consolidated parity run passed (`overall.status=pass`, `domains_failed=0`) for `perioprobe,bpe,bpe_furcation,treatment_notes`.
+  - Evidence captured under `.run/stage129/` (health, verify, cohort, apply/resume stats+reports, parity outputs, status checks).
 - 2026-02-04: Stage 23 follow-up triage completed (roadmap hygiene).
   - `docs/STATUS.md` treated as source of truth: Stage 23 is the lowest-numbered unresolved item but has no scoped deliverables (`details TBD`).
   - Stage 23 is explicitly deferred until scope is defined (objective, deliverables, and hard gates).
@@ -953,7 +959,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 129 follow-on (`stage129-charting-import-parity`) — implement charting import closeout + canonical parity gates from discovery outputs.
+- Stage selection required (post Stage 129 follow-on) — choose the next executable implementation stage using the operator checklist.
 
 ## Stage 129 follow-on definition (charting import + canonical parity)
 - Objective: implement the charting import follow-on so imported canonical charting data matches R4 for scoped entities with deterministic, idempotent runs.
@@ -998,6 +1004,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Do not write to SQL Server under any circumstance; all SQL Server access remains SELECT-only.
   - Use container-local `/tmp/stage129_*` working files and copy only evidence outputs into `.run/stage129/`.
   - If gates fail, stop and record failure evidence before attempting any scope expansion.
+- Implementation status:
+  - 2026-02-04: Stage 129 follow-on completed on `stage129-charting-import-parity`.
+  - Evidence directory: `.run/stage129/` (including `stage129_codes.csv`, apply/resume stats+reports, parity outputs, and `status_checks.txt`).
+  - Hard gates run/passed: `bash ops/health.sh`, `bash ops/verify.sh`, cohort select command, patients apply command, charting apply+resume commands, and consolidated parity command (`overall.status=pass`).
 
 ## Stage 128 follow-on definition (charting discovery closeout)
 - Objective: close the stale Stage 128 "implementation not started" ambiguity by publishing an explicit post-discovery execution checklist tied to current charting parity tooling.
