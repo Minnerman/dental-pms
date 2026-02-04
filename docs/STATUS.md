@@ -959,7 +959,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 130 (`stage130-charting-scaleout`) — charting import scale-out + stability/observability on larger cohorts.
+- Stage selection required — no next executable stage is currently defined after Stage 130 closeout.
+- Action: run the operator checklist selection step, then either start the selected stage or land a docs-only stage-definition PR.
 
 ## Stage 130 definition — Charting scale-out + stability
 - Objective: increase cohort size (500 then 1000) and confirm charting import + parity remain stable, deterministic, and idempotent.
@@ -1000,6 +1001,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Stop immediately on any parity failure or non-idempotent resume and record failure evidence.
   - Keep SQL Server strictly read-only; no writes to R4 under any circumstance.
   - Use container `/tmp/stage130_*` working files and copy evidence to `.run/stage130/`.
+- Implementation status:
+  - 2026-02-04: Stage 130 completed on `stage130-charting-scaleout` (scale-out run: 500 seed=2, then 1000 seed=3).
+  - Evidence directory: `.run/stage130/` including `health.txt`, `verify.txt`, `summary.md`, `status_checks.txt`, and cohort apply/resume/parity outputs for both runs.
+  - Key outcomes:
+    - 500 cohort: `codes_count=500`; patients apply `created=346 updated=0 skipped=154`; charting apply `imported_created_total=9850 imported_updated_total=0 unmapped_patients_total=0`; resume `imported_created_total=0 imported_updated_total=0`; parity overall `status=pass`.
+    - 1000 cohort: `codes_count=1000`; patients apply `created=506 updated=0 skipped=494`; charting apply `imported_created_total=12169 imported_updated_total=0 unmapped_patients_total=0`; resume `imported_created_total=0 imported_updated_total=0`; parity overall `status=pass`.
 
 ## Stage 129 follow-on definition (charting import + canonical parity)
 - Objective: implement the charting import follow-on so imported canonical charting data matches R4 for scoped entities with deterministic, idempotent runs.
