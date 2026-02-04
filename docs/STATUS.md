@@ -993,6 +993,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Create a stage branch (`stageNNN-<slug>`), run stage hard gates, and record artefacts before PR.
 - Implementation status:
   - 2026-02-04: Stage 23 implementation completed on `stage23-roadmap-hygiene` (docs-only; scope-restricted execution).
+  - Implementation PR: #245 (`stage23-roadmap-hygiene`); merge SHA to be recorded after merge on `master`.
   - Evidence directory: `.run/stage23/` (`health.txt`, `verify.txt`, `status_checks.txt`).
   - Hard gates run/passed: `bash ops/health.sh`, `bash ops/verify.sh`, `sed -n '955,970p' docs/STATUS.md | rg -n "deferred|details TBD"` (no matches), `rg -n "^## Stage 23 definition" docs/STATUS.md` (exactly one match).
 
