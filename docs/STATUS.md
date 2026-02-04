@@ -959,7 +959,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 131 (`stage131-charting-next-domains`) — implement canonical import + parity for next charting domains: `treatment_plans,treatment_plan_items`.
+- Stage selection required — no next executable stage is currently defined after Stage 131 closeout.
+- Action: run the operator checklist selection step, then either start the selected stage or land a docs-only stage-definition PR.
 
 ## Stage 131 follow-on definition — next charting domains (`treatment_plans,treatment_plan_items`)
 - Objective: extend charting canonical import/parity beyond Stage 129/130 domains by adding `treatment_plans` and `treatment_plan_items` from `docs/r4/R4_CHARTING_DISCOVERY.md`.
@@ -1002,6 +1003,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Stop immediately on parity failure or non-idempotent resume.
   - Keep SQL Server strictly read-only; no writes to R4 under any circumstance.
   - Use container `/tmp/stage131_*` work files and copy evidence to host `.run/stage131/`.
+- Implementation status:
+  - 2026-02-04: Stage 131 completed on `stage131-charting-next-domains`.
+  - Evidence directory: `.run/stage131/` including `health.txt`, `verify.txt`, `status_checks.txt`, and cohort/apply/resume/parity outputs.
+  - Key outcomes:
+    - Cohort: `codes_count=200` for `treatment_plans,treatment_plan_items` (`seed=4`, `2017-01-01..2026-02-01`).
+    - Patients apply: `patients_created=96`, `patients_updated=0`, `patients_skipped=104`.
+    - Charting apply: `imported_created_total=1071`, `imported_updated_total=1`, `unmapped_patients_total=0`.
+    - Resume idempotency: `imported_created_total=0`, `imported_updated_total=0`.
+    - Parity: overall `status=pass`, `domains_failed=0`.
 
 ## Stage 130 definition — Charting scale-out + stability
 - Objective: increase cohort size (500 then 1000) and confirm charting import + parity remain stable, deterministic, and idempotent.
