@@ -1,0 +1,6 @@
+LATEST_DB=.run/backups/db/db_2026-02-04_135334.sql.gz
+gzip_test=ok
+LATEST_ATT=.run/backups/attachments_2026-02-04_135336.tgz
+./
+./attachments/
+tar_list=ok

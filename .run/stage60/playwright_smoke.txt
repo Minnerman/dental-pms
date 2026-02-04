@@ -1,0 +1,573 @@
+
+Running 29 tests using 2 workers
+
+[1A[2K[1/29] tests/billing-payment.spec.ts:6:5 › recording a payment updates status and enables receipt download
+[1A[2K[2/29] tests/appointments-booking.spec.ts:83:5 › appointments deep link opens modal and cleans URL
+[1A[2K[3/29] tests/charting-parity.spec.ts:218:5 › charting viewer parity matches API counts
+[1A[2K[4/29] tests/appointments-booking.spec.ts:89:5 › appointments refresh after deep link does not reopen without book param
+[1A[2Ktests/charting-parity.spec.ts:218:5 › charting viewer parity matches API counts
+[charting] seed patients [
+  [ [33m1000000[39m, [32m'10238'[39m ],
+  [ [33m1011978[39m, [32m'10239'[39m ],
+  [ [33m1012056[39m, [32m'10240'[39m ],
+  [ [33m1013684[39m, [32m'10241'[39m ],
+  [ [33m1000035[39m, [32m'10242'[39m ]
+]
+
+[1A[2K[charting] export patient id 10238
+
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/perio-probes?limit=500&offset=0 total=12 items=12
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/notes? total=0 items=0
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10238/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10238/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10238/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10238/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/perio-probes?limit=500&offset=0 total=12 items=12
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/notes? total=0 items=0
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10238/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10238/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10238/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] perio-probes ui total=12 api total=12 patient_id=10238
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/perio-probes?limit=500&offset=0 total=12 items=12
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/notes? total=0 items=0
+
+[1A[2K[5/29] tests/appointments-booking.spec.ts:102:5 › appointments navigation back/forward keeps modal state consistent
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10239/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/bpe? total=3 items=3
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/notes? total=0 items=0
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10239/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10239/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10239/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10239/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/bpe? total=3 items=3
+
+[1A[2K[charting] bpe ui total=3 api total=3 patient_id=10239
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10239/charting/notes? total=0 items=0
+
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10240/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/bpe? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/notes? total=5 items=5
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10240/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10240/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10240/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10240/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/bpe? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10240/charting/notes? total=5 items=5
+
+[1A[2K[charting] notes ui total=5 api total=5 patient_id=10240
+
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10241/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[6/29] tests/appointments-booking.spec.ts:121:5 › appointments modal survives view and location switches
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/bpe? total=2 items=2
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/notes? total=0 items=0
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10241/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10241/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10241/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10241/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/bpe? total=2 items=2
+
+[1A[2K[charting] bpe ui total=2 api total=2 patient_id=10241
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/notes? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10241/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10242/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe? total=1 items=1
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe-furcations? total=3 items=3
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/notes? total=0 items=0
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10242/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10242/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10242/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe-furcations? total=3 items=3
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe? total=1 items=1
+
+[1A[2K[charting] bpe ui total=1 api total=1 patient_id=10242
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/notes? total=0 items=0
+
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10242/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/notes? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe? total=1 items=1
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe-furcations? total=3 items=3
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10242/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10242/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10242/charting/audit net::ERR_ABORTED
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/perio-probes?limit=500&offset=0 total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe? total=1 items=1
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/bpe-furcations? total=3 items=3
+
+[1A[2K[charting] bpe-furcations ui total=3 api total=3 patient_id=10242
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10242/charting/notes? total=0 items=0
+
+[1A[2K[7/29] tests/appointments-booking.spec.ts:158:5 › appointments shortcuts open, focus, and close booking
+[1A[2K[charting] request GET http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[charting] navigated to http://frontend:3000/patients/10238/charting
+
+[1A[2K[charting] response 200 http://frontend:3000/_next/static/chunks/app/(app)/patients/%5Bid%5D/charting/page.js
+
+[1A[2K[browser:error] Warning: Extra attributes from the server: %s%s data-theme 
+    at html
+    at RootLayout (Server)
+    at RedirectErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:74:9)
+    at RedirectBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/redirect-boundary.js:82:11)
+    at NotFoundErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:76:9)
+    at NotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/not-found-boundary.js:84:11)
+    at DevRootNotFoundBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/dev-root-not-found-boundary.js:33:11)
+    at ReactDevOverlay (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/ReactDevOverlay.js:87:9)
+    at HotReload (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:321:11)
+    at Router (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:207:11)
+    at ErrorBoundaryHandler (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:113:9)
+    at ErrorBoundary (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/error-boundary.js:160:11)
+    at AppRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/app-router.js:585:13)
+    at ServerRoot (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:112:27)
+    at Root (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js:117:11)
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/bpe-furcations?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/notes?
+
+[1A[2K[charting] request GET http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/tooth-surfaces?limit=500&offset=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/perio-probes?limit=500&offset=0 total=12 items=12
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/bpe-furcations? total=0 items=0
+
+[1A[2K[charting] response 200 http://frontend:3000/api/patients/10238/charting/notes? total=0 items=0
+
+[1A[2K[charting] tooth-surfaces ui total=13 api total=13 patient_id=10238
+
+[1A[2K[charting] request POST http://frontend:3000/api/patients/10238/charting/audit
+
+[1A[2K[charting] response 204 http://frontend:3000/api/patients/10238/charting/audit
+
+[1A[2K[charting] request failed http://frontend:3000/api/patients/10238/charting/audit net::ERR_ABORTED
+
+[1A[2KUI_PARITY_REPORT [{"legacy_code":1000000,"patient_id":"10238","entity":"Perio probes","api_count":12,"ui_count":12,"status":"pass","row_checks":[{"cells":["01/01/2024","11","MB (1)","4"],"status":"pass"},{"cells":["02/01/2024","11","B (2)","5"],"status":"pass"},{"cells":["03/01/2024","11","DB (3)","3"],"status":"pass"}]},{"legacy_code":1011978,"patient_id":"10239","entity":"BPE entries","api_count":3,"ui_count":3,"status":"pass","row_checks":[{"cells":["2","1","0","2","1","0"],"status":"pass"},{"cells":["2","1","0","2","1","0"],"status":"pass"},{"cells":["2","1","0","2","1","0"],"status":"pass"}]},{"legacy_code":1012056,"patient_id":"10240","entity":"Patient notes","api_count":5,"ui_count":5,"status":"pass","row_checks":[{"cells":["04/07/2024","1","Demo charting note 5"],"status":"pass"},{"cells":["03/07/2024","1","Demo charting note 4"],"status":"pass"}]},{"legacy_code":1013684,"patient_id":"10241","entity":"BPE entries","api_count":2,"ui_count":2,"status":"pass"},{"legacy_code":1000035,"patient_id":"10242","entity":"BPE entries","api_count":1,"ui_count":1,"status":"pass"},{"legacy_code":1000035,"patient_id":"10242","entity":"BPE furcations","api_count":3,"ui_count":3,"status":"pass","row_checks":[{"cells":["16/01/2024","16","1","1"],"status":"pass"},{"cells":["16/01/2024","26","2","2"],"status":"pass"},{"cells":["16/01/2024","36","3","3"],"status":"pass"}]},{"legacy_code":1000000,"patient_id":"10238","entity":"Tooth surfaces","api_count":13,"ui_count":13,"status":"pass","row_checks":[{"cells":["1","1"],"status":"pass"},{"cells":["1","2"],"status":"pass"}]}]
+
+[1A[2K[8/29] tests/charting-parity.spec.ts:560:5 › charting filters reduce totals in UI
+[1A[2K[9/29] tests/appointments-booking.spec.ts:175:5 › appointment creation uses latest clinician and location selections
+[1A[2K[10/29] tests/charting-parity.spec.ts:602:5 › charting notes preset export/import roundtrip
+[1A[2K[11/29] tests/charting-parity.spec.ts:652:5 › charting notes share link roundtrip (non-text filters)
+[1A[2K[12/29] tests/appointments-booking.spec.ts:246:5 › booking conflict check debounces and surfaces latest conflicts
+[1A[2K[13/29] tests/appointments-booking.spec.ts:304:5 › booking modal requires minimum fields before enabling submit
+[1A[2K[14/29] tests/charting-parity.spec.ts:717:5 › charting notes share link includes text search when opted in
+[1A[2K[15/29] tests/charting-viewer.spec.ts:8:5 › charting viewer renders read-only sections
+[1A[2K[16/29] tests/appointments-booking.spec.ts:329:5 › visit appointments require address, clinic does not
+[1A[2K[17/29] tests/charting-viewer.spec.ts:49:5 › charting viewer gating follows backend config
+[1A[2K[18/29] tests/clinical-chart.spec.ts:6:5 › clinical chart toggle renders tooth badges
+[1A[2Ktests/clinical-chart.spec.ts:6:5 › clinical chart toggle renders tooth badges
+CREATED_PROCEDURE {
+  id: [33m17[39m,
+  patient_id: [33m10250[39m,
+  appointment_id: [1mnull[22m,
+  tooth: [32m'UR1'[39m,
+  surface: [1mnull[22m,
+  procedure_code: [32m'PROC'[39m,
+  description: [32m'Test procedure'[39m,
+  fee_pence: [33m1200[39m,
+  status: [32m'completed'[39m,
+  performed_at: [32m'2026-02-04T13:51:31.525165Z'[39m,
+  created_by: { id: [33m1[39m, email: [32m'omid2000@hotmail.co.uk'[39m, role: [32m'superadmin'[39m }
+}
+
+[1A[2K[19/29] tests/appointments-booking.spec.ts:352:5 › conflict banner shows overlapping appointments with view day link
+[1A[2K[20/29] tests/appointments-booking.spec.ts:405:5 › booking submit is blocked when conflicts exist
+[1A[2K[21/29] tests/clinical-view-mode.spec.ts:21:5 › clinical view mode persists across refresh and patient navigation
+[1A[2K[22/29] tests/appointments-booking.spec.ts:456:5 › rescheduling respects conflicts and persists successful moves
+[1A[2K[23/29] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K[24/29] tests/clinical-view-mode.spec.ts:56:5 › tooth badges remain stable across mode changes and refresh
+[1A[2Ktests/clinical-view-mode.spec.ts:56:5 › tooth badges remain stable across mode changes and refresh
+CREATED_PROCEDURE {
+  id: [33m18[39m,
+  patient_id: [33m10260[39m,
+  appointment_id: [1mnull[22m,
+  tooth: [32m'UR1'[39m,
+  surface: [1mnull[22m,
+  procedure_code: [32m'PROC'[39m,
+  description: [32m'Test procedure'[39m,
+  fee_pence: [33m1200[39m,
+  status: [32m'completed'[39m,
+  performed_at: [32m'2026-02-04T13:51:45.083167Z'[39m,
+  created_by: { id: [33m1[39m, email: [32m'omid2000@hotmail.co.uk'[39m, role: [32m'superadmin'[39m }
+}
+
+[1A[2K[25/29] tests/patient-attachments.spec.ts:7:5 › patient attachments upload, preview, download, delete
+[1A[2K[26/29] tests/patients/transactions-tab.spec.ts:6:5 › patient transactions tab renders, paginates, and filters
+[1A[2K[27/29] tests/r4-calendar-readonly.spec.ts:21:5 › r4 calendar read-only filters and rendering
+[1A[2K[28/29] tests/recalls-export.spec.ts:17:5 › recalls export filename preview matches download and sanitizes
+[1A[2K[29/29] tests/r4-calendar-readonly.spec.ts:113:5 › r4 calendar links unlinked appointment to patient
+[1A[2K  4 skipped
+  25 passed (1.7m)

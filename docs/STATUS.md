@@ -172,6 +172,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Recorded flake diagnosis and failing snippet in `.run/stage59/flake_analysis.md`.
   - Stability proof captured with repeated execution logs in `.run/stage59/single_run.txt` and `.run/stage59/repeat_10x.txt` (`10/10` green).
   - Added release readiness runbook: `docs/RELEASE_CHECKLIST.md`, and linked it from `docs/OPERATIONS.md`.
+- 2026-02-04: Stage 60 completed (MVP release candidate lock + deployment rehearsal).
+  - Executed release checklist gates and captured evidence: `.run/stage60/env_check.txt`, `.run/stage60/health_before.txt`, `.run/stage60/verify.txt`, `.run/stage60/pytest.txt`.
+  - Ran Playwright smoke/parity rehearsal commands and captured logs at `.run/stage60/playwright_smoke.txt` and `.run/stage60/playwright_parity.txt`.
+  - Ran backup gate with artefact validation (`gzip -t`, `tar -tzf`) and recorded outputs in `.run/stage60/backup_run.txt` and `.run/stage60/backup_validation.txt`.
+  - Completed isolated RC restore smoke from latest DB backup with pre/post health evidence: `.run/stage60/restore_context.txt`, `.run/stage60/health_rc_before_restore.txt`, `.run/stage60/health_rc_after_restore.txt`.
+  - Stage report recorded at `.run/stage60/REPORT.md`; no open blockers at close-out.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
