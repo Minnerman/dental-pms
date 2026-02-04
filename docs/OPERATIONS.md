@@ -30,3 +30,4 @@
 ## Go-live + monitoring
 - UAT checklist: `docs/UAT_CHECKLIST.md`
 - Monitoring and first-response triage: `docs/OPS_MONITORING.md`
+- Release-ready gate/checklist: `docs/RELEASE_CHECKLIST.md`

@@ -1,0 +1,5 @@
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.5s)
