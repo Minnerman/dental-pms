@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16
-    container_name: dental_pms_db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -20,7 +19,6 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: dental_pms_backend
     restart: unless-stopped
     env_file:
       - .env
@@ -65,7 +63,6 @@ services:
       context: ./frontend
       args:
         BUILD_SHA: ${BUILD_SHA:-dev}
-    container_name: dental_pms_frontend
     restart: unless-stopped
     working_dir: /app
     command: ["npm","run","dev","--","--hostname","0.0.0.0","--port","3000"]

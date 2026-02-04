@@ -37,6 +37,24 @@ Expected:
 - Restore drill reference: Stage 53 entry in `docs/STATUS.md`.
 - Backup restore runbook: `docs/OPS_BACKUPS.md` (DB + attachments restore commands).
 
+## RC isolation drill (no compose variant required)
+Run an isolated parallel stack by setting a project name and alternate ports:
+
+```bash
+export COMPOSE_PROJECT_NAME="dentalpms_rc_test"
+export BACKEND_PORT=8110
+export FRONTEND_PORT=3110
+export POSTGRES_PORT=5443
+
+docker compose up -d --build
+docker compose ps
+curl -fsS "http://localhost:${BACKEND_PORT}/health"
+curl -fsS "http://localhost:${FRONTEND_PORT}/" >/dev/null
+
+docker compose down -v
+unset COMPOSE_PROJECT_NAME BACKEND_PORT FRONTEND_PORT POSTGRES_PORT
+```
+
 ## Post-deploy verify
 ```bash
 bash ops/health.sh

@@ -178,6 +178,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Ran backup gate with artefact validation (`gzip -t`, `tar -tzf`) and recorded outputs in `.run/stage60/backup_run.txt` and `.run/stage60/backup_validation.txt`.
   - Completed isolated RC restore smoke from latest DB backup with pre/post health evidence: `.run/stage60/restore_context.txt`, `.run/stage60/health_rc_before_restore.txt`, `.run/stage60/health_rc_after_restore.txt`.
   - Stage report recorded at `.run/stage60/REPORT.md`; no open blockers at close-out.
+- 2026-02-04: Stage 61 completed (remove fixed `container_name` for native compose project isolation).
+  - Removed fixed `container_name` entries from `docker-compose.yml` (`db`, `backend`, `frontend`) so names are project-scoped.
+  - Verified compose rendering still succeeds: `docker compose config` (`/tmp/compose_rendered.yml`).
+  - Verified default workflow remains green after change: `docker compose up -d --build`, `bash ops/health.sh`, `bash ops/verify.sh`, `docker compose exec -T backend pytest -q` (`214 passed, 2 skipped`).
+  - Verified two projects run concurrently without collisions using `COMPOSE_PROJECT_NAME=dentalpms_rc_test` + port overrides; evidence in `.run/stage61/ps_rc.txt` and `.run/stage61/both_projects_running.txt`.
+  - Verified RC teardown does not impact default project (`.run/stage61/ps_default_after_rc_teardown.txt`, `.run/stage61/health_default_after_rc_teardown.txt`).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
