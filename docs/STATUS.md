@@ -184,6 +184,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Verified default workflow remains green after change: `docker compose up -d --build`, `bash ops/health.sh`, `bash ops/verify.sh`, `docker compose exec -T backend pytest -q` (`214 passed, 2 skipped`).
   - Verified two projects run concurrently without collisions using `COMPOSE_PROJECT_NAME=dentalpms_rc_test` + port overrides; evidence in `.run/stage61/ps_rc.txt` and `.run/stage61/both_projects_running.txt`.
   - Verified RC teardown does not impact default project (`.run/stage61/ps_default_after_rc_teardown.txt`, `.run/stage61/health_default_after_rc_teardown.txt`).
+- 2026-02-04: Stage 62 completed (production-mode dry run: systemd + backups + rollback smoke).
+  - Validated repo systemd templates and captured unit definitions at `.run/stage62/systemd_units.txt`; host `dental-pms-backup.*` units were not installed/active in this environment (`.run/stage62/backup_timer_status.txt`, `.run/stage62/backup_service_status.txt`).
+  - Executed deterministic backup via `ops/backup_run.sh` and validated latest DB backup with `gzip -t` (`.run/stage62/backup_run_script.txt`, `.run/stage62/latest_db_path.txt`).
+  - Ran isolated rollback smoke using `COMPOSE_PROJECT_NAME=dentalpms_rollback_<ts>` with alternate ports and restored latest backup into RC DB (`.run/stage62/rollback_context.txt`).
+  - RC restore gates passed: backend `/health` before+after restore plus DB count snapshot (`.run/stage62/rc_health_before_restore.txt`, `.run/stage62/rc_health_after_restore.txt`, `.run/stage62/rc_counts.txt`).
+  - Final gates green: `.run/stage62/health_final.txt`, `.run/stage62/verify_final.txt`, `.run/stage62/pytest_final.txt` (`214 passed, 2 skipped`).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

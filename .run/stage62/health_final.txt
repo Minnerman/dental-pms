@@ -1,0 +1,14 @@
+Env check: OK (.env)
+Dental PMS health
+NAME                    IMAGE                 COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+dental-pms-backend-1    dental-pms-backend    "uvicorn app.main:ap…"   backend    14 minutes ago   Up 13 minutes (healthy)   0.0.0.0:8100->8000/tcp, [::]:8100->8000/tcp
+dental-pms-db-1         postgres:16           "docker-entrypoint.s…"   db         14 minutes ago   Up 14 minutes (healthy)   0.0.0.0:5442->5432/tcp, [::]:5442->5432/tcp
+dental-pms-frontend-1   dental-pms-frontend   "docker-entrypoint.s…"   frontend   14 minutes ago   Up 13 minutes             0.0.0.0:3100->3000/tcp, [::]:3100->3000/tcp
+
+Backend:
+{"status":"ok"}
+Frontend proxy:
+Frontend proxy: ok
+
+Auth + data (using ADMIN_EMAIL/ADMIN_PASSWORD from .env):
+Auth checks: OK

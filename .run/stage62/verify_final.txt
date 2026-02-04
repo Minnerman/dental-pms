@@ -1,0 +1,263 @@
+Env check: OK (.env)
+Building containers...
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.46kB done
+#1 DONE 0.0s
+
+#2 [frontend internal] load build definition from Dockerfile
+#2 transferring dockerfile: 483B done
+#2 DONE 0.0s
+
+#3 [r4_import internal] load build definition from Dockerfile.r4
+#3 transferring dockerfile: 1.67kB done
+#3 DONE 0.0s
+
+#4 [backend internal] load build definition from Dockerfile
+#4 transferring dockerfile: 1.26kB done
+#4 DONE 0.1s
+
+#5 [backend internal] load metadata for docker.io/library/python:3.12-slim
+#5 ...
+
+#6 [r4_import internal] load metadata for docker.io/library/python:3.12-slim-bullseye
+#6 DONE 0.4s
+
+#7 [frontend internal] load metadata for docker.io/library/node:18-slim
+#7 DONE 0.5s
+
+#5 [backend internal] load metadata for docker.io/library/python:3.12-slim
+#5 DONE 0.4s
+
+#8 [backend internal] load .dockerignore
+#8 transferring context: 2B done
+#8 DONE 0.0s
+
+#9 [r4_import  1/11] FROM docker.io/library/python:3.12-slim-bullseye@sha256:411fa4dcfdce7e7a3057c45662beba9dcd4fa36b2e50a2bfcd6c9333e59bf0db
+#9 DONE 0.0s
+
+#10 [frontend internal] load .dockerignore
+#10 transferring context: 2B done
+#10 DONE 0.1s
+
+#11 [backend  1/11] FROM docker.io/library/python:3.12-slim@sha256:87b49ee9d18db77b0afc7e3adbd994acb9544695217f6e8b4ff352a076a9e6a6
+#11 resolve docker.io/library/python:3.12-slim@sha256:87b49ee9d18db77b0afc7e3adbd994acb9544695217f6e8b4ff352a076a9e6a6 0.0s done
+#11 DONE 0.0s
+
+#12 [r4_import internal] load build context
+#12 transferring context: 22.25kB 0.0s done
+#12 DONE 0.1s
+
+#13 [backend internal] load build context
+#13 transferring context: 22.29kB 0.0s done
+#13 DONE 0.1s
+
+#14 [r4_import  4/11] RUN if [ -f /etc/ssl/openssl.cnf ]; then       sed -i 's/^CipherString = .*/CipherString = DEFAULT@SECLEVEL=0/' /etc/ssl/openssl.cnf || true;       grep -q '^MinProtocol' /etc/ssl/openssl.cnf &&         sed -i 's/^MinProtocol = .*/MinProtocol = TLSv1/' /etc/ssl/openssl.cnf ||         printf '\nMinProtocol = TLSv1\n' >> /etc/ssl/openssl.cnf;     fi
+#14 CACHED
+
+#15 [r4_import  6/11] RUN pip install --no-cache-dir -r /app/requirements.txt
+#15 CACHED
+
+#16 [r4_import  2/11] WORKDIR /app
+#16 CACHED
+
+#17 [r4_import 10/11] COPY pytest.ini /app/pytest.ini
+#17 CACHED
+
+#18 [r4_import  7/11] COPY app /app/app
+#18 CACHED
+
+#19 [r4_import  8/11] COPY alembic.ini /app/alembic.ini
+#19 CACHED
+
+#20 [r4_import  9/11] COPY alembic /app/alembic
+#20 CACHED
+
+#21 [r4_import  5/11] COPY requirements.txt /app/requirements.txt
+#21 CACHED
+
+#22 [r4_import  3/11] RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     unixodbc     unixodbc-dev     curl     gnupg     ca-certificates   && mkdir -p /etc/apt/keyrings   && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc      | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg   && echo "deb [signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/11/prod bullseye main"      > /etc/apt/sources.list.d/microsoft-prod.list   && apt-get update   && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17   && rm -rf /var/lib/apt/lists/*
+#22 CACHED
+
+#23 [r4_import 11/11] COPY tests /app/tests
+#23 CACHED
+
+#24 [backend  8/11] COPY alembic /app/alembic
+#24 CACHED
+
+#25 [backend  2/11] WORKDIR /app
+#25 CACHED
+
+#26 [backend 10/11] COPY tests /app/tests
+#26 CACHED
+
+#27 [backend  7/11] COPY alembic.ini /app/alembic.ini
+#27 CACHED
+
+#28 [backend  6/11] COPY app /app/app
+#28 CACHED
+
+#29 [backend  4/11] COPY requirements.txt /app/requirements.txt
+#29 CACHED
+
+#30 [backend  5/11] RUN pip install --no-cache-dir -r /app/requirements.txt
+#30 CACHED
+
+#31 [backend  9/11] COPY pytest.ini /app/pytest.ini
+#31 CACHED
+
+#32 [backend  3/11] RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     unixodbc     unixodbc-dev     openssl     curl     gnupg     ca-certificates   && mkdir -p /etc/apt/keyrings   && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc      | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg   && echo "deb [signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main"      > /etc/apt/sources.list.d/microsoft-prod.list   && apt-get update   && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17   && rm -rf /var/lib/apt/lists/*
+#32 CACHED
+
+#33 [backend 11/11] COPY openssl-legacy.cnf /app/openssl-legacy.cnf
+#33 CACHED
+
+#34 [frontend 1/7] FROM docker.io/library/node:18-slim@sha256:f9ab18e354e6855ae56ef2b290dd225c1e51a564f87584b9bd21dd651838830e
+#34 DONE 0.0s
+
+#35 [backend] exporting to image
+#35 exporting layers done
+#35 writing image sha256:c593e2087ee1c921b92f172410e0b0ac13a4a6b2afa1ccf7e52ebca0dbb5186a 0.0s done
+#35 naming to docker.io/library/dental-pms-backend
+#35 naming to docker.io/library/dental-pms-backend done
+#35 DONE 0.0s
+
+#36 [r4_import] exporting to image
+#36 exporting layers done
+#36 writing image sha256:3d48511b47e9daf8c2f85b1992ff71d4cf8cafa7103d147f77820fef2528089d done
+#36 naming to docker.io/library/dental-pms-r4_import 0.0s done
+#36 DONE 0.0s
+
+#37 [frontend internal] load build context
+#37 ...
+
+#38 [r4_import] resolving provenance for metadata file
+#38 DONE 0.0s
+
+#39 [backend] resolving provenance for metadata file
+#39 DONE 0.0s
+
+#37 [frontend internal] load build context
+#37 transferring context: 2.15MB 0.9s done
+#37 DONE 1.0s
+
+#40 [frontend 2/7] WORKDIR /app
+#40 CACHED
+
+#41 [frontend 5/7] RUN npx playwright install-deps
+#41 CACHED
+
+#42 [frontend 6/7] RUN npx playwright install chromium
+#42 CACHED
+
+#43 [frontend 4/7] RUN npm ci
+#43 CACHED
+
+#44 [frontend 3/7] COPY package.json package-lock.json ./
+#44 CACHED
+
+#45 [frontend 7/7] COPY . .
+#45 CACHED
+
+#46 [frontend] exporting to image
+#46 exporting layers done
+#46 writing image sha256:ec613056e02ad16e83e051f19be84e84ae0d009da493b3d280f9bfe06014d0fc done
+#46 naming to docker.io/library/dental-pms-frontend done
+#46 DONE 0.0s
+
+#47 [frontend] resolving provenance for metadata file
+#47 DONE 0.0s
+Starting containers...
+
+Frontend production build...
+
+> dental-pms-frontend@0.1.0 build
+> next build
+
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/26) ...
+   Generating static pages (6/26) 
+   Generating static pages (12/26) 
+   Generating static pages (19/26) 
+ ✓ Generating static pages (26/26)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    1.57 kB        97.9 kB
+├ ○ /_not-found                          143 B          87.7 kB
+├ ○ /admin/legacy/unmapped-appointments  3.29 kB        90.8 kB
+├ ○ /admin/r4/manual-mappings            2.51 kB        90.1 kB
+├ ○ /admin/r4/patient-mappings           3.46 kB          91 kB
+├ ○ /admin/r4/treatment-plans            2.88 kB        90.4 kB
+├ ƒ /api/health                          0 B                0 B
+├ ○ /appointments                        28.8 kB         187 kB
+├ ƒ /appointments/[id]/audit             2.05 kB        89.6 kB
+├ ○ /cashup                              2.17 kB        89.7 kB
+├ ○ /change-password                     2.07 kB        89.6 kB
+├ ○ /forgot-password                     1.72 kB          98 kB
+├ ○ /login                               2.13 kB        98.4 kB
+├ ○ /notes                               3.02 kB        99.3 kB
+├ ƒ /notes/[id]/audit                    2.05 kB        89.6 kB
+├ ○ /patients                            2.69 kB          99 kB
+├ ƒ /patients/[id]                       140 B           131 kB
+├ ƒ /patients/[id]/attachments           140 B           131 kB
+├ ƒ /patients/[id]/audit                 1.79 kB        89.3 kB
+├ ƒ /patients/[id]/charting              140 B           131 kB
+├ ƒ /patients/[id]/clinical              140 B           131 kB
+├ ƒ /patients/[id]/documents             140 B           131 kB
+├ ƒ /patients/[id]/timeline              2.07 kB        98.4 kB
+├ ○ /patients/new                        2.43 kB          90 kB
+├ ○ /r4-calendar                         4.31 kB         153 kB
+├ ○ /recalls                             10.3 kB         107 kB
+├ ○ /reports                             3.19 kB        90.7 kB
+├ ○ /reset-password                      2.01 kB        98.3 kB
+├ ○ /settings/profile                    1.95 kB        89.5 kB
+├ ○ /settings/schedule                   2.62 kB        90.2 kB
+├ ○ /templates                           3.56 kB        91.1 kB
+├ ○ /treatments                          3.68 kB        91.2 kB
+└ ○ /users                               3.96 kB        91.5 kB
++ First Load JS shared by all            87.5 kB
+  ├ chunks/117-2a678951d8145688.js       31.9 kB
+  ├ chunks/fd9d1056-a8910ee5ce7deead.js  53.6 kB
+  └ other shared chunks (total)          2 kB
+
+
+ƒ Middleware                             26.7 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+Typecheck...
+
+> dental-pms-frontend@0.1.0 typecheck
+> tsc --noEmit
+
+
+Health check...
+Env check: OK (.env)
+Dental PMS health
+NAME                    IMAGE                 COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+dental-pms-backend-1    dental-pms-backend    "uvicorn app.main:ap…"   backend    15 minutes ago   Up 14 minutes (healthy)   0.0.0.0:8100->8000/tcp, [::]:8100->8000/tcp
+dental-pms-db-1         postgres:16           "docker-entrypoint.s…"   db         15 minutes ago   Up 14 minutes (healthy)   0.0.0.0:5442->5432/tcp, [::]:5442->5432/tcp
+dental-pms-frontend-1   dental-pms-frontend   "docker-entrypoint.s…"   frontend   15 minutes ago   Up 14 minutes             0.0.0.0:3100->3000/tcp, [::]:3100->3000/tcp
+
+Backend:
+{"status":"ok"}
+Frontend proxy:
+Frontend proxy: ok
+
+Auth + data (using ADMIN_EMAIL/ADMIN_PASSWORD from .env):
+Auth checks: OK
+
+Config check...
