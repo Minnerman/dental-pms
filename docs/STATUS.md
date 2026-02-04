@@ -959,8 +959,49 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage selection required — no next executable stage is currently defined after Stage 130 closeout.
-- Action: run the operator checklist selection step, then either start the selected stage or land a docs-only stage-definition PR.
+- Stage 131 (`stage131-charting-next-domains`) — implement canonical import + parity for next charting domains: `treatment_plans,treatment_plan_items`.
+
+## Stage 131 follow-on definition — next charting domains (`treatment_plans,treatment_plan_items`)
+- Objective: extend charting canonical import/parity beyond Stage 129/130 domains by adding `treatment_plans` and `treatment_plan_items` from `docs/r4/R4_CHARTING_DISCOVERY.md`.
+- User value: expands clinically relevant chart coverage (planned treatment structures) while preserving deterministic and idempotent import guarantees.
+- Dependencies:
+  - Stage 130 closeout evidence in `.run/stage130/`.
+  - Discovery source: `docs/r4/R4_CHARTING_DISCOVERY.md` (planned work for treatment-plan overlays).
+  - SQL Server read-only guardrail: `R4_SQLSERVER_READONLY=true`.
+- In scope:
+  - Deterministic cohort select for `treatment_plans,treatment_plan_items`.
+  - Patients import apply, charting_canonical apply, resume idempotency, and consolidated parity for the same domains/window.
+  - Stage evidence capture under `.run/stage131/` and STATUS closeout note.
+- Out of scope:
+  - UI/viewer changes.
+  - New domains outside `treatment_plans,treatment_plan_items`.
+  - Refactors to already green Stage 129/130 domain paths.
+  - Any SQL Server write/proc/DDL actions.
+- Acceptance criteria:
+  - Parsed cohort `codes_count >= 1` (and document actual count).
+  - Charting apply reports `unmapped_patients_total=0`.
+  - Resume run reports `imported_created_total=0` and `imported_updated_total=0`.
+  - Parity combined report overall status is `pass` for `treatment_plans,treatment_plan_items`.
+- Hard gates (commands + pass criteria):
+  - `bash ops/health.sh` -> exits `0`.
+  - `bash ops/verify.sh` -> exits `0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains treatment_plans,treatment_plan_items --date-from 2017-01-01 --date-to 2026-02-01 --limit 200 --mode union --order hashed --seed 4 --output /tmp/stage131_codes.csv` -> exits `0`; then parsed code count check (`codes_count >= 1`) via Python CSV reader exits `0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity patients --patient-codes-file /tmp/stage131_codes.csv --apply --confirm APPLY --stats-out /tmp/stage131_patients_apply_stats.json` -> exits `0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_import --source sqlserver --entity charting_canonical --patient-codes-file /tmp/stage131_codes.csv --charting-from 2017-01-01 --charting-to 2026-02-01 --batch-size 50 --state-file /tmp/stage131_state.json --run-summary-out /tmp/stage131_run_summary_apply.json --apply --confirm APPLY --stats-out /tmp/stage131_charting_apply_stats.json --output-json /tmp/stage131_charting_apply_report.json` -> exits `0`, `unmapped_patients_total=0`.
+  - Same charting command with `--resume` and `--run-summary-out /tmp/stage131_run_summary_resume.json --stats-out /tmp/stage131_charting_resume_stats.json --output-json /tmp/stage131_charting_resume_report.json` -> exits `0`, `imported_created_total=0`, `imported_updated_total=0`.
+  - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_parity_run --patient-codes-file /tmp/stage131_codes.csv --domains treatment_plans,treatment_plan_items --date-from 2017-01-01 --date-to 2026-02-01 --output-json /tmp/stage131_parity_combined.json --output-dir /tmp/stage131_parity_domains` -> exits `0`, overall status `pass`.
+- Artefacts to capture:
+  - `.run/stage131/health.txt`, `.run/stage131/verify.txt`
+  - `.run/stage131/stage131_codes.csv`, `.run/stage131/cohort_select.txt`
+  - `.run/stage131/stage131_patients_apply_stats.json`
+  - `.run/stage131/stage131_charting_apply_stats.json`, `.run/stage131/stage131_charting_apply_report.json`, `.run/stage131/stage131_run_summary_apply.json`
+  - `.run/stage131/stage131_charting_resume_stats.json`, `.run/stage131/stage131_charting_resume_report.json`, `.run/stage131/stage131_run_summary_resume.json`
+  - `.run/stage131/stage131_parity_combined.json`, `.run/stage131/stage131_parity_domains.tgz`
+  - `.run/stage131/status_checks.txt`
+- Rollback / safety notes:
+  - Stop immediately on parity failure or non-idempotent resume.
+  - Keep SQL Server strictly read-only; no writes to R4 under any circumstance.
+  - Use container `/tmp/stage131_*` work files and copy evidence to host `.run/stage131/`.
 
 ## Stage 130 definition — Charting scale-out + stability
 - Objective: increase cohort size (500 then 1000) and confirm charting import + parity remain stable, deterministic, and idempotent.
