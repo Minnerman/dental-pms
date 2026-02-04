@@ -157,6 +157,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Added template scheduler units (not installed automatically): `ops/systemd/dental-pms-backup.service` and `ops/systemd/dental-pms-backup.timer` (`02:30` daily).
   - Evidence captured under `.run/stage56/` (`backup_run_1.txt`, `backup_run_2.txt`) and artefact sanity checks (`gzip -t`, `tar -tzf`).
   - Gates green: `bash ops/health.sh`, `bash ops/verify.sh`, and `docker compose exec -T backend pytest -q`.
+- 2026-02-04: Stage 57 completed (go-live acceptance + monitoring checklist).
+  - Added go-live UAT script at `docs/UAT_CHECKLIST.md` with receptionist and clinician flows and expected results per step.
+  - Added monitoring/triage runbook at `docs/OPS_MONITORING.md` covering first-5-minute checks, logs, DB sanity, disk/backups, and common failure modes.
+  - Added helper script `ops/triage.sh` for one-shot triage capture (`compose ps`, health, last 100 logs per service, `df -h`) and stored sample output at `.run/stage57/triage_sample.txt`.
+  - Gates green: `bash ops/health.sh` and `bash ops/verify.sh`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
