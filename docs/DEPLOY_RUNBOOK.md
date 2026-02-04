@@ -68,18 +68,22 @@ Common failure classes:
 - Port conflicts: check bindings and adjust `BACKEND_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT` in `.env`.
 - DB startup timing: check `docker compose logs db` and rerun migrations after DB is healthy.
 
-## Backups (Stage 53 drill target)
+## Backups
 Data locations:
 - Postgres volume: `dental_pms_db_data`
 - Attachments/uploads volume: `dental_pms_attachments`
 
-Existing helper scripts:
-- `ops/backup_db_volume.sh`
-- `ops/restore_db_volume.sh`
-- `ops/db_backup.sh`
+Primary ops backup docs:
+- `docs/OPS_BACKUPS.md`
+
+Backup/restore helpers:
+- `ops/backup_run.sh`
+- `ops/backup_db.sh`
+- `ops/backup_attachments.sh`
 - `ops/db_restore.sh`
 
-Stage 53 will run and document a full backup/restore drill.
+Historical drill reference:
+- Stage 53 backup/restore drill (`2026-02-03`) in `docs/STATUS.md`.
 
 ## Rollback
 Application rollback:

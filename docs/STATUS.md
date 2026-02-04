@@ -149,6 +149,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Tooth badges (`P` planned / `H` history) remain stable across mode changes and refresh, based on loaded clinical + treatment plan data.
   - Added Playwright coverage for persistence + badge stability in `frontend/tests/clinical-view-mode.spec.ts`.
   - Repeated Stage 55 Playwright loop passed `10/10` consecutive runs (`2 passed` per run).
+- 2026-02-04: Stage 56 completed (ops hardening: scheduled backups + retention + docs/templates).
+  - Added backup scripts: `ops/backup_db.sh`, `ops/backup_attachments.sh`, and `ops/backup_run.sh`.
+  - Default backup destination resolution: `BACKUP_DIR` override, else `/srv/dental-pms/backups` if present, else `./.run/backups`.
+  - Enforced deterministic retention via `BACKUP_KEEP` (default `14`) for DB backups (`db_*.sql.gz`) and attachments archives (`attachments_*.tgz`).
+  - Added `docs/OPS_BACKUPS.md` and linked it from `docs/DEPLOY_RUNBOOK.md` with run, restore, and operator guidance.
+  - Added template scheduler units (not installed automatically): `ops/systemd/dental-pms-backup.service` and `ops/systemd/dental-pms-backup.timer` (`02:30` daily).
+  - Evidence captured under `.run/stage56/` (`backup_run_1.txt`, `backup_run_2.txt`) and artefact sanity checks (`gzip -t`, `tar -tzf`).
+  - Gates green: `bash ops/health.sh`, `bash ops/verify.sh`, and `docker compose exec -T backend pytest -q`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

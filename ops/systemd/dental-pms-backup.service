@@ -1,0 +1,13 @@
+[Unit]
+Description=Dental PMS backup job (DB + attachments)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dental-pms
+Environment=BACKUP_KEEP=14
+ExecStart=/usr/bin/bash /srv/dental-pms/ops/backup_run.sh
+
+[Install]
+WantedBy=multi-user.target
