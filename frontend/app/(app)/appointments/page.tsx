@@ -547,6 +547,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState("");
@@ -723,14 +724,19 @@ export default function AppointmentsPage() {
     : locationText;
   const activeLocation = showNewModal ? modalLocation ?? location : location;
   const loadAppointmentsRequestId = useRef(0);
+  const loadPatientsRequestId = useRef(0);
 
   const filteredPatients = useMemo(() => {
+    const merged = new Map<number, Patient>();
+    for (const patient of patients) merged.set(patient.id, patient);
+    for (const patient of patientSearchResults) merged.set(patient.id, patient);
+    const mergedPatients = Array.from(merged.values());
     const q = patientQuery.toLowerCase().trim();
-    if (!q) return patients;
-    return patients.filter((p) =>
+    if (!q) return mergedPatients;
+    return mergedPatients.filter((p) =>
       `${p.first_name} ${p.last_name}`.toLowerCase().includes(q)
     );
-  }, [patientQuery, patients]);
+  }, [patientQuery, patients, patientSearchResults]);
 
   const calendarEvents = useMemo<CalendarEvent[]>(
     () =>
@@ -1259,17 +1265,43 @@ export default function AppointmentsPage() {
     }
   }, [locationFilter, range, router]);
 
-  const loadPatients = useCallback(async () => {
+  const loadPatients = useCallback(async (query?: string) => {
+    const requestId = ++loadPatientsRequestId.current;
     try {
-      const res = await apiFetch("/api/patients?limit=200");
+      const params = new URLSearchParams({ limit: "200" });
+      const trimmed = query?.trim() ?? "";
+      if (trimmed) params.set("q", trimmed);
+      const res = await apiFetch(`/api/patients?${params.toString()}`);
       if (res.ok) {
         const data = (await res.json()) as Patient[];
-        setPatients(data);
+        if (requestId !== loadPatientsRequestId.current) return;
+        if (trimmed) {
+          setPatientSearchResults(data);
+        } else {
+          setPatients(data);
+        }
       }
     } catch {
-      setPatients([]);
+      if (requestId !== loadPatientsRequestId.current) return;
+      if (query?.trim()) {
+        setPatientSearchResults([]);
+      } else {
+        setPatients([]);
+      }
     }
   }, []);
+
+  useEffect(() => {
+    const query = patientQuery.trim();
+    if (!query) {
+      setPatientSearchResults([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadPatients(query);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [loadPatients, patientQuery]);
 
   const loadUsers = useCallback(async () => {
     try {

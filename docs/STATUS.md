@@ -137,6 +137,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Restore validated with strict DB replay (`psql -v ON_ERROR_STOP=1`) after resetting schema (`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`), then restoring attachments volume.
   - Post-restore gates green: `ops/health.sh` passed, Alembic head present (`0048_r4_charting_canonical_content_hash`), and spot-check counts were sane (`patients=477`, `appointments=200`).
   - Evidence recorded at `.run/stage53/REPORT.md` (binary backup artefacts remain uncommitted by design).
+- 2026-02-04: Stage 54 completed (appointments reliability).
+  - Closed Stage 31 backlog reliability paths: booking modal patient selection remained deterministic across refresh/reopen, calendar/day-sheet switching remained stable, and creation flow with clinician/location switching stayed consistent.
+  - Hardened booking data loading by supporting server-backed patient query results in the appointments modal (not limited to initial first-page patient list).
+  - Strengthened Playwright booking reliability coverage in `frontend/tests/appointments-booking.spec.ts` with deterministic patient selection helper behaviour.
+  - Repeated appointment booking suite stability loop passed `10/10` consecutive runs (`9 passed, 4 skipped` per run; no flaky failures).
+  - Gates green: `bash ops/health.sh`, `bash ops/verify.sh`, and `docker compose exec -T backend pytest -q` (`214 passed, 2 skipped`).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

@@ -56,6 +56,30 @@ async function createConflictAppointment(
   });
   expect(response.ok()).toBeTruthy();
 }
+
+async function selectBookingPatient(page: any, patientId: string, searchTerm: string) {
+  const search = page.getByTestId("booking-patient-search");
+  const select = page.getByTestId("booking-patient-select");
+  const searchResponse = page
+    .waitForResponse(
+      (response: any) =>
+        response.url().includes("/api/patients?") &&
+        response.url().includes("q=") &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+      { timeout: 15_000 }
+    )
+    .catch(() => null);
+  await search.fill("");
+  await search.pressSequentially(searchTerm, { delay: 20 });
+  await expect(search).toHaveValue(searchTerm);
+  await searchResponse;
+  await expect(select.locator(`option[value="${patientId}"]`)).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  await select.selectOption(String(patientId));
+  await expect(select).toHaveValue(String(patientId));
+}
 test("appointments deep link opens modal and cleans URL", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
@@ -163,15 +187,7 @@ test("appointment creation uses latest clinician and location selections", async
   await clickNewAppointment(page);
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
-  const patientSearch = page.getByTestId("booking-patient-search");
-  await patientSearch.fill(lastName);
-  const patientSelect = page.getByTestId("booking-patient-select");
-  await expect(patientSelect.locator(`option[value="${patientId}"]`)).toHaveCount(
-    1,
-    { timeout: 15_000 }
-  );
-  await patientSelect.selectOption(String(patientId));
-  await expect(patientSelect).toHaveValue(String(patientId));
+  await selectBookingPatient(page, patientId, lastName);
 
   const start = page.getByTestId("booking-start");
   await expect(start).toBeVisible({ timeout: 60_000 });
@@ -231,13 +247,15 @@ test("booking conflict check debounces and surfaces latest conflicts", async ({
   page,
   request,
 }) => {
+  const conflictLastName = `Patient ${Date.now()}`;
   const conflictPatientId = await createPatient(request, {
     first_name: "Conflict",
-    last_name: `Patient ${Date.now()}`,
+    last_name: conflictLastName,
   });
+  const bookingLastName = `Patient ${Date.now()}`;
   const bookingPatientId = await createPatient(request, {
     first_name: "Booking",
-    last_name: `Patient ${Date.now()}`,
+    last_name: bookingLastName,
   });
 
   await openAppointments(page, request, "/appointments?date=2026-01-15");
@@ -270,7 +288,7 @@ test("booking conflict check debounces and surfaces latest conflicts", async ({
   await clickNewAppointment(page);
   await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
 
-  await page.getByTestId("booking-patient-select").selectOption(String(bookingPatientId));
+  await selectBookingPatient(page, bookingPatientId, bookingLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T09:15");
   await page.getByTestId("booking-end").fill("2026-01-15T09:40");
   await page.getByTestId("booking-end").fill("2026-01-15T09:45");
@@ -287,9 +305,10 @@ test("booking modal requires minimum fields before enabling submit", async ({
   page,
   request,
 }) => {
+  const requiredLastName = `Required ${Date.now()}`;
   const patientId = await createPatient(request, {
     first_name: "Test",
-    last_name: `Required ${Date.now()}`,
+    last_name: requiredLastName,
   });
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
@@ -299,7 +318,7 @@ test("booking modal requires minimum fields before enabling submit", async ({
   await expect(page.getByTestId("booking-error")).toBeVisible();
   await expect(page.getByTestId("booking-error-patient")).toBeVisible();
 
-  await page.getByTestId("booking-patient-select").selectOption(String(patientId));
+  await selectBookingPatient(page, patientId, requiredLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T09:00");
   await page.getByTestId("booking-end").fill("2026-01-15T09:30");
 
@@ -308,14 +327,15 @@ test("booking modal requires minimum fields before enabling submit", async ({
 });
 
 test("visit appointments require address, clinic does not", async ({ page, request }) => {
+  const visitLastName = `Test ${Date.now()}`;
   const patientId = await createPatient(request, {
     first_name: "Visit",
-    last_name: `Test ${Date.now()}`,
+    last_name: visitLastName,
   });
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
 
-  await page.getByTestId("booking-patient-select").selectOption(String(patientId));
+  await selectBookingPatient(page, patientId, visitLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T10:00");
   await page.getByTestId("booking-end").fill("2026-01-15T10:30");
 
@@ -333,13 +353,15 @@ test("conflict banner shows overlapping appointments with view day link", async 
   page,
   request,
 }) => {
+  const conflictLastName = `Patient ${Date.now()}`;
   const conflictPatientId = await createPatient(request, {
     first_name: "Conflict",
-    last_name: `Patient ${Date.now()}`,
+    last_name: conflictLastName,
   });
+  const bookingLastName = `Patient ${Date.now()}`;
   const bookingPatientId = await createPatient(request, {
     first_name: "Booking",
-    last_name: `Patient ${Date.now()}`,
+    last_name: bookingLastName,
   });
 
   await openAppointments(page, request, "/appointments?date=2026-01-15");
@@ -371,7 +393,7 @@ test("conflict banner shows overlapping appointments with view day link", async 
   await clickNewAppointment(page);
   await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
 
-  await page.getByTestId("booking-patient-select").selectOption(String(bookingPatientId));
+  await selectBookingPatient(page, bookingPatientId, bookingLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T09:15");
   await page.getByTestId("booking-end").fill("2026-01-15T09:45");
 
@@ -381,13 +403,15 @@ test("conflict banner shows overlapping appointments with view day link", async 
 });
 
 test("booking submit is blocked when conflicts exist", async ({ page, request }) => {
+  const conflictLastName = `Patient ${Date.now()}`;
   const conflictPatientId = await createPatient(request, {
     first_name: "Conflict",
-    last_name: `Patient ${Date.now()}`,
+    last_name: conflictLastName,
   });
+  const bookingLastName = `Patient ${Date.now()}`;
   const bookingPatientId = await createPatient(request, {
     first_name: "Booking",
-    last_name: `Patient ${Date.now()}`,
+    last_name: bookingLastName,
   });
 
   await openAppointments(page, request, "/appointments?date=2026-01-15");
@@ -420,7 +444,7 @@ test("booking submit is blocked when conflicts exist", async ({ page, request })
   await clickNewAppointment(page);
   await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
 
-  await page.getByTestId("booking-patient-select").selectOption(String(bookingPatientId));
+  await selectBookingPatient(page, bookingPatientId, bookingLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T10:15");
   await page.getByTestId("booking-end").fill("2026-01-15T10:45");
 
