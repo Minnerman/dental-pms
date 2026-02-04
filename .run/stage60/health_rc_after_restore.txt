@@ -1,0 +1,7 @@
+RC health after restore
+NAME                                      IMAGE                                   COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+dentalpms_rc_20260204_135625-backend-1    dentalpms_rc_20260204_135625-backend    "uvicorn app.main:ap…"   backend    26 seconds ago   Up 20 seconds (healthy)   0.0.0.0:9100->8000/tcp, [::]:9100->8000/tcp
+dentalpms_rc_20260204_135625-db-1         postgres:16                             "docker-entrypoint.s…"   db         26 seconds ago   Up 25 seconds (healthy)   0.0.0.0:6542->5432/tcp, [::]:6542->5432/tcp
+dentalpms_rc_20260204_135625-frontend-1   dentalpms_rc_20260204_135625-frontend   "docker-entrypoint.s…"   frontend   26 seconds ago   Up 9 seconds              0.0.0.0:4100->3000/tcp, [::]:4100->3000/tcp
+backend_health={"status":"ok"}
+frontend_proxy=ok
