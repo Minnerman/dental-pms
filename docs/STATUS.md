@@ -143,6 +143,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Strengthened Playwright booking reliability coverage in `frontend/tests/appointments-booking.spec.ts` with deterministic patient selection helper behaviour.
   - Repeated appointment booking suite stability loop passed `10/10` consecutive runs (`9 passed, 4 skipped` per run; no flaky failures).
   - Gates green: `bash ops/health.sh`, `bash ops/verify.sh`, and `docker compose exec -T backend pytest -q` (`214 passed, 2 skipped`).
+- 2026-02-04: Stage 55 completed (clinical trust polish).
+  - Persistence scope finalised as localStorage/session-side (`clinicalViewMode` key), with hydration guard to prevent default-mode overwrite during route/load transitions.
+  - Clinical chart view mode now remains deterministic across refresh and patient-to-patient navigation.
+  - Tooth badges (`P` planned / `H` history) remain stable across mode changes and refresh, based on loaded clinical + treatment plan data.
+  - Added Playwright coverage for persistence + badge stability in `frontend/tests/clinical-view-mode.spec.ts`.
+  - Repeated Stage 55 Playwright loop passed `10/10` consecutive runs (`2 passed` per run).
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

@@ -791,6 +791,7 @@ export default function PatientDetailClient({
   const [clinicalViewMode, setClinicalViewMode] = useState<
     "current" | "planned" | "history"
   >("current");
+  const [clinicalViewHydrated, setClinicalViewHydrated] = useState(false);
   const [chartingLoaded, setChartingLoaded] = useState(false);
   const [chartingLoading, setChartingLoading] = useState(false);
   const [chartingError, setChartingError] = useState<string | null>(null);
@@ -3069,16 +3070,22 @@ export default function PatientDetailClient({
     const fromUrl = searchParams?.get("clinicalView");
     if (fromUrl === "current" || fromUrl === "planned" || fromUrl === "history") {
       setClinicalViewMode((prev) => (prev === fromUrl ? prev : fromUrl));
+      setClinicalViewHydrated(true);
       return;
     }
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") {
+      setClinicalViewHydrated(true);
+      return;
+    }
     const stored = window.localStorage.getItem("clinicalViewMode");
     if (stored === "current" || stored === "planned" || stored === "history") {
       setClinicalViewMode((prev) => (prev === stored ? prev : stored));
     }
+    setClinicalViewHydrated(true);
   }, [searchParams]);
 
   useEffect(() => {
+    if (!clinicalViewHydrated) return;
     if (typeof window !== "undefined") {
       window.localStorage.setItem("clinicalViewMode", clinicalViewMode);
     }
@@ -3094,7 +3101,7 @@ export default function PatientDetailClient({
     if (current === next) return;
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [clinicalViewMode, pathname, router, searchParams]);
+  }, [clinicalViewHydrated, clinicalViewMode, pathname, router, searchParams]);
 
   const plannedTeeth = useMemo(() => {
     const activeStatuses = new Set(["proposed", "accepted"]);

@@ -14,6 +14,14 @@ type ProcedureOverrides = {
   fee_pence?: number;
 };
 
+type TreatmentPlanOverrides = {
+  tooth?: string;
+  surface?: string | null;
+  procedure_code?: string;
+  description?: string;
+  fee_pence?: number | null;
+};
+
 type AppointmentOverrides = {
   clinician_user_id?: number | null;
   starts_at?: string;
@@ -77,6 +85,28 @@ export async function createClinicalProcedure(
   const result = await response.json();
   console.log("CREATED_PROCEDURE", result);
   return result;
+}
+
+export async function createTreatmentPlanItem(
+  request: APIRequestContext,
+  patientId: string,
+  overrides: TreatmentPlanOverrides = {}
+) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const payload = {
+    tooth: overrides.tooth ?? "UL1",
+    surface: overrides.surface ?? null,
+    procedure_code: overrides.procedure_code ?? "PLAN",
+    description: overrides.description ?? "Planned treatment",
+    fee_pence: overrides.fee_pence ?? 1500,
+  };
+  const response = await request.post(`${baseURL}/api/patients/${patientId}/treatment-plan`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: payload,
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
 }
 
 export async function createAppointment(
