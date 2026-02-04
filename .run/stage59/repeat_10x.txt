@@ -1,0 +1,60 @@
+RUN 1
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.5s)
+RUN 2
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.6s)
+RUN 3
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.5s)
+RUN 4
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.5s)
+RUN 5
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.4s)
+RUN 6
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.6s)
+RUN 7
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.5s)
+RUN 8
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.6s)
+RUN 9
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.6s)
+RUN 10
+
+Running 1 test using 1 worker
+
+[1A[2K[1/1] tests/appointments-booking.spec.ts:537:5 › appointment last updated metadata changes after edit
+[1A[2K  1 passed (5.6s)

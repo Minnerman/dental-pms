@@ -167,6 +167,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Captured before/after triage snapshots at `.run/stage58/triage_before.txt` and `.run/stage58/triage_after.txt`.
   - Captured browser/API evidence in `.run/stage58/uat_playwright.txt`, `.run/stage58/uat_rerun_metadata_edit.txt`, and `.run/stage58/uat_api_checks.json`.
   - UAT close-out: `15/15` checklist steps passed, `0` open blockers.
+- 2026-02-04: Stage 59 completed (flake elimination + release checklist).
+  - Eliminated Playwright flake in `frontend/tests/appointments-booking.spec.ts` test `appointment last updated metadata changes after edit` by scoping appointment event locator to visible nodes only.
+  - Recorded flake diagnosis and failing snippet in `.run/stage59/flake_analysis.md`.
+  - Stability proof captured with repeated execution logs in `.run/stage59/single_run.txt` and `.run/stage59/repeat_10x.txt` (`10/10` green).
+  - Added release readiness runbook: `docs/RELEASE_CHECKLIST.md`, and linked it from `docs/OPERATIONS.md`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

@@ -535,9 +535,10 @@ test("rescheduling respects conflicts and persists successful moves", async ({
 });
 
 test("appointment last updated metadata changes after edit", async ({ page, request }) => {
+  const lastName = `Meta ${Date.now()}`;
   const patientId = await createPatient(request, {
     first_name: "Audit",
-    last_name: `Meta ${Date.now()}`,
+    last_name: lastName,
   });
   const appointment = await createAppointment(request, patientId, {
     clinician_user_id: null,
@@ -548,11 +549,12 @@ test("appointment last updated metadata changes after edit", async ({ page, requ
   });
 
   await openAppointments(page, request, "/appointments?date=2026-01-15");
-  await page.getByTestId("appointments-view-calendar").click();
-
-  const event = page.getByTestId(`appointment-event-${appointment.id}`);
-  await expect(event).toBeVisible({ timeout: 15_000 });
-  await event.click();
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const row = page.locator("tbody tr", { hasText: new RegExp(lastName, "i") }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.dblclick();
+  await expect(page.getByTestId("edit-appointment-type")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Cancel edit" }).click();
 
   const updatedMeta = page.getByTestId("appointment-updated-meta");
   await expect(updatedMeta).toBeVisible({ timeout: 15_000 });
