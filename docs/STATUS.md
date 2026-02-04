@@ -953,8 +953,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 23 follow-up: scope defined below; next step is implementation on `stage23-<slug>`.
-- Use the Stage 23 hard-gates checklist below as the release gate for that implementation PR.
+- Next up: **Stage selection required** — no unambiguous next implementation stage is currently identified in `docs/STATUS.md` after Stage 23 completion.
+- Candidate signals currently need explicit scoping before execution:
+  - Historical stage notes are mostly marked completed/closed/merged.
+  - Legacy roadmap sections (for older stages) do not define a new active `In progress` target.
+- Operator action: run the Stage 23 operator checklist selection step, then create `stageNNN-<slug>` for the selected stage before implementation.
 
 ## Stage 23 definition (scope approved for implementation)
 - Objective: remove roadmap ambiguity by converting Stage 23 from a TBD placeholder into an actionable, testable stage plan.
