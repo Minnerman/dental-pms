@@ -190,6 +190,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Ran isolated rollback smoke using `COMPOSE_PROJECT_NAME=dentalpms_rollback_<ts>` with alternate ports and restored latest backup into RC DB (`.run/stage62/rollback_context.txt`).
   - RC restore gates passed: backend `/health` before+after restore plus DB count snapshot (`.run/stage62/rc_health_before_restore.txt`, `.run/stage62/rc_health_after_restore.txt`, `.run/stage62/rc_counts.txt`).
   - Final gates green: `.run/stage62/health_final.txt`, `.run/stage62/verify_final.txt`, `.run/stage62/pytest_final.txt` (`214 passed, 2 skipped`).
+- 2026-02-04: Stage 63 completed (host backup timer install + proof).
+  - `dental-pms-backup.timer` installed/enabled on host and active (`Trigger: Thu 2026-02-05 02:30:00 GMT`) with entry in `list-timers`.
+  - Root cause/fix: unit `WorkingDirectory=/srv/dental-pms` initially failed (`status=200/CHDIR`); fixed by symlink `/srv/dental-pms -> /home/amir/dental-pms`.
+  - Manual run success: `dental-pms-backup.service` completed with `status=0/SUCCESS` and backup summary in journald.
+  - Latest artefacts: `LATEST_DB=.run/backups/db/db_2026-02-04_151258.sql.gz`, `LATEST_TGZ=.run/backups/attachments_2026-02-04_151259.tgz`; validation passed (`gzip -t` and `tar -tzf` preview).
+  - Host evidence files captured: `/tmp/dpms_timer_status_final.txt`, `/tmp/dpms_timer_list_final.txt`, `/tmp/dpms_service_status_final.txt`, `/tmp/dpms_service_journal_final.txt`, `/tmp/dpms_srv_symlink.txt`.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.
