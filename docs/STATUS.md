@@ -162,6 +162,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Added monitoring/triage runbook at `docs/OPS_MONITORING.md` covering first-5-minute checks, logs, DB sanity, disk/backups, and common failure modes.
   - Added helper script `ops/triage.sh` for one-shot triage capture (`compose ps`, health, last 100 logs per service, `df -h`) and stored sample output at `.run/stage57/triage_sample.txt`.
   - Gates green: `bash ops/health.sh` and `bash ops/verify.sh`.
+- 2026-02-04: Stage 58 completed (go-live rehearsal UAT run + sign-off record).
+  - Executed full UAT rehearsal against `docs/UAT_CHECKLIST.md` and recorded outcomes in `.run/stage58/UAT_REPORT.md`.
+  - Captured before/after triage snapshots at `.run/stage58/triage_before.txt` and `.run/stage58/triage_after.txt`.
+  - Captured browser/API evidence in `.run/stage58/uat_playwright.txt`, `.run/stage58/uat_rerun_metadata_edit.txt`, and `.run/stage58/uat_api_checks.json`.
+  - UAT close-out: `15/15` checklist steps passed, `0` open blockers.
 - 2026-02-02: Stage 131 completed (charting-only cohort for `perioprobe,bpe,bpe_furcation`, window `2017-01-01..2026-02-01`).
   - Cohort progression is deterministic (`r4_cohort_select --order hashed --seed N`) with host-persistent exclude ledger at `.run/seen_stage131.txt`.
   - Exhaustion proof: selector reached `candidates_before_exclude=1114`, `remaining_after_exclude=0` after tail chunk.

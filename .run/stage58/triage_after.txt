@@ -1,0 +1,272 @@
+
+=== timestamp ===
+2026-02-04T12:28:10Z
+
+=== docker compose ps ===
+NAME                  IMAGE                 COMMAND                  SERVICE    CREATED             STATUS                   PORTS
+dental_pms_backend    dental-pms-backend    "uvicorn app.main:ap…"   backend    2 minutes ago       Up 2 minutes (healthy)   0.0.0.0:8100->8000/tcp, [::]:8100->8000/tcp
+dental_pms_db         postgres:16           "docker-entrypoint.s…"   db         13 hours ago        Up 13 hours (healthy)    0.0.0.0:5442->5432/tcp, [::]:5442->5432/tcp
+dental_pms_frontend   dental-pms-frontend   "docker-entrypoint.s…"   frontend   About an hour ago   Up About an hour         0.0.0.0:3100->3000/tcp, [::]:3100->3000/tcp
+
+=== health check ===
+Env check: OK (.env)
+Dental PMS health
+NAME                  IMAGE                 COMMAND                  SERVICE    CREATED             STATUS                   PORTS
+dental_pms_backend    dental-pms-backend    "uvicorn app.main:ap…"   backend    2 minutes ago       Up 2 minutes (healthy)   0.0.0.0:8100->8000/tcp, [::]:8100->8000/tcp
+dental_pms_db         postgres:16           "docker-entrypoint.s…"   db         13 hours ago        Up 13 hours (healthy)    0.0.0.0:5442->5432/tcp, [::]:5442->5432/tcp
+dental_pms_frontend   dental-pms-frontend   "docker-entrypoint.s…"   frontend   About an hour ago   Up About an hour         0.0.0.0:3100->3000/tcp, [::]:3100->3000/tcp
+
+Backend:
+{"status":"ok"}
+Frontend proxy:
+Frontend proxy: ok
+
+Auth + data (using ADMIN_EMAIL/ADMIN_PASSWORD from .env):
+Auth checks: OK
+health_exit_code=0
+
+=== backend logs (last 100) ===
+dental_pms_backend  | INFO:     172.19.0.3:51360 - "POST /patients HTTP/1.1" 201 Created
+dental_pms_backend  | INFO:     172.19.0.3:51372 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51404 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51414 - "GET /patients/10119 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51392 - "GET /patients/10119 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51376 - "GET /patients/10119 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51430 - "GET /patients/10119?include_deleted=1 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51448 - "GET /patients/10119/timeline HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51436 - "GET /patients/10119/notes HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51468 - "GET /treatments?include_inactive=1 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51496 - "GET /appointments?patient_id=10119&from=2026-02-04T12%3A27%3A27.859Z&to=2027-02-04T12%3A27%3A27.859Z HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51470 - "GET /patients/10119/estimates HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51482 - "GET /appointments?patient_id=10119&from=2025-02-04T12%3A27%3A27.859Z&to=2026-02-04T12%3A27%3A27.859Z HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51462 - "GET /invoices?patient_id=10119 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51514 - "GET /patients/10119/ledger?limit=200 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51544 - "GET /config HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51508 - "GET /users HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51528 - "GET /patients/10119/balance HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51538 - "GET /patients/10119/recalls HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51554 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51558 - "GET /patients/10119?include_deleted=1 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51560 - "GET /patients/10119/notes HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51562 - "GET /patients/10119/timeline HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51516 - "GET /patients/10119/finance-summary?limit=10 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51566 - "GET /treatments?include_inactive=1 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51580 - "GET /appointments?patient_id=10119&from=2025-02-04T12%3A27%3A27.870Z&to=2026-02-04T12%3A27%3A27.870Z HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51592 - "GET /appointments?patient_id=10119&from=2026-02-04T12%3A27%3A27.870Z&to=2027-02-04T12%3A27%3A27.870Z HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51564 - "GET /invoices?patient_id=10119 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51578 - "GET /patients/10119/estimates HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51608 - "GET /patients/10119/ledger?limit=200 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51618 - "GET /patients/10119/balance HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51642 - "GET /config HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51594 - "GET /users HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51644 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51656 - "GET /document-templates HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51638 - "GET /patients/10119/recalls HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51628 - "GET /patients/10119/finance-summary?limit=10 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51664 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51694 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51670 - "GET /patients/10119/documents HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51706 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51700 - "GET /document-templates HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51682 - "GET /patients/10119/attachments HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51732 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51720 - "GET /patients/10119/attachments HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51716 - "GET /patients/10119/documents HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     127.0.0.1:56280 - "GET /health HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51744 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:51758 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:35318 - "POST /auth/login HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:35326 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:35328 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:35344 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:35358 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_list_ms=53.78 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35374 - "GET /recalls?status=due%2Coverdue&limit=50&offset=0 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_list_ms=28.67 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35388 - "GET /recalls?status=due%2Coverdue&limit=50&offset=0 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_export_count_ms=14.78 cache=miss count=46
+dental_pms_backend  | INFO:     172.19.0.3:35396 - "GET /recalls/export_count?status=due%2Coverdue HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_list_ms=27.77 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35408 - "GET /recalls?status=due%2Coverdue%2Cupcoming&limit=50&offset=0 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_list_ms=24.67 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35412 - "GET /recalls?status=due%2Coverdue%2Cupcoming%2Ccompleted&limit=50&offset=0 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_export_count_ms=9.73 cache=miss count=46
+dental_pms_backend  | INFO:     172.19.0.3:35428 - "GET /recalls/export_count?status=due%2Coverdue%2Cupcoming%2Ccompleted HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_list_ms=28.28 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35438 - "GET /recalls?status=due%2Coverdue%2Cupcoming%2Ccompleted%2Ccancelled&limit=50&offset=0 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_export_count_ms=10.46 cache=miss count=46
+dental_pms_backend  | INFO:     172.19.0.3:35454 - "GET /recalls/export_count?status=due%2Coverdue%2Cupcoming%2Ccompleted%2Ccancelled HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     perf: recalls_export_csv_ms=65.46 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35458 - "GET /recalls/export.csv?status=due%2Coverdue%2Cupcoming%2Ccompleted%2Ccancelled HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     export_count_cache_invalidate epoch=1 reason=recalls.export_letters_zip
+dental_pms_backend  | INFO:     perf: recalls_export_zip_ms=472.26 rows=46
+dental_pms_backend  | INFO:     172.19.0.3:35474 - "GET /recalls/letters.zip?status=due%2Coverdue%2Cupcoming%2Ccompleted%2Ccancelled HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:35484 - "GET /recalls/letters.zip?status=due%2Coverdue%2Cupcoming%2Ccompleted%2Ccancelled HTTP/1.1" 401 Unauthorized
+dental_pms_backend  | INFO:     127.0.0.1:40076 - "GET /health HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60296 - "POST /auth/login HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60298 - "POST /patients HTTP/1.1" 201 Created
+dental_pms_backend  | INFO:     172.19.0.3:60314 - "POST /appointments HTTP/1.1" 201 Created
+dental_pms_backend  | INFO:     127.0.0.1:58072 - "GET /health HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60322 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60328 - "GET /me HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60340 - "GET /patients?limit=200 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60332 - "GET /settings/schedule HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60352 - "GET /users HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60354 - "GET /appointments/range?start=2026-01-15&end=2026-01-16 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60362 - "GET /settings/schedule HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60366 - "GET /patients?limit=200 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:60370 - "GET /users HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:53626 - "GET /appointments/757/notes HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:53640 - "GET /patients/10120 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:53648 - "PATCH /appointments/757 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:53658 - "GET /appointments/range?start=2026-01-15&end=2026-01-16 HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     127.0.0.1:59642 - "GET /health HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.1:58980 - "GET /health HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:40624 - "GET /health HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:40628 - "POST /auth/login HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:40636 - "GET /patients HTTP/1.1" 200 OK
+dental_pms_backend  | INFO:     172.19.0.3:40652 - "GET /audit HTTP/1.1" 200 OK
+
+=== frontend logs (last 100) ===
+dental_pms_frontend  | 
+dental_pms_frontend  | > dental-pms-frontend@0.1.0 dev
+dental_pms_frontend  | > next dev --hostname 0.0.0.0 --port 3000
+dental_pms_frontend  | 
+dental_pms_frontend  |   ▲ Next.js 14.2.35
+dental_pms_frontend  |   - Local:        http://localhost:3000
+dental_pms_frontend  |   - Network:      http://0.0.0.0:3000
+dental_pms_frontend  | 
+dental_pms_frontend  |  ✓ Starting...
+dental_pms_frontend  | Attention: Next.js now collects completely anonymous telemetry regarding usage.
+dental_pms_frontend  | This information is used to shape Next.js' roadmap and prioritize features.
+dental_pms_frontend  | You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+dental_pms_frontend  | https://nextjs.org/telemetry
+dental_pms_frontend  | 
+dental_pms_frontend  |  ✓ Ready in 1936ms
+dental_pms_frontend  |  ○ Compiling /api/health ...
+dental_pms_frontend  |  ✓ Compiled /api/health in 697ms (56 modules)
+dental_pms_frontend  |  GET /api/health 200 in 848ms
+dental_pms_frontend  |  GET /api/health 200 in 64ms
+dental_pms_frontend  |  GET /api/health 200 in 19ms
+dental_pms_frontend  |  GET /api/health 200 in 20ms
+dental_pms_frontend  |  GET /api/health 200 in 17ms
+dental_pms_frontend  |  GET /api/health 200 in 18ms
+dental_pms_frontend  |  GET /api/health 200 in 16ms
+dental_pms_frontend  |  GET /api/health 200 in 19ms
+dental_pms_frontend  |  GET /api/health 200 in 19ms
+dental_pms_frontend  |  GET /api/health 200 in 17ms
+dental_pms_frontend  |  GET /api/health 200 in 17ms
+dental_pms_frontend  |  ○ Compiling /middleware ...
+dental_pms_frontend  |  ✓ Compiled /middleware in 658ms (72 modules)
+dental_pms_frontend  |  ○ Compiling /patients/[id] ...
+dental_pms_frontend  |  ✓ Compiled /patients/[id] in 16.8s (2608 modules)
+dental_pms_frontend  |  GET /appointments?date=2026-01-15&book=1 200 in 17275ms
+dental_pms_frontend  |  GET /patients/10094 200 in 17518ms
+dental_pms_frontend  |  ⚠ Cross origin request detected from frontend to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+dental_pms_frontend  | Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+dental_pms_frontend  |  GET /appointments?date=2026-01-15&book=1 200 in 28ms
+dental_pms_frontend  |  ✓ Compiled /patients/[id]/charting in 459ms (2610 modules)
+dental_pms_frontend  |  GET /patients/10095/charting 200 in 1163ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 109ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 96ms
+dental_pms_frontend  |  GET /patients/10095/charting 200 in 55ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15&book=1 200 in 71ms
+dental_pms_frontend  |  GET /patients/10096/charting 200 in 44ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-16 200 in 23ms
+dental_pms_frontend  |  GET /patients/10097/charting 200 in 81ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 99ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 82ms
+dental_pms_frontend  |  GET /patients/10098/charting 200 in 56ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 27ms
+dental_pms_frontend  |  GET /patients/10099/charting 200 in 71ms
+dental_pms_frontend  |  GET /patients/10099/charting 200 in 48ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 33ms
+dental_pms_frontend  |  GET /patients/10095/charting 200 in 57ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 46ms
+dental_pms_frontend  |  GET /patients/10097/charting 200 in 39ms
+dental_pms_frontend  |  GET /patients/10097/charting 200 in 63ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 27ms
+dental_pms_frontend  |  GET /patients/10097/charting 200 in 52ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 32ms
+dental_pms_frontend  |  GET /patients/10097/charting?charting_notes_from=2024-07-02&charting_notes_to=2024-07-03&charting_notes_category=1&v=1 200 in 71ms
+dental_pms_frontend  |  GET /patients/10097/charting 200 in 49ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 27ms
+dental_pms_frontend  |  GET /patients/10105/charting 200 in 69ms
+dental_pms_frontend  |  GET /patients/10106 200 in 76ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 45ms
+dental_pms_frontend  |  ○ Compiling /patients/[id]/clinical ...
+dental_pms_frontend  |  ✓ Compiled /patients/[id]/clinical in 652ms (2612 modules)
+dental_pms_frontend  |  GET /patients/10109/clinical 200 in 1418ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 143ms
+dental_pms_frontend  |  GET /patients/10109/clinical?clinicalView=history 200 in 32ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 38ms
+dental_pms_frontend  |  GET /patients/10114/clinical 200 in 47ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 72ms
+dental_pms_frontend  |  GET /patients/10114/clinical?clinicalView=history 200 in 46ms
+dental_pms_frontend  |  GET /patients/10115/clinical 200 in 40ms
+dental_pms_frontend  |  GET /patients/10117/clinical 200 in 51ms
+dental_pms_frontend  |  GET /patients/10117/clinical 200 in 25ms
+dental_pms_frontend  |  ✓ Compiled /patients/[id]/attachments in 388ms (2614 modules)
+dental_pms_frontend  |  GET /patients/10118/attachments 200 in 1048ms
+dental_pms_frontend  |  GET /patients/10119 200 in 80ms
+dental_pms_frontend  |  ○ Compiling /r4-calendar ...
+dental_pms_frontend  |  ✓ Compiled /r4-calendar in 1535ms (2626 modules)
+dental_pms_frontend  |  GET /r4-calendar?from=2025-01-01&to=2025-01-07 200 in 1889ms
+dental_pms_frontend  |  GET /r4-calendar?from=2025-01-01&to=2025-01-07&show_unlinked=1 200 in 36ms
+dental_pms_frontend  |  ○ Compiling /recalls ...
+dental_pms_frontend  |  ✓ Compiled /recalls in 1100ms (2640 modules)
+dental_pms_frontend  |  GET /recalls 200 in 1363ms
+dental_pms_frontend  |  GET /appointments?date=2026-01-15 200 in 109ms
+dental_pms_frontend  |  ✓ Compiled /api/health in 473ms (1357 modules)
+dental_pms_frontend  |  GET /api/health 200 in 620ms
+
+=== db logs (last 100) ===
+dental_pms_db  | 
+dental_pms_db  | PostgreSQL Database directory appears to contain a database; Skipping initialization
+dental_pms_db  | 
+dental_pms_db  | 2026-02-03 23:46:49.606 UTC [1] LOG:  starting PostgreSQL 16.11 (Debian 16.11-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+dental_pms_db  | 2026-02-03 23:46:49.606 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+dental_pms_db  | 2026-02-03 23:46:49.606 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+dental_pms_db  | 2026-02-03 23:46:49.615 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+dental_pms_db  | 2026-02-03 23:46:49.624 UTC [29] LOG:  database system was shut down at 2026-02-03 23:44:12 UTC
+dental_pms_db  | 2026-02-03 23:46:49.638 UTC [1] LOG:  database system is ready to accept connections
+dental_pms_db  | 2026-02-03 23:51:49.724 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-03 23:52:13.854 UTC [27] LOG:  checkpoint complete: wrote 242 buffers (1.5%); 0 WAL file(s) added, 0 removed, 0 recycled; write=24.098 s, sync=0.014 s, total=24.131 s; sync files=174, longest=0.005 s, average=0.001 s; distance=815 kB, estimate=815 kB; lsn=0/16528568, redo lsn=0/165284F8
+dental_pms_db  | 2026-02-03 23:56:49.954 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-03 23:56:54.502 UTC [27] LOG:  checkpoint complete: wrote 46 buffers (0.3%); 0 WAL file(s) added, 0 removed, 0 recycled; write=4.515 s, sync=0.008 s, total=4.548 s; sync files=22, longest=0.006 s, average=0.001 s; distance=126 kB, estimate=746 kB; lsn=0/16547DC8, redo lsn=0/16547D90
+dental_pms_db  | 2026-02-04 00:01:49.602 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 00:01:52.242 UTC [27] LOG:  checkpoint complete: wrote 27 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.610 s, sync=0.014 s, total=2.641 s; sync files=17, longest=0.008 s, average=0.001 s; distance=97 kB, estimate=681 kB; lsn=0/165603F0, redo lsn=0/165603B8
+dental_pms_db  | 2026-02-04 00:06:49.314 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 00:06:52.757 UTC [27] LOG:  checkpoint complete: wrote 35 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=3.419 s, sync=0.003 s, total=3.443 s; sync files=20, longest=0.002 s, average=0.001 s; distance=134 kB, estimate=627 kB; lsn=0/16587620, redo lsn=0/16581DB0
+dental_pms_db  | 2026-02-04 00:11:49.857 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 00:12:08.751 UTC [27] LOG:  checkpoint complete: wrote 189 buffers (1.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=18.863 s, sync=0.012 s, total=18.895 s; sync files=21, longest=0.011 s, average=0.001 s; distance=416 kB, estimate=606 kB; lsn=0/165FC1A0, redo lsn=0/165EA108
+dental_pms_db  | 2026-02-04 00:16:49.804 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 00:16:53.446 UTC [27] LOG:  checkpoint complete: wrote 37 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=3.612 s, sync=0.009 s, total=3.642 s; sync files=18, longest=0.006 s, average=0.001 s; distance=184 kB, estimate=563 kB; lsn=0/16618428, redo lsn=0/166183F0
+dental_pms_db  | 2026-02-04 07:06:56.443 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 07:06:58.573 UTC [27] LOG:  checkpoint complete: wrote 21 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.106 s, sync=0.006 s, total=2.131 s; sync files=2, longest=0.006 s, average=0.003 s; distance=6 kB, estimate=508 kB; lsn=0/16619C48, redo lsn=0/16619C10
+dental_pms_db  | 2026-02-04 07:11:56.667 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 07:12:20.754 UTC [27] LOG:  checkpoint complete: wrote 241 buffers (1.5%); 0 WAL file(s) added, 0 removed, 0 recycled; write=24.057 s, sync=0.015 s, total=24.088 s; sync files=171, longest=0.006 s, average=0.001 s; distance=864 kB, estimate=864 kB; lsn=0/166F1C50, redo lsn=0/166F1C18
+dental_pms_db  | 2026-02-04 07:16:56.846 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 07:16:58.104 UTC [27] LOG:  checkpoint complete: wrote 12 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.232 s, sync=0.006 s, total=1.259 s; sync files=1, longest=0.006 s, average=0.006 s; distance=28 kB, estimate=780 kB; lsn=0/166F8D68, redo lsn=0/166F8D30
+dental_pms_db  | 2026-02-04 07:26:56.250 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 07:27:23.752 UTC [27] LOG:  checkpoint complete: wrote 275 buffers (1.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=27.473 s, sync=0.010 s, total=27.503 s; sync files=185, longest=0.003 s, average=0.001 s; distance=937 kB, estimate=937 kB; lsn=0/167E31B8, redo lsn=0/167E3148
+dental_pms_db  | 2026-02-04 07:31:56.839 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 07:32:06.200 UTC [27] LOG:  checkpoint complete: wrote 94 buffers (0.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=9.334 s, sync=0.011 s, total=9.362 s; sync files=22, longest=0.008 s, average=0.001 s; distance=312 kB, estimate=874 kB; lsn=0/1683B330, redo lsn=0/16831368
+dental_pms_db  | 2026-02-04 07:36:56.274 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 07:37:22.978 UTC [27] LOG:  checkpoint complete: wrote 267 buffers (1.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=26.669 s, sync=0.013 s, total=26.704 s; sync files=187, longest=0.004 s, average=0.001 s; distance=974 kB, estimate=974 kB; lsn=0/16924BD8, redo lsn=0/16924BA0
+dental_pms_db  | 2026-02-04 11:22:00.722 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 11:22:30.328 UTC [27] LOG:  checkpoint complete: wrote 297 buffers (1.8%); 0 WAL file(s) added, 0 removed, 0 recycled; write=29.575 s, sync=0.013 s, total=29.607 s; sync files=183, longest=0.006 s, average=0.001 s; distance=997 kB, estimate=997 kB; lsn=0/16A1E218, redo lsn=0/16A1E1E0
+dental_pms_db  | 2026-02-04 11:27:00.428 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 11:27:25.131 UTC [27] LOG:  checkpoint complete: wrote 247 buffers (1.5%); 0 WAL file(s) added, 0 removed, 0 recycled; write=24.662 s, sync=0.016 s, total=24.703 s; sync files=178, longest=0.006 s, average=0.001 s; distance=866 kB, estimate=984 kB; lsn=0/16AF6B58, redo lsn=0/16AF6B20
+dental_pms_db  | 2026-02-04 12:27:01.154 UTC [27] LOG:  checkpoint starting: time
+dental_pms_db  | 2026-02-04 12:27:13.995 UTC [27] LOG:  checkpoint complete: wrote 128 buffers (0.8%); 0 WAL file(s) added, 0 removed, 0 recycled; write=12.795 s, sync=0.015 s, total=12.841 s; sync files=79, longest=0.007 s, average=0.001 s; distance=286 kB, estimate=914 kB; lsn=0/16B573F8, redo lsn=0/16B3E470
+
+=== disk usage ===
+Filesystem                         Size  Used Avail Use% Mounted on
+tmpfs                              1.6G  1.9M  1.6G   1% /run
+/dev/mapper/ubuntu--vg-ubuntu--lv   98G   51G   42G  55% /
+tmpfs                              7.8G     0  7.8G   0% /dev/shm
+tmpfs                              5.0M     0  5.0M   0% /run/lock
+/dev/sda2                          2.0G  197M  1.6G  11% /boot
+tmpfs                              1.6G   12K  1.6G   1% /run/user/1000
+/dev/sdb1                          229G  776K  217G   1% /srv/samsun-ssd

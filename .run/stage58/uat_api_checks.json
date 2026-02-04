@@ -1,0 +1,152 @@
+{
+  "base": "http://localhost:3100/api",
+  "timestamp_utc": "2026-02-04T12:30:12.234816Z",
+  "checks": [
+    {
+      "name": "login",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "must_change_password": false
+      }
+    },
+    {
+      "name": "password_reset_request",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "patient_create",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "patient_id": 10122
+      }
+    },
+    {
+      "name": "patient_search_partial",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "query": "UAT1",
+        "matches": 2
+      }
+    },
+    {
+      "name": "patient_open",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "appointment_create",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "appointment_id": 759
+      }
+    },
+    {
+      "name": "appointment_move_update",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "appointment_id": 759
+      }
+    },
+    {
+      "name": "patient_note_create",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "note_id": 2
+      }
+    },
+    {
+      "name": "patient_note_audit",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "audit_rows": 1
+      }
+    },
+    {
+      "name": "recalls_filter",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "rows": 46
+      }
+    },
+    {
+      "name": "treatment_plan_add",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "item_id": 16
+      }
+    },
+    {
+      "name": "treatment_plan_edit",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "charting_perio-probes_view",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "patient_id": 10095,
+        "count": 12
+      }
+    },
+    {
+      "name": "charting_bpe_view",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "patient_id": 10096,
+        "count": 3
+      }
+    },
+    {
+      "name": "charting_bpe-furcations_view",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "patient_id": 10099,
+        "count": 3
+      }
+    },
+    {
+      "name": "template_create",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "template_id": 4
+      }
+    },
+    {
+      "name": "patient_document_create",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "document_id": 2
+      }
+    },
+    {
+      "name": "patient_letter_pdf_download",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "bytes": 1904,
+        "content_type": "application/pdf"
+      }
+    }
+  ]
+}
