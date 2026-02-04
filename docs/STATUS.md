@@ -953,11 +953,39 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Next up: **Stage selection required** — no unambiguous next implementation stage is currently identified in `docs/STATUS.md` after Stage 23 completion.
-- Candidate signals currently need explicit scoping before execution:
-  - Historical stage notes are mostly marked completed/closed/merged.
-  - Legacy roadmap sections (for older stages) do not define a new active `In progress` target.
-- Operator action: run the Stage 23 operator checklist selection step, then create `stageNNN-<slug>` for the selected stage before implementation.
+- Stage 128 follow-on (`stage128-charting-discovery-closeout`) — execute the historical discovery closeout so selection and implementation state are explicit and testable.
+
+## Stage 128 follow-on definition (charting discovery closeout)
+- Objective: close the stale Stage 128 "implementation not started" ambiguity by publishing an explicit post-discovery execution checklist tied to current charting parity tooling.
+- User value: restores deterministic stage sequencing and gives operators a single runnable path for charting parity validation without re-deriving context from historical notes.
+- In scope:
+  - Reconcile Stage 128/129 status wording so discovery and implementation state are not contradictory.
+  - Add a concise execution checklist for charting parity validation referencing existing scripts/docs.
+  - Record a fresh verification run proving the checklist commands are still valid in the current repo state.
+- Out of scope:
+  - Any backend/frontend feature changes.
+  - Any schema migrations or data model updates.
+  - Any SQL Server write/proc/DDL operations.
+- Dependencies:
+  - `docs/r4/R4_CHARTING_DISCOVERY.md` (Stage 128 source of truth).
+  - `docs/r4/STAGE129_CHARTING_CANONICAL_PLAN.md` and existing Stage 129 parity pack docs.
+  - Existing scripts: `app.scripts.r4_parity_run`, `app.scripts.r4_cohort_select`, `app.scripts.r4_import`.
+- Acceptance criteria:
+  - `docs/STATUS.md` no longer leaves Stage 128 in an ambiguous "implementation not started" state.
+  - A reviewer can run one documented checklist and determine pass/fail from captured artefacts.
+  - The checklist keeps R4 access strictly read-only.
+- Hard gates (commands + pass criteria):
+  - `bash ops/health.sh` -> exits `0`.
+  - `bash ops/verify.sh` -> exits `0`.
+  - `rg -n "Stage128 discovery complete|Implementation not started; charting must match R4 exactly" docs/STATUS.md` -> replaced with explicit closeout wording.
+  - `rg -n "^## Stage 128 follow-on definition" docs/STATUS.md` -> returns exactly one match.
+- Artefacts to capture:
+  - `.run/stage128/health.txt`
+  - `.run/stage128/verify.txt`
+  - `.run/stage128/status_checks.txt`
+- Rollback / safety notes:
+  - Docs-only changes can be reverted via a single PR revert.
+  - R4 SQL Server remains strictly SELECT-only (`R4_SQLSERVER_READONLY=true` for any live parity/import command).
 
 ## Stage 23 definition (scope approved for implementation)
 - Objective: remove roadmap ambiguity by converting Stage 23 from a TBD placeholder into an actionable, testable stage plan.
