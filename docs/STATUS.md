@@ -959,7 +959,47 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage selection required (post Stage 129 follow-on) — choose the next executable implementation stage using the operator checklist.
+- Stage 130 (`stage130-charting-scaleout`) — charting import scale-out + stability/observability on larger cohorts.
+
+## Stage 130 definition — Charting scale-out + stability
+- Objective: increase cohort size (500 then 1000) and confirm charting import + parity remain stable, deterministic, and idempotent.
+- User value: increases confidence before wider rollout and surfaces scale/performance edge cases early.
+- Dependencies:
+  - Stage 129 follow-on completion evidence in `.run/stage129/`.
+  - `docs/r4/R4_CHARTING_DISCOVERY.md` and Stage 129 parity tooling.
+  - SQL Server read-only guardrail: `R4_SQLSERVER_READONLY=true`.
+- In scope:
+  - Run deterministic cohort selection for limit `500` (seed `2`), then `1000` (seed `3`) only if 500 gates pass.
+  - Run patients import apply, charting_canonical apply, resume idempotency, and parity gates for each cohort.
+  - Capture timings/counts and stage evidence under `.run/stage130/` including a concise summary.
+- Out of scope:
+  - New charting domains/entities beyond current Stage 129 scoped domains.
+  - Frontend/UI changes.
+  - Schema migrations unrelated to run stability.
+  - Any SQL Server write/proc/DDL operations.
+- Acceptance criteria:
+  - Cohort parsed `codes_count == limit` (or documented reason if smaller).
+  - Charting apply reports `unmapped_patients_total=0`.
+  - Resume run reports `imported_created_total=0` and `imported_updated_total=0`.
+  - Parity combined report overall status is `pass`.
+- Hard gates (commands + pass criteria):
+  - `bash ops/health.sh` -> exits `0`.
+  - `bash ops/verify.sh` -> exits `0`.
+  - 500 cohort pipeline (select -> patients apply -> charting apply -> charting resume -> parity) exits `0` and meets acceptance criteria.
+  - 1000 cohort pipeline repeats the same gates only after 500 cohort passes.
+- Artefacts to capture:
+  - `.run/stage130/health.txt`, `.run/stage130/verify.txt`
+  - `.run/stage130/cohort_select_500.txt`, `.run/stage130/codes_500.csv`
+  - `.run/stage130/patients_apply_500_stats.json`
+  - `.run/stage130/charting_apply_500_stats.json`, `.run/stage130/charting_resume_500_stats.json`, `.run/stage130/parity_500_combined.json`
+  - `.run/stage130/cohort_select_1000.txt`, `.run/stage130/codes_1000.csv`
+  - `.run/stage130/patients_apply_1000_stats.json`
+  - `.run/stage130/charting_apply_1000_stats.json`, `.run/stage130/charting_resume_1000_stats.json`, `.run/stage130/parity_1000_combined.json`
+  - `.run/stage130/summary.md`, `.run/stage130/status_checks.txt`
+- Rollback / safety notes:
+  - Stop immediately on any parity failure or non-idempotent resume and record failure evidence.
+  - Keep SQL Server strictly read-only; no writes to R4 under any circumstance.
+  - Use container `/tmp/stage130_*` working files and copy evidence to `.run/stage130/`.
 
 ## Stage 129 follow-on definition (charting import + canonical parity)
 - Objective: implement the charting import follow-on so imported canonical charting data matches R4 for scoped entities with deterministic, idempotent runs.
