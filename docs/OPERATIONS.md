@@ -24,4 +24,9 @@
 - Stored on the backend container at `/data` (named volume).
 
 ## Backups
-- See `docs/BACKUP_RESTORE.md` for guidance.
+- See `docs/OPS_BACKUPS.md` for Stage 56 backup/retention runbook.
+- See `docs/BACKUP_RESTORE.md` for legacy backup/restore notes.
+
+## Go-live + monitoring
+- UAT checklist: `docs/UAT_CHECKLIST.md`
+- Monitoring and first-response triage: `docs/OPS_MONITORING.md`
