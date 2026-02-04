@@ -61,6 +61,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-04: Stage 23 follow-up triage completed (roadmap hygiene).
+  - `docs/STATUS.md` treated as source of truth: Stage 23 is the lowest-numbered unresolved item but has no scoped deliverables (`details TBD`).
+  - Stage 23 is explicitly deferred until scope is defined (objective, deliverables, and hard gates).
+  - Stage 31 backlog is marked historical/closed because Stage 54 already closed those reliability paths.
 - 2026-02-03: Stage 134 closed (active-patients cohort mode, local-first then merged).
   - Added `r4_cohort_select --mode active_patients` with `--active-months` (default `24`) and `--active-from` override; reports include `active_from`, `active_to`, and `active_months`.
   - Active cohort source uses `dbo.vwAppointmentDetails` (`get_distinct_active_patient_codes(...)`) under `R4_SQLSERVER_READONLY=true` (SELECT-only).
@@ -949,9 +953,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- P1: Clinical chart view mode toggle + tooth badges
-- P2: Stage 23 follow-up (details TBD)
-- P3: Stage 31 backlog (details TBD)
+- Stage 23 follow-up: deferred (details TBD; no actionable scope recorded yet).
+- Unblock requirement: define objective + deliverables + hard gates in this file before execution.
 
 ## Stage 66
 - Completed (PR #43, master 1b4de3d): clinical tab last-updated + refresh, error retry, standardized timestamps, newest-first ordering for notes/procedures, and clearer empty-state copy.
@@ -1055,9 +1058,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - `ops/env_check.sh` runs at the start of `ops/health.sh` and `ops/verify.sh` and exits with actionable missing-var messages.
 
 ## Stage 31 backlog
-- Appointments: booking modal reliability across refresh/tab changes.
-- Appointments: calendar interactions and range loading edge cases.
-- Appointments: confirm creation flow when switching clinicians/locations.
+- Historical reference only (closed by Stage 54 on 2026-02-04).
+- Closed items:
+  - booking modal reliability across refresh/tab changes
+  - calendar interactions and range loading edge cases
+  - creation flow when switching clinicians/locations
 
 ## Role management access
 - Superadmin: change roles, enable/disable users, grant/revoke superadmin.
