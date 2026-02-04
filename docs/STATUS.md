@@ -953,8 +953,38 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 23 follow-up: deferred (details TBD; no actionable scope recorded yet).
-- Unblock requirement: define objective + deliverables + hard gates in this file before execution.
+- Stage 23 follow-up: scope defined below; next step is implementation on `stage23-<slug>`.
+- Use the Stage 23 hard-gates checklist below as the release gate for that implementation PR.
+
+## Stage 23 definition (scope approved for implementation)
+- Objective: remove roadmap ambiguity by converting Stage 23 from a TBD placeholder into an actionable, testable stage plan.
+- User value / why it exists: prevents accidental rework, keeps stage sequencing deterministic, and gives operators a reproducible checklist for stage execution.
+- In scope:
+  - Define and document Stage 23 execution plan in `docs/STATUS.md` with explicit completion criteria.
+  - Reconcile stale "next up"/backlog notes so they do not conflict with already-completed stages.
+  - Add a short operator checklist for selecting the next stage from `docs/STATUS.md` without ad-hoc interpretation.
+- Out of scope:
+  - Any backend/frontend feature implementation.
+  - Database schema changes or migrations.
+  - Changes to R4 import logic, mappings, or SQL Server access patterns.
+- Dependencies:
+  - `docs/STATUS.md` remains the source of truth for stage state.
+  - Existing verification scripts remain available: `ops/health.sh`, `ops/verify.sh`.
+- Acceptance criteria (observable):
+  - Stage 23 is represented as a concrete block (objective, scope, gates, artefacts, safety notes) rather than `details TBD`.
+  - No conflicting "next stage" notes remain that point to already-closed items.
+  - A reviewer can determine whether Stage 23 is complete using only documented gates and artefacts.
+- Hard gates (commands + pass criteria):
+  - `bash ops/health.sh` -> exits `0`.
+  - `bash ops/verify.sh` -> exits `0`.
+  - `sed -n '955,970p' docs/STATUS.md | rg -n "deferred|details TBD"` -> returns no matches.
+  - `rg -n "^## Stage 23 definition" docs/STATUS.md` -> returns exactly one match.
+- Artefacts to capture:
+  - Stage 23 implementation PR link and merge SHA in `docs/STATUS.md`.
+  - Validation command outputs saved under `.run/stage23/` (at minimum: `health.txt`, `verify.txt`, `status_checks.txt`).
+- Rollback / safety notes:
+  - Docs-only changes can be rolled back by reverting the Stage 23 PR.
+  - Keep R4 SQL Server strictly read-only (SELECT-only); no write/proc/schema operations.
 
 ## Stage 66
 - Completed (PR #43, master 1b4de3d): clinical tab last-updated + refresh, error retry, standardized timestamps, newest-first ordering for notes/procedures, and clearer empty-state copy.
