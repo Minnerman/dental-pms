@@ -61,6 +61,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-18: Stage 141 preflight (`treatment_plan_items` tail) resolved as no-op exhaustion.
+  - Branch/SHA: `stage141-treatment-plan-items-tail` @ `3e4091f`; baseline checks passed (`docker compose ps`, `./ops/health.sh`, `./ops/verify.sh`).
+  - Stage141 ledger initialized from prior TPI seen set: `.run/seen_stage141_treatment_plan_items.txt` (copied from `.run/seen_stage136_tp_items.txt`), count `3040`.
+  - Read-only tail probe command:
+    - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains treatment_plan_items --date-from 2017-01-01 --date-to 2026-02-01 --limit 5000 --mode union --order hashed --seed 17 --exclude-patient-codes-file /tmp/seen_stage141_treatment_plan_items.txt --output /tmp/stage141_tail_probe.csv`
+    - Result: `RuntimeError: Exclusion removed all candidate patient codes; adjust --exclude-patient-codes-file or selection parameters.`
+  - Validation probes without exclusions (seeds `17` and `1`) both returned `candidates_before_exclude=3040` for `treatment_plan_items`.
+  - Set-diff confirmation against Stage141 ledger: `full_count=3040`, `seen_count=3040`, `remaining_after_exclude=0`.
+  - Stop condition met before import/parity steps: no Stage 141 import executed in this run.
 - 2026-02-04: Stage 129 follow-on completed (`stage129-charting-import-parity` pilot cohort + parity gates).
   - Cohort select completed with deterministic hashed union selection (`seed=1`, `limit=200`), output captured at `.run/stage129/stage129_codes.csv`.
   - Patients import apply completed (`patients_created=200`, `patients_updated=0`, `patients_skipped=0`) from `/tmp/stage129_codes.csv`.
