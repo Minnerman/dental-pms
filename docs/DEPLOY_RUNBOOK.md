@@ -33,6 +33,15 @@ Start (build + run):
 docker compose up -d --build
 ```
 
+Start with R4 SQL Server credentials (practice server only):
+```bash
+docker compose -f docker-compose.yml -f docker-compose.r4.yml up -d --build
+```
+
+Notes:
+- Base compose (`docker-compose.yml`) does not require `/home/amir/secrets/dental-pms-r4.env` and is used by CI/smoke.
+- Add `docker-compose.r4.yml` only for R4 import runs on hosts that have the secrets file.
+
 Stop:
 ```bash
 docker compose down

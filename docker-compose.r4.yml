@@ -1,0 +1,8 @@
+services:
+  backend:
+    env_file:
+      - /home/amir/secrets/dental-pms-r4.env
+
+  r4_import:
+    env_file:
+      - /home/amir/secrets/dental-pms-r4.env
