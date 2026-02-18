@@ -61,6 +61,16 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-18: Stage 135 final close-out confirmed (`treatment_plans` exhausted).
+  - Branch/SHA at verification: `stage135-treatment-plans` @ `9a1a859`; working tree clean.
+  - Health gates passed: `./ops/health.sh` and `./ops/verify.sh`.
+  - Host ledger count: `wc -l .run/seen_stage135_treatment_plans.txt` => `3109`.
+  - Read-only probe command (expected stop condition):
+    - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains treatment_plans --date-from 2017-01-01 --date-to 2026-02-01 --limit 5000 --mode union --order hashed --seed 17 --exclude-patient-codes-file /tmp/seen_stage135_treatment_plans.txt --output /tmp/stage135_verify_probe.csv`
+    - Result: `RuntimeError: Exclusion removed all candidate patient codes; adjust --exclude-patient-codes-file or selection parameters.`
+    - Interpretation: selector zero-remaining stop condition (no additional cohort to import).
+  - Set-diff confirmation (full cohort vs seen ledger): `full_count=3109`, `seen_count=3109`, `remaining_after_exclude=0`.
+  - Guardrail honoured throughout: `R4_SQLSERVER_READONLY=true` (SELECT-only against R4 SQL Server).
 - 2026-02-03: Stage 134 closed (active-patients cohort mode, local-first then merged).
   - Added `r4_cohort_select --mode active_patients` with `--active-months` (default `24`) and `--active-from` override; reports include `active_from`, `active_to`, and `active_months`.
   - Active cohort source uses `dbo.vwAppointmentDetails` (`get_distinct_active_patient_codes(...)`) under `R4_SQLSERVER_READONLY=true` (SELECT-only).
