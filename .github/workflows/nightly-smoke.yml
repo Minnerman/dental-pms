@@ -66,6 +66,9 @@ jobs:
             echo "R4_SQLSERVER_ENABLED=false" >> "$GITHUB_ENV"
           fi
 
+      - name: Validate compose config
+        run: docker compose config >/dev/null
+
       - name: Start database
         run: docker compose up -d db
 

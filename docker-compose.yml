@@ -52,8 +52,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.r4
-    env_file:
-      - /home/amir/secrets/dental-pms-r4.env
+    environment:
+      R4_SQLSERVER_ENABLED: ${R4_SQLSERVER_ENABLED:-false}
     depends_on:
       db:
         condition: service_healthy

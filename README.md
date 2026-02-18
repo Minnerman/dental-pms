@@ -44,6 +44,8 @@ If a run needs more time, set `PLAYWRIGHT_TIMEOUT=900` (seconds) or
 `PLAYWRIGHT_TIMEOUT=0` to disable the wrapper timeout.
 
 ## R4 imports (safe defaults)
+- CI/smoke uses base compose only. On practice-server, include `docker-compose.r4.yml` for R4 credentials:
+  - `docker compose -f docker-compose.yml -f docker-compose.r4.yml up -d --build`
 - Without R4 connectivity, use fixtures: `--source fixtures`.
 - `--dry-run`/`--apply` are supported only with `--source sqlserver`.
 - R4 SQL Server must be reachable from the backend container (host/port routing).
