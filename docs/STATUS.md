@@ -71,6 +71,23 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - Interpretation: selector zero-remaining stop condition (no additional cohort to import).
   - Set-diff confirmation (full cohort vs seen ledger): `full_count=3109`, `seen_count=3109`, `remaining_after_exclude=0`.
   - Guardrail honoured throughout: `R4_SQLSERVER_READONLY=true` (SELECT-only against R4 SQL Server).
+- 2026-02-18: Next-stage inventory selector (read-only, no imports started).
+  - Domain list confirmed from `r4_cohort_select --help`: `perioprobe,bpe,bpe_furcation,treatment_plans,treatment_notes,treatment_plan_items`.
+  - Probe pattern used for each domain `D`:
+    - `docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scripts.r4_cohort_select --domains D --date-from 2017-01-01 --date-to 2026-02-01 --limit 5000 --mode union --order hashed --seed 1 --output /tmp/inventory_D.csv`
+  - Artifacts saved to `.run/inventory/`: `inventory_<domain>.csv`, `inventory_<domain>.json`, `inventory_counts.csv`.
+  - Inventory summary (window `2017-01-01..2026-02-01`, `limit=5000`):
+
+    | Domain | Inventory unique patients | Existing seen-ledger count | Remaining vs seen |
+    | --- | ---:| ---:| ---:|
+    | perioprobe | 6 | 6 (`.run/seen_stage138_perioprobe.txt`) | 0 |
+    | bpe | 1108 | 1108 (`.run/seen_stage139_bpe.txt`) | 0 |
+    | bpe_furcation | 1108 | 1108 (`.run/seen_stage140_bpe_furcation.txt`) | 0 |
+    | treatment_plans | 3109 | 3109 (`.run/seen_stage135_treatment_plans.txt`) | 0 |
+    | treatment_notes | 139 | 139 (`.run/seen_stage137_treatment_notes.txt`) | 0 |
+    | treatment_plan_items | 3044 | 3040 (`.run/seen_stage136_tp_items.txt`) | 4 |
+
+  - Next domain candidate selected by inventory delta: `treatment_plan_items` (`4` remaining vs seen ledger).
 - 2026-02-03: Stage 134 closed (active-patients cohort mode, local-first then merged).
   - Added `r4_cohort_select --mode active_patients` with `--active-months` (default `24`) and `--active-from` override; reports include `active_from`, `active_to`, and `active_months`.
   - Active cohort source uses `dbo.vwAppointmentDetails` (`get_distinct_active_patient_codes(...)`) under `R4_SQLSERVER_READONLY=true` (SELECT-only).
