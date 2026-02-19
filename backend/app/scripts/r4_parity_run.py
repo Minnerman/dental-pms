@@ -10,6 +10,7 @@ from app.scripts import (
     r4_import as r4_import_script,
     r4_bpe_parity_pack,
     r4_bpe_furcation_parity_pack,
+    r4_chart_healing_actions_parity_pack,
     r4_patient_notes_parity_pack,
     r4_perioprobe_parity_pack,
     r4_treatment_plans_parity_pack,
@@ -21,6 +22,7 @@ from app.scripts import (
 ALL_DOMAINS = (
     "bpe",
     "bpe_furcation",
+    "chart_healing_actions",
     "perioprobe",
     "patient_notes",
     "treatment_plans",
@@ -191,6 +193,15 @@ def run_parity(
                     row_limit=row_limit,
                     include_sqlserver=True,
                 )
+            elif domain == "chart_healing_actions":
+                domain_report = r4_chart_healing_actions_parity_pack.build_parity_report(
+                    session,
+                    patient_codes=patient_codes,
+                    date_from=date_from,
+                    date_to=date_to,
+                    row_limit=row_limit,
+                    include_sqlserver=True,
+                )
             elif domain == "perioprobe":
                 domain_report = r4_perioprobe_parity_pack.build_parity_report(
                     session,
@@ -280,7 +291,7 @@ def main() -> int:
         "--domains",
         help=(
             "Comma-separated subset: "
-            "bpe,bpe_furcation,perioprobe,patient_notes,treatment_plans,treatment_notes,treatment_plan_items "
+            "bpe,bpe_furcation,chart_healing_actions,perioprobe,patient_notes,treatment_plans,treatment_notes,treatment_plan_items "
             "(default all)."
         ),
     )
