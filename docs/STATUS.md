@@ -61,6 +61,30 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 143B implemented (`stage143b-unlinkable-missing-patient-code`) to separate unlinkable rows from actionable linkage backlog.
+  - Linkage report classification now tags missing patient-code appointments as `unlinkable_missing_patient_code`.
+  - Summary split added:
+    - `appointments_unmapped_actionable`
+    - `appointments_unmapped_unlinkable`
+  - Live report (window `2017-01-01..2026-02-01`) after Stage 143A mappings:
+    - `appointments_unmapped=277`
+    - `appointments_unmapped_actionable=0`
+    - `appointments_unmapped_unlinkable=277`
+    - `unmapped_reasons={unlinkable_missing_patient_code: 277}`
+  - Queue loader behavior updated:
+    - unlinkable reason rows are excluded from actionable queue ingestion
+    - actionable queue summary omits unlinkable reason codes
+  - Verification run with isolated source key (`legacy_source=r4-stage143b`) using report CSV/JSON:
+    - `Loaded linkage issues (created=0, updated=0).`
+    - `No actionable linkage issues found.`
+    - queue table rows for `r4-stage143b` remained `0` (exclusion path validated)
+  - Rationale captured:
+    - `missing_patient_code` rows are structurally unlinkable in current extract path; probe confirmed all affected appointment IDs exist in `dbo.Appts` with `PatientCode=NULL`, so no safe deterministic resolver key is available.
+  - Evidence:
+    - `.run/stage143b/r4_linkage_report_stage143b.txt`
+    - `.run/stage143b/r4_linkage_report_stage143b.json`
+    - `.run/stage143b/r4_linkage_report_stage143b.csv`
+    - `.run/stage143b/r4_linkage_queue_load_stage143b.txt`
 - 2026-02-19: Stage 143A linkage baseline completed (`stage143-linkage-mapping-a`) to clear `missing_patient_mapping`.
   - Deterministic mapping backlog extracted from linkage report CSV (`reason=missing_patient_mapping`):
     - unique legacy patient codes: `2354`

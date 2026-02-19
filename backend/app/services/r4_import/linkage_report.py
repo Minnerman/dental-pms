@@ -7,7 +7,9 @@ import logging
 from app.services.r4_import.types import R4AppointmentRecord
 
 
-UNMAPPED_MISSING_PATIENT_CODE = "missing_patient_code"
+UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE = "unlinkable_missing_patient_code"
+# Backward-compatible alias for historical callers/tests.
+UNMAPPED_MISSING_PATIENT_CODE = UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE
 UNMAPPED_MISSING_MAPPING = "missing_patient_mapping"
 UNMAPPED_MAPPED_TO_DELETED_PATIENT = "mapped_to_deleted_patient"
 
@@ -26,6 +28,8 @@ class R4LinkageReportBuilder:
     appointments_missing_patient_code: int = 0
     appointments_mapped: int = 0
     appointments_unmapped: int = 0
+    appointments_unmapped_actionable: int = 0
+    appointments_unmapped_unlinkable: int = 0
     appointments_imported: int = 0
     appointments_not_imported: int = 0
     unmapped_reasons: Counter[str] = field(default_factory=Counter)
@@ -44,7 +48,7 @@ class R4LinkageReportBuilder:
 
         if patient_code is None:
             self.appointments_missing_patient_code += 1
-            reason = UNMAPPED_MISSING_PATIENT_CODE
+            reason = UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE
         else:
             self.appointments_with_patient_code += 1
             patient_id = self._resolve_patient_id(patient_code)
@@ -57,6 +61,10 @@ class R4LinkageReportBuilder:
 
         if reason is not None:
             self.appointments_unmapped += 1
+            if reason == UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE:
+                self.appointments_unmapped_unlinkable += 1
+            else:
+                self.appointments_unmapped_actionable += 1
             self.unmapped_reasons[reason] += 1
             if patient_code is not None:
                 self.unmapped_patient_code_counts[patient_code] += 1
@@ -86,6 +94,8 @@ class R4LinkageReportBuilder:
             "appointments_missing_patient_code": self.appointments_missing_patient_code,
             "appointments_mapped": self.appointments_mapped,
             "appointments_unmapped": self.appointments_unmapped,
+            "appointments_unmapped_actionable": self.appointments_unmapped_actionable,
+            "appointments_unmapped_unlinkable": self.appointments_unmapped_unlinkable,
             "unmapped_reasons": dict(self.unmapped_reasons),
             "top_unmapped_patient_codes": top_unmapped,
         }

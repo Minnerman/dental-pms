@@ -17,6 +17,7 @@ from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.linkage_queue import (
+    REASON_UNLINKABLE_MISSING_PATIENT_CODE,
     R4LinkageIssueInput,
     load_linkage_issues,
     normalize_reason_code,
@@ -79,6 +80,9 @@ def _iter_issues_from_csv(
             reason = normalize_reason_code(row.get("reason"))
             if reason is None:
                 continue
+            if reason == REASON_UNLINKABLE_MISSING_PATIENT_CODE:
+                # Keep unlinkable rows in reports, but do not enqueue as mapping work.
+                continue
             patient_code_raw = row.get("patient_code") or None
             patient_code = int(patient_code_raw) if patient_code_raw else None
             if reason == "missing_patient_mapping" and patient_code is not None:
@@ -135,6 +139,9 @@ def _iter_issues_from_source(
         reason = normalize_reason_code(report.ingest(appt))
         if reason is None:
             continue
+        if reason == REASON_UNLINKABLE_MISSING_PATIENT_CODE:
+            # Keep unlinkable rows in reports, but do not enqueue as mapping work.
+            continue
         details = {
             "appointment_id": appt.appointment_id,
             "patient_code": appt.patient_code,
@@ -165,7 +172,7 @@ def _iter_issues_from_source(
 
 def _print_counts(summary_rows: list[dict[str, object]], file=sys.stdout) -> None:
     if not summary_rows:
-        print("No linkage issues found.", file=file)
+        print("No actionable linkage issues found.", file=file)
         return
     print("Queue summary (reason_code/status):", file=file)
     for row in summary_rows:
@@ -245,9 +252,14 @@ def main() -> int:
 
     session = SessionLocal()
     try:
-        stats = load_linkage_issues(session, issues)
+        stats = load_linkage_issues(session, issues, actionable_only=True)
         session.commit()
-        summary = summarize_queue(session, args.legacy_source, args.entity_type)
+        summary = summarize_queue(
+            session,
+            args.legacy_source,
+            args.entity_type,
+            actionable_only=True,
+        )
     finally:
         session.close()
 
@@ -258,10 +270,20 @@ def main() -> int:
         print("Batch reason counts:")
         for reason, count in stats["reason_counts"].items():
             print(f"  - {reason}: {count}")
+    if stats["excluded_reason_counts"]:
+        print("Excluded reasons (non-actionable):")
+        for reason, count in stats["excluded_reason_counts"].items():
+            print(f"  - {reason}: {count}")
 
     _print_counts(summary)
 
     if metadata:
+        actionable = metadata.get("appointments_unmapped_actionable")
+        unlinkable = metadata.get("appointments_unmapped_unlinkable")
+        if actionable is not None or unlinkable is not None:
+            print("Report unmapped split:", file=sys.stdout)
+            print(f"  - actionable: {actionable}", file=sys.stdout)
+            print(f"  - unlinkable: {unlinkable}", file=sys.stdout)
         meta_counts = Counter(metadata.get("unmapped_reasons") or {})
         if meta_counts:
             print("Report unmapped reasons:", file=sys.stdout)

@@ -9,10 +9,13 @@ from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.user import User
 from app.services.r4_import.linkage_queue import (
     REASON_MISSING_MAPPING,
+    REASON_UNLINKABLE_MISSING_PATIENT_CODE,
     STATUS_RESOLVED,
     R4LinkageIssueInput,
+    is_actionable_reason,
     load_linkage_issues,
     normalize_reason_code,
+    summarize_queue,
 )
 from app.services.r4_import.linkage_report import (
     R4LinkageReportBuilder,
@@ -101,6 +104,101 @@ def test_linkage_queue_reason_normalization():
             )
         )
         assert stored == REASON_MISSING_MAPPING
+        assert normalize_reason_code("missing_patient_code") == REASON_UNLINKABLE_MISSING_PATIENT_CODE
+        assert is_actionable_reason("missing_patient_code") is False
+        assert is_actionable_reason("missing_patient_mapping") is True
+    finally:
+        session.close()
+
+
+def test_linkage_queue_actionable_only_excludes_unlinkable():
+    session = SessionLocal()
+    try:
+        _clear_issues(session, "r4-test")
+        session.commit()
+
+        issues = [
+            R4LinkageIssueInput(
+                entity_type="appointment",
+                legacy_source="r4-test",
+                legacy_id="4001",
+                patient_code=None,
+                reason_code="missing_patient_code",
+                details_json={"appointment_id": "4001"},
+            ),
+            R4LinkageIssueInput(
+                entity_type="appointment",
+                legacy_source="r4-test",
+                legacy_id="4002",
+                patient_code=555,
+                reason_code="missing_patient_mapping",
+                details_json={"appointment_id": "4002"},
+            ),
+        ]
+
+        stats = load_linkage_issues(session, issues, actionable_only=True)
+        session.commit()
+
+        rows = session.execute(
+            select(R4LinkageIssue.legacy_id, R4LinkageIssue.reason_code).where(
+                R4LinkageIssue.legacy_source == "r4-test"
+            )
+        ).all()
+
+        assert stats["created"] == 1
+        assert stats["updated"] == 0
+        assert stats["reason_counts"] == {"missing_patient_mapping": 1}
+        assert stats["excluded_reason_counts"] == {REASON_UNLINKABLE_MISSING_PATIENT_CODE: 1}
+        assert rows == [("4002", "missing_patient_mapping")]
+    finally:
+        session.close()
+
+
+def test_summarize_queue_actionable_only_filters_unlinkable():
+    session = SessionLocal()
+    try:
+        _clear_issues(session, "r4-test")
+        session.commit()
+
+        load_linkage_issues(
+            session,
+            [
+                R4LinkageIssueInput(
+                    entity_type="appointment",
+                    legacy_source="r4-test",
+                    legacy_id="4101",
+                    patient_code=None,
+                    reason_code="missing_patient_code",
+                    details_json={"appointment_id": "4101"},
+                ),
+                R4LinkageIssueInput(
+                    entity_type="appointment",
+                    legacy_source="r4-test",
+                    legacy_id="4102",
+                    patient_code=777,
+                    reason_code="missing_patient_mapping",
+                    details_json={"appointment_id": "4102"},
+                ),
+            ],
+        )
+        session.commit()
+
+        actionable_summary = summarize_queue(
+            session,
+            "r4-test",
+            "appointment",
+            actionable_only=True,
+        )
+        full_summary = summarize_queue(session, "r4-test", "appointment")
+
+        assert actionable_summary == [
+            {
+                "reason_code": "missing_patient_mapping",
+                "status": "open",
+                "count": 1,
+            }
+        ]
+        assert len(full_summary) == 2
     finally:
         session.close()
 

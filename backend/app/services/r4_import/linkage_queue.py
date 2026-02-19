@@ -13,6 +13,8 @@ STATUS_OPEN = "open"
 STATUS_RESOLVED = "resolved"
 STATUS_IGNORED = "ignored"
 
+REASON_UNLINKABLE_MISSING_PATIENT_CODE = "unlinkable_missing_patient_code"
+# Legacy alias preserved for compatibility with older CSV/report exports.
 REASON_MISSING_PATIENT_CODE = "missing_patient_code"
 REASON_MISSING_MAPPING = "missing_patient_mapping"
 REASON_MAPPED_TO_DELETED_PATIENT = "mapped_to_deleted_patient"
@@ -21,6 +23,7 @@ REASON_DUPLICATE_MAPPING = "duplicate_mapping"
 REASON_PATIENT_CODE_NOT_FOUND = "patient_code_not_found"
 
 REASON_ALIASES = {
+    REASON_MISSING_PATIENT_CODE: REASON_UNLINKABLE_MISSING_PATIENT_CODE,
     REASON_PATIENT_CODE_NOT_FOUND: REASON_MISSING_MAPPING,
 }
 
@@ -39,6 +42,13 @@ def normalize_reason_code(reason_code: str | None) -> str | None:
     if not reason_code:
         return None
     return REASON_ALIASES.get(reason_code, reason_code)
+
+
+def is_actionable_reason(reason_code: str | None) -> bool:
+    normalized = normalize_reason_code(reason_code)
+    if normalized is None:
+        return False
+    return normalized != REASON_UNLINKABLE_MISSING_PATIENT_CODE
 
 
 def upsert_linkage_issue(session, issue: R4LinkageIssueInput) -> tuple[R4LinkageIssue, bool]:
@@ -71,14 +81,31 @@ def upsert_linkage_issue(session, issue: R4LinkageIssueInput) -> tuple[R4Linkage
 def load_linkage_issues(
     session,
     issues: Iterable[R4LinkageIssueInput],
+    *,
+    actionable_only: bool = False,
 ) -> dict[str, object]:
     created = 0
     updated = 0
     reason_counts: Counter[str] = Counter()
+    excluded_reason_counts: Counter[str] = Counter()
 
     for issue in issues:
-        reason_counts[issue.reason_code] += 1
-        _, is_created = upsert_linkage_issue(session, issue)
+        reason = normalize_reason_code(issue.reason_code)
+        if reason is None:
+            continue
+        if actionable_only and not is_actionable_reason(reason):
+            excluded_reason_counts[reason] += 1
+            continue
+        reason_counts[reason] += 1
+        normalized_issue = R4LinkageIssueInput(
+            entity_type=issue.entity_type,
+            legacy_source=issue.legacy_source,
+            legacy_id=issue.legacy_id,
+            patient_code=issue.patient_code,
+            reason_code=reason,
+            details_json=issue.details_json,
+        )
+        _, is_created = upsert_linkage_issue(session, normalized_issue)
         if is_created:
             created += 1
         else:
@@ -88,11 +115,18 @@ def load_linkage_issues(
         "created": created,
         "updated": updated,
         "reason_counts": dict(reason_counts),
+        "excluded_reason_counts": dict(excluded_reason_counts),
     }
 
 
-def summarize_queue(session, legacy_source: str, entity_type: str) -> list[dict[str, object]]:
-    rows = session.execute(
+def summarize_queue(
+    session,
+    legacy_source: str,
+    entity_type: str,
+    *,
+    actionable_only: bool = False,
+) -> list[dict[str, object]]:
+    stmt = (
         select(
             R4LinkageIssue.reason_code,
             R4LinkageIssue.status,
@@ -104,7 +138,14 @@ def summarize_queue(session, legacy_source: str, entity_type: str) -> list[dict[
         )
         .group_by(R4LinkageIssue.reason_code, R4LinkageIssue.status)
         .order_by(R4LinkageIssue.reason_code, R4LinkageIssue.status)
-    ).all()
+    )
+    if actionable_only:
+        stmt = stmt.where(
+            R4LinkageIssue.reason_code != REASON_UNLINKABLE_MISSING_PATIENT_CODE,
+            R4LinkageIssue.reason_code != REASON_MISSING_PATIENT_CODE,
+        )
+
+    rows = session.execute(stmt).all()
 
     return [
         {"reason_code": reason, "status": status, "count": count}
