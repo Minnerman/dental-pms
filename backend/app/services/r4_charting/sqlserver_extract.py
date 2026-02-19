@@ -87,6 +87,37 @@ class SqlServerChartingExtractor:
                     )
                 )
 
+        if _include("chart_healing_actions", "chart_healing_action") and hasattr(
+            self._source, "list_chart_healing_actions"
+        ):
+            for item in self._iter_chart_healing_actions(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                recorded_at = item.action_date
+                if date_from or date_to:
+                    if recorded_at is None:
+                        report.undated_included += 1
+                    elif not _date_in_range(recorded_at, date_from, date_to, report):
+                        continue
+                records.append(
+                    CanonicalRecordInput(
+                        domain="chart_healing_action",
+                        r4_source="dbo.ChartHealingActions",
+                        r4_source_id=str(item.action_id),
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=recorded_at,
+                        entered_at=None,
+                        tooth=item.tooth,
+                        surface=item.surface,
+                        code_id=item.code_id,
+                        status=item.status,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
         if _include("perioprobe", "perio_probe"):
             for item in self._iter_perio_probes(
                 patients_from=patients_from,
@@ -354,6 +385,43 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_perio_probes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_chart_healing_actions(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not hasattr(self._source, "list_chart_healing_actions"):
+            return
+        if not patient_codes:
+            yield from self._source.list_chart_healing_actions(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_chart_healing_actions(
                     patients_from=code,
                     patients_to=code,
                     limit=batch_limit,
@@ -661,6 +729,79 @@ def get_distinct_bpe_patient_codes(
         ),
         [limit, date_from, date_to],
     )
+
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
+def get_distinct_chart_healing_actions_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("ChartHealingActions", ["PatientCode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "ChartHealingActions",
+        ["ActionDate", "Date", "CreatedDate", "ActionedDate", "ActionedOn"],
+    )
+    id_col = source._pick_column(  # noqa: SLF001
+        "ChartHealingActions",
+        ["ID", "ActionID", "ChartHealingActionID"],
+    )
+    if not patient_col:
+        raise RuntimeError("ChartHealingActions missing PatientCode; cannot fetch distinct codes.")
+    if not date_col and not id_col:
+        raise RuntimeError(
+            "ChartHealingActions missing date/id columns; cannot fetch distinct codes."
+        )
+
+    if date_col:
+        rows = source._query(  # noqa: SLF001
+            (
+                "SELECT TOP (?) "
+                f"{patient_col} AS patient_code "
+                "FROM dbo.ChartHealingActions WITH (NOLOCK) "
+                f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+                f"GROUP BY {patient_col} "
+                f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+            ),
+            [limit, date_from, date_to],
+        )
+    else:
+        rows = source._query(  # noqa: SLF001
+            (
+                "SELECT TOP (?) "
+                f"{patient_col} AS patient_code "
+                "FROM dbo.ChartHealingActions WITH (NOLOCK) "
+                f"WHERE {patient_col} IS NOT NULL "
+                f"GROUP BY {patient_col} "
+                f"ORDER BY MAX({id_col}) DESC, {patient_col} ASC"
+            ),
+            [limit],
+        )
 
     seen: set[int] = set()
     codes: list[int] = []

@@ -6,6 +6,7 @@ def test_parse_domains_csv_defaults_include_treatment_plan_items():
         "perioprobe",
         "bpe",
         "bpe_furcation",
+        "chart_healing_actions",
         "patient_notes",
         "treatment_plans",
         "treatment_notes",
@@ -167,6 +168,12 @@ def test_parse_domains_csv_accepts_treatment_plans():
 
 def test_parse_domains_csv_accepts_patient_notes():
     assert r4_cohort_select._parse_domains_csv("patient_notes") == ["patient_notes"]
+
+
+def test_parse_domains_csv_accepts_chart_healing_actions():
+    assert r4_cohort_select._parse_domains_csv("chart_healing_actions") == [
+        "chart_healing_actions"
+    ]
 
 
 def test_select_cohort_active_patients_mode_applies_exclusions_and_limit(monkeypatch):

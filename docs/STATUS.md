@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 148 started (`stage148-chart-healing-actions`) for `chart_healing_actions` parity + UI mapping preflight.
+  - Domain wiring completed for Stage 148 execution path:
+    - `r4_cohort_select` now accepts `chart_healing_actions`.
+    - distinct cohort helper added: `get_distinct_chart_healing_actions_patient_codes(...)`.
+    - charting canonical extractor now supports domain filter `chart_healing_actions`/`chart_healing_action`.
+    - parity runner now supports `chart_healing_actions` with new parity pack script.
+  - R4 inventory probe (`seed=1`, window `2017-01-01..2026-02-01`) returned zero candidates:
+    - `candidates_before_exclude=0`, `selected_count=0`, `domain_errors={}`.
+  - Deterministic cohort select (`seed=17`, same window, Stage 148 exclude ledger) also returned zero:
+    - `candidates_before_exclude=0`, `remaining_after_exclude=0`, `selected_count=0`.
+  - Outcome:
+    - Stage 148 closed as no-op/exhausted for the current in-window data slice.
+    - No patients apply, no charting canonical apply, no parity gate, and no spotcheck pack were run because cohort size was `0`.
+    - Placeholder skip artefacts were written for downstream stage bookkeeping:
+      - `.run/stage148/stage148_charting_apply.json`
+      - `.run/stage148/stage148_parity.json`
+  - Evidence:
+    - `.run/stage148/inventory_probe.txt`
+    - `.run/stage148/inventory_chart_healing_actions.csv`
+    - `.run/stage148/cohort_select.txt`
+    - `.run/stage148/stage148_chart_healing_actions_cohort.csv`
+    - `.run/stage148/spotcheck_skipped.txt`
+    - `.run/stage148/stage148_summary.json`
 - 2026-02-19: Stage 147 started (`stage147-charting-domain-discovery`) to clarify `surface_definitions` vs patient-state charting domains.
   - Spotcheck naming/reporting clarified:
     - output key renamed from `tooth_surfaces` to `surface_definitions`

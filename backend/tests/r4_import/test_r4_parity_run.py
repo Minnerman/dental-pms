@@ -16,6 +16,7 @@ def test_parse_domains_csv_defaults_all():
     assert r4_parity_run._parse_domains_csv(None) == [
         "bpe",
         "bpe_furcation",
+        "chart_healing_actions",
         "perioprobe",
         "patient_notes",
         "treatment_plans",
@@ -116,6 +117,40 @@ def test_run_parity_treatment_plan_items_domain(monkeypatch, tmp_path: Path):
     assert report["domain_summaries"]["treatment_plan_items"]["status"] == "pass"
     assert report["overall"]["status"] == "pass"
     assert (tmp_path / "treatment_plan_items.json").exists()
+
+
+def test_run_parity_chart_healing_actions_domain(monkeypatch, tmp_path: Path):
+    def _build_with_data(*args, **kwargs):
+        return {
+            "patients": [
+                {
+                    "patient_code": 1000,
+                    "sqlserver_total_rows": 1,
+                    "latest_match": True,
+                    "latest_digest_match": True,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(r4_parity_run, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(
+        r4_parity_run.r4_chart_healing_actions_parity_pack,
+        "build_parity_report",
+        _build_with_data,
+    )
+
+    report = r4_parity_run.run_parity(
+        patient_codes=[1000],
+        domains=["chart_healing_actions"],
+        date_from=None,
+        date_to=None,
+        row_limit=10,
+        output_dir=str(tmp_path),
+    )
+
+    assert report["domain_summaries"]["chart_healing_actions"]["status"] == "pass"
+    assert report["overall"]["status"] == "pass"
+    assert (tmp_path / "chart_healing_actions.json").exists()
 
 
 def test_run_parity_treatment_notes_domain(monkeypatch, tmp_path: Path):

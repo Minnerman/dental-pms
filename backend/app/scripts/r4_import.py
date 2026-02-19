@@ -109,6 +109,7 @@ _CHARTING_CANONICAL_DOMAINS = {
     "perioprobe",
     "bpe",
     "bpe_furcation",
+    "chart_healing_actions",
     "patient_notes",
     "treatment_plans",
     "treatment_notes",
@@ -761,7 +762,7 @@ def main() -> int:
         default=None,
         help=(
             "Optional comma-separated charting canonical domains "
-            "(perioprobe,bpe,bpe_furcation,patient_notes,treatment_plans,treatment_notes,treatment_plan_items)."
+            "(perioprobe,bpe,bpe_furcation,chart_healing_actions,patient_notes,treatment_plans,treatment_notes,treatment_plan_items)."
         ),
     )
     parser.add_argument(
