@@ -61,6 +61,38 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 143A linkage baseline completed (`stage143-linkage-mapping-a`) to clear `missing_patient_mapping`.
+  - Deterministic mapping backlog extracted from linkage report CSV (`reason=missing_patient_mapping`):
+    - unique legacy patient codes: `2354`
+    - file: `.run/stage143/missing_patient_mapping_patient_codes.txt`
+  - Scoped patients import (SQL Server source, read-only R4, apply to local PMS DB) ran with `--patient-codes-file` and completed:
+    - `patients_created=2354`, `patients_updated=0`, `patients_skipped=0`
+    - stats: `.run/stage143/stage143_patients_import_stats.json`
+    - command output: `.run/stage143/r4_import_patients_stage143a.txt`
+  - Linkage report delta (window `2017-01-01..2026-02-01`):
+    - before: `appointments_unmapped=5393` with reasons `missing_patient_mapping=5116`, `missing_patient_code=277`
+    - after: `appointments_unmapped=277` with reasons `missing_patient_code=277` only
+    - eliminated by Stage 143A: `missing_patient_mapping=5116` appointment rows
+  - Post-import queue-load (same date window):
+    - batch update reasons: `missing_patient_code=277` only
+    - output: `.run/stage143/r4_linkage_queue_load_after_patients.txt`
+  - Evidence:
+    - baseline report: `.run/r4_linkage_report.json`, `.run/r4_linkage_report.csv`
+    - post-import report: `.run/stage143/r4_linkage_report_after_patients.json`, `.run/stage143/r4_linkage_report_after_patients.csv`
+- 2026-02-19: Stage 143B triage baseline (`missing_patient_code`) extracted and policy scoped.
+  - Subset extraction from post-import linkage report:
+    - rows: `277`
+    - file: `.run/stage143/missing_patient_code_rows.csv`
+    - CSV header: `appointment_id,patient_code,starts_at,reason`
+  - Strict resolver probe (read-only R4):
+    - all `277` appointment IDs exist in `dbo.Appts` (`ApptId`)
+    - all `277` rows have `PatientCode = NULL` in `dbo.Appts` as well
+    - result: no deterministic patient key available in current linkage artifact/path for these rows
+  - Current policy recommendation:
+    - treat `missing_patient_code` rows as unlinkable and track separately in linkage metrics/reporting until a stable R4 foreign key resolver exists.
+  - Evidence:
+    - extraction/probe inputs: `.run/stage143/missing_patient_code_rows.csv`
+    - candidate notes: `.run/r4_manual_mapping_candidates.md`
 - 2026-02-19: Stage 142 completed (`patient_notes`, deterministic 4-patient cohort).
   - Branch: `stage142-patient-notes`; source cohort generated from `r4_cohort_select` with `--domains patient_notes --order hashed --seed 17` and Stage 142 ledger exclusions.
   - Cohort output: `.run/stage142_patient_notes_cohort.csv`; sorted codes:
