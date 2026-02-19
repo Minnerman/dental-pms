@@ -61,6 +61,18 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage discovery refresh after PR #259 found next charting domain candidate (`patient_notes`).
+  - Domain-map extraction from code:
+    - `r4_cohort_select.ALL_DOMAINS`: `perioprobe,bpe,bpe_furcation,treatment_plans,treatment_notes,treatment_plan_items`.
+    - `r4_parity_run.ALL_DOMAINS`: includes `patient_notes`.
+    - `r4_import._CHARTING_CANONICAL_DOMAINS`: includes `patient_notes`.
+  - Set-diff outcome: `import/parity - cohort_select = {patient_notes}`.
+  - Cohort wiring added for `patient_notes` in `backend/app/scripts/r4_cohort_select.py` (domain allowlist, selector default/help text, and `get_distinct_patient_notes_patient_codes(...)` branch).
+  - Test coverage updated in `backend/tests/r4_import/test_r4_cohort_select.py`; focused test run passed:
+    - `docker compose exec -T backend pytest tests/r4_import/test_r4_cohort_select.py -q` -> `13 passed`.
+  - Read-only inventory probe for `patient_notes` (R4 override compose) returned non-zero remaining:
+    - `candidates_before_exclude=4`, `remaining_after_exclude=4`, `domain_errors={}`.
+    - Evidence: `.run/inventory/inventory_patient_notes.raw`, `.run/inventory/inventory_patient_notes.csv`, `.run/inventory/inventory_patient_notes.json`, `.run/inventory/inventory_remaining_patient_notes_master_after_259.csv`.
 - 2026-02-18: Stage 141 preflight (`treatment_plan_items` tail) resolved as no-op exhaustion.
   - Branch/SHA: `stage141-treatment-plan-items-tail` @ `3e4091f`; baseline checks passed (`docker compose ps`, `./ops/health.sh`, `./ops/verify.sh`).
   - Stage141 ledger initialized from prior TPI seen set: `.run/seen_stage141_treatment_plan_items.txt` (copied from `.run/seen_stage136_tp_items.txt`), count `3040`.
