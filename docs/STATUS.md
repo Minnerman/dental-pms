@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 144 started (`stage144-chart-ui-fidelity-pack`) for chart UI fidelity evidence pack (R4-like odontogram target).
+  - Inventory snapshot captured from read-only R4 SQL Server for window `2017-01-01..2026-02-01`:
+    - `.run/stage144/stage144_charting_inventory.json`
+  - Deterministic 20-patient selection method:
+    - source cohort file: `.run/inventory/inventory_treatment_plans.csv`
+    - parse numeric patient codes from file contents
+    - stable ordering key: `sha256("stage144:<patient_code>")`
+    - selected first `20` codes from hash order
+    - output list: `.run/stage144/spotcheck_patient_codes.txt`
+    - selected codes:
+      `1015947,1013865,1015039,1016368,1006870,1013729,1014801,1016130,1013244,1016138,1012591,1011090,1013987,1015981,1014764,1013167,1013316,1011869,1013926,1016589`
+  - Per-patient artefacts generated under `.run/stage144/patient_<code>/`:
+    - `r4_spotcheck.json` and `r4_spotcheck.stderr`
+    - `link_explain.txt` and `link_explain.stderr`
+    - `checklist.md` (odontogram UI fidelity checklist stub)
+  - Pack index and command evidence:
+    - `.run/stage144/summary.md`
+    - `.run/stage144/r4_charting_link_explain_help.txt`
+  - Known script gap discovered during pack generation:
+    - `r4_charting_spotcheck --entities treatment_notes` fails with
+      `TypeError: combine() argument 1 must be datetime.date, not int`.
+    - Evidence:
+      - `.run/stage144/spotcheck_treatment_notes_probe.txt`
+      - `.run/stage144/spotcheck_treatment_notes_error.txt`
+    - Current Stage 144 workaround: exclude `treatment_notes` from spotcheck entities until the script path is fixed.
+  - Acceptance focus remains unchanged: odontogram should be R4-like and dentist-legible at a glance (tooth geometry, surfaces, restorative symbols, bridge/RCT/implant/denture clarity, and planned vs completed differentiation).
 - 2026-02-19: Stage 143B implemented (`stage143b-unlinkable-missing-patient-code`) to separate unlinkable rows from actionable linkage backlog.
   - Linkage report classification now tags missing patient-code appointments as `unlinkable_missing_patient_code`.
   - Summary split added:
