@@ -61,6 +61,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 145 started (`stage145-odontogram-ui-backlog`) with gap report + chart UI acceptance criteria.
+  - Artefacts generated from Stage 144 pack:
+    - `.run/stage145/gaps_summary.json`
+    - `.run/stage145/gaps_summary.md`
+  - Acceptance spec added:
+    - `docs/CHARTING_UI_ACCEPTANCE.md`
+  - Spotcheck schema shape observed across `20/20` patient files:
+    - top-level keys: `generated_at`, `patient_code`, `postgres`, `sqlserver`
+  - Top entities by SQL Server row volume (from `.run/stage145/gaps_summary.md`):
+    - `tooth_surfaces=100000`
+    - `note_categories=240`
+    - `temporary_notes=20`
+    - `bpe=18`
+    - `bpe_furcations=18`
+    - `patient_notes=3`
+  - Prioritised implementation checklist (R4-like odontogram):
+    1. Layout: R4-like arch geometry, tooth silhouettes, ordering/orientation, missing-tooth clarity.
+    2. Surfaces: O/I/M/D/B/L overlay + precise per-surface placement/selection behavior.
+    3. Symbols: fillings/crowns/bridges/RCT/posts/implants/dentures with clear visual semantics.
+    4. Planned vs completed: distinct visual language with correct tooth/surface anchoring.
+    5. Drill-down: hover/click explainability aligned with canonical records + link-explain outputs.
 - 2026-02-19: Stage 144 started (`stage144-chart-ui-fidelity-pack`) for chart UI fidelity evidence pack (R4-like odontogram target).
   - Inventory snapshot captured from read-only R4 SQL Server for window `2017-01-01..2026-02-01`:
     - `.run/stage144/stage144_charting_inventory.json`
@@ -85,7 +106,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - Evidence:
       - `.run/stage144/spotcheck_treatment_notes_probe.txt`
       - `.run/stage144/spotcheck_treatment_notes_error.txt`
-    - Current Stage 144 workaround: exclude `treatment_notes` from spotcheck entities until the script path is fixed.
+    - Stage 144 workaround (historical): exclude `treatment_notes` from spotcheck entities during pack generation.
+    - Follow-up fix merged on `master` (PR #266): `r4_charting_spotcheck --entities treatment_notes` now succeeds.
   - Acceptance focus remains unchanged: odontogram should be R4-like and dentist-legible at a glance (tooth geometry, surfaces, restorative symbols, bridge/RCT/implant/denture clarity, and planned vs completed differentiation).
 - 2026-02-19: Stage 143B implemented (`stage143b-unlinkable-missing-patient-code`) to separate unlinkable rows from actionable linkage backlog.
   - Linkage report classification now tags missing patient-code appointments as `unlinkable_missing_patient_code`.
