@@ -18,8 +18,8 @@ from app.services.r4_import.fixture_source import FixtureSource
 from app.services.r4_import.linkage_report import (
     R4LinkageReportBuilder,
     UNMAPPED_MAPPED_TO_DELETED_PATIENT,
+    UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE,
     UNMAPPED_MISSING_MAPPING,
-    UNMAPPED_MISSING_PATIENT_CODE,
 )
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
@@ -80,6 +80,16 @@ def _print_summary(payload: dict[str, object], *, file=sys.stderr) -> None:
     )
     print(f"  appointments_mapped: {payload.get('appointments_mapped')}", file=file)
     print(f"  appointments_unmapped: {payload.get('appointments_unmapped')}", file=file)
+    print(
+        "  appointments_unmapped_actionable: "
+        f"{payload.get('appointments_unmapped_actionable')}",
+        file=file,
+    )
+    print(
+        "  appointments_unmapped_unlinkable: "
+        f"{payload.get('appointments_unmapped_unlinkable')}",
+        file=file,
+    )
     if "appointments_imported" in payload:
         print(
             f"  appointments_imported: {payload.get('appointments_imported')}",
@@ -208,7 +218,9 @@ def main() -> int:
         "limit": args.limit,
     }
     payload["unmapped_reason_definitions"] = {
-        UNMAPPED_MISSING_PATIENT_CODE: "R4 appointment row has no patient code.",
+        UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE: (
+            "R4 appointment row has no patient code and is currently unlinkable."
+        ),
         UNMAPPED_MISSING_MAPPING: "No r4_patient_mappings entry for patient_code.",
         UNMAPPED_MAPPED_TO_DELETED_PATIENT: "Mapping points to a soft-deleted patient.",
     }

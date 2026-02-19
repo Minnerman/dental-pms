@@ -4,7 +4,7 @@ from app.services.r4_import.linkage_report import (
     R4LinkageReportBuilder,
     UNMAPPED_MAPPED_TO_DELETED_PATIENT,
     UNMAPPED_MISSING_MAPPING,
-    UNMAPPED_MISSING_PATIENT_CODE,
+    UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE,
 )
 from app.services.r4_import.types import R4AppointmentRecord
 
@@ -41,11 +41,13 @@ def test_linkage_report_builder_counts_and_reasons():
     assert report["appointments_missing_patient_code"] == 1
     assert report["appointments_mapped"] == 1
     assert report["appointments_unmapped"] == 3
+    assert report["appointments_unmapped_actionable"] == 2
+    assert report["appointments_unmapped_unlinkable"] == 1
     assert report["appointments_imported"] == 2
     assert report["appointments_not_imported"] == 2
 
     reasons = report["unmapped_reasons"]
-    assert reasons[UNMAPPED_MISSING_PATIENT_CODE] == 1
+    assert reasons[UNMAPPED_UNLINKABLE_MISSING_PATIENT_CODE] == 1
     assert reasons[UNMAPPED_MISSING_MAPPING] == 1
     assert reasons[UNMAPPED_MAPPED_TO_DELETED_PATIENT] == 1
 
