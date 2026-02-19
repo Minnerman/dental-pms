@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, literal, select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -25,6 +25,7 @@ from app.models.r4_charting import (
     R4TreatmentNote,
 )
 from app.models.r4_patient_mapping import R4PatientMapping
+from app.models.r4_treatment_plan import R4TreatmentPlan, R4TreatmentPlanItem
 from app.models.user import User
 from app.services.r4_import.mapping_preflight import ensure_mapping_for_patient, mapping_exists
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
@@ -150,6 +151,30 @@ def _sqlserver_temporary_notes(source: R4SqlServerSource, patient_code: int, lim
 def _sqlserver_treatment_notes(source: R4SqlServerSource, patient_code: int, limit: int):
     return _normalize_rows(
         source.list_treatment_notes(
+            patients_from=patient_code,
+            patients_to=patient_code,
+            date_from=None,
+            date_to=None,
+            limit=limit,
+        )
+    )
+
+
+def _sqlserver_treatment_plans(source: R4SqlServerSource, patient_code: int, limit: int):
+    return _normalize_rows(
+        source.list_treatment_plans(
+            patients_from=patient_code,
+            patients_to=patient_code,
+            date_from=None,
+            date_to=None,
+            limit=limit,
+        )
+    )
+
+
+def _sqlserver_treatment_plan_items(source: R4SqlServerSource, patient_code: int, limit: int):
+    return _normalize_rows(
+        source.list_treatment_plan_items(
             patients_from=patient_code,
             patients_to=patient_code,
             date_from=None,
@@ -306,6 +331,9 @@ ENTITY_ALIASES = {
     "patient_notes": "patient_notes",
     "temporary_notes": "temporary_notes",
     "treatment_notes": "treatment_notes",
+    "treatment_plans": "treatment_plans",
+    "treatment_plan_items": "treatment_plan_items",
+    "treatment_plan_item": "treatment_plan_items",
     "chart_healing_actions": "chart_healing_actions",
     "chart_actions": "chart_healing_actions",
     "bpe": "bpe",
@@ -334,6 +362,40 @@ ENTITY_COLUMNS = {
     ],
     "temporary_notes": ["patient_code", "note", "legacy_updated_at", "user_code"],
     "treatment_notes": ["patient_code", "legacy_treatment_note_id", "note_date", "note", "user_code"],
+    "treatment_plans": [
+        "patient_code",
+        "tp_number",
+        "treatment_plan_id",
+        "plan_index",
+        "is_master",
+        "is_current",
+        "is_accepted",
+        "creation_date",
+        "acceptance_date",
+        "completion_date",
+        "status_code",
+        "reason_id",
+        "tp_group",
+    ],
+    "treatment_plan_items": [
+        "patient_code",
+        "tp_number",
+        "tp_item",
+        "tp_item_key",
+        "code_id",
+        "tooth",
+        "surface",
+        "appointment_need_id",
+        "item_date",
+        "plan_creation_date",
+        "completed",
+        "completed_date",
+        "patient_cost",
+        "dpb_cost",
+        "discretionary_cost",
+        "material",
+        "arch_code",
+    ],
     "chart_healing_actions": [
         "patient_code",
         "legacy_action_id",
@@ -413,6 +475,8 @@ ENTITY_SORT_KEYS = {
     "patient_notes": ["patient_code", "note_date", "note_number", "legacy_note_key"],
     "temporary_notes": ["patient_code", "legacy_updated_at"],
     "treatment_notes": ["patient_code", "note_date", "legacy_treatment_note_id"],
+    "treatment_plans": ["patient_code", "tp_number"],
+    "treatment_plan_items": ["patient_code", "tp_number", "tp_item", "tp_item_key"],
     "chart_healing_actions": ["patient_code", "action_date", "legacy_action_id"],
     "bpe": ["patient_code", "recorded_at", "legacy_bpe_id", "legacy_bpe_key"],
     "bpe_furcations": ["patient_code", "recorded_at", "legacy_bpe_id", "tooth", "furcation"],
@@ -427,6 +491,8 @@ ENTITY_DATE_FIELDS = {
     "patient_notes": ["note_date"],
     "temporary_notes": ["legacy_updated_at"],
     "treatment_notes": ["note_date"],
+    "treatment_plans": ["creation_date"],
+    "treatment_plan_items": ["item_date", "completed_date"],
     "chart_healing_actions": ["action_date"],
     "bpe": ["recorded_at"],
     "bpe_furcations": ["recorded_at"],
@@ -438,6 +504,8 @@ ENTITY_LINKAGE = {
     "patient_notes": "patient_notes.patient_code",
     "temporary_notes": "temporary_notes.patient_code",
     "treatment_notes": "treatment_notes.patient_code",
+    "treatment_plans": "treatment_plans.patient_code",
+    "treatment_plan_items": "treatment_plan_items.patient_code_via_treatment_plans",
     "chart_healing_actions": "chart_healing_actions.patient_code",
     "bpe": "bpe.patient_code_or_bpe_id",
     "bpe_furcations": "bpefurcation.bpe_id_join",
@@ -526,6 +594,20 @@ def _normalize_entity_rows(
         elif entity == "treatment_notes":
             if payload.get("legacy_treatment_note_id") is None and payload.get("note_id") is not None:
                 payload["legacy_treatment_note_id"] = payload.get("note_id")
+        elif entity == "treatment_plans":
+            if payload.get("patient_code") is None and payload.get("legacy_patient_code") is not None:
+                payload["patient_code"] = payload.get("legacy_patient_code")
+            if payload.get("tp_number") is None and payload.get("legacy_tp_number") is not None:
+                payload["tp_number"] = payload.get("legacy_tp_number")
+        elif entity == "treatment_plan_items":
+            if payload.get("patient_code") is None and payload.get("legacy_patient_code") is not None:
+                payload["patient_code"] = payload.get("legacy_patient_code")
+            if payload.get("tp_number") is None and payload.get("legacy_tp_number") is not None:
+                payload["tp_number"] = payload.get("legacy_tp_number")
+            if payload.get("tp_item") is None and payload.get("legacy_tp_item") is not None:
+                payload["tp_item"] = payload.get("legacy_tp_item")
+            if payload.get("tp_item_key") is None and payload.get("legacy_tp_item_key") is not None:
+                payload["tp_item_key"] = payload.get("legacy_tp_item_key")
         elif entity == "patient_notes":
             if payload.get("legacy_note_key") is None:
                 payload["legacy_note_key"] = _build_legacy_key(
@@ -649,6 +731,59 @@ def main() -> int:
                     R4TreatmentNote.note.label("note"),
                     R4TreatmentNote.user_code.label("user_code"),
                 ).where(R4TreatmentNote.legacy_patient_code == patient_code),
+                args.limit,
+            )
+
+        if "treatment_plans" in entities:
+            sqlserver["treatment_plans"] = _sqlserver_treatment_plans(source, patient_code, args.limit)
+            postgres["treatment_plans"] = _pg_rows(
+                session,
+                select(
+                    R4TreatmentPlan.legacy_patient_code.label("patient_code"),
+                    R4TreatmentPlan.legacy_tp_number.label("tp_number"),
+                    R4TreatmentPlan.id.label("treatment_plan_id"),
+                    R4TreatmentPlan.plan_index.label("plan_index"),
+                    R4TreatmentPlan.is_master.label("is_master"),
+                    R4TreatmentPlan.is_current.label("is_current"),
+                    R4TreatmentPlan.is_accepted.label("is_accepted"),
+                    R4TreatmentPlan.creation_date.label("creation_date"),
+                    R4TreatmentPlan.acceptance_date.label("acceptance_date"),
+                    R4TreatmentPlan.completion_date.label("completion_date"),
+                    R4TreatmentPlan.status_code.label("status_code"),
+                    R4TreatmentPlan.reason_id.label("reason_id"),
+                    R4TreatmentPlan.tp_group.label("tp_group"),
+                ).where(R4TreatmentPlan.legacy_patient_code == patient_code),
+                args.limit,
+            )
+
+        if "treatment_plan_items" in entities:
+            sqlserver["treatment_plan_items"] = _sqlserver_treatment_plan_items(source, patient_code, args.limit)
+            postgres["treatment_plan_items"] = _pg_rows(
+                session,
+                select(
+                    R4TreatmentPlan.legacy_patient_code.label("patient_code"),
+                    R4TreatmentPlan.legacy_tp_number.label("tp_number"),
+                    R4TreatmentPlanItem.legacy_tp_item.label("tp_item"),
+                    R4TreatmentPlanItem.legacy_tp_item_key.label("tp_item_key"),
+                    R4TreatmentPlanItem.code_id.label("code_id"),
+                    R4TreatmentPlanItem.tooth.label("tooth"),
+                    R4TreatmentPlanItem.surface.label("surface"),
+                    R4TreatmentPlanItem.appointment_need_id.label("appointment_need_id"),
+                    literal(None).label("item_date"),
+                    R4TreatmentPlan.creation_date.label("plan_creation_date"),
+                    R4TreatmentPlanItem.completed.label("completed"),
+                    R4TreatmentPlanItem.completed_date.label("completed_date"),
+                    R4TreatmentPlanItem.patient_cost.label("patient_cost"),
+                    R4TreatmentPlanItem.dpb_cost.label("dpb_cost"),
+                    R4TreatmentPlanItem.discretionary_cost.label("discretionary_cost"),
+                    R4TreatmentPlanItem.material.label("material"),
+                    R4TreatmentPlanItem.arch_code.label("arch_code"),
+                )
+                .join(
+                    R4TreatmentPlan,
+                    R4TreatmentPlan.id == R4TreatmentPlanItem.treatment_plan_id,
+                )
+                .where(R4TreatmentPlan.legacy_patient_code == patient_code),
                 args.limit,
             )
 
