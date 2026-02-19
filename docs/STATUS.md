@@ -61,6 +61,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 142 completed (`patient_notes`, deterministic 4-patient cohort).
+  - Branch: `stage142-patient-notes`; source cohort generated from `r4_cohort_select` with `--domains patient_notes --order hashed --seed 17` and Stage 142 ledger exclusions.
+  - Cohort output: `.run/stage142_patient_notes_cohort.csv`; sorted codes:
+    - `1011486, 1014154, 1014474, 1016312` (size `4`, overlap-before-append `0`).
+  - Patients apply (same cohort): `patients_created=2`, `patients_updated=0`, `patients_skipped=2`.
+    - Resume rerun: `patients_created=0`, `patients_updated=0`, `patients_skipped=4`.
+  - Charting canonical apply (`--domains patient_notes`): `candidates_total=4`, `imported_created_total=2`, `imported_updated_total=0`, `skipped_total=2`, `unmapped_patients_total=0`, `dropped_out_of_range_total=0`.
+    - Resume rerun: `candidates_total=0`, `imported_created_total=0`, `imported_updated_total=0` (idempotent no-op).
+  - Parity gate (`r4_parity_run --domains patient_notes`) passed:
+    - overall `status=pass`; `domains_failed=0`; patient_notes latest/digest matches `4/4`.
+  - Ledger update and stop condition:
+    - `.run/seen_stage142_patient_notes.txt` count `0 -> 4`.
+    - Re-probe with full exclusions returned expected exhaustion hard-stop:
+      `RuntimeError: Exclusion removed all candidate patient codes`.
+  - Evidence:
+    - `.run/stage142/stage142_patients_apply.txt`, `.run/stage142/stage142_patients_apply_stats.json`
+    - `.run/stage142/stage142_patients_resume.txt`, `.run/stage142/stage142_patients_resume_stats.json`
+    - `.run/stage142/stage142_charting_apply.txt`, `.run/stage142/stage142_charting_apply_stats.json`, `.run/stage142/stage142_charting_apply_report.json`, `.run/stage142/stage142_run_summary_apply.json`
+    - `.run/stage142/stage142_charting_resume.txt`, `.run/stage142/stage142_charting_resume_stats.json`, `.run/stage142/stage142_charting_resume_report.json`, `.run/stage142/stage142_run_summary_resume.json`
+    - `.run/stage142/stage142_parity_run.txt`, `.run/stage142/stage142_parity_combined.json`, `.run/stage142/stage142_parity_domains.tgz`
+    - `.run/stage142/stage142_exhaustion_probe.txt`, `.run/stage142/stage142_ledger_counts.txt`, `.run/stage142/stage142_summary.json`
 - 2026-02-19: Stage discovery refresh after PR #259 found next charting domain candidate (`patient_notes`).
   - Domain-map extraction from code:
     - `r4_cohort_select.ALL_DOMAINS`: `perioprobe,bpe,bpe_furcation,treatment_plans,treatment_notes,treatment_plan_items`.
