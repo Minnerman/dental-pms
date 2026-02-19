@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 146A diagnosis completed (`stage146a-surface-state-diagnosis`) for tooth-surface definitions vs states gap.
+  - Evidence from Stage 144 spotcheck JSON (`patient_code=1015947`):
+    - SQL Server `tooth_surfaces` sample: `5000` rows, keys
+      `tooth_id,surface_no,label,short_label,sort_order`
+    - Postgres `tooth_surfaces` sample: `3` rows, keys
+      `legacy_tooth_id,legacy_surface_no,label,short_label,sort_order`
+    - files:
+      - `.run/stage146a/step1_sqlserver_tooth_surfaces_shape.txt`
+      - `.run/stage146a/step2_postgres_tooth_surfaces_shape.txt`
+  - Code-path confirmation:
+    - `r4_charting_spotcheck` marks `tooth_surfaces` as `global_lookup` and does not patient-filter SQL Server lookup rows.
+    - SQL Server source `list_tooth_surfaces(limit=...)` has no patient-code filter.
+    - Canonical importer stores `tooth_surface` with `legacy_patient_code=None` (global definition rows).
+  - DB schema discovery (chart/surface related):
+    - `public.r4_tooth_surfaces` (`3` rows) and `public.r4_tooth_systems` (`2` rows) are global reference tables.
+    - no dedicated `surface_states` table/entity currently present.
+    - patient-state related tables found: `public.r4_chart_healing_actions` (`2` rows), `public.r4_charting_canonical_records` (`1` row), `public.tooth_notes` (`0` rows).
+    - files:
+      - `.run/stage146a/step4_chart_like_tables.txt`
+      - `.run/stage146a/step4_candidate_columns.txt`
+      - `.run/stage146a/step4_canonical_domain_counts.txt`
+      - `.run/stage146a/step4_patient_state_counts_1015947.txt`
+  - Conclusion / outcome:
+    - Current `tooth_surfaces` metrics are comparing global surface definitions, not patient-specific surface states.
+    - Naming/reporting should split explicitly:
+      - `surface_definitions` (current `tooth_surfaces`)
+      - `surface_states` (new patient-scoped domain)
+  - Next recommended stage (Stage 147):
+    - implement/import parity for patient-scoped `surface_states` and expose it separately in spotcheck/reporting (do not overload `tooth_surfaces`).
 - 2026-02-19: Stage 145 started (`stage145-odontogram-ui-backlog`) with gap report + chart UI acceptance criteria.
   - Artefacts generated from Stage 144 pack:
     - `.run/stage145/gaps_summary.json`
