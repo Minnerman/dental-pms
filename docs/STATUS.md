@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 147 started (`stage147-charting-domain-discovery`) to clarify `surface_definitions` vs patient-state charting domains.
+  - Spotcheck naming/reporting clarified:
+    - output key renamed from `tooth_surfaces` to `surface_definitions`
+    - backward-compatible entity input alias retained (`--entities tooth_surfaces` maps to `surface_definitions`)
+  - 2-patient quick recheck run (`1015947`, `1013865`) confirmed:
+    - JSON outputs include `surface_definitions` on both SQL Server and Postgres sides
+    - legacy `tooth_surfaces` key no longer emitted in JSON output
+    - evidence: `.run/stage147/spotcheck_key_check.txt`
+  - Interpretation fix:
+    - `surface_definitions` is global lookup/reference data (not patient-history parity signal)
+    - parity should focus on patient-state domains (`chart_healing_actions`, `treatment_plan_items`, `bpe/bpe_furcations`, notes, etc.)
+  - Stage 147 discovery report written:
+    - `.run/stage147/charting_state_candidates.md`
+    - supporting artifacts:
+      - `.run/stage147/gaps_summary.json`
+      - `.run/stage147/gaps_summary.md`
+      - `.run/stage147/inventory_stage144_excerpt.txt`
+      - `.run/stage147/canonical_domains.txt`
+      - `.run/stage147/rg_state_candidates.txt`
+  - Recommended next-stage order (top 3):
+    1. `chart_healing_action` parity + UI mapping (tooth/surface marks and status semantics).
+    2. `treatment_plan_item` parity into chart rendering for planned/completed overlays.
+    3. `bpe_entry` + `bpe_furcation` UX integration.
 - 2026-02-19: Stage 146A diagnosis completed (`stage146a-surface-state-diagnosis`) for tooth-surface definitions vs states gap.
   - Evidence from Stage 144 spotcheck JSON (`patient_code=1015947`):
     - SQL Server `tooth_surfaces` sample: `5000` rows, keys

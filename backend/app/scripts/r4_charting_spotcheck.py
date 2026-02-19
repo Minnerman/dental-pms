@@ -313,7 +313,8 @@ ENTITY_ALIASES = {
     "bpe_furcations": "bpe_furcations",
     "perio_probes": "perio_probes",
     "perio_plaque": "perio_plaque",
-    "tooth_surfaces": "tooth_surfaces",
+    "surface_definitions": "surface_definitions",
+    "tooth_surfaces": "surface_definitions",
     "fixed_notes": "fixed_notes",
     "note_categories": "note_categories",
 }
@@ -385,7 +386,7 @@ ENTITY_COLUMNS = {
         "plaque",
         "bleeding",
     ],
-    "tooth_surfaces": [
+    "surface_definitions": [
         "legacy_tooth_id",
         "legacy_surface_no",
         "label",
@@ -417,7 +418,7 @@ ENTITY_SORT_KEYS = {
     "bpe_furcations": ["patient_code", "recorded_at", "legacy_bpe_id", "tooth", "furcation"],
     "perio_probes": ["patient_code", "recorded_at", "tooth", "probing_point", "legacy_trans_id"],
     "perio_plaque": ["patient_code", "recorded_at", "tooth", "legacy_trans_id"],
-    "tooth_surfaces": ["legacy_tooth_id", "legacy_surface_no"],
+    "surface_definitions": ["legacy_tooth_id", "legacy_surface_no"],
     "fixed_notes": ["patient_code", "legacy_fixed_note_code"],
     "note_categories": ["patient_code", "legacy_category_number"],
 }
@@ -442,7 +443,7 @@ ENTITY_LINKAGE = {
     "bpe_furcations": "bpefurcation.bpe_id_join",
     "perio_probes": "transactions.ref_id_join",
     "perio_plaque": "transactions.ref_id_join",
-    "tooth_surfaces": "global_lookup",
+    "surface_definitions": "global_lookup",
     "fixed_notes": "fixed_note_code_lookup",
     "note_categories": "note_categories.global_lookup",
 }
@@ -537,7 +538,7 @@ def _normalize_entity_rows(
         elif entity == "note_categories":
             if payload.get("legacy_category_number") is None and payload.get("category_number") is not None:
                 payload["legacy_category_number"] = payload.get("category_number")
-        elif entity == "tooth_surfaces":
+        elif entity == "surface_definitions":
             if payload.get("legacy_tooth_id") is None and payload.get("tooth_id") is not None:
                 payload["legacy_tooth_id"] = payload.get("tooth_id")
             if payload.get("legacy_surface_no") is None and payload.get("surface_no") is not None:
@@ -758,9 +759,9 @@ def main() -> int:
                 args.limit,
             )
 
-        if "tooth_surfaces" in entities:
-            sqlserver["tooth_surfaces"] = _sqlserver_tooth_surfaces(source, args.limit)
-            postgres["tooth_surfaces"] = _pg_rows(
+        if "surface_definitions" in entities:
+            sqlserver["surface_definitions"] = _sqlserver_tooth_surfaces(source, args.limit)
+            postgres["surface_definitions"] = _pg_rows(
                 session,
                 select(
                     R4ToothSurface.legacy_tooth_id.label("legacy_tooth_id"),
