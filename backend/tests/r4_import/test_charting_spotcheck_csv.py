@@ -1,9 +1,11 @@
 import csv
 
 from app.scripts.r4_charting_spotcheck import (
+    ENTITY_ALIASES,
     ENTITY_COLUMNS,
     ENTITY_SORT_KEYS,
     _normalize_entity_rows,
+    _parse_entities,
     _sqlserver_treatment_notes,
     _rows_for_csv,
     _write_csv,
@@ -112,3 +114,18 @@ def test_treatment_notes_call_uses_keyword_filters():
         "date_to": None,
         "limit": 50,
     }
+
+
+def test_surface_definitions_alias_parsing_is_backward_compatible():
+    entities = _parse_entities("tooth_surfaces,surface_definitions", ENTITY_ALIASES)
+    assert entities == ["surface_definitions"]
+
+
+def test_surface_definitions_normalization_maps_legacy_fields():
+    rows = _normalize_entity_rows(
+        "surface_definitions",
+        [{"tooth_id": 11, "surface_no": 2, "label": "O"}],
+        patient_code=1000,
+    )
+    assert rows[0]["legacy_tooth_id"] == 11
+    assert rows[0]["legacy_surface_no"] == 2
