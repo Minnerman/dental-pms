@@ -4,6 +4,7 @@ from app.scripts.r4_charting_spotcheck import (
     ENTITY_COLUMNS,
     ENTITY_SORT_KEYS,
     _normalize_entity_rows,
+    _sqlserver_treatment_notes,
     _rows_for_csv,
     _write_csv,
 )
@@ -86,3 +87,28 @@ def test_patient_code_in_csv_rows_for_both_sources():
     assert len(postgres_csv) == 1
     assert sqlserver_csv[0]["patient_code"] == patient_code
     assert postgres_csv[0]["patient_code"] == patient_code
+
+
+def test_treatment_notes_call_uses_keyword_filters():
+    class StubSource:
+        def __init__(self):
+            self.args = None
+            self.kwargs = None
+
+        def list_treatment_notes(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+            return []
+
+    source = StubSource()
+    rows = _sqlserver_treatment_notes(source, patient_code=1015947, limit=50)
+
+    assert rows == []
+    assert source.args == ()
+    assert source.kwargs == {
+        "patients_from": 1015947,
+        "patients_to": 1015947,
+        "date_from": None,
+        "date_to": None,
+        "limit": 50,
+    }

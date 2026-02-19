@@ -148,7 +148,15 @@ def _sqlserver_temporary_notes(source: R4SqlServerSource, patient_code: int, lim
 
 
 def _sqlserver_treatment_notes(source: R4SqlServerSource, patient_code: int, limit: int):
-    return _normalize_rows(source.list_treatment_notes(patient_code, patient_code, limit))
+    return _normalize_rows(
+        source.list_treatment_notes(
+            patients_from=patient_code,
+            patients_to=patient_code,
+            date_from=None,
+            date_to=None,
+            limit=limit,
+        )
+    )
 
 
 def _sqlserver_chart_actions(source: R4SqlServerSource, patient_code: int, limit: int):
