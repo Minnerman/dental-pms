@@ -68,6 +68,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Patients apply (same cohort): `patients_created=2`, `patients_updated=0`, `patients_skipped=2`.
     - Resume rerun: `patients_created=0`, `patients_updated=0`, `patients_skipped=4`.
   - Charting canonical apply (`--domains patient_notes`): `candidates_total=4`, `imported_created_total=2`, `imported_updated_total=0`, `skipped_total=2`, `unmapped_patients_total=0`, `dropped_out_of_range_total=0`.
+    - Skip reason validation: the `2` skipped rows were pre-existing canonical `patient_note` records (same `unique_key`) created on `2026-02-04`; the other `2` rows were newly created on `2026-02-19` (no drops/unmapped/errors).
     - Resume rerun: `candidates_total=0`, `imported_created_total=0`, `imported_updated_total=0` (idempotent no-op).
   - Parity gate (`r4_parity_run --domains patient_notes`) passed:
     - overall `status=pass`; `domains_failed=0`; patient_notes latest/digest matches `4/4`.
@@ -82,6 +83,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `.run/stage142/stage142_charting_resume.txt`, `.run/stage142/stage142_charting_resume_stats.json`, `.run/stage142/stage142_charting_resume_report.json`, `.run/stage142/stage142_run_summary_resume.json`
     - `.run/stage142/stage142_parity_run.txt`, `.run/stage142/stage142_parity_combined.json`, `.run/stage142/stage142_parity_domains.tgz`
     - `.run/stage142/stage142_exhaustion_probe.txt`, `.run/stage142/stage142_ledger_counts.txt`, `.run/stage142/stage142_summary.json`
+- 2026-02-19: Milestone reached — charting canonical importer domains exhausted through `2026-02-01`.
+  - Post-merge inventory + set-diff on `master` with R4 override context (`R4_SQLSERVER_ENABLED=true`) and per-domain seen ledgers:
+    - `perioprobe=0`, `bpe=0`, `bpe_furcation=0`, `patient_notes=0`, `treatment_notes=0`, `treatment_plans=0`, `treatment_plan_items=0` (`remaining_after_exclude` for all).
+  - Evidence: `.run/inventory/inventory_remaining_after_exclude_master_after_261.csv`.
+  - Next planned area (single focus): `linkage/manual mapping pipeline`.
+    - Plan: `r4_linkage_queue_load` -> `r4_manual_mapping_candidates` -> `r4_linkage_report`.
+    - Guardrails unchanged: R4 SQL Server stays SELECT-only; parity + STATUS evidence discipline remains mandatory.
 - 2026-02-19: Stage discovery refresh after PR #259 found next charting domain candidate (`patient_notes`).
   - Domain-map extraction from code:
     - `r4_cohort_select.ALL_DOMAINS`: `perioprobe,bpe,bpe_furcation,treatment_plans,treatment_notes,treatment_plan_items`.
