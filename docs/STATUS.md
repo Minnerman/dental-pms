@@ -61,6 +61,48 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 157 started (`stage157-r4-diary-parity-pack`) for appointments diary/calendar R4 parity evidence + acceptance baseline.
+  - Acceptance contract added:
+    - `docs/APPOINTMENTS_UI_ACCEPTANCE.md`
+    - sections cover views, layout, visual language, interactions, context menus, shortcuts, filters, export/print scope, performance, and Playwright acceptance coverage.
+  - Read-only diary snapshot API added:
+    - `GET /appointments/snapshot?date=YYYY-MM-DD&view=day|week`
+    - response includes column model (`chair`/`clinician`), time blocks, appointment rows (status/type/start/end/patient display), and flags (`has_notes`, `has_patient_alerts`, `has_cancel_reason`).
+  - Deterministic snapshot tooling added:
+    - script: `backend/app/scripts/appointments_diary_snapshot_pack.py`
+    - backend tests: `backend/tests/appointments/test_appointments_snapshot.py`
+    - generated artifacts:
+      - `.run/stage157/diary_day_metrics.json`
+      - `.run/stage157/diary_representative_dates.json`
+      - `.run/stage157/diary_snapshot_<date>_<view>.json`
+  - Selected representative dates from current DB:
+    - busy day: `2026-01-15`
+    - medium day: `2026-01-10`
+    - light day: `2026-02-04`
+    - mixed clinicians/chairs day (best available fallback): `2026-01-20`
+    - emergency/blocks day (fallback, no emergency/block markers present): `2026-01-19`
+  - UI screenshot harness added:
+    - Playwright spec: `frontend/tests/appointments-diary-parity-pack.spec.ts`
+    - captures day screenshots for selected dates + one week screenshot under `.run/stage157/`:
+      - `.run/stage157/appointments_day_<date>.png`
+      - `.run/stage157/appointments_week_<anchor_date>.png`
+  - Initial parity checklist (baseline vs R4):
+    - matches:
+      - day-sheet view exists and supports dense patient rows.
+      - calendar view supports day/week/month with drag/drop and resize.
+      - right-click context menu supports core status actions and clipboard actions.
+      - keyboard basics exist (`n`, `/`, `Esc`, plus copy/cut/paste shortcuts).
+    - top 10 gaps to close in Stage 158:
+      1. calendar shell still uses generic `react-big-calendar` layout instead of R4 diary shell.
+      2. no true chair/clinician columnar diary rendering in the main appointment grid.
+      3. header rows do not yet expose R4-like grouping + metadata density.
+      4. status/type visual language is not yet standardized to a strict R4 palette/icon system.
+      5. emergency slot/block semantics are not explicitly rendered.
+      6. filter model lacks first-class status/type/chair controls in the diary shell.
+      7. interaction affordances (single vs double click semantics) are not locked by dedicated parity tests yet.
+      8. context menu action set is present but not yet finalized against strict R4 action parity.
+      9. diary print/export parity is incomplete (run-sheet exists, diary print pack missing).
+      10. screenshot-diff visual regression gate for diary parity is not in place yet.
 - 2026-02-20: Stage 156A started (`stage156a-tooth-state-classification`) to expand backend tooth-state classification buckets.
   - Tooth-state type classification extracted to a pure function:
     - `backend/app/services/tooth_state_classification.py`

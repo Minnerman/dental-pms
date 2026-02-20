@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Optional
+from datetime import date, datetime
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -66,3 +66,48 @@ class AppointmentOut(BaseModel):
     updated_by: Optional[ActorOut] = None
     deleted_at: Optional[datetime] = None
     deleted_by: Optional[ActorOut] = None
+
+
+class DiarySnapshotColumnOut(BaseModel):
+    key: str
+    label: str
+    kind: Literal["chair", "clinician"]
+    appointment_count: int
+    clinician_user_id: Optional[int] = None
+    location: Optional[str] = None
+    location_type: Optional[AppointmentLocationType] = None
+
+
+class DiarySnapshotFlagsOut(BaseModel):
+    has_notes: bool = False
+    has_patient_alerts: bool = False
+    has_cancel_reason: bool = False
+
+
+class DiarySnapshotAppointmentOut(BaseModel):
+    id: int
+    starts_at: datetime
+    ends_at: datetime
+    duration_minutes: int
+    status: AppointmentStatus
+    appointment_type: Optional[str] = None
+    patient_id: Optional[int] = None
+    patient_display_name: str
+    clinician_user_id: Optional[int] = None
+    clinician_label: Optional[str] = None
+    location: Optional[str] = None
+    location_type: AppointmentLocationType
+    is_domiciliary: bool = False
+    column_key: str
+    flags: DiarySnapshotFlagsOut
+
+
+class DiarySnapshotOut(BaseModel):
+    date: date
+    view: Literal["day", "week"]
+    range_start: date
+    range_end: date
+    columns: list[DiarySnapshotColumnOut]
+    time_blocks: list[str]
+    appointments: list[DiarySnapshotAppointmentOut]
+    summary: dict[str, int]
