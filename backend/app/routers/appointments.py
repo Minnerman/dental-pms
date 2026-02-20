@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -12,9 +13,15 @@ from app.models.audit_log import AuditLog
 from app.models.estimate import Estimate
 from app.models.patient import CareSetting, Patient
 from app.models.user import Role, User
-from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
+from app.schemas.appointment import (
+    AppointmentCreate,
+    AppointmentOut,
+    AppointmentUpdate,
+    DiarySnapshotOut,
+)
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.estimate import EstimateOut
+from app.services.appointments_snapshot import build_appointments_snapshot
 from app.services.audit import log_event, snapshot_model
 from app.services.run_sheet_pdf import build_run_sheet_pdf
 from app.services.schedule import load_schedule, validate_appointment_window
@@ -92,6 +99,22 @@ def list_appointments_range(
     elif location == "visit":
         stmt = stmt.where(Appointment.location_type == AppointmentLocationType.visit)
     return list(db.scalars(stmt))
+
+
+@router.get("/snapshot", response_model=DiarySnapshotOut)
+def appointments_snapshot(
+    snapshot_date: date = Query(..., alias="date"),
+    view: Literal["day", "week"] = Query(default="day"),
+    mask_names: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    return build_appointments_snapshot(
+        db,
+        anchor_date=snapshot_date,
+        view=view,
+        mask_names=mask_names,
+    )
 
 
 @router.get("", response_model=list[AppointmentOut])
