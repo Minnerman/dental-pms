@@ -2485,6 +2485,97 @@ class R4SqlServerSource:
                 if remaining is not None:
                     remaining -= 1
 
+    def list_treatments_by_codes(
+        self,
+        treatment_codes: list[int],
+        limit: int | None = None,
+    ) -> list[R4Treatment]:
+        if not treatment_codes:
+            return []
+        selected_codes = sorted({int(code) for code in treatment_codes})
+        if limit is not None:
+            selected_codes = selected_codes[: max(limit, 0)]
+        if not selected_codes:
+            return []
+
+        # Primary source for TP item code labels in this dataset is dbo.Codes.
+        # Fallback to dbo.Treatments when dbo.Codes is unavailable.
+        table = "Treatments"
+        code_col = self._pick_column("Codes", ["CodeID", "TreatmentCode", "Code"])
+        if code_col:
+            table = "Codes"
+        else:
+            code_col = self._require_column(
+                "Treatments",
+                ["TreatmentCode", "CodeID", "TreatmentID", "Code"],
+            )
+        desc_col = self._pick_column(table, ["Description", "description", "TreatmentDescription", "Name"])
+        short_col = self._pick_column(table, ["ShortCode", "ShortDesc", "Code"])
+        default_time_col = self._pick_column(
+            table,
+            ["DefaultTime", "DefaultMinutes", "DefaultDuration"],
+        )
+        exam_col = self._pick_column(table, ["Exam", "IsExam"])
+        patient_required_col = self._pick_column(
+            table,
+            ["PatientRequired", "RequiresPatient", "PatientReq"],
+        )
+
+        select_cols = [f"{code_col} AS treatment_code"]
+        if desc_col:
+            select_cols.append(f"{desc_col} AS description")
+        if short_col:
+            select_cols.append(f"{short_col} AS short_code")
+        if default_time_col:
+            select_cols.append(
+                "CASE WHEN {0} IS NULL THEN NULL ELSE "
+                "(DATEPART(HOUR, {0}) * 60 + DATEPART(MINUTE, {0})) "
+                "END AS default_time_minutes".format(default_time_col)
+            )
+        if exam_col:
+            select_cols.append(f"{exam_col} AS exam")
+        if patient_required_col:
+            select_cols.append(f"{patient_required_col} AS patient_required")
+
+        rows: list[dict[str, Any]] = []
+        chunk_size = 500
+        for i in range(0, len(selected_codes), chunk_size):
+            chunk = selected_codes[i : i + chunk_size]
+            placeholders = ", ".join("?" for _ in chunk)
+            query = (
+                f"SELECT {', '.join(select_cols)} "
+                f"FROM dbo.{table} WITH (NOLOCK) "
+                f"WHERE {code_col} IN ({placeholders}) "
+                f"ORDER BY {code_col}"
+            )
+            rows.extend(self._query(query, chunk))
+
+        out: list[R4Treatment] = []
+        seen: set[int] = set()
+        for row in rows:
+            treatment_code = row.get("treatment_code")
+            if treatment_code is None:
+                continue
+            code_int = int(treatment_code)
+            if code_int in seen:
+                continue
+            seen.add(code_int)
+            out.append(
+                R4Treatment(
+                    treatment_code=code_int,
+                    description=(row.get("description") or "").strip() or None,
+                    short_code=(row.get("short_code") or "").strip() or None,
+                    default_time_minutes=(
+                        int(row["default_time_minutes"])
+                        if row.get("default_time_minutes") is not None
+                        else None
+                    ),
+                    exam=_coerce_bool(row.get("exam"), default=False),
+                    patient_required=_coerce_bool(row.get("patient_required"), default=False),
+                )
+            )
+        return out
+
     def list_users(self, limit: int | None = None) -> Iterable[R4User]:
         return self.stream_users(limit=limit)
 

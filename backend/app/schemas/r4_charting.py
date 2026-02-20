@@ -160,6 +160,37 @@ class R4ChartingMetaOut(BaseModel):
     source: str = "r4"
 
 
+class R4TreatmentPlanOverlayItemOut(BaseModel):
+    tp_number: int | None = None
+    tp_item: int | None = None
+    tp_item_key: str | None = None
+    code_id: int | None = None
+    code_label: str | None = None
+    tooth: int | None = None
+    surface: int | None = None
+    tooth_level: bool = False
+    completed: bool | None = None
+    item_date: datetime | None = None
+    plan_creation_date: datetime | None = None
+
+
+class R4TreatmentPlanToothGroupOut(BaseModel):
+    tooth: int
+    planned_count: int
+    completed_count: int
+    items: list[R4TreatmentPlanOverlayItemOut]
+
+
+class R4TreatmentPlanOverlayOut(BaseModel):
+    patient_id: int
+    legacy_patient_code: int | None = None
+    total_items: int
+    total_planned: int
+    total_completed: int
+    tooth_groups: list[R4TreatmentPlanToothGroupOut]
+    unassigned_items: list[R4TreatmentPlanOverlayItemOut]
+
+
 class ChartingAuditIn(BaseModel):
     action: Literal["viewer_opened", "share_link_copied"]
     section: str | None = None

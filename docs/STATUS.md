@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 152A/B started (`stage152-odontogram-overlays`) for TP/TPI overlay API + treatment code label sync.
+  - SQL Server code-label source discovery (read-only) completed:
+    - discovery query:
+      `SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME LIKE '%Code%' OR COLUMN_NAME LIKE '%Desc%' OR COLUMN_NAME LIKE '%Description%' ORDER BY TABLE_NAME, ORDINAL_POSITION`
+    - focused result for TP item code IDs (`3599`, `3600`):
+      - `dbo.Codes.CodeID` + `dbo.Codes.Description`
+    - evidence: `.run/stage152/sqlserver_code_table_discovery.txt`, `.run/stage152/code_lookup_probe.txt`
+  - Stage 152A implementation:
+    - added targeted code sync script:
+      - `backend/app/scripts/r4_treatment_codes_sync.py`
+      - syncs selected code IDs into existing Postgres cache table `r4_treatments` (source-of-truth for code labels in API).
+    - SQL Server source helper added:
+      - `list_treatments_by_codes(...)` now fetches from `dbo.Codes` (fallback `dbo.Treatments`).
+    - deterministic code sync for patient `1014496`:
+      - derived code IDs: `.run/stage152/code_ids.txt` (`3599`, `3600`)
+      - sync stats: `.run/stage152/stage152_codes_sync.json`
+      - outcome: `fetched_total=2`, `created=2`, `missing_codes_total=0`
+  - Stage 152B implementation:
+    - new read-only overlay endpoint:
+      - `GET /patients/{patient_id}/charting/treatment-plan-items`
+    - endpoint uses canonical TP/TPI rows keyed by `legacy_patient_code` and enriches each item with:
+      - `code_label` from `r4_treatments` (fallback: `"Unknown code"` when code is missing in cache)
+      - planned/completed totals
+      - tooth-grouped items + `unassigned_items` for non-tooth rows
+    - real-data sample response for patient `1014496`:
+      - `.run/stage152/api_response_1014496.json`
+      - confirms tooth groups `15`, `16` with labels:
+        - `3599 -> "Extraction"`
+        - unassigned row `3600 -> "Emergency Appointment"`
 - 2026-02-20: Stage 151 completed (`fix/spotcheck-postgres-tp-tpi`) to fix TP/TPI Postgres spotcheck retrieval.
   - Root cause from Stage 150 was confirmed and fixed:
     - `r4_charting_spotcheck` Postgres TP/TPI path previously queried `r4_treatment_plans`/`r4_treatment_plan_items`.
