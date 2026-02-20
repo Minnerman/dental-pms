@@ -36,8 +36,8 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
                 code_id: 3599,
                 code_label: "Extraction",
                 tooth: 15,
-                surface: 0,
-                tooth_level: true,
+                surface: 1,
+                tooth_level: false,
                 completed: false,
                 item_date: "2025-08-01T00:00:00+00:00",
                 plan_creation_date: "2025-08-01T00:00:00+00:00",
@@ -56,8 +56,8 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
                 code_id: 3599,
                 code_label: "Extraction",
                 tooth: 16,
-                surface: 0,
-                tooth_level: true,
+                surface: 77,
+                tooth_level: false,
                 completed: false,
                 item_date: "2025-08-01T00:00:00+00:00",
                 plan_creation_date: "2025-08-01T00:00:00+00:00",
@@ -91,14 +91,26 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
   await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveText("P1");
+  await expect(page.getByTestId("tooth-surface-overlay-15-M")).toBeVisible();
+  await expect(page.getByTestId("tooth-surface-overlay-15-M")).toHaveAttribute(
+    "data-surface",
+    "M"
+  );
   await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
     "Emergency Appointment"
   );
 
   await page.getByTestId("tooth-button-UR5").click();
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("Extraction");
+  await expect(page.getByTestId("overlay-tooth-items")).toContainText("Surface: M");
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("Planned");
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("5001-1");
+
+  await page.getByTestId("tooth-button-UR6").click();
+  await expect(page.getByTestId("overlay-tooth-items")).toContainText("Surface: 77 (unmapped)");
+  await expect(page.getByTestId("overlay-tooth-items")).toContainText(
+    "Unmapped surface code; rendered as tooth-level fallback."
+  );
 
   await page.getByTestId("clinical-overlay-filter-planned").click();
   await expect(page.getByTestId("overlay-unassigned-items")).toContainText(

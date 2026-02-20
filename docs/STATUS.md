@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 153B started (`stage153b-surface-overlays`) for surface-specific overlay rendering.
+  - Surface discovery from existing artefacts:
+    - command scanned `.run/stage144/patient_*/r4_spotcheck.json` and `.run/stage151/r4_spotcheck_1014496.json`
+    - distinct `sqlserver.treatment_plan_items[].surface` values currently observed: `0` only
+    - evidence: `.run/stage153b/distinct_tp_item_surfaces.txt`
+  - Framework-first implementation (since current observed set is only `0`):
+    - added shared mapper utility:
+      - `frontend/lib/charting/r4SurfaceCodeToSurfaceKey.ts`
+      - contract: `r4SurfaceCodeToSurfaceKey(code) -> "M"|"O"|"D"|"B"|"L"|"I"|null`
+      - `0` -> `null` (whole-tooth)
+      - letter inputs are accepted directly (`M/O/D/B/L/I`)
+      - conservative numeric mapping wired for synthetic coverage:
+        - `1->M`, `2->O`, `3->D`, `4->B`, `5->L`, `6->I`
+      - unknown values -> `null` (fallback to tooth-level rendering)
+    - clinical overlay UI now renders surface markers when mapped and falls back cleanly when unmapped:
+      - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+      - surface marker elements expose `data-surface` and test IDs like
+        `tooth-surface-overlay-<fdi>-<surface>`
+      - drill-down panel now shows:
+        - mapped example: `Surface: M`
+        - unmapped example: `Surface: <raw> (unmapped)` + dev-note fallback text
+  - Tests:
+    - new mapper tests:
+      - `frontend/tests/r4-surface-code-mapping.spec.ts`
+    - overlay smoke extended with synthetic non-zero surface cases:
+      - `frontend/tests/clinical-odontogram-overlays.spec.ts`
+      - verifies mapped surface marker rendering + `data-surface` attribute and unmapped fallback panel text
 - 2026-02-20: Post-merge live sanity check completed for PR #275 overlays using patient `1014496`.
   - Deterministic one-patient refresh run (R4 read-only):
     - patients import: `.run/stage153/stage153_patients_1014496.json` (`patients_created=1`)
