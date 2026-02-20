@@ -78,6 +78,7 @@ type CalendarEvent = {
   title: string;
   start: Date;
   end: Date;
+  resourceId?: string;
   resource: Appointment;
 };
 
@@ -160,6 +161,7 @@ type PracticeSchedule = {
 };
 
 type LocationFilter = "all" | "clinic" | "visit";
+type DiaryGrouping = "chair" | "clinician";
 
 type CalendarRange = {
   start: string;
@@ -591,6 +593,9 @@ export default function AppointmentsPage() {
   const [calendarView, setCalendarView] = useState<View>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<"day_sheet" | "calendar">("day_sheet");
+  const [diaryGrouping, setDiaryGrouping] = useState<DiaryGrouping>("chair");
+  const [diaryChairFilter, setDiaryChairFilter] = useState("all");
+  const [diaryClinicianFilter, setDiaryClinicianFilter] = useState("all");
   const [highlightedAppointmentId, setHighlightedAppointmentId] = useState<string | null>(
     null
   );
@@ -738,31 +743,166 @@ export default function AppointmentsPage() {
     );
   }, [patientQuery, patients, patientSearchResults]);
 
-  const calendarEvents = useMemo<CalendarEvent[]>(
-    () =>
-      appointments.map((appt) => ({
-        id: String(appt.id),
-        title: `${appt.patient.first_name} ${appt.patient.last_name}`,
-        start: new Date(appt.starts_at),
-        end: new Date(appt.ends_at),
-        resource: appt,
-      })),
-    [appointments]
-  );
-
-  const isRescheduleLocked = rescheduleSavingId !== null;
-
   const patientLookup = useMemo(() => {
     return new Map(patients.map((patient) => [patient.id, patient]));
   }, [patients]);
 
+  const clinicianLookup = useMemo(() => {
+    return new Map(
+      users.map((user) => [
+        user.id,
+        user.full_name || user.email || `Clinician ${user.id}`,
+      ])
+    );
+  }, [users]);
+
+  const getClinicianLabel = useCallback(
+    (clinicianId: number | null | undefined) => {
+      if (!clinicianId) return "";
+      return clinicianLookup.get(clinicianId) || `Clinician ${clinicianId}`;
+    },
+    [clinicianLookup]
+  );
+
+  const getChairLabel = useCallback((appt: Appointment) => {
+    const room = (appt.location || "").trim();
+    if (room) return room;
+    const locationText = (appt.location_text || "").trim();
+    if (locationText) return locationText;
+    return appt.location_type === "visit" ? "Visit" : "Unassigned";
+  }, []);
+
+  const getClinicianFilterKey = useCallback(
+    (appt: Appointment) => {
+      if (appt.clinician_user_id) {
+        return `user:${appt.clinician_user_id}`;
+      }
+      const raw = (appt.clinician || "").trim();
+      if (raw) return `text:${raw.toLowerCase()}`;
+      return "unassigned";
+    },
+    []
+  );
+
+  const getClinicianDisplayLabel = useCallback(
+    (appt: Appointment) => {
+      if (appt.clinician_user_id) {
+        return getClinicianLabel(appt.clinician_user_id);
+      }
+      const raw = (appt.clinician || "").trim();
+      if (raw) return raw;
+      return "Unassigned";
+    },
+    [getClinicianLabel]
+  );
+
+  const diaryChairOptions = useMemo(() => {
+    const labels = Array.from(new Set(appointments.map((appt) => getChairLabel(appt))));
+    return labels.sort((a, b) => a.localeCompare(b));
+  }, [appointments, getChairLabel]);
+
+  const diaryClinicianOptions = useMemo(() => {
+    const entries = new Map<string, string>();
+    for (const appt of appointments) {
+      const key = getClinicianFilterKey(appt);
+      if (!entries.has(key)) {
+        entries.set(key, getClinicianDisplayLabel(appt));
+      }
+    }
+    return Array.from(entries.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [appointments, getClinicianDisplayLabel, getClinicianFilterKey]);
+
+  useEffect(() => {
+    if (diaryGrouping === "chair") {
+      if (diaryChairFilter !== "all" && !diaryChairOptions.includes(diaryChairFilter)) {
+        setDiaryChairFilter("all");
+      }
+      return;
+    }
+    if (
+      diaryClinicianFilter !== "all" &&
+      !diaryClinicianOptions.some((item) => item.key === diaryClinicianFilter)
+    ) {
+      setDiaryClinicianFilter("all");
+    }
+  }, [
+    diaryGrouping,
+    diaryChairFilter,
+    diaryChairOptions,
+    diaryClinicianFilter,
+    diaryClinicianOptions,
+  ]);
+
+  const diaryFilteredAppointments = useMemo(() => {
+    return appointments.filter((appt) => {
+      if (diaryGrouping === "chair") {
+        if (diaryChairFilter !== "all" && getChairLabel(appt) !== diaryChairFilter) {
+          return false;
+        }
+      } else if (diaryClinicianFilter !== "all") {
+        if (getClinicianFilterKey(appt) !== diaryClinicianFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [
+    appointments,
+    diaryGrouping,
+    diaryChairFilter,
+    diaryClinicianFilter,
+    getChairLabel,
+    getClinicianFilterKey,
+  ]);
+
+  const diaryColumns = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const appt of diaryFilteredAppointments) {
+      const label =
+        diaryGrouping === "chair"
+          ? getChairLabel(appt)
+          : getClinicianDisplayLabel(appt);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (rows.length > 0) return rows;
+    return [
+      {
+        label: diaryGrouping === "chair" ? "Unassigned" : "Unassigned",
+        count: 0,
+      },
+    ];
+  }, [diaryFilteredAppointments, diaryGrouping, getChairLabel, getClinicianDisplayLabel]);
+
+  const calendarEvents = useMemo<CalendarEvent[]>(
+    () =>
+      diaryFilteredAppointments.map((appt) => ({
+        id: String(appt.id),
+        title: `${appt.patient.first_name} ${appt.patient.last_name}`,
+        start: new Date(appt.starts_at),
+        end: new Date(appt.ends_at),
+        resourceId:
+          diaryGrouping === "chair"
+            ? getChairLabel(appt)
+            : getClinicianDisplayLabel(appt),
+        resource: appt,
+      })),
+    [diaryFilteredAppointments, diaryGrouping, getChairLabel, getClinicianDisplayLabel]
+  );
+
+  const isRescheduleLocked = rescheduleSavingId !== null;
+
   const highlightScrollTime = useMemo(() => {
     if (!highlightedAppointmentId) return undefined;
-    const appt = appointments.find(
+    const appt = diaryFilteredAppointments.find(
       (item) => String(item.id) === String(highlightedAppointmentId)
     );
     return appt ? new Date(appt.starts_at) : undefined;
-  }, [appointments, highlightedAppointmentId]);
+  }, [diaryFilteredAppointments, highlightedAppointmentId]);
 
   const daySheetAppointments = useMemo(() => {
     const key = toDateKey(currentDate);
@@ -772,16 +912,6 @@ export default function AppointmentsPage() {
         (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
       );
   }, [appointments, currentDate]);
-
-  const getClinicianLabel = useCallback(
-    (clinicianId: number | null | undefined) => {
-      if (!clinicianId) return "";
-      const clinician = users.find((user) => user.id === clinicianId);
-      if (!clinician) return `Clinician ${clinicianId}`;
-      return clinician.full_name || clinician.email || `Clinician ${clinicianId}`;
-    },
-    [users]
-  );
 
   const buildConflictWarning = useCallback(
     (
@@ -2192,6 +2322,70 @@ export default function AppointmentsPage() {
     setRange((prev) => (prev ? { ...prev, anchor: toDateKey(date) } : prev));
   }
 
+  const isDiaryShellView =
+    viewMode === "calendar" && (calendarView === "day" || calendarView === "week");
+
+  function CalendarToolbar(toolbar: {
+    date: Date;
+    label: string;
+    view: View;
+    onNavigate: (action: "PREV" | "NEXT" | "TODAY" | "DATE", date?: Date) => void;
+    onView: (view: View) => void;
+  }) {
+    const availableViews: Array<{ value: View; label: string }> = [
+      { value: "day", label: "Day" },
+      { value: "week", label: "Week" },
+      { value: "month", label: "Month" },
+      { value: "agenda", label: "Agenda" },
+    ];
+    return (
+      <div className="rbc-toolbar appointments-r4-toolbar" data-testid="appointments-calendar-toolbar">
+        <span className="rbc-btn-group">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => toolbar.onNavigate("PREV")}
+            data-testid="appointments-calendar-prev"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => toolbar.onNavigate("TODAY")}
+            data-testid="appointments-calendar-today"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => toolbar.onNavigate("NEXT")}
+            data-testid="appointments-calendar-next"
+          >
+            Next
+          </button>
+        </span>
+        <span className="rbc-toolbar-label" data-testid="appointments-calendar-label">
+          {toolbar.label}
+        </span>
+        <span className="rbc-btn-group">
+          {availableViews.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={toolbar.view === item.value ? "btn btn-primary" : "btn btn-secondary"}
+              onClick={() => toolbar.onView(item.value)}
+              data-testid={`appointments-calendar-view-${item.value}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </span>
+      </div>
+    );
+  }
+
   function eventStyleGetter(event: CalendarEvent) {
     const theme = statusThemeTokens[event.resource.status];
     const isHighlighted =
@@ -2239,70 +2433,44 @@ export default function AppointmentsPage() {
     const patientDetail = patientLookup.get(appt.patient.id);
     const phone = patientDetail?.phone || "";
     const address = buildShortAddress(patientDetail);
-    const timeLabel = `${format(event.start, "HH:mm")}-${format(event.end, "HH:mm")}`;
-    const secondaryParts = [
-      appt.clinician ? `Clinician: ${appt.clinician}` : null,
-      appt.location || appt.location_text ? `Location: ${appt.location || appt.location_text}` : null,
+    const timeLabel = `${format(event.start, "HH:mm")}–${format(event.end, "HH:mm")}`;
+    const appointmentCode = toAppointmentCode(appt.appointment_type);
+    const locationLabel =
+      appt.location_type === "visit"
+        ? appt.location_text || "Visit"
+        : appt.location || "Clinic";
+    const patientLabel = `${appt.patient.last_name.toUpperCase()}, ${appt.patient.first_name}`;
+    const detailParts = [
+      calendarView === "day" && phone ? `P: ${phone}` : null,
+      calendarView === "day" && address ? address : null,
+      locationLabel ? `@ ${locationLabel}` : null,
     ].filter(Boolean);
     return (
-        <div
-          style={{ display: "grid", gap: 4 }}
-          data-testid={`appointment-event-${appt.id}`}
-          data-appointment-id={appt.id}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setSelectedAppointmentId(appt.id);
-            setContextMenu({ x: event.clientX, y: event.clientY, appointment: appt });
-          }}
-        >
-        <div style={{ fontWeight: 600, lineHeight: 1.2 }}>
-          {timeLabel} {event.title}
+      <div
+        className="appointments-r4-event"
+        data-testid={`appointment-event-${appt.id}`}
+        data-appointment-id={appt.id}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setSelectedAppointmentId(appt.id);
+          setContextMenu({ x: event.clientX, y: event.clientY, appointment: appt });
+        }}
+      >
+        <div className="appointments-r4-event-title">
+          <span className="appointments-r4-event-time">{timeLabel}</span>
+          <span>{patientLabel}</span>
         </div>
-        {calendarView === "day" && (phone || address) && (
-          <div style={{ fontSize: 12, opacity: 0.9 }}>
-            {[phone ? `Phone: ${phone}` : null, address ? `Address: ${address}` : null]
-              .filter(Boolean)
-              .join(" · ")}
-          </div>
-        )}
-        {secondaryParts.length > 0 && (
-          <div style={{ fontSize: 12, opacity: 0.9 }}>{secondaryParts.join(" · ")}</div>
-        )}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <span
-            className="badge"
-            style={{
-              color: "white",
-              borderColor: "transparent",
-              background: "rgba(255, 255, 255, 0.2)",
-            }}
-          >
-            {statusLabels[appt.status]}
+        <div className="appointments-r4-event-meta">
+          <span className="appointments-r4-event-code">{appointmentCode}</span>
+          <span className="r4-status-pill" data-status={appt.status}>
+            {daySheetStatusLabels[appt.status]}
           </span>
-          <span
-            className="badge"
-            style={{
-              color: "white",
-              borderColor: "transparent",
-              background: "rgba(255, 255, 255, 0.2)",
-            }}
-          >
-            {appt.location_type === "visit" ? "Visit" : "Clinic"}
-          </span>
-          {rescheduleSavingId === appt.id && (
-            <span
-              className="badge"
-              style={{
-                color: "white",
-                borderColor: "transparent",
-                background: "rgba(0, 0, 0, 0.35)",
-              }}
-            >
-              Saving...
-            </span>
-          )}
+          {rescheduleSavingId === appt.id && <span className="badge">Saving...</span>}
         </div>
+        {detailParts.length > 0 && (
+          <div className="appointments-r4-event-detail">{detailParts.join(" · ")}</div>
+        )}
       </div>
     );
   }
@@ -2487,7 +2655,90 @@ export default function AppointmentsPage() {
         )}
 
         {viewMode === "calendar" ? (
-          <div className="card" style={{ margin: 0, padding: 16 }}>
+          <div
+            className="card appointments-r4-shell"
+            style={{ margin: 0, padding: 16 }}
+            data-testid="appointments-diary-shell"
+          >
+            {isDiaryShellView && (
+              <div className="appointments-r4-shell-header">
+                <label className="appointments-r4-filter">
+                  <span className="label" style={{ margin: 0 }}>
+                    Group by
+                  </span>
+                  <select
+                    className="input"
+                    value={diaryGrouping}
+                    onChange={(event) => setDiaryGrouping(event.target.value as DiaryGrouping)}
+                    data-testid="appointments-diary-grouping"
+                  >
+                    <option value="chair">Chair</option>
+                    <option value="clinician">Clinician</option>
+                  </select>
+                </label>
+                {diaryGrouping === "chair" ? (
+                  <label className="appointments-r4-filter">
+                    <span className="label" style={{ margin: 0 }}>
+                      Chair
+                    </span>
+                    <select
+                      className="input"
+                      value={diaryChairFilter}
+                      onChange={(event) => setDiaryChairFilter(event.target.value)}
+                      data-testid="appointments-diary-chair-filter"
+                    >
+                      <option value="all">All chairs</option>
+                      {diaryChairOptions.map((label) => (
+                        <option key={label} value={label}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="appointments-r4-filter">
+                    <span className="label" style={{ margin: 0 }}>
+                      Clinician
+                    </span>
+                    <select
+                      className="input"
+                      value={diaryClinicianFilter}
+                      onChange={(event) => setDiaryClinicianFilter(event.target.value)}
+                      data-testid="appointments-diary-clinician-filter"
+                    >
+                      <option value="all">All clinicians</option>
+                      {diaryClinicianOptions.map((item) => (
+                        <option key={item.key} value={item.key}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="appointments-r4-shell-note">
+                  Time scale: 10-minute increments
+                </div>
+              </div>
+            )}
+            {isDiaryShellView && (
+              <div
+                className="appointments-r4-columns"
+                data-testid="appointments-diary-columns"
+                data-grouping={diaryGrouping}
+              >
+                {diaryColumns.map((column, index) => (
+                  <div
+                    key={`${column.label}-${index}`}
+                    className="appointments-r4-column"
+                    data-testid={`appointments-diary-column-${index}`}
+                    data-column-label={column.label}
+                  >
+                    <span className="appointments-r4-column-label">{column.label}</span>
+                    <span className="badge">{column.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {loading && <div className="badge">Loading appointments…</div>}
             <DragAndDropCalendar
               localizer={localizer}
@@ -2514,11 +2765,12 @@ export default function AppointmentsPage() {
               max={maxTime}
               culture="en-GB"
               views={["day", "week", "month", "agenda"]}
-              components={{ event: AppointmentEvent }}
+              components={{ event: AppointmentEvent, toolbar: CalendarToolbar }}
               eventPropGetter={eventStyleGetter}
               dayPropGetter={dayPropGetter}
               slotPropGetter={slotPropGetter}
               scrollToTime={highlightScrollTime}
+              className="appointments-r4-calendar"
               style={{ height: "70vh" }}
             />
           </div>
@@ -2742,7 +2994,9 @@ export default function AppointmentsPage() {
             {tooltip.content}
           </div>
         )}
-        {!loading && appointments.length === 0 && (
+        {!loading &&
+          ((viewMode === "calendar" && calendarEvents.length === 0) ||
+            (viewMode !== "calendar" && appointments.length === 0)) && (
           <div className="notice">No appointments in this range.</div>
         )}
 

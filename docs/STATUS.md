@@ -61,6 +61,41 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 158A started (`stage158a-diary-layout-parity`) for R4-like appointments diary shell (layout-first, day/week).
+  - Diary shell layout changes (no new drag/resize behavior in this stage):
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/app/globals.css`
+    - Added day/week shell controls:
+      - grouping selector (`chair`/`clinician`)
+      - chair/clinician header filters
+      - compact lane header row with per-lane counts
+      - custom calendar toolbar (`Prev`/`Today`/`Next`, `Day`/`Week`/`Month`/`Agenda`) with stable test IDs.
+    - Appointment block rendering tightened for denser diary readability:
+      - time range + patient, code badge, status pill, concise detail line.
+  - Screenshot harness update:
+    - `frontend/tests/appointments-diary-parity-pack.spec.ts`
+    - now supports output directory override via `APPOINTMENTS_DIARY_SCREENSHOT_DIR`.
+  - New Playwright parity assertion:
+    - `frontend/tests/appointments-diary-layout.spec.ts`
+    - verifies day-view lane column count + rendered appointment block count align with
+      `GET /appointments/snapshot` for a known date.
+  - Stage 158A evidence screenshots (same Stage 157 dates, updated shell):
+    - `.run/stage158a/appointments_day_2026-01-10.png`
+    - `.run/stage158a/appointments_day_2026-01-15.png`
+    - `.run/stage158a/appointments_day_2026-01-19.png`
+    - `.run/stage158a/appointments_day_2026-01-20.png`
+    - `.run/stage158a/appointments_day_2026-02-04.png`
+    - `.run/stage158a/appointments_week_2026-01-15.png`
+  - Gaps closed in Stage 158A:
+    1. Added explicit chair/clinician diary shell controls and lane headers.
+    2. Codified 10-minute time scale in shell UI (day/week).
+    3. Improved appointment block density/readability toward R4-style scanning.
+    4. Added deterministic UI-vs-snapshot lane/block parity check in Playwright.
+  - Remaining gaps (Stage 158B/158C focus):
+    1. Interaction parity lock (single-click select, double-click open, right-click action parity).
+    2. Keyboard navigation parity (next/prev day, jump today, plus R4-like shortcuts pack).
+    3. Drag/drop and resize parity in lane-aware shell with full guardrail checks.
+    4. Final status/type iconography and emergency/block rendering semantics.
 - 2026-02-20: Stage 157 started (`stage157-r4-diary-parity-pack`) for appointments diary/calendar R4 parity evidence + acceptance baseline.
   - Acceptance contract added:
     - `docs/APPOINTMENTS_UI_ACCEPTANCE.md`

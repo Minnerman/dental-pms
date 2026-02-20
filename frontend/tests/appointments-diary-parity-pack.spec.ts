@@ -10,6 +10,9 @@ type RepresentativeDateEntry = {
 };
 
 const stage157Dir = path.resolve(__dirname, "..", "..", ".run", "stage157");
+const artifactDir = process.env.APPOINTMENTS_DIARY_SCREENSHOT_DIR
+  ? path.resolve(process.env.APPOINTMENTS_DIARY_SCREENSHOT_DIR)
+  : stage157Dir;
 const representativeDatesPath = path.join(stage157Dir, "diary_representative_dates.json");
 const fallbackDates = ["2026-01-15", "2026-01-10", "2026-01-11", "2026-01-19", "2026-02-04"];
 
@@ -40,10 +43,13 @@ async function waitForDiaryReady(page: Page) {
 }
 
 async function switchCalendarView(page: Page, label: "Day" | "Week") {
-  const button = page
-    .locator(".rbc-toolbar button")
-    .filter({ hasText: new RegExp(`^${label}$`, "i") })
-    .first();
+  const explicit = page.getByTestId(`appointments-calendar-view-${label.toLowerCase()}`);
+  if (await explicit.count()) {
+    await expect(explicit).toBeVisible({ timeout: 10_000 });
+    await explicit.click();
+    return;
+  }
+  const button = page.locator(".rbc-toolbar button").filter({ hasText: new RegExp(`^${label}$`, "i") }).first();
   await expect(button).toBeVisible({ timeout: 10_000 });
   await button.click();
 }
@@ -61,7 +67,7 @@ async function captureDayScreenshot(
   await switchCalendarView(page, "Day");
   await waitForDiaryReady(page);
   await page.screenshot({
-    path: path.join(stage157Dir, `appointments_day_${day}.png`),
+    path: path.join(artifactDir, `appointments_day_${day}.png`),
     fullPage: true,
   });
 }
@@ -81,14 +87,14 @@ async function captureWeekScreenshot(
   await switchCalendarView(page, "Week");
   await waitForDiaryReady(page);
   await page.screenshot({
-    path: path.join(stage157Dir, `appointments_week_${anchorDate}.png`),
+    path: path.join(artifactDir, `appointments_week_${anchorDate}.png`),
     fullPage: true,
   });
 }
 
 test("stage157 diary screenshot pack", async ({ page, request }) => {
   test.setTimeout(180_000);
-  await fs.mkdir(stage157Dir, { recursive: true });
+  await fs.mkdir(artifactDir, { recursive: true });
   const days = await readRepresentativeDates();
   const baseUrl = getBaseUrl();
 
