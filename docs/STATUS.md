@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 158C started (`stage158c-diary-drag-resize`) for R4-like drag/drop + resize parity.
+  - Diary scheduling behavior upgrades in `frontend/app/(app)/appointments/page.tsx`:
+    - drag/drop move:
+      - direct drag move without confirm modal.
+      - snap-to-grid enforcement (10-minute increments).
+      - optimistic UI updates with backend persist + rollback on failure.
+      - lane-aware move persistence for chair/clinician lanes (supported mapped lanes).
+    - resize:
+      - drag-resize remains enabled with 10-minute snap enforcement.
+      - optimistic duration update with backend persist + rollback on failure.
+    - constraints:
+      - same-lane overlap is blocked in diary shell (chair/clinician grouping context).
+      - explicit error feedback is shown when blocked.
+    - resources/lanes:
+      - calendar now consumes derived diary lane resources keyed by grouping lane identity.
+      - lane metadata is surfaced via `data-column-key` alongside existing column test IDs.
+  - Visual parity polish:
+    - `frontend/app/globals.css` adds drag ghost/preview styling for RBC DnD classes.
+  - Acceptance spec update:
+    - `docs/APPOINTMENTS_UI_ACCEPTANCE.md` now codifies Stage 158C drag/resize/snap/overlap baseline.
+  - Playwright coverage:
+    - new: `frontend/tests/appointments-diary-drag-resize.spec.ts`
+      - validates drag move (time + lane), resize duration increase, and overlap-blocked persistence.
+  - Stage 158C evidence screenshots:
+    - `.run/stage158c/drag_move.png`
+    - `.run/stage158c/resize.png`
+    - `.run/stage158c/overlap_blocked.png`
+  - Remaining parity gaps after Stage 158C:
+    - explicit undo action for last move/resize.
+    - richer lane-change support for free-text/unassigned clinician lanes.
+    - deeper R4 parity polish for dense-week collision stacking behavior.
 - 2026-02-20: Stage 158B started (`stage158b-diary-interactions`) for R4-like diary interaction parity (selection/open/context/keyboard scaffolding).
   - Interaction behavior upgrades in `frontend/app/(app)/appointments/page.tsx`:
     - selection model:

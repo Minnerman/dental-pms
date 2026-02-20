@@ -55,8 +55,15 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
   - Open appointment details/edit quickly.
 - Drag/drop:
   - Move appointment in day/week grid with conflict + schedule guardrails.
+  - Stage 158C baseline:
+    - drag to a new time in the same lane.
+    - drag to a new lane (chair/clinician resource column) at the target time.
+    - direct manipulation (no confirmation modal in normal flow).
 - Resize:
   - Adjust duration with schedule/conflict checks.
+  - Stage 158C baseline:
+    - bottom-edge resize with 10-minute snap increments.
+    - optimistic update with rollback on failure.
 - Copy/duplicate:
   - Cut/copy/paste behavior with deterministic conflict handling and clear notices.
 
@@ -87,6 +94,9 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
   - `ArrowLeft`/`ArrowRight`: move appointment selection across current diary order/lane scaffold.
   - `PageUp` / `PageDown`: previous day / next day.
   - `T`: jump diary to today.
+- Stage 158C scheduling constraints:
+  - Disallow overlap within the same active lane (chair/clinician grouping context).
+  - Show explicit feedback when blocked and keep original appointment slot.
 
 ## Filtering and Search
 - Required filters:
@@ -122,7 +132,9 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
 - Interaction baseline:
   - Single click selects appointment.
   - Double click opens details.
-  - Drag/drop and resize enforce schedule/conflict constraints.
+  - Drag/drop moves appointment by time and lane.
+  - Resize adjusts appointment duration in 10-minute increments.
+  - Overlap attempt in same lane is blocked with visible feedback.
 - Context and shortcuts:
   - Right-click menu core actions work.
   - Keyboard shortcuts for new/search/copy/cut/paste/escape work.

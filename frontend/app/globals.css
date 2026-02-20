@@ -714,6 +714,21 @@ button {
   outline-offset: 1px;
 }
 
+.appointments-r4-calendar .rbc-addons-dnd-dragged-event {
+  opacity: 0.35;
+}
+
+.appointments-r4-calendar .rbc-addons-dnd-drag-preview {
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: rgba(51, 255, 180, 0.18);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.appointments-r4-calendar .rbc-addons-dnd-over {
+  background: rgba(51, 255, 180, 0.12);
+}
+
 .appointments-r4-event-title {
   display: flex;
   flex-wrap: wrap;
