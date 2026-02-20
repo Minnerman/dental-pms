@@ -18,6 +18,8 @@ from app.models.r4_charting import (
     R4PerioPlaque,
     R4PerioProbe,
 )
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
+from app.models.r4_treatment_plan import R4Treatment
 from app.models.capability import UserCapability
 from app.models.user import Role, User
 from app.services.charting_csv import ENTITY_COLUMNS
@@ -309,6 +311,151 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
         if legacy_code is not None:
             _cleanup(session, patient_id, legacy_code)
             session.commit()
+        session.close()
+
+
+def test_treatment_plan_items_overlay_returns_grouped_items_with_code_labels(
+    api_client, auth_headers
+):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    labeled_code_id = 903599
+    unlabeled_code_id = 903600
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 997000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+        session.add(
+            R4Treatment(
+                legacy_source="r4",
+                legacy_treatment_code=labeled_code_id,
+                description="Composite filling",
+                short_code="CMP",
+                created_by_user_id=actor_id,
+                updated_by_user_id=actor_id,
+            )
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage152-overlay-{legacy_code}-59603",
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                        r4_source_id="59603",
+                        legacy_patient_code=legacy_code,
+                        recorded_at=datetime(2019, 4, 1, 15, 1, 14, tzinfo=timezone.utc),
+                        code_id=labeled_code_id,
+                        tooth=15,
+                        surface=0,
+                        payload={
+                            "tp_number": 1,
+                            "tp_item": 1,
+                            "tp_item_key": 59603,
+                            "code_id": labeled_code_id,
+                            "tooth": 15,
+                            "surface": 0,
+                            "completed": False,
+                            "item_date": "2019-04-01T15:01:14.467000+00:00",
+                        "plan_creation_date": "2019-04-01T14:44:14+00:00",
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage152-overlay-{legacy_code}-59604",
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                        r4_source_id="59604",
+                        legacy_patient_code=legacy_code,
+                        recorded_at=datetime(2019, 4, 1, 15, 1, 14, tzinfo=timezone.utc),
+                        code_id=labeled_code_id,
+                        tooth=16,
+                        surface=0,
+                        payload={
+                            "tp_number": 1,
+                            "tp_item": 2,
+                            "tp_item_key": 59604,
+                            "code_id": labeled_code_id,
+                            "tooth": 16,
+                            "surface": 0,
+                            "completed": False,
+                            "item_date": "2019-04-01T15:01:14.473000+00:00",
+                        "plan_creation_date": "2019-04-01T14:44:14+00:00",
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage152-overlay-{legacy_code}-59605",
+                        domain="treatment_plan_item",
+                        r4_source="dbo.TreatmentPlanItems",
+                        r4_source_id="59605",
+                        legacy_patient_code=legacy_code,
+                        code_id=unlabeled_code_id,
+                        tooth=0,
+                        surface=0,
+                        recorded_at=datetime(2019, 4, 1, 15, 1, 21, tzinfo=timezone.utc),
+                        payload={
+                            "tp_number": 1,
+                            "tp_item": 3,
+                            "tp_item_key": 59605,
+                            "code_id": unlabeled_code_id,
+                            "tooth": 0,
+                            "surface": 0,
+                            "completed": True,
+                        },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/treatment-plan-items?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert payload["legacy_patient_code"] == legacy_code
+        assert payload["total_items"] == 3
+        assert payload["total_planned"] == 2
+        assert payload["total_completed"] == 1
+        groups = {row["tooth"]: row for row in payload["tooth_groups"]}
+        assert 15 in groups
+        assert 16 in groups
+        assert groups[15]["planned_count"] == 1
+        assert groups[16]["planned_count"] == 1
+        assert groups[15]["items"][0]["code_id"] == labeled_code_id
+        assert groups[15]["items"][0]["code_label"] == "Composite filling"
+        assert len(payload["unassigned_items"]) == 1
+        assert payload["unassigned_items"][0]["completed"] is True
+        assert payload["unassigned_items"][0]["code_label"] == "Unknown code"
+
+        completed_only = api_client.get(
+            f"/patients/{patient.id}/charting/treatment-plan-items?include_planned=false&include_completed=true",
+            headers=auth_headers,
+        )
+        assert completed_only.status_code == 200, completed_only.text
+        completed_payload = completed_only.json()
+        assert completed_payload["total_items"] == 1
+        assert completed_payload["total_planned"] == 0
+        assert completed_payload["total_completed"] == 1
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            session.execute(
+                delete(R4Treatment).where(
+                    R4Treatment.legacy_source == "r4",
+                    R4Treatment.legacy_treatment_code == labeled_code_id,
+                )
+            )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
         session.close()
 
 

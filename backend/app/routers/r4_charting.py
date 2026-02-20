@@ -16,6 +16,7 @@ from app.db.session import get_db
 from app.deps import get_current_user
 from app.models.patient import Patient
 from app.models.user import Role
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_charting import (
     R4BPEEntry,
     R4BPEFurcation,
@@ -27,6 +28,7 @@ from app.models.r4_charting import (
     R4PerioProbe,
     R4ToothSurface,
 )
+from app.models.r4_treatment_plan import R4Treatment
 from app.services.charting_csv import (
     ENTITY_ALIASES,
     ENTITY_COLUMNS,
@@ -54,6 +56,9 @@ from app.schemas.r4_charting import (
     R4PatientNoteOut,
     R4PerioPlaqueOut,
     R4PerioProbeOut,
+    R4TreatmentPlanOverlayItemOut,
+    R4TreatmentPlanOverlayOut,
+    R4TreatmentPlanToothGroupOut,
     R4ToothSurfaceOut,
 )
 from app.services.rate_limit import SimpleRateLimiter
@@ -179,6 +184,61 @@ def _pg_rows(db: Session, stmt):
             payload[key] = format_dt(value)
         normalized.append(payload)
     return normalized
+
+
+def _canonical_payload(record: R4ChartingCanonicalRecord) -> dict[str, object]:
+    if isinstance(record.payload, dict):
+        return dict(record.payload)
+    return {}
+
+
+def _coerce_optional_int(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def _coerce_optional_bool(value: object | None) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _coerce_optional_datetime(value: object | None) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 @router.get("/perio-probes", response_model=PaginatedR4PerioProbeOut)
@@ -395,6 +455,178 @@ def list_perio_plaque(
             duration_ms=duration_ms,
         )
         return payload
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
+@router.get("/treatment-plan-items", response_model=R4TreatmentPlanOverlayOut)
+def list_treatment_plan_items_overlay(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    include_planned: bool = Query(default=True),
+    include_completed: bool = Query(default=True),
+) -> R4TreatmentPlanOverlayOut:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        patient_code = _resolve_legacy_patient_code(db, patient_id)
+        if patient_code is None:
+            payload = R4TreatmentPlanOverlayOut(
+                patient_id=patient_id,
+                legacy_patient_code=None,
+                total_items=0,
+                total_planned=0,
+                total_completed=0,
+                tooth_groups=[],
+                unassigned_items=[],
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_id,
+                path=request.url.path,
+                method=request.method,
+                status_code=200,
+                duration_ms=duration_ms,
+            )
+            return payload
+        if not include_planned and not include_completed:
+            payload = R4TreatmentPlanOverlayOut(
+                patient_id=patient_id,
+                legacy_patient_code=patient_code,
+                total_items=0,
+                total_planned=0,
+                total_completed=0,
+                tooth_groups=[],
+                unassigned_items=[],
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_id,
+                path=request.url.path,
+                method=request.method,
+                status_code=200,
+                duration_ms=duration_ms,
+            )
+            return payload
+
+        stmt = (
+            select(R4ChartingCanonicalRecord, R4Treatment.description.label("code_label"))
+            .outerjoin(
+                R4Treatment,
+                and_(
+                    R4Treatment.legacy_source == "r4",
+                    R4Treatment.legacy_treatment_code == R4ChartingCanonicalRecord.code_id,
+                ),
+            )
+            .where(
+                R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
+                R4ChartingCanonicalRecord.domain.in_(("treatment_plan_item", "treatment_plan_items")),
+            )
+            .order_by(
+                nullslast(R4ChartingCanonicalRecord.recorded_at.desc()),
+                R4ChartingCanonicalRecord.r4_source_id.desc(),
+            )
+            .limit(limit)
+        )
+
+        tooth_buckets: dict[int, list[R4TreatmentPlanOverlayItemOut]] = {}
+        unassigned_items: list[R4TreatmentPlanOverlayItemOut] = []
+        total_planned = 0
+        total_completed = 0
+        total_items = 0
+
+        for record, code_label in db.execute(stmt).all():
+            payload = _canonical_payload(record)
+            completed = _coerce_optional_bool(payload.get("completed"))
+            is_completed = completed is True
+            if is_completed and not include_completed:
+                continue
+            if (not is_completed) and not include_planned:
+                continue
+
+            tooth = _coerce_optional_int(payload.get("tooth"))
+            surface = _coerce_optional_int(payload.get("surface"))
+            code_id = _coerce_optional_int(payload.get("code_id"))
+            item = R4TreatmentPlanOverlayItemOut(
+                tp_number=_coerce_optional_int(payload.get("tp_number")),
+                tp_item=_coerce_optional_int(payload.get("tp_item")),
+                tp_item_key=(
+                    str(payload.get("tp_item_key"))
+                    if payload.get("tp_item_key") is not None
+                    else (record.r4_source_id or None)
+                ),
+                code_id=code_id if code_id is not None else record.code_id,
+                code_label=(code_label or ("Unknown code" if code_id is not None else None)),
+                tooth=tooth,
+                surface=surface,
+                tooth_level=surface in (None, 0),
+                completed=completed if completed is not None else False,
+                item_date=_coerce_optional_datetime(payload.get("item_date")),
+                plan_creation_date=_coerce_optional_datetime(
+                    payload.get("plan_creation_date") or payload.get("creation_date")
+                ),
+            )
+            total_items += 1
+            if is_completed:
+                total_completed += 1
+            else:
+                total_planned += 1
+            if tooth is None or tooth <= 0:
+                unassigned_items.append(item)
+                continue
+            tooth_buckets.setdefault(tooth, []).append(item)
+
+        tooth_groups: list[R4TreatmentPlanToothGroupOut] = []
+        for tooth in sorted(tooth_buckets):
+            items = tooth_buckets[tooth]
+            planned_count = sum(1 for item in items if item.completed is not True)
+            completed_count = sum(1 for item in items if item.completed is True)
+            tooth_groups.append(
+                R4TreatmentPlanToothGroupOut(
+                    tooth=tooth,
+                    planned_count=planned_count,
+                    completed_count=completed_count,
+                    items=items,
+                )
+            )
+
+        response = R4TreatmentPlanOverlayOut(
+            patient_id=patient_id,
+            legacy_patient_code=patient_code,
+            total_items=total_items,
+            total_planned=total_planned,
+            total_completed=total_completed,
+            tooth_groups=tooth_groups,
+            unassigned_items=unassigned_items,
+        )
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=200,
+            duration_ms=duration_ms,
+        )
+        return response
     except HTTPException as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
         _log_charting_access(
