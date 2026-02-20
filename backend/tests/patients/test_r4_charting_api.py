@@ -601,7 +601,14 @@ def test_tooth_state_endpoint_contract(api_client, auth_headers):
 
         tooth_16 = teeth["16"]
         assert tooth_16["extracted"] is True
-        assert tooth_16["restorations"] == []
+        extraction = next(
+            (item for item in tooth_16["restorations"] if item["type"] == "extraction"),
+            None,
+        )
+        assert extraction is not None
+        assert extraction["surfaces"] == []
+        assert extraction["meta"]["code_id"] == extraction_code_id
+        assert extraction["meta"]["code_label"] == "Extraction"
 
         tooth_17 = teeth["17"]
         other = next(

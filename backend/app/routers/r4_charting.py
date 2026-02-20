@@ -43,6 +43,7 @@ from app.services.charting_csv import (
     rows_for_csv,
 )
 from app.services.audit import log_event
+from app.services.tooth_state_classification import classify_tooth_state_type
 from app.schemas.r4_charting import (
     ChartingAuditIn,
     PaginatedR4PerioProbeOut,
@@ -297,27 +298,6 @@ def _bool_from_payload(payload: dict[str, object], keys: tuple[str, ...]) -> boo
             if value is not None:
                 return value
     return None
-
-
-def _is_extraction_completed_tpi(payload: dict[str, object], code_label: str | None) -> bool:
-    search_material = " ".join(
-        [
-            str(code_label or ""),
-            str(payload.get("description") or ""),
-            str(payload.get("note") or ""),
-            str(payload.get("status") or ""),
-            str(payload.get("action") or ""),
-            str(payload.get("procedure") or ""),
-        ]
-    ).lower()
-    return "extract" in search_material
-
-
-def _classify_completed_tpi_restoration(code_label: str | None) -> str:
-    label = str(code_label or "").strip().lower()
-    if "crown" in label:
-        return "crown"
-    return "other"
 
 
 @router.get("/perio-probes", response_model=PaginatedR4PerioProbeOut)
@@ -794,11 +774,10 @@ def get_tooth_state(
                 R4ToothStateEntryOut(restorations=[], missing=False, extracted=False),
             )
 
-            if _is_extraction_completed_tpi(payload, resolved_code_label):
+            restoration_type = classify_tooth_state_type(resolved_code_label)
+            if restoration_type == "extraction":
                 entry.extracted = True
-                continue
 
-            restoration_type = _classify_completed_tpi_restoration(resolved_code_label)
             restoration_surfaces = _extract_surface_keys(payload, record.surface)
 
             dedupe_key = "|".join(

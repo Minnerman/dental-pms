@@ -192,7 +192,19 @@ class R4TreatmentPlanOverlayOut(BaseModel):
 
 
 class R4ToothStateRestorationOut(BaseModel):
-    type: Literal["filling", "crown", "bridge", "rct", "implant", "denture", "other"]
+    type: Literal[
+        "implant",
+        "bridge",
+        "crown",
+        "veneer",
+        "inlay_onlay",
+        "post",
+        "root_canal",
+        "filling",
+        "extraction",
+        "denture",
+        "other",
+    ]
     surfaces: list[Literal["M", "O", "D", "B", "L", "I"]] = []
     meta: dict[str, object] = {}
 
