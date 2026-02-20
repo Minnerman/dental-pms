@@ -61,6 +61,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 153C completed (`stage153c-overlay-visual-language`) for overlay visual language alignment on `/patients/{id}/clinical`.
+  - UI enhancements delivered in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`:
+    - compact legend added with `data-testid="odontogram-overlay-legend"` (`Planned`, `Completed`, `Surface`, `Tooth`)
+    - marker tooltips now include code label fallback, status, and surface context
+    - marker placement standardized:
+      - tooth-level markers fixed to a consistent corner position
+      - surface markers use shared anchor mapping via `getSurfaceOverlayPositionStyle`
+    - drill-down readability upgraded:
+      - panel container test hook `data-testid="overlay-panel"`
+      - row hook `data-testid="overlay-item"`
+      - planned/completed status pills
+      - `tp_item_key` moved into a `Details` expander
+  - Filter persistence:
+    - implemented with query string (`overlay=both|planned|completed`) for deterministic refresh/shareable URLs and straightforward Playwright assertions
+  - Playwright updates in `frontend/tests/clinical-odontogram-overlays.spec.ts`:
+    - asserts legend visibility
+    - verifies tooltip/title contains treatment label + status
+    - verifies filter persistence after refresh + URL query state
+  - Evidence:
+    - `.run/stage153c/overlay_ui_legend_tooltip.png`
+    - `.run/stage153c/overlay_ui_filter_persist.png`
 - 2026-02-20: Stage 153B started (`stage153b-surface-overlays`) for surface-specific overlay rendering.
   - Surface discovery from existing artefacts:
     - command scanned `.run/stage144/patient_*/r4_spotcheck.json` and `.run/stage151/r4_spotcheck_1014496.json`

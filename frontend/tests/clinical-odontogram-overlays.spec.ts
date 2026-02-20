@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { createPatient } from "./helpers/api";
@@ -7,6 +9,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   page,
   request,
 }) => {
+  mkdirSync(".run/stage153c", { recursive: true });
   await primePageAuth(page, request);
   const patientId = await createPatient(request, {
     first_name: "Overlay",
@@ -89,6 +92,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   });
 
   await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("odontogram-overlay-legend")).toBeVisible();
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
   await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveText("P1");
   await expect(page.getByTestId("tooth-surface-overlay-15-M")).toBeVisible();
@@ -99,11 +103,20 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
     "Emergency Appointment"
   );
+  const plannedMarkerTitle = await page.getByTestId("tooth-overlay-planned-15").getAttribute("title");
+  expect(plannedMarkerTitle ?? "").toContain("Extraction");
+  expect(plannedMarkerTitle ?? "").toContain("Planned");
+  await page.screenshot({
+    path: ".run/stage153c/overlay_ui_legend_tooltip.png",
+    fullPage: true,
+  });
 
   await page.getByTestId("tooth-button-UR5").click();
+  await expect(page.getByTestId("overlay-panel")).toBeVisible();
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("Extraction");
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("Surface: M");
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("Planned");
+  await page.getByTestId("overlay-item").first().locator("summary").click();
   await expect(page.getByTestId("overlay-tooth-items")).toContainText("5001-1");
 
   await page.getByTestId("tooth-button-UR6").click();
@@ -113,12 +126,27 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   );
 
   await page.getByTestId("clinical-overlay-filter-planned").click();
+  await expect(page).toHaveURL(/overlay=planned/);
   await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
     "No unassigned treatment plan items."
   );
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("clinical-overlay-filter-planned")).toHaveAttribute(
+    "data-active",
+    "true"
+  );
+  await expect(page).toHaveURL(/overlay=planned/);
+  await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
+    "No unassigned treatment plan items."
+  );
+  await page.screenshot({
+    path: ".run/stage153c/overlay_ui_filter_persist.png",
+    fullPage: true,
+  });
 
   await page.getByTestId("clinical-overlay-filter-completed").click();
+  await expect(page).toHaveURL(/overlay=completed/);
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveCount(0);
   await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveCount(0);
   await expect(page.getByTestId("overlay-unassigned-items")).toContainText(

@@ -479,6 +479,7 @@ type ToothSurfaceOverlaySummary = {
   surface: R4SurfaceKey;
   plannedCount: number;
   completedCount: number;
+  items: R4TreatmentPlanOverlayItem[];
 };
 
 const categoryLabels: Record<PatientCategory, string> = {
@@ -663,6 +664,11 @@ function parseChartingPerioSite(value: string | null) {
   const numeric = Number(parsed);
   if (!Number.isFinite(numeric) || !perioSiteLabels[numeric]) return "";
   return String(numeric);
+}
+
+function parseOverlayFilterParam(value: string | null): TreatmentPlanOverlayFilter {
+  if (value === "planned" || value === "completed" || value === "both") return value;
+  return "both";
 }
 
 function sanitizeNotesQuery(value: string) {
@@ -866,6 +872,7 @@ export default function PatientDetailClient({
     null
   );
   const [clinicalViewHydrated, setClinicalViewHydrated] = useState(false);
+  const [overlayFilterHydrated, setOverlayFilterHydrated] = useState(false);
   const [chartingLoaded, setChartingLoaded] = useState(false);
   const [chartingLoading, setChartingLoading] = useState(false);
   const [chartingError, setChartingError] = useState<string | null>(null);
@@ -2725,6 +2732,7 @@ export default function PatientDetailClient({
     setR4TreatmentOverlayError(null);
     setR4TreatmentOverlayLoading(false);
     setOverlayFilter("both");
+    setOverlayFilterHydrated(false);
   }, [patientId]);
 
   useEffect(() => {
@@ -3163,6 +3171,71 @@ export default function PatientDetailClient({
     return item.completed === true ? "Completed" : "Planned";
   }
 
+  function overlayItemTooltipLine(item: R4TreatmentPlanOverlayItem) {
+    const surfaceInfo = overlayItemSurfaceInfo(item);
+    return `${overlayItemLabel(item)} · ${overlayItemStatus(item)} · ${surfaceInfo.label.replace("Surface: ", "")}`;
+  }
+
+  function overlayItemKey(item: R4TreatmentPlanOverlayItem) {
+    return item.tp_item_key ?? `${item.code_id ?? "unknown"}-${item.item_date ?? "none"}`;
+  }
+
+  function overlayMarkerTitle(
+    items: R4TreatmentPlanOverlayItem[],
+    status: "planned" | "completed" | "all"
+  ) {
+    const filtered = items.filter((item) => {
+      if (status === "all") return true;
+      if (status === "planned") return item.completed !== true;
+      return item.completed === true;
+    });
+    if (filtered.length === 0) return "";
+    const lines = filtered.slice(0, 3).map((item) => overlayItemTooltipLine(item));
+    if (filtered.length > 3) {
+      lines.push(`+${filtered.length - 3} more`);
+    }
+    return lines.join("\n");
+  }
+
+  function getToothOverlayPositionStyle() {
+    return {
+      position: "absolute",
+      top: 3,
+      right: 3,
+      display: "flex",
+      gap: 4,
+      fontSize: 10,
+      lineHeight: 1,
+      flexWrap: "wrap",
+      justifyContent: "flex-end",
+      maxWidth: "70%",
+    } as const;
+  }
+
+  function getSurfaceOverlayPositionStyle(surface: R4SurfaceKey) {
+    return {
+      position: "absolute",
+      top: surfaceOverlayAnchor[surface].top,
+      left: surfaceOverlayAnchor[surface].left,
+      transform: "translate(-50%, -50%)",
+    } as const;
+  }
+
+  function getOverlayStatusBadgeStyle(item: R4TreatmentPlanOverlayItem) {
+    if (item.completed === true) {
+      return {
+        background: "var(--accent)",
+        color: "var(--bg)",
+        border: "1px solid var(--accent)",
+      } as const;
+    }
+    return {
+      border: "1px solid var(--accent)",
+      color: "var(--text)",
+      background: "transparent",
+    } as const;
+  }
+
   function toggleChartingMeta(section: string) {
     setChartingMetaOpen((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -3259,6 +3332,28 @@ export default function PatientDetailClient({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [clinicalViewHydrated, clinicalViewMode, pathname, router, searchParams]);
 
+  useEffect(() => {
+    const fromUrl = parseOverlayFilterParam(searchParams?.get("overlay") ?? null);
+    setOverlayFilter((prev) => (prev === fromUrl ? prev : fromUrl));
+    setOverlayFilterHydrated(true);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!overlayFilterHydrated) return;
+    if (!pathname) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (overlayFilter === "both") {
+      params.delete("overlay");
+    } else {
+      params.set("overlay", overlayFilter);
+    }
+    const current = parseOverlayFilterParam(searchParams?.get("overlay") ?? null);
+    const next = parseOverlayFilterParam(params.get("overlay"));
+    if (current === next) return;
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [overlayFilterHydrated, overlayFilter, pathname, router, searchParams]);
+
   const plannedTeeth = useMemo(() => {
     const activeStatuses = new Set(["proposed", "accepted"]);
     return new Set(
@@ -3315,7 +3410,9 @@ export default function PatientDetailClient({
           surface: surfaceKey,
           plannedCount: 0,
           completedCount: 0,
+          items: [],
         };
+        summary.items.push(item);
         if (item.completed === true) {
           summary.completedCount += 1;
         } else {
@@ -7148,6 +7245,70 @@ export default function PatientDetailClient({
                     </span>
                     {r4TreatmentOverlayLoading && <span className="badge">Loading overlays…</span>}
                   </div>
+                  <div
+                    className="card"
+                    style={{ margin: 0, padding: "8px 10px" }}
+                    data-testid="odontogram-overlay-legend"
+                  >
+                    <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+                      <span className="label" style={{ marginRight: 6 }}>
+                        Legend
+                      </span>
+                      <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                        <span
+                          style={{
+                            border: "1px solid var(--accent)",
+                            borderRadius: 999,
+                            padding: "1px 6px",
+                            fontSize: 10,
+                          }}
+                        >
+                          P1
+                        </span>
+                        Planned
+                      </span>
+                      <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                        <span
+                          style={{
+                            border: "1px solid var(--accent)",
+                            background: "var(--accent)",
+                            color: "var(--bg)",
+                            borderRadius: 999,
+                            padding: "1px 6px",
+                            fontSize: 10,
+                          }}
+                        >
+                          C1
+                        </span>
+                        Completed
+                      </span>
+                      <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                        <span
+                          style={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: 999,
+                            border: "1px solid var(--accent)",
+                            display: "inline-block",
+                          }}
+                        />
+                        Surface
+                      </span>
+                      <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                        <span
+                          style={{
+                            border: "1px dashed var(--accent)",
+                            borderRadius: 6,
+                            padding: "0 6px",
+                            fontSize: 10,
+                          }}
+                        >
+                          Corner
+                        </span>
+                        Tooth
+                      </span>
+                    </div>
+                  </div>
                   {r4TreatmentOverlayError && (
                     <div className="notice">
                       <div
@@ -7190,6 +7351,12 @@ export default function PatientDetailClient({
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
+                                    const plannedMarkerTitle = overlaySummary
+                                      ? overlayMarkerTitle(overlaySummary.items, "planned")
+                                      : "";
+                                    const completedMarkerTitle = overlaySummary
+                                      ? overlayMarkerTitle(overlaySummary.items, "completed")
+                                      : "";
                                     return (
                                       <button
                                         key={tooth}
@@ -7223,12 +7390,7 @@ export default function PatientDetailClient({
                                         {overlaySummary && (
                                           <div
                                             style={{
-                                              display: "flex",
-                                              gap: 4,
-                                              fontSize: 10,
-                                              lineHeight: 1,
-                                              flexWrap: "wrap",
-                                              justifyContent: "center",
+                                              ...getToothOverlayPositionStyle(),
                                             }}
                                             data-testid={`tooth-overlay-${tooth}`}
                                           >
@@ -7239,7 +7401,11 @@ export default function PatientDetailClient({
                                                   borderRadius: 999,
                                                   padding: "1px 4px",
                                                 }}
-                                                title={`Planned items: ${overlaySummary.plannedCount}`}
+                                                title={
+                                                  plannedMarkerTitle
+                                                    ? `Planned (${overlaySummary.plannedCount})\n${plannedMarkerTitle}`
+                                                    : `Planned items: ${overlaySummary.plannedCount}`
+                                                }
                                                 data-testid={`tooth-overlay-planned-${overlaySummary.legacyTooth}`}
                                               >
                                                 P{overlaySummary.plannedCount}
@@ -7253,7 +7419,11 @@ export default function PatientDetailClient({
                                                   borderRadius: 999,
                                                   padding: "1px 4px",
                                                 }}
-                                                title={`Completed items: ${overlaySummary.completedCount}`}
+                                                title={
+                                                  completedMarkerTitle
+                                                    ? `Completed (${overlaySummary.completedCount})\n${completedMarkerTitle}`
+                                                    : `Completed items: ${overlaySummary.completedCount}`
+                                                }
                                                 data-testid={`tooth-overlay-completed-${overlaySummary.legacyTooth}`}
                                               >
                                                 C{overlaySummary.completedCount}
@@ -7300,17 +7470,22 @@ export default function PatientDetailClient({
                                             const isCompletedOnly =
                                               completedCount > 0 && plannedCount === 0;
                                             const isMixed = plannedCount > 0 && completedCount > 0;
+                                            const surfaceTitle = overlayMarkerTitle(
+                                              surfaceOverlay.items,
+                                              "all"
+                                            );
                                             return (
                                               <span
                                                 key={`${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
-                                                title={`Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}`}
+                                                title={
+                                                  surfaceTitle
+                                                    ? `Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}\n${surfaceTitle}`
+                                                    : `Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}`
+                                                }
                                                 data-testid={`tooth-surface-overlay-${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
                                                 data-surface={surfaceOverlay.surface}
                                                 style={{
-                                                  position: "absolute",
-                                                  top: surfaceOverlayAnchor[surfaceOverlay.surface].top,
-                                                  left: surfaceOverlayAnchor[surfaceOverlay.surface].left,
-                                                  transform: "translate(-50%, -50%)",
+                                                  ...getSurfaceOverlayPositionStyle(surfaceOverlay.surface),
                                                   display: "inline-flex",
                                                   alignItems: "center",
                                                   justifyContent: "center",
@@ -7359,6 +7534,12 @@ export default function PatientDetailClient({
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
+                                    const plannedMarkerTitle = overlaySummary
+                                      ? overlayMarkerTitle(overlaySummary.items, "planned")
+                                      : "";
+                                    const completedMarkerTitle = overlaySummary
+                                      ? overlayMarkerTitle(overlaySummary.items, "completed")
+                                      : "";
                                     return (
                                       <button
                                         key={tooth}
@@ -7392,12 +7573,7 @@ export default function PatientDetailClient({
                                         {overlaySummary && (
                                           <div
                                             style={{
-                                              display: "flex",
-                                              gap: 4,
-                                              fontSize: 10,
-                                              lineHeight: 1,
-                                              flexWrap: "wrap",
-                                              justifyContent: "center",
+                                              ...getToothOverlayPositionStyle(),
                                             }}
                                             data-testid={`tooth-overlay-${tooth}`}
                                           >
@@ -7408,7 +7584,11 @@ export default function PatientDetailClient({
                                                   borderRadius: 999,
                                                   padding: "1px 4px",
                                                 }}
-                                                title={`Planned items: ${overlaySummary.plannedCount}`}
+                                                title={
+                                                  plannedMarkerTitle
+                                                    ? `Planned (${overlaySummary.plannedCount})\n${plannedMarkerTitle}`
+                                                    : `Planned items: ${overlaySummary.plannedCount}`
+                                                }
                                                 data-testid={`tooth-overlay-planned-${overlaySummary.legacyTooth}`}
                                               >
                                                 P{overlaySummary.plannedCount}
@@ -7422,7 +7602,11 @@ export default function PatientDetailClient({
                                                   borderRadius: 999,
                                                   padding: "1px 4px",
                                                 }}
-                                                title={`Completed items: ${overlaySummary.completedCount}`}
+                                                title={
+                                                  completedMarkerTitle
+                                                    ? `Completed (${overlaySummary.completedCount})\n${completedMarkerTitle}`
+                                                    : `Completed items: ${overlaySummary.completedCount}`
+                                                }
                                                 data-testid={`tooth-overlay-completed-${overlaySummary.legacyTooth}`}
                                               >
                                                 C{overlaySummary.completedCount}
@@ -7469,17 +7653,22 @@ export default function PatientDetailClient({
                                             const isCompletedOnly =
                                               completedCount > 0 && plannedCount === 0;
                                             const isMixed = plannedCount > 0 && completedCount > 0;
+                                            const surfaceTitle = overlayMarkerTitle(
+                                              surfaceOverlay.items,
+                                              "all"
+                                            );
                                             return (
                                               <span
                                                 key={`${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
-                                                title={`Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}`}
+                                                title={
+                                                  surfaceTitle
+                                                    ? `Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}\n${surfaceTitle}`
+                                                    : `Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}`
+                                                }
                                                 data-testid={`tooth-surface-overlay-${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
                                                 data-surface={surfaceOverlay.surface}
                                                 style={{
-                                                  position: "absolute",
-                                                  top: surfaceOverlayAnchor[surfaceOverlay.surface].top,
-                                                  left: surfaceOverlayAnchor[surfaceOverlay.surface].left,
-                                                  transform: "translate(-50%, -50%)",
+                                                  ...getSurfaceOverlayPositionStyle(surfaceOverlay.surface),
                                                   display: "inline-flex",
                                                   alignItems: "center",
                                                   justifyContent: "center",
@@ -7528,7 +7717,8 @@ export default function PatientDetailClient({
                                     <div
                                       className="card"
                                       style={{ margin: 0 }}
-                                      key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
+                                      key={overlayItemKey(item)}
+                                      data-testid="overlay-unassigned-item"
                                     >
                                       <div className="row">
                                         <div>
@@ -7545,12 +7735,19 @@ export default function PatientDetailClient({
                                             </div>
                                           )}
                                         </div>
-                                        <span className="badge">{overlayItemStatus(item)}</span>
+                                        <span className="badge" style={getOverlayStatusBadgeStyle(item)}>
+                                          {overlayItemStatus(item)}
+                                        </span>
                                       </div>
-                                      <div style={{ color: "var(--muted)" }}>
-                                        TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} · Key{" "}
-                                        {item.tp_item_key ?? "—"}
-                                      </div>
+                                      <details style={{ marginTop: 6 }}>
+                                        <summary style={{ cursor: "pointer", color: "var(--muted)" }}>
+                                          Details
+                                        </summary>
+                                        <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+                                          TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} · Key{" "}
+                                          {item.tp_item_key ?? "—"}
+                                        </div>
+                                      </details>
                                     </div>
                                   );
                                 })
@@ -7714,7 +7911,7 @@ export default function PatientDetailClient({
                                 </button>
                               </div>
 
-                              <div className="stack" style={{ gap: 10 }}>
+                              <div className="stack" style={{ gap: 10 }} data-testid="overlay-panel">
                                 <div className="label">R4 treatment overlays</div>
                                 {selectedToothOverlay?.items?.length ? (
                                   <div className="stack" style={{ gap: 8 }} data-testid="overlay-tooth-items">
@@ -7724,7 +7921,8 @@ export default function PatientDetailClient({
                                         <div
                                           className="card"
                                           style={{ margin: 0 }}
-                                          key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
+                                          key={overlayItemKey(item)}
+                                          data-testid="overlay-item"
                                         >
                                           <div className="row">
                                             <div>
@@ -7742,12 +7940,19 @@ export default function PatientDetailClient({
                                                 </div>
                                               )}
                                             </div>
-                                            <span className="badge">{overlayItemStatus(item)}</span>
+                                            <span className="badge" style={getOverlayStatusBadgeStyle(item)}>
+                                              {overlayItemStatus(item)}
+                                            </span>
                                           </div>
-                                          <div style={{ color: "var(--muted)" }}>
-                                            TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} ·
-                                            Key {item.tp_item_key ?? "—"}
-                                          </div>
+                                          <details style={{ marginTop: 6 }}>
+                                            <summary style={{ cursor: "pointer", color: "var(--muted)" }}>
+                                              Details
+                                            </summary>
+                                            <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+                                              TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} · Key{" "}
+                                              {item.tp_item_key ?? "—"}
+                                            </div>
+                                          </details>
                                         </div>
                                       );
                                     })}
