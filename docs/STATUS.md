@@ -61,6 +61,25 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 151 completed (`fix/spotcheck-postgres-tp-tpi`) to fix TP/TPI Postgres spotcheck retrieval.
+  - Root cause from Stage 150 was confirmed and fixed:
+    - `r4_charting_spotcheck` Postgres TP/TPI path previously queried `r4_treatment_plans`/`r4_treatment_plan_items`.
+    - charting canonical import for this flow writes TP/TPI to `r4_charting_canonical_records` (`domain=treatment_plan|treatment_plan_item`), keyed by `legacy_patient_code`.
+    - spotcheck now reads TP/TPI Postgres rows from canonical records with `legacy_patient_code` filtering and `--limit` bound.
+  - Regression test added:
+    - seeds canonical TP/TPI rows and asserts spotcheck JSON returns non-zero Postgres TP/TPI counts.
+    - file: `backend/tests/r4_import/test_charting_spotcheck_csv.py`
+  - Real-data verification rerun for `patient_code=1014496`:
+    - canonical import stats: `.run/stage151/stage151_charting_tp_tpi.json`
+      - `imported_created_total=4` (`dbo.TreatmentPlans=1`, `dbo.TreatmentPlanItems=3`)
+    - spotcheck output: `.run/stage151/r4_spotcheck_1014496.json`
+      - `postgres.treatment_plans=1`
+      - `postgres.treatment_plan_items=3`
+      - `sqlserver.treatment_plans=1`
+      - `sqlserver.treatment_plan_items=3`
+  - Outcome:
+    - Stage 151 closes Case B by aligning TP/TPI Postgres spotcheck retrieval with canonical-backed storage.
+    - Stage 152 can proceed to odontogram planned/completed overlay UI tickets on a reliable Postgres evidence path.
 - 2026-02-20: Stage 150 diagnosis completed (`stage150-tp-tpi-postgres-gap`) for TP/TPI SQL Server vs Postgres gap (`patient_code=1014496`).
   - Baseline before re-import:
     - canonical registry probe showed no rows for this patient:

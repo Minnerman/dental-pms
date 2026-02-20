@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Select, func, literal, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -24,8 +24,8 @@ from app.models.r4_charting import (
     R4ToothSurface,
     R4TreatmentNote,
 )
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_patient_mapping import R4PatientMapping
-from app.models.r4_treatment_plan import R4TreatmentPlan, R4TreatmentPlanItem
 from app.models.user import User
 from app.services.r4_import.mapping_preflight import ensure_mapping_for_patient, mapping_exists
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
@@ -65,6 +65,95 @@ def _normalize_rows(items: list[object]) -> list[dict[str, object]]:
         payload = item.model_dump() if hasattr(item, "model_dump") else dict(item)
         normalized.append({key: _format_dt(value) for key, value in payload.items()})
     return normalized
+
+
+def _canonical_payload(record: R4ChartingCanonicalRecord) -> dict[str, object]:
+    if isinstance(record.payload, dict):
+        return dict(record.payload)
+    return {}
+
+
+def _pg_treatment_plans_from_canonical(
+    session: Session,
+    patient_code: int,
+    limit: int,
+) -> list[dict[str, object]]:
+    stmt = (
+        select(R4ChartingCanonicalRecord)
+        .where(
+            R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
+            R4ChartingCanonicalRecord.domain.in_(("treatment_plan", "treatment_plans")),
+        )
+        .order_by(
+            R4ChartingCanonicalRecord.recorded_at.desc(),
+            R4ChartingCanonicalRecord.r4_source_id.desc(),
+        )
+    )
+    rows: list[dict[str, object]] = []
+    for record in session.execute(stmt.limit(limit)).scalars().all():
+        payload = _canonical_payload(record)
+        row = {
+            "patient_code": payload.get("patient_code", record.legacy_patient_code),
+            "tp_number": payload.get("tp_number", payload.get("legacy_tp_number")),
+            "treatment_plan_id": payload.get("treatment_plan_id", payload.get("id")),
+            "plan_index": payload.get("plan_index"),
+            "is_master": payload.get("is_master"),
+            "is_current": payload.get("is_current"),
+            "is_accepted": payload.get("is_accepted"),
+            "creation_date": payload.get("creation_date", record.recorded_at),
+            "acceptance_date": payload.get("acceptance_date", record.entered_at),
+            "completion_date": payload.get("completion_date"),
+            "status_code": payload.get("status_code"),
+            "reason_id": payload.get("reason_id"),
+            "tp_group": payload.get("tp_group"),
+        }
+        rows.append({key: _format_dt(value) for key, value in row.items()})
+    return rows
+
+
+def _pg_treatment_plan_items_from_canonical(
+    session: Session,
+    patient_code: int,
+    limit: int,
+) -> list[dict[str, object]]:
+    stmt = (
+        select(R4ChartingCanonicalRecord)
+        .where(
+            R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
+            R4ChartingCanonicalRecord.domain.in_(("treatment_plan_item", "treatment_plan_items")),
+        )
+        .order_by(
+            R4ChartingCanonicalRecord.recorded_at.desc(),
+            R4ChartingCanonicalRecord.r4_source_id.desc(),
+        )
+    )
+    rows: list[dict[str, object]] = []
+    for record in session.execute(stmt.limit(limit)).scalars().all():
+        payload = _canonical_payload(record)
+        row = {
+            "patient_code": payload.get("patient_code", record.legacy_patient_code),
+            "tp_number": payload.get("tp_number", payload.get("legacy_tp_number")),
+            "tp_item": payload.get("tp_item", payload.get("legacy_tp_item")),
+            "tp_item_key": payload.get(
+                "tp_item_key",
+                payload.get("legacy_tp_item_key", record.r4_source_id),
+            ),
+            "code_id": payload.get("code_id", record.code_id),
+            "tooth": payload.get("tooth", record.tooth),
+            "surface": payload.get("surface", record.surface),
+            "appointment_need_id": payload.get("appointment_need_id"),
+            "item_date": payload.get("item_date"),
+            "plan_creation_date": payload.get("plan_creation_date", payload.get("creation_date")),
+            "completed": payload.get("completed"),
+            "completed_date": payload.get("completed_date", record.recorded_at),
+            "patient_cost": payload.get("patient_cost"),
+            "dpb_cost": payload.get("dpb_cost"),
+            "discretionary_cost": payload.get("discretionary_cost"),
+            "material": payload.get("material"),
+            "arch_code": payload.get("arch_code"),
+        }
+        rows.append({key: _format_dt(value) for key, value in row.items()})
+    return rows
 
 
 def _sortable(value) -> str:
@@ -505,7 +594,7 @@ ENTITY_LINKAGE = {
     "temporary_notes": "temporary_notes.patient_code",
     "treatment_notes": "treatment_notes.patient_code",
     "treatment_plans": "treatment_plans.patient_code",
-    "treatment_plan_items": "treatment_plan_items.patient_code_via_treatment_plans",
+    "treatment_plan_items": "canonical_records.legacy_patient_code",
     "chart_healing_actions": "chart_healing_actions.patient_code",
     "bpe": "bpe.patient_code_or_bpe_id",
     "bpe_furcations": "bpefurcation.bpe_id_join",
@@ -736,54 +825,17 @@ def main() -> int:
 
         if "treatment_plans" in entities:
             sqlserver["treatment_plans"] = _sqlserver_treatment_plans(source, patient_code, args.limit)
-            postgres["treatment_plans"] = _pg_rows(
+            postgres["treatment_plans"] = _pg_treatment_plans_from_canonical(
                 session,
-                select(
-                    R4TreatmentPlan.legacy_patient_code.label("patient_code"),
-                    R4TreatmentPlan.legacy_tp_number.label("tp_number"),
-                    R4TreatmentPlan.id.label("treatment_plan_id"),
-                    R4TreatmentPlan.plan_index.label("plan_index"),
-                    R4TreatmentPlan.is_master.label("is_master"),
-                    R4TreatmentPlan.is_current.label("is_current"),
-                    R4TreatmentPlan.is_accepted.label("is_accepted"),
-                    R4TreatmentPlan.creation_date.label("creation_date"),
-                    R4TreatmentPlan.acceptance_date.label("acceptance_date"),
-                    R4TreatmentPlan.completion_date.label("completion_date"),
-                    R4TreatmentPlan.status_code.label("status_code"),
-                    R4TreatmentPlan.reason_id.label("reason_id"),
-                    R4TreatmentPlan.tp_group.label("tp_group"),
-                ).where(R4TreatmentPlan.legacy_patient_code == patient_code),
+                patient_code,
                 args.limit,
             )
 
         if "treatment_plan_items" in entities:
             sqlserver["treatment_plan_items"] = _sqlserver_treatment_plan_items(source, patient_code, args.limit)
-            postgres["treatment_plan_items"] = _pg_rows(
+            postgres["treatment_plan_items"] = _pg_treatment_plan_items_from_canonical(
                 session,
-                select(
-                    R4TreatmentPlan.legacy_patient_code.label("patient_code"),
-                    R4TreatmentPlan.legacy_tp_number.label("tp_number"),
-                    R4TreatmentPlanItem.legacy_tp_item.label("tp_item"),
-                    R4TreatmentPlanItem.legacy_tp_item_key.label("tp_item_key"),
-                    R4TreatmentPlanItem.code_id.label("code_id"),
-                    R4TreatmentPlanItem.tooth.label("tooth"),
-                    R4TreatmentPlanItem.surface.label("surface"),
-                    R4TreatmentPlanItem.appointment_need_id.label("appointment_need_id"),
-                    literal(None).label("item_date"),
-                    R4TreatmentPlan.creation_date.label("plan_creation_date"),
-                    R4TreatmentPlanItem.completed.label("completed"),
-                    R4TreatmentPlanItem.completed_date.label("completed_date"),
-                    R4TreatmentPlanItem.patient_cost.label("patient_cost"),
-                    R4TreatmentPlanItem.dpb_cost.label("dpb_cost"),
-                    R4TreatmentPlanItem.discretionary_cost.label("discretionary_cost"),
-                    R4TreatmentPlanItem.material.label("material"),
-                    R4TreatmentPlanItem.arch_code.label("arch_code"),
-                )
-                .join(
-                    R4TreatmentPlan,
-                    R4TreatmentPlan.id == R4TreatmentPlanItem.treatment_plan_id,
-                )
-                .where(R4TreatmentPlan.legacy_patient_code == patient_code),
+                patient_code,
                 args.limit,
             )
 

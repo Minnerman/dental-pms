@@ -1,5 +1,12 @@
 import csv
+import json
+from datetime import datetime, timezone
 
+from sqlalchemy import delete
+
+from app.db.session import SessionLocal
+from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
+from app.scripts import r4_charting_spotcheck
 from app.scripts.r4_charting_spotcheck import (
     ENTITY_ALIASES,
     ENTITY_COLUMNS,
@@ -137,3 +144,157 @@ def test_surface_definitions_normalization_maps_legacy_fields():
     )
     assert rows[0]["legacy_tooth_id"] == 11
     assert rows[0]["legacy_surface_no"] == 2
+
+
+def test_spotcheck_json_reads_tp_tpi_postgres_from_canonical_records(monkeypatch, capsys):
+    patient_code = 991014496
+    session = SessionLocal()
+    try:
+        session.execute(
+            delete(R4ChartingCanonicalRecord).where(
+                R4ChartingCanonicalRecord.unique_key.like("test-stage151-%")
+            )
+        )
+        session.add(
+            R4ChartingCanonicalRecord(
+                unique_key=f"test-stage151-plan-{patient_code}-1",
+                domain="treatment_plan",
+                r4_source="dbo.TreatmentPlans",
+                r4_source_id=f"{patient_code}:1",
+                legacy_patient_code=patient_code,
+                recorded_at=datetime(2019, 4, 1, 14, 44, 14, tzinfo=timezone.utc),
+                entered_at=datetime(2019, 4, 1, 15, 1, 25, tzinfo=timezone.utc),
+                payload={
+                    "patient_code": patient_code,
+                    "tp_number": 1,
+                    "treatment_plan_id": 23849,
+                    "plan_index": 1,
+                    "is_master": False,
+                    "is_current": False,
+                    "is_accepted": False,
+                    "creation_date": "2019-04-01T14:44:14+00:00",
+                    "acceptance_date": "2019-04-01T15:01:25+00:00",
+                    "completion_date": "2019-08-01T12:37:37+00:00",
+                    "status_code": 2,
+                    "reason_id": None,
+                    "tp_group": 1,
+                },
+            )
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"test-stage151-item-{patient_code}-59603",
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                    r4_source_id="59603",
+                    legacy_patient_code=patient_code,
+                    recorded_at=datetime(2019, 4, 1, 15, 1, 14, tzinfo=timezone.utc),
+                    payload={
+                        "patient_code": patient_code,
+                        "tp_number": 1,
+                        "tp_item": 1,
+                        "tp_item_key": 59603,
+                        "code_id": 3599,
+                        "tooth": 15,
+                        "surface": 0,
+                        "completed": False,
+                        "completed_date": None,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"test-stage151-item-{patient_code}-59604",
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                    r4_source_id="59604",
+                    legacy_patient_code=patient_code,
+                    recorded_at=datetime(2019, 4, 1, 15, 1, 14, tzinfo=timezone.utc),
+                    payload={
+                        "patient_code": patient_code,
+                        "tp_number": 1,
+                        "tp_item": 2,
+                        "tp_item_key": 59604,
+                        "code_id": 3599,
+                        "tooth": 16,
+                        "surface": 0,
+                        "completed": False,
+                        "completed_date": None,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"test-stage151-item-{patient_code}-59605",
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                    r4_source_id="59605",
+                    legacy_patient_code=patient_code,
+                    recorded_at=datetime(2019, 4, 1, 15, 1, 21, tzinfo=timezone.utc),
+                    payload={
+                        "patient_code": patient_code,
+                        "tp_number": 1,
+                        "tp_item": 3,
+                        "tp_item_key": 59605,
+                        "code_id": 3600,
+                        "tooth": 0,
+                        "surface": 0,
+                        "completed": True,
+                        "completed_date": None,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    class _DummyConfig:
+        @staticmethod
+        def from_env():
+            return _DummyConfig()
+
+        def require_enabled(self):
+            return None
+
+    class _DummySource:
+        def __init__(self, _config):
+            pass
+
+        def list_treatment_plans(self, **_kwargs):
+            return []
+
+        def list_treatment_plan_items(self, **_kwargs):
+            return []
+
+    monkeypatch.setattr(r4_charting_spotcheck, "R4SqlServerConfig", _DummyConfig)
+    monkeypatch.setattr(r4_charting_spotcheck, "R4SqlServerSource", _DummySource)
+    monkeypatch.setattr(r4_charting_spotcheck, "mapping_exists", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "r4_charting_spotcheck.py",
+            "--patient-code",
+            str(patient_code),
+            "--entities",
+            "treatment_plans,treatment_plan_items",
+            "--format",
+            "json",
+            "--limit",
+            "5000",
+        ],
+    )
+
+    try:
+        assert r4_charting_spotcheck.main() == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert len(payload["postgres"]["treatment_plans"]) == 1
+        assert len(payload["postgres"]["treatment_plan_items"]) == 3
+    finally:
+        cleanup = SessionLocal()
+        try:
+            cleanup.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.unique_key.like("test-stage151-%")
+                )
+            )
+            cleanup.commit()
+        finally:
+            cleanup.close()
