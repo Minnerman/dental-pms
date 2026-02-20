@@ -32,6 +32,20 @@ The odontogram must render R4-equivalent visual representations for, at minimum:
 - Implants
 - Dentures/partials
 
+### 3.1 Restoration visual vocabulary (Stage 154B v1)
+- Contract-first rendering is introduced through `GET /patients/{patient_id}/charting/tooth-state`.
+- Initial vocabulary supported by the SVG tooth component:
+  - `filling`: surface-only shaded overlays (`M/O/D/B/L/I`)
+  - `crown`: full-tooth ring/coverage overlay
+  - `bridge`: abutment/pontic connector stub glyph
+  - `rct`: root-canal indicator glyph
+  - `implant`: implant post glyph
+  - `denture`: arch/plate segment glyph
+  - `missing` / `extracted`: tooth-level strike markers
+- Deterministic test hooks are required for each rendered symbol:
+  - `tooth-restoration-<tooth>-<type>`
+  - `tooth-restoration-<tooth>-filling-<surface>` for per-surface fillings
+
 ## 4. Planned vs completed treatment
 - Planned items are visually distinct from completed items.
 - Planned/completed items attach to the correct tooth and surface where applicable.

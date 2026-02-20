@@ -191,6 +191,24 @@ class R4TreatmentPlanOverlayOut(BaseModel):
     unassigned_items: list[R4TreatmentPlanOverlayItemOut]
 
 
+class R4ToothStateRestorationOut(BaseModel):
+    type: Literal["filling", "crown", "bridge", "rct", "implant", "denture"]
+    surfaces: list[Literal["M", "O", "D", "B", "L", "I"]] = []
+    meta: dict[str, object] = {}
+
+
+class R4ToothStateEntryOut(BaseModel):
+    restorations: list[R4ToothStateRestorationOut] = []
+    missing: bool = False
+    extracted: bool = False
+
+
+class R4ToothStateOut(BaseModel):
+    patient_id: int
+    legacy_patient_code: int | None = None
+    teeth: dict[str, R4ToothStateEntryOut] = {}
+
+
 class ChartingAuditIn(BaseModel):
     action: Literal["viewer_opened", "share_link_copied"]
     section: str | None = None

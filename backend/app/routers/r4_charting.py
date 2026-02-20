@@ -59,6 +59,9 @@ from app.schemas.r4_charting import (
     R4TreatmentPlanOverlayItemOut,
     R4TreatmentPlanOverlayOut,
     R4TreatmentPlanToothGroupOut,
+    R4ToothStateEntryOut,
+    R4ToothStateOut,
+    R4ToothStateRestorationOut,
     R4ToothSurfaceOut,
 )
 from app.services.rate_limit import SimpleRateLimiter
@@ -239,6 +242,120 @@ def _coerce_optional_datetime(value: object | None) -> datetime | None:
         return datetime.fromisoformat(text)
     except ValueError:
         return None
+
+
+def _surface_key(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    if text in {"M", "O", "D", "B", "L", "I"}:
+        return text
+    numeric = _coerce_optional_int(value)
+    if numeric is None:
+        return None
+    return {
+        1: "M",
+        2: "O",
+        3: "D",
+        4: "B",
+        5: "L",
+        6: "I",
+    }.get(numeric)
+
+
+def _extract_surface_keys(
+    payload: dict[str, object],
+    fallback_surface: object | None,
+) -> list[str]:
+    values: list[object] = []
+    raw_surfaces = payload.get("surfaces")
+    if isinstance(raw_surfaces, list):
+        values.extend(raw_surfaces)
+    elif raw_surfaces is not None:
+        values.append(raw_surfaces)
+
+    raw_surface = payload.get("surface")
+    if raw_surface is not None:
+        values.append(raw_surface)
+    if fallback_surface is not None:
+        values.append(fallback_surface)
+
+    surface_keys: list[str] = []
+    for value in values:
+        surface_key = _surface_key(value)
+        if surface_key is None:
+            continue
+        if surface_key not in surface_keys:
+            surface_keys.append(surface_key)
+    return surface_keys
+
+
+def _bool_from_payload(payload: dict[str, object], keys: tuple[str, ...]) -> bool | None:
+    for key in keys:
+        if key in payload:
+            value = _coerce_optional_bool(payload.get(key))
+            if value is not None:
+                return value
+    return None
+
+
+def _infer_tooth_state_flags(payload: dict[str, object]) -> tuple[bool, bool]:
+    missing = _bool_from_payload(payload, ("missing", "is_missing")) is True
+    extracted = _bool_from_payload(payload, ("extracted", "is_extracted")) is True
+    status_text = str(payload.get("status") or "").strip().lower()
+    if status_text in {"missing", "tooth missing"}:
+        missing = True
+    if status_text in {"extracted", "extract", "removed"}:
+        extracted = True
+    return missing, extracted
+
+
+def _classify_restoration_type(
+    *,
+    payload: dict[str, object],
+    code_label: str | None,
+) -> str | None:
+    explicit = str(payload.get("restoration_type") or "").strip().lower()
+    if explicit in {"filling", "crown", "bridge", "rct", "implant", "denture"}:
+        return explicit
+    if explicit in {"root_canal", "root-canal", "endodontic"}:
+        return "rct"
+    if explicit in {"filling_surface", "composite", "amalgam", "restoration"}:
+        return "filling"
+
+    search_material = " ".join(
+        [
+            str(code_label or ""),
+            str(payload.get("description") or ""),
+            str(payload.get("note") or ""),
+            str(payload.get("status") or ""),
+            str(payload.get("action") or ""),
+            str(payload.get("procedure") or ""),
+        ]
+    ).lower()
+    if "crown" in search_material:
+        return "crown"
+    if "bridge" in search_material or "pontic" in search_material or "abutment" in search_material:
+        return "bridge"
+    if (
+        "root canal" in search_material
+        or " rct" in search_material
+        or "rct " in search_material
+        or "endodont" in search_material
+    ):
+        return "rct"
+    if "implant" in search_material:
+        return "implant"
+    if "denture" in search_material or "partial denture" in search_material:
+        return "denture"
+    if (
+        "filling" in search_material
+        or "composite" in search_material
+        or "amalgam" in search_material
+        or "restoration" in search_material
+    ):
+        return "filling"
+    return None
 
 
 @router.get("/perio-probes", response_model=PaginatedR4PerioProbeOut)
@@ -615,6 +732,157 @@ def list_treatment_plan_items_overlay(
             total_completed=total_completed,
             tooth_groups=tooth_groups,
             unassigned_items=unassigned_items,
+        )
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=200,
+            duration_ms=duration_ms,
+        )
+        return response
+    except HTTPException as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_charting_access(
+            user_id=user.id,
+            user_email=user.email,
+            patient_id=patient_id,
+            path=request.url.path,
+            method=request.method,
+            status_code=exc.status_code,
+            duration_ms=duration_ms,
+        )
+        raise
+
+
+@router.get("/tooth-state", response_model=R4ToothStateOut)
+def get_tooth_state(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(_charting_access_context),
+    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+) -> R4ToothStateOut:
+    user = access["user"]
+    start = access["start"]
+    request: Request = access["request"]
+    try:
+        patient_code = _resolve_legacy_patient_code(db, patient_id)
+        if patient_code is None:
+            response = R4ToothStateOut(patient_id=patient_id, legacy_patient_code=None, teeth={})
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _log_charting_access(
+                user_id=user.id,
+                user_email=user.email,
+                patient_id=patient_id,
+                path=request.url.path,
+                method=request.method,
+                status_code=200,
+                duration_ms=duration_ms,
+            )
+            return response
+
+        stmt = (
+            select(R4ChartingCanonicalRecord, R4Treatment.description.label("code_label"))
+            .outerjoin(
+                R4Treatment,
+                and_(
+                    R4Treatment.legacy_source == "r4",
+                    R4Treatment.legacy_treatment_code == R4ChartingCanonicalRecord.code_id,
+                ),
+            )
+            .where(
+                R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
+                R4ChartingCanonicalRecord.domain.in_(
+                    (
+                        "chart_healing_action",
+                        "treatment_plan_item",
+                        "treatment_plan_items",
+                    )
+                ),
+            )
+            .order_by(
+                nullslast(R4ChartingCanonicalRecord.recorded_at.desc()),
+                R4ChartingCanonicalRecord.r4_source_id.desc(),
+            )
+            .limit(limit)
+        )
+
+        teeth: dict[str, R4ToothStateEntryOut] = {}
+        seen_restorations: dict[str, set[str]] = {}
+
+        for record, code_label in db.execute(stmt).all():
+            payload = _canonical_payload(record)
+            if record.domain in {"treatment_plan_item", "treatment_plan_items"}:
+                completed = _coerce_optional_bool(payload.get("completed"))
+                if completed is not True:
+                    continue
+
+            tooth = _coerce_optional_int(payload.get("tooth"))
+            if tooth is None:
+                tooth = record.tooth
+            if tooth is None or tooth <= 0:
+                continue
+
+            missing, extracted = _infer_tooth_state_flags(payload)
+            restoration_type = _classify_restoration_type(payload=payload, code_label=code_label)
+            if restoration_type is None and not missing and not extracted:
+                continue
+
+            tooth_key = str(tooth)
+            entry = teeth.setdefault(
+                tooth_key,
+                R4ToothStateEntryOut(restorations=[], missing=False, extracted=False),
+            )
+
+            if missing:
+                entry.missing = True
+            if extracted:
+                entry.extracted = True
+
+            if restoration_type is None:
+                continue
+
+            restoration_surfaces = _extract_surface_keys(payload, record.surface)
+            if restoration_type != "filling":
+                restoration_surfaces = []
+
+            dedupe_key = "|".join(
+                [
+                    restoration_type,
+                    ",".join(restoration_surfaces),
+                    record.r4_source or "",
+                    record.r4_source_id or "",
+                ]
+            )
+            seen = seen_restorations.setdefault(tooth_key, set())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            restoration_meta: dict[str, object] = {
+                "source_domain": record.domain,
+                "source_table": record.r4_source,
+                "source_id": record.r4_source_id,
+            }
+            if record.code_id is not None:
+                restoration_meta["code_id"] = record.code_id
+            if code_label:
+                restoration_meta["code_label"] = code_label
+            entry.restorations.append(
+                R4ToothStateRestorationOut(
+                    type=restoration_type,
+                    surfaces=restoration_surfaces,
+                    meta=restoration_meta,
+                )
+            )
+
+        response = R4ToothStateOut(
+            patient_id=patient_id,
+            legacy_patient_code=patient_code,
+            teeth=teeth,
         )
         duration_ms = int((time.monotonic() - start) * 1000)
         _log_charting_access(

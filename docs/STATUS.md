@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 154B started (`stage154b-odontogram-restorations`) for restoration/prosthetic visual vocabulary on the SVG odontogram.
+  - Data availability probe (Postgres today):
+    - charting/canonical + candidate domain tables confirmed:
+      - `r4_charting_canonical_records`, `r4_chart_healing_actions`, `r4_treatment_plan_items`, `r4_treatment_plans`, `r4_treatments`, `r4_tooth_surfaces`, plus charting note/perio tables.
+    - restoration/state-specific canonical domain parity is still limited; Stage 154B is contract-first to avoid blocking UI progress.
+  - Backend contract added:
+    - `GET /patients/{patient_id}/charting/tooth-state`
+    - response shape:
+      - `patient_id`, `legacy_patient_code`
+      - `teeth: { "<fdi_tooth>": { restorations: [...], missing, extracted } }`
+    - v1 implementation classification source:
+      - canonical records in domains `chart_healing_action`, `treatment_plan_item`, `treatment_plan_items`
+      - completed-only filtering for treatment plan items
+      - conservative restoration classification + surface extraction with fallback-safe behavior
+  - Frontend wiring:
+    - `PatientDetailClient` now fetches `charting/tooth-state` in clinical refresh and maps FDI teeth through Stage 153A mapping utility.
+    - `OdontogramToothSvg` now accepts:
+      - `restorations[]`, `missing`, `extracted`
+    - visual vocabulary stubs rendered with deterministic test IDs:
+      - fillings by surface, crown, bridge, RCT, implant, denture, missing, extracted.
+  - Real vs mocked evidence:
+    - real backend contract test added in backend suite (`test_tooth_state_endpoint_contract`)
+    - frontend interaction/regression uses mocked tooth-state payload in Playwright to lock DOM/render behavior while real restoration domains are still being imported.
 - 2026-02-20: Stage 154A started (`stage154a-odontogram-geometry`) to move odontogram fidelity toward R4-like tooth geometry and interactive surfaces.
   - Rendering approach upgraded:
     - previous chart was button/div text-first rendering

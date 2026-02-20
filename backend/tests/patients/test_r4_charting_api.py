@@ -459,6 +459,134 @@ def test_treatment_plan_items_overlay_returns_grouped_items_with_code_labels(
         session.close()
 
 
+def test_tooth_state_endpoint_contract(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    code_id = 6599
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 998000000 + (uuid4().int % 100000)
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+
+        session.add(
+            R4Treatment(
+                legacy_source="r4",
+                legacy_treatment_code=code_id,
+                description="Composite filling",
+                created_by_user_id=actor_id,
+                updated_by_user_id=actor_id,
+            )
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage154b-tooth-state-{legacy_code}-1",
+                    domain="chart_healing_action",
+                    r4_source="dbo.ChartHealingActions",
+                    r4_source_id="1",
+                    legacy_patient_code=legacy_code,
+                    tooth=15,
+                    surface=1,
+                    code_id=code_id,
+                    payload={
+                        "tooth": 15,
+                        "surface": 1,
+                        "code_id": code_id,
+                        "restoration_type": "filling",
+                        "status": "completed",
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage154b-tooth-state-{legacy_code}-2",
+                    domain="chart_healing_action",
+                    r4_source="dbo.ChartHealingActions",
+                    r4_source_id="2",
+                    legacy_patient_code=legacy_code,
+                    tooth=16,
+                    surface=0,
+                    payload={
+                        "tooth": 16,
+                        "surface": 0,
+                        "restoration_type": "crown",
+                        "status": "completed",
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage154b-tooth-state-{legacy_code}-3",
+                    domain="chart_healing_action",
+                    r4_source="dbo.ChartHealingActions",
+                    r4_source_id="3",
+                    legacy_patient_code=legacy_code,
+                    tooth=17,
+                    surface=0,
+                    payload={
+                        "tooth": 17,
+                        "surface": 0,
+                        "status": "extracted",
+                        "is_extracted": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/tooth-state?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert payload["patient_id"] == patient.id
+        assert payload["legacy_patient_code"] == legacy_code
+        teeth = payload["teeth"]
+        assert "15" in teeth
+        assert "16" in teeth
+        assert "17" in teeth
+
+        tooth_15 = teeth["15"]
+        assert tooth_15["missing"] is False
+        assert tooth_15["extracted"] is False
+        filling = next(
+            (item for item in tooth_15["restorations"] if item["type"] == "filling"),
+            None,
+        )
+        assert filling is not None
+        assert filling["surfaces"] == ["M"]
+
+        tooth_16 = teeth["16"]
+        crown = next(
+            (item for item in tooth_16["restorations"] if item["type"] == "crown"),
+            None,
+        )
+        assert crown is not None
+
+        tooth_17 = teeth["17"]
+        assert tooth_17["extracted"] is True
+        assert tooth_17["missing"] is False
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            session.execute(
+                delete(R4Treatment).where(
+                    R4Treatment.legacy_source == "r4",
+                    R4Treatment.legacy_treatment_code == code_id,
+                )
+            )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
+        session.close()
+
+
 def test_charting_requires_auth(api_client, auth_headers):
     session = SessionLocal()
     patient_id = None
@@ -837,6 +965,7 @@ def test_charting_export_truncates_rows(api_client, auth_headers, monkeypatch):
         "/patients/1/charting/note-categories",
         "/patients/1/charting/fixed-notes",
         "/patients/1/charting/tooth-surfaces",
+        "/patients/1/charting/tooth-state",
         "/patients/1/charting/meta",
     ],
 )
@@ -857,6 +986,7 @@ def test_charting_endpoints_blocked_when_feature_disabled(
         "/patients/1/charting/bpe-furcations",
         "/patients/1/charting/notes",
         "/patients/1/charting/tooth-surfaces",
+        "/patients/1/charting/tooth-state",
         "/patients/1/charting/meta",
     ],
 )
