@@ -37,6 +37,9 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
 - Scroll behavior:
   - Smooth vertical scroll without jitter during re-render.
   - Predictable scroll restore after filter/date/view changes.
+  - Stage 158D baseline:
+    - now-line stays visible in day/week time grid.
+    - explicit `Jump to now` control scrolls diary to current time anchor.
 
 ## Visual Language
 - Color coding:
@@ -74,6 +77,17 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
   - Cancel/no-show (with reason)
   - Cut/copy
   - Paste (when clipboard present)
+- Stage 158D baseline:
+  - Implemented context actions in day/week diary cards:
+    - `Open`
+    - `Mark arrived`
+    - `Mark seated` (`in_progress`)
+    - `Mark completed`
+    - `Did not attend` (`no_show`)
+    - `Cancel…`
+    - `Move` (cut mode)
+    - `Copy`
+    - `Add note` (opens detail/edit panel)
 - Unsupported R4 actions should be explicitly listed as out-of-scope until implemented.
 
 ## Keyboard Shortcuts
@@ -94,6 +108,12 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
   - `ArrowLeft`/`ArrowRight`: move appointment selection across current diary order/lane scaffold.
   - `PageUp` / `PageDown`: previous day / next day.
   - `T`: jump diary to today.
+- Stage 158D baseline key map:
+  - `Ctrl/Cmd + Left`: previous day.
+  - `Ctrl/Cmd + Right`: next day.
+  - `Ctrl/Cmd + F`: focus diary patient-search input (scoped diary quick-find).
+  - `N`: open new appointment modal.
+  - `Esc`: close menu/panel/modal focus states and clear diary selection.
 - Stage 158C scheduling constraints:
   - Disallow overlap within the same active lane (chair/clinician grouping context).
   - Show explicit feedback when blocked and keep original appointment slot.
