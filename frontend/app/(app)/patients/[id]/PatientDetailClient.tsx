@@ -10,6 +10,10 @@ import {
   r4SurfaceCodeToSurfaceKey,
   type R4SurfaceKey,
 } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
+import {
+  isToothStateType,
+  type ToothStateType,
+} from "@/lib/charting/toothStateTypes";
 import OdontogramToothSvg, {
   getOdontogramSurfaceAnchor,
   getOdontogramToothType,
@@ -475,7 +479,7 @@ type R4TreatmentPlanOverlay = {
 };
 
 type R4ToothStateRestoration = {
-  type: "filling" | "crown" | "bridge" | "rct" | "implant" | "denture" | "other";
+  type: ToothStateType;
   surfaces?: R4SurfaceKey[] | null;
   meta?: Record<string, unknown> | null;
 };
@@ -3526,15 +3530,7 @@ export default function PatientDetailClient({
       const restorations = (entry.restorations ?? [])
         .map((restoration): OdontogramToothRestoration | null => {
           const type = restoration?.type;
-          if (
-            type !== "filling" &&
-            type !== "crown" &&
-            type !== "bridge" &&
-            type !== "rct" &&
-            type !== "implant" &&
-            type !== "denture" &&
-            type !== "other"
-          ) {
+          if (!isToothStateType(type)) {
             return null;
           }
           const surfaces = (restoration.surfaces ?? []).filter(

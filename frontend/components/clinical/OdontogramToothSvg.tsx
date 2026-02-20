@@ -1,16 +1,14 @@
 import { memo } from "react";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
+import {
+  TOOTH_STATE_TYPE_LABELS,
+  TOOTH_STATE_TYPES,
+  type ToothStateType,
+} from "@/lib/charting/toothStateTypes";
 
 export type OdontogramToothType = "incisor" | "canine" | "premolar" | "molar";
-export type OdontogramRestorationType =
-  | "filling"
-  | "crown"
-  | "bridge"
-  | "rct"
-  | "implant"
-  | "denture"
-  | "other";
+export type OdontogramRestorationType = ToothStateType;
 
 export type OdontogramToothRestoration = {
   type: OdontogramRestorationType;
@@ -21,6 +19,16 @@ export type OdontogramToothRestoration = {
 type SurfaceShape = {
   key: R4SurfaceKey;
   points: string;
+};
+
+type CompactBadgeType = "bridge" | "veneer" | "inlay_onlay" | "post" | "denture" | "other";
+
+type CompactBadgeStyle = {
+  label: string;
+  cx: number;
+  cy: number;
+  fill: string;
+  stroke: string;
 };
 
 const toothOutlinePath: Record<OdontogramToothType, string> = {
@@ -95,6 +103,89 @@ const surfaceAnchorByType: Record<
   },
 };
 
+const compactBadgeStyles: Record<CompactBadgeType, CompactBadgeStyle> = {
+  bridge: {
+    label: "BR",
+    cx: 20,
+    cy: 14,
+    fill: "rgba(14, 116, 144, 0.9)",
+    stroke: "rgba(8, 47, 73, 0.95)",
+  },
+  veneer: {
+    label: "VE",
+    cx: 35,
+    cy: 14,
+    fill: "rgba(79, 70, 229, 0.88)",
+    stroke: "rgba(49, 46, 129, 0.96)",
+  },
+  inlay_onlay: {
+    label: "IN",
+    cx: 50,
+    cy: 14,
+    fill: "rgba(202, 138, 4, 0.88)",
+    stroke: "rgba(120, 53, 15, 0.96)",
+  },
+  post: {
+    label: "PO",
+    cx: 65,
+    cy: 14,
+    fill: "rgba(71, 85, 105, 0.9)",
+    stroke: "rgba(15, 23, 42, 0.96)",
+  },
+  denture: {
+    label: "DE",
+    cx: 80,
+    cy: 14,
+    fill: "rgba(217, 119, 6, 0.9)",
+    stroke: "rgba(146, 64, 14, 0.96)",
+  },
+  other: {
+    label: "OT",
+    cx: 50,
+    cy: 27,
+    fill: "rgba(99, 102, 241, 0.88)",
+    stroke: "rgba(67, 56, 202, 0.96)",
+  },
+};
+
+function createRestorationBuckets(): Record<OdontogramRestorationType, OdontogramToothRestoration[]> {
+  return TOOTH_STATE_TYPES.reduce(
+    (acc, type) => {
+      acc[type] = [];
+      return acc;
+    },
+    {} as Record<OdontogramRestorationType, OdontogramToothRestoration[]>
+  );
+}
+
+function coerceOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (["1", "true", "yes", "y", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "n", "off"].includes(normalized)) return false;
+  return null;
+}
+
+function restorationCodeLabel(restoration: OdontogramToothRestoration) {
+  const codeLabelValue = restoration.meta?.code_label;
+  const codeIdValue = restoration.meta?.code_id;
+  if (typeof codeLabelValue === "string" && codeLabelValue.trim()) {
+    return codeLabelValue.trim();
+  }
+  if (typeof codeIdValue === "number" || typeof codeIdValue === "string") {
+    return `Code ${String(codeIdValue)}`;
+  }
+  return "Unknown code";
+}
+
+function restorationStatusLabel(restoration: OdontogramToothRestoration) {
+  const completed = coerceOptionalBoolean(restoration.meta?.completed);
+  return completed === false ? "Planned" : "Completed";
+}
+
 type Props = {
   toothKey: string;
   toothType: OdontogramToothType;
@@ -117,46 +208,214 @@ function OdontogramToothSvgImpl({
   onSurfaceClick,
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
-  const fillingSurfaces = new Set<R4SurfaceKey>();
+  const restorationsByType = createRestorationBuckets();
   for (const restoration of restorations) {
-    if (restoration.type !== "filling") continue;
+    restorationsByType[restoration.type].push(restoration);
+  }
+  const fillingSurfaces = new Set<R4SurfaceKey>();
+  for (const restoration of restorationsByType.filling) {
     for (const surface of restoration.surfaces ?? []) {
       fillingSurfaces.add(surface);
     }
   }
-
-  const hasRestoration = (type: OdontogramRestorationType) =>
-    restorations.some((restoration) => restoration.type === type);
+  const hasWholeToothFilling = restorationsByType.filling.some(
+    (restoration) => (restoration.surfaces?.length ?? 0) === 0
+  );
 
   const restorationTooltipForType = (type: OdontogramRestorationType): string | undefined => {
-    const matches = restorations.filter((restoration) => restoration.type === type);
+    const matches = restorationsByType[type];
     if (matches.length === 0) return undefined;
 
     const lines = matches.map((restoration) => {
-      const codeLabelValue = restoration.meta?.code_label;
-      const codeIdValue = restoration.meta?.code_id;
-      const label =
-        typeof codeLabelValue === "string" && codeLabelValue.trim()
-          ? codeLabelValue.trim()
-          : typeof codeIdValue === "number" || typeof codeIdValue === "string"
-            ? `Code ${String(codeIdValue)}`
-            : "Unknown code";
+      const label = restorationCodeLabel(restoration);
+      const typeLabel = TOOTH_STATE_TYPE_LABELS[type];
+      const status = restorationStatusLabel(restoration);
       const surfaceText =
         restoration.surfaces && restoration.surfaces.length > 0
-          ? `Surface: ${restoration.surfaces.join(",")}`
-          : "Surface: Whole tooth";
-      return `${label} (Completed) - ${surfaceText}`;
+          ? restoration.surfaces.join(",")
+          : "Whole tooth";
+      return `${label} | Type: ${typeLabel} | Status: ${status} | Surface: ${surfaceText}`;
     });
 
     return lines.join("\n");
   };
 
-  const crownTooltip = restorationTooltipForType("crown");
-  const bridgeTooltip = restorationTooltipForType("bridge");
-  const rctTooltip = restorationTooltipForType("rct");
-  const implantTooltip = restorationTooltipForType("implant");
-  const dentureTooltip = restorationTooltipForType("denture");
-  const otherTooltip = restorationTooltipForType("other");
+  const extractionCompleted = restorationsByType.extraction.some(
+    (restoration) => restorationStatusLabel(restoration) === "Completed"
+  );
+  const extractionPlanned = restorationsByType.extraction.some(
+    (restoration) => restorationStatusLabel(restoration) === "Planned"
+  );
+  const hasExtraction = extracted || extractionCompleted || extractionPlanned;
+  const extractionState: "completed" | "planned" | "mixed" =
+    hasExtraction && extractionPlanned && !extracted && !extractionCompleted
+      ? "planned"
+      : hasExtraction && extractionPlanned && (extracted || extractionCompleted)
+        ? "mixed"
+        : "completed";
+
+  function renderCompactBadge(type: CompactBadgeType) {
+    if (restorationsByType[type].length === 0) return null;
+    const tooltip = restorationTooltipForType(type);
+    const style = compactBadgeStyles[type];
+    return (
+      <g
+        pointerEvents="none"
+        data-testid={`tooth-restoration-${toothKey}-${type}`}
+        data-tooltip={tooltip}
+      >
+        {tooltip ? <title>{tooltip}</title> : null}
+        <circle
+          cx={style.cx}
+          cy={style.cy}
+          r="5.5"
+          fill={style.fill}
+          stroke={style.stroke}
+          strokeWidth="1"
+        />
+        <text
+          x={style.cx}
+          y={style.cy + 1.8}
+          textAnchor="middle"
+          fontSize="4.8"
+          fontWeight="700"
+          fill="rgba(255,255,255,0.92)"
+          pointerEvents="none"
+        >
+          {style.label}
+        </text>
+      </g>
+    );
+  }
+
+  const restorationRenderers: Record<OdontogramRestorationType, () => JSX.Element | null> = {
+    filling: () => {
+      if (restorationsByType.filling.length === 0) return null;
+      const tooltip = restorationTooltipForType("filling");
+      return (
+        <g
+          pointerEvents="none"
+          data-testid={`tooth-restoration-${toothKey}-filling`}
+          data-tooltip={tooltip}
+        >
+          {tooltip ? <title>{tooltip}</title> : null}
+          {hasWholeToothFilling && (
+            <rect
+              x="45"
+              y="45"
+              width="10"
+              height="10"
+              rx="2"
+              fill="rgba(239, 68, 68, 0.28)"
+              stroke="rgba(239, 68, 68, 0.76)"
+              strokeWidth="1.2"
+            />
+          )}
+        </g>
+      );
+    },
+    crown: () => {
+      if (restorationsByType.crown.length === 0) return null;
+      const tooltip = restorationTooltipForType("crown");
+      return (
+        <path
+          d={toothOutlinePath[toothType]}
+          fill="rgba(251, 191, 36, 0.14)"
+          stroke="rgba(202, 138, 4, 0.95)"
+          strokeWidth={4}
+          pointerEvents="none"
+          data-tooltip={tooltip}
+          data-testid={`tooth-restoration-${toothKey}-crown`}
+        >
+          {tooltip ? <title>{tooltip}</title> : null}
+        </path>
+      );
+    },
+    bridge: () => renderCompactBadge("bridge"),
+    veneer: () => renderCompactBadge("veneer"),
+    inlay_onlay: () => renderCompactBadge("inlay_onlay"),
+    post: () => renderCompactBadge("post"),
+    root_canal: () => {
+      if (restorationsByType.root_canal.length === 0) return null;
+      const tooltip = restorationTooltipForType("root_canal");
+      return (
+        <g
+          pointerEvents="none"
+          data-tooltip={tooltip}
+          data-testid={`tooth-restoration-${toothKey}-root_canal`}
+        >
+          {tooltip ? <title>{tooltip}</title> : null}
+          <line x1="44" y1="30" x2="44" y2="84" stroke="rgba(14, 116, 144, 0.95)" strokeWidth="2.2" />
+          <line x1="50" y1="28" x2="50" y2="84" stroke="rgba(14, 116, 144, 0.95)" strokeWidth="2.2" />
+          <line x1="56" y1="30" x2="56" y2="84" stroke="rgba(14, 116, 144, 0.95)" strokeWidth="2.2" />
+        </g>
+      );
+    },
+    implant: () => {
+      if (restorationsByType.implant.length === 0) return null;
+      const tooltip = restorationTooltipForType("implant");
+      return (
+        <g
+          pointerEvents="none"
+          data-tooltip={tooltip}
+          data-testid={`tooth-restoration-${toothKey}-implant`}
+        >
+          {tooltip ? <title>{tooltip}</title> : null}
+          <rect
+            x="43"
+            y="70"
+            width="14"
+            height="22"
+            rx="2"
+            fill="rgba(107, 114, 128, 0.86)"
+            stroke="rgba(55, 65, 81, 0.94)"
+            strokeWidth="1"
+          />
+          <line x1="43" y1="76" x2="57" y2="76" stroke="rgba(255, 255, 255, 0.72)" strokeWidth="1" />
+          <line x1="43" y1="82" x2="57" y2="82" stroke="rgba(255, 255, 255, 0.72)" strokeWidth="1" />
+          <line x1="43" y1="88" x2="57" y2="88" stroke="rgba(255, 255, 255, 0.72)" strokeWidth="1" />
+        </g>
+      );
+    },
+    extraction: () => {
+      if (!hasExtraction) return null;
+      const tooltip =
+        restorationTooltipForType("extraction") ??
+        "Unknown code | Type: extraction | Status: Completed | Surface: Whole tooth";
+      const plannedOnly = extractionState === "planned";
+      const mixedState = extractionState === "mixed";
+      return (
+        <g
+          pointerEvents="none"
+          data-tooltip={tooltip}
+          data-status={extractionState}
+          data-testid={`tooth-restoration-${toothKey}-extraction`}
+        >
+          {tooltip ? <title>{tooltip}</title> : null}
+          <line
+            x1="22"
+            y1="18"
+            x2="78"
+            y2="82"
+            stroke={plannedOnly ? "rgba(220, 38, 38, 0.9)" : "rgba(185, 28, 28, 0.92)"}
+            strokeWidth={mixedState ? "3.2" : "3.8"}
+            strokeDasharray={plannedOnly ? "5 4" : mixedState ? "2 2" : undefined}
+          />
+          <line
+            x1="78"
+            y1="18"
+            x2="22"
+            y2="82"
+            stroke={plannedOnly ? "rgba(220, 38, 38, 0.9)" : "rgba(185, 28, 28, 0.92)"}
+            strokeWidth={mixedState ? "3.2" : "3.8"}
+            strokeDasharray={plannedOnly ? "5 4" : mixedState ? "2 2" : undefined}
+          />
+        </g>
+      );
+    },
+    denture: () => renderCompactBadge("denture"),
+    other: () => renderCompactBadge("other"),
+  };
 
   return (
     <svg
@@ -207,93 +466,11 @@ function OdontogramToothSvgImpl({
           </g>
         );
       })}
-      {hasRestoration("crown") && (
-        <path
-          d={toothOutlinePath[toothType]}
-          fill="rgba(251, 191, 36, 0.14)"
-          stroke="rgba(202, 138, 4, 0.95)"
-          strokeWidth={4}
-          pointerEvents="none"
-          data-tooltip={crownTooltip}
-          data-testid={`tooth-restoration-${toothKey}-crown`}
-        >
-          {crownTooltip ? <title>{crownTooltip}</title> : null}
-        </path>
-      )}
-      {hasRestoration("bridge") && (
-        <line
-          x1="20"
-          y1="20"
-          x2="80"
-          y2="20"
-          stroke="rgba(14, 116, 144, 0.95)"
-          strokeWidth={3}
-          strokeDasharray="5 3"
-          pointerEvents="none"
-          data-tooltip={bridgeTooltip}
-          data-testid={`tooth-restoration-${toothKey}-bridge`}
-        >
-          {bridgeTooltip ? <title>{bridgeTooltip}</title> : null}
-        </line>
-      )}
-      {hasRestoration("rct") && (
-        <g
-          pointerEvents="none"
-          data-tooltip={rctTooltip}
-          data-testid={`tooth-restoration-${toothKey}-rct`}
-        >
-          {rctTooltip ? <title>{rctTooltip}</title> : null}
-          <circle cx="50" cy="42" r="6" fill="rgba(2, 132, 199, 0.9)" />
-          <line x1="50" y1="48" x2="50" y2="84" stroke="rgba(2, 132, 199, 0.9)" strokeWidth={2.5} />
-        </g>
-      )}
-      {hasRestoration("implant") && (
-        <g
-          pointerEvents="none"
-          data-tooltip={implantTooltip}
-          data-testid={`tooth-restoration-${toothKey}-implant`}
-        >
-          {implantTooltip ? <title>{implantTooltip}</title> : null}
-          <rect
-            x="44"
-            y="72"
-            width="12"
-            height="18"
-            rx="2"
-            fill="rgba(107, 114, 128, 0.85)"
-          />
-          <line x1="44" y1="80" x2="56" y2="80" stroke="rgba(255, 255, 255, 0.7)" strokeWidth={1} />
-          <line x1="44" y1="86" x2="56" y2="86" stroke="rgba(255, 255, 255, 0.7)" strokeWidth={1} />
-        </g>
-      )}
-      {hasRestoration("denture") && (
-        <path
-          d="M18 82 Q50 98 82 82"
-          fill="none"
-          stroke="rgba(217, 119, 6, 0.9)"
-          strokeWidth={4}
-          pointerEvents="none"
-          data-tooltip={dentureTooltip}
-          data-testid={`tooth-restoration-${toothKey}-denture`}
-        >
-          {dentureTooltip ? <title>{dentureTooltip}</title> : null}
-        </path>
-      )}
-      {hasRestoration("other") && (
-        <circle
-          cx="50"
-          cy="14"
-          r="5"
-          fill="rgba(99, 102, 241, 0.85)"
-          stroke="rgba(67, 56, 202, 0.95)"
-          strokeWidth={1.5}
-          pointerEvents="none"
-          data-tooltip={otherTooltip}
-          data-testid={`tooth-restoration-${toothKey}-other`}
-        >
-          {otherTooltip ? <title>{otherTooltip}</title> : null}
-        </circle>
-      )}
+      {TOOTH_STATE_TYPES.map((type) => {
+        const content = restorationRenderers[type]();
+        if (!content) return null;
+        return <g key={`${toothKey}-${type}`}>{content}</g>;
+      })}
       {missing && (
         <line
           x1="18"
@@ -307,14 +484,9 @@ function OdontogramToothSvgImpl({
         />
       )}
       {extracted && (
-        <line
-          x1="18"
-          y1="14"
-          x2="82"
-          y2="86"
-          stroke="rgba(220, 38, 38, 0.85)"
-          strokeWidth={3}
+        <g
           pointerEvents="none"
+          style={{ display: "none" }}
           data-testid={`tooth-restoration-${toothKey}-extracted`}
         />
       )}

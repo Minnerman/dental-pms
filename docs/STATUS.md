@@ -61,6 +61,26 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 156B started (`stage156b-tooth-state-svg-rendering`) for incremental, type-specific SVG rendering in clinical odontogram.
+  - Frontend tooth-state type contract aligned with backend Stage 156A buckets:
+    - added shared type guard + labels: `frontend/lib/charting/toothStateTypes.ts`
+    - `PatientDetailClient` now accepts all tooth-state types via `isToothStateType(...)` during API payload mapping.
+  - `OdontogramToothSvg` rendering upgraded with a renderer map (`type -> renderFn`) and deterministic hooks:
+    - baseline detailed rendering:
+      - `filling`: surface fills remain; whole-tooth fillings render a generic center marker.
+      - `root_canal`: internal canal-line glyph (`data-testid="tooth-restoration-<tooth>-root_canal"`).
+      - `extraction`: cross overlay with planned/completed state (`data-status` planned/completed/mixed).
+      - `implant`: screw/cylinder marker retained with updated styling.
+      - `crown`: maintained as full-tooth overlay and normalized tooltip format.
+    - fallback compact badge rendering for:
+      - `bridge`, `veneer`, `inlay_onlay`, `post`, `denture`, `other`.
+    - tooltip/title lines now include both code label and type metadata (`Type: <type>`), plus status and surface context.
+  - Test coverage and evidence:
+    - added unit-style type-guard test: `frontend/tests/tooth-state-types.spec.ts`
+    - expanded Playwright overlay spec with mocked `root_canal`, `implant`, `extraction (planned)`, and crown type assertions:
+      - `frontend/tests/clinical-odontogram-overlays.spec.ts`
+    - evidence screenshot path added:
+      - `.run/stage156b/tooth_state_ui_types.png`
 - 2026-02-20: Stage 156A started (`stage156a-tooth-state-classification`) to expand backend tooth-state classification buckets.
   - Tooth-state type classification extracted to a pure function:
     - `backend/app/services/tooth_state_classification.py`
