@@ -475,7 +475,7 @@ type R4TreatmentPlanOverlay = {
 };
 
 type R4ToothStateRestoration = {
-  type: "filling" | "crown" | "bridge" | "rct" | "implant" | "denture";
+  type: "filling" | "crown" | "bridge" | "rct" | "implant" | "denture" | "other";
   surfaces?: R4SurfaceKey[] | null;
   meta?: Record<string, unknown> | null;
 };
@@ -3532,7 +3532,8 @@ export default function PatientDetailClient({
             type !== "bridge" &&
             type !== "rct" &&
             type !== "implant" &&
-            type !== "denture"
+            type !== "denture" &&
+            type !== "other"
           ) {
             return null;
           }
