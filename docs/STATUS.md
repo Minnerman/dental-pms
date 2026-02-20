@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 158D started (`stage158d-diary-polish-layer`) for R4-like diary polish (shortcuts, real context actions, fast navigation).
+  - Diary polish upgrades in `frontend/app/(app)/appointments/page.tsx`:
+    - keyboard shortcuts:
+      - `Ctrl/Cmd + Left/Right` for previous/next day navigation.
+      - `Ctrl/Cmd + F` focuses scoped diary patient search.
+      - `Esc` now clears selection and closes context menu/detail panel/cancel modal.
+      - existing `T` jump-to-today now also anchors diary scroll to current time.
+    - fast navigation:
+      - added shell `Jump to now` control (`data-testid="appointments-diary-jump-now"`).
+      - added diary patient quick-find input (`data-testid="appointments-diary-search"`).
+      - selected appointment is kept in view via `scrollIntoView` after selection/range updates.
+      - jump-date input now has stable hook (`data-testid="appointments-jump-date-input"`).
+    - context menu actions promoted from scaffold to real status actions:
+      - `Mark arrived`, `Mark seated`, `Mark completed`, `Did not attend`, `Cancel…`, plus `Open`, `Move`, `Copy`, `Add note`.
+    - status updates now refresh open detail panel state for the active appointment.
+  - Micro-visual parity polish in `frontend/app/globals.css`:
+    - stronger diary card hover/selected affordances.
+    - explicit now-line styling (`.rbc-current-time-indicator`).
+    - shell search/action row alignment updates.
+  - Playwright coverage extended in `frontend/tests/appointments-diary-interactions.spec.ts`:
+    - new shortcut assertions (`Ctrl/Cmd+F`, `Ctrl/Cmd+Left/Right`, `T`, `N`, `Esc`).
+    - new context-menu status persistence assertion (`Mark arrived` persisted via API).
+  - Stage 158D evidence screenshots:
+    - `.run/stage158d/context_status_arrived.png`
+    - `.run/stage158d/shortcut_navigation.png`
+  - Remaining parity gaps after Stage 158D:
+    - one-step undo UX for drag/resize actions.
+    - richer overlap visualization/stacking for extreme dense clinics.
+    - optional screenshot-diff visual baseline gate for diary regression control.
 - 2026-02-20: Stage 158C started (`stage158c-diary-drag-resize`) for R4-like drag/drop + resize parity.
   - Diary scheduling behavior upgrades in `frontend/app/(app)/appointments/page.tsx`:
     - drag/drop move:
