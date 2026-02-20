@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { createAppointment, createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
 const stage158bDir = path.resolve(__dirname, "..", "..", ".run", "stage158b");
@@ -42,6 +43,16 @@ test("diary interaction parity: select, open, context menu, escape, enter", asyn
 }) => {
   test.setTimeout(120_000);
   await fs.mkdir(stage158bDir, { recursive: true });
+  const patientId = await createPatient(request, {
+    first_name: "Diary",
+    last_name: `Interaction ${Date.now()}`,
+  });
+  await createAppointment(request, patientId, {
+    starts_at: "2026-01-15T10:00:00.000Z",
+    ends_at: "2026-01-15T10:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
   const baseUrl = getBaseUrl();
   await primePageAuth(page, request);
   await page.goto(`${baseUrl}/appointments?date=2026-01-15&view=day`, {
