@@ -61,6 +61,30 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 150 diagnosis completed (`stage150-tp-tpi-postgres-gap`) for TP/TPI SQL Server vs Postgres gap (`patient_code=1014496`).
+  - Baseline before re-import:
+    - canonical registry probe showed no rows for this patient:
+      - `.run/stage150/canonical_records_patient_1014496.txt`
+    - treatment table probe showed zero patient-linked rows in Postgres TP/TPI-related tables:
+      - `.run/stage150/table_probe_treatment_tables.txt`
+  - Single-patient re-import executed (current CLI syntax with `--entity` + `--patient-codes-file`):
+    - `patients` apply stats: `.run/stage150/stage150_patients.json`
+    - `charting_canonical` apply stats (domains `treatment_plans,treatment_plan_items`): `.run/stage150/stage150_charting_tp_tpi.json`
+    - charting canonical import result: `imported_created_total=4` (`dbo.TreatmentPlans=1`, `dbo.TreatmentPlanItems=3`)
+  - Post-import verification:
+    - canonical registry now has patient rows by domain:
+      - `treatment_plan=1`, `treatment_plan_item=3`
+    - domain tables used by spotcheck remain empty for this patient:
+      - `r4_treatment_plans` (`legacy_patient_code=1014496`) = `0`
+      - `r4_treatment_plan_items` joined via `r4_treatment_plans` = `0`
+    - evidence:
+      - `.run/stage150/post_import_db_probe_1014496_clean.txt`
+      - `.run/stage150/patient_1014496/r4_spotcheck.json`
+      - `.run/stage150/patient_1014496/overlay_summary_sqlserver.json`
+      - `.run/stage150/patient_1014496/overlay_summary_postgres.json`
+  - Outcome:
+    - **Case B** confirmed: import was executed and canonical rows were created, but spotcheck TP/TPI Postgres retrieval is still zero because it reads `r4_treatment_plans`/`r4_treatment_plan_items` rather than canonical records for this flow.
+    - Stage 151 should fix TP/TPI Postgres parity/spotcheck retrieval path (canonical-backed) before UI overlay work.
 - 2026-02-19: Stage 149 started (`stage149-treatment-plan-item-overlays`) for planned/completed odontogram overlay evidence.
   - Inventory probe (`treatment_plan_items`, window `2017-01-01..2026-02-01`) returned `3040` candidate patient codes.
     - file: `.run/stage149/inventory_treatment_plan_items_stage149.csv`
