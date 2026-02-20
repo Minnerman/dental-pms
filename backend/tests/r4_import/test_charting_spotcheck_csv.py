@@ -121,6 +121,14 @@ def test_surface_definitions_alias_parsing_is_backward_compatible():
     assert entities == ["surface_definitions"]
 
 
+def test_treatment_plan_entity_aliases_parse_to_canonical_names():
+    entities = _parse_entities(
+        "treatment_plans,treatment_plan_item,treatment_plan_items",
+        ENTITY_ALIASES,
+    )
+    assert entities == ["treatment_plans", "treatment_plan_items"]
+
+
 def test_surface_definitions_normalization_maps_legacy_fields():
     rows = _normalize_entity_rows(
         "surface_definitions",

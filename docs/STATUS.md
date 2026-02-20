@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-19: Stage 149 started (`stage149-treatment-plan-item-overlays`) for planned/completed odontogram overlay evidence.
+  - Inventory probe (`treatment_plan_items`, window `2017-01-01..2026-02-01`) returned `3040` candidate patient codes.
+    - file: `.run/stage149/inventory_treatment_plan_items_stage149.csv`
+  - Existing seen ledgers confirmed prior domain exhaustion history:
+    - `.run/seen_stage136_tp_items.txt` = `3040`
+    - `.run/seen_stage141_treatment_plan_items.txt` = `3040`
+  - Deterministic 20-patient UI pack selection (stable key `sha256("stage149:<patient_code>")` from inventory):
+    - output: `.run/stage149/overlay_patient_codes.txt`
+    - selected codes:
+      `1014496,1015073,1015382,1016092,1014947,1016736,1016108,1013285,1015537,1012631,1007618,1015049,1016630,1015173,1016254,1013045,1014391,1015542,1015974,1016371`
+  - Spotcheck pack produced for each selected patient under `.run/stage149/patient_<code>/`:
+    - `r4_spotcheck.json`
+    - `overlay_summary_sqlserver.json`
+    - `overlay_summary_postgres.json`
+  - Stage 149 spotcheck script support update:
+    - `r4_charting_spotcheck` now accepts entities `treatment_plans` and `treatment_plan_items` (plus alias `treatment_plan_item`) for this overlay pack workflow.
+  - Top findings from the 20-patient pack:
+    - SQL Server side: `patients_with_treatment_plans=20`, `patients_with_treatment_plan_items=20`,
+      `treatment_plans_total=52`, `treatment_plan_items_total=282`.
+    - Tooth-linked treatment plan items (SQL Server): `154/282`.
+    - Planned/completed signal shape: items expose boolean `completed` (not text status), with
+      `completed_true=111`, `completed_false=171`.
+    - Postgres side for this selected pack: `treatment_plans_total=0`, `treatment_plan_items_total=0`.
+      (Overlay parity for these 20 is currently SQL Server-only evidence.)
+  - Evidence:
+    - `.run/stage149/inventory_probe.txt`
+    - `.run/stage149/overlay_patient_codes.txt`
+    - `.run/stage149/patient_*/r4_spotcheck.json`
+    - `.run/stage149/patient_*/overlay_summary_sqlserver.json`
+    - `.run/stage149/patient_*/overlay_summary_postgres.json`
 - 2026-02-19: Stage 148 started (`stage148-chart-healing-actions`) for `chart_healing_actions` parity + UI mapping preflight.
   - Domain wiring completed for Stage 148 execution path:
     - `r4_cohort_select` now accepts `chart_healing_actions`.
