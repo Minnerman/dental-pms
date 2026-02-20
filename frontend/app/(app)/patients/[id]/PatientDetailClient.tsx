@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { fdiToChartToothKey } from "@/lib/charting/fdiToChartToothKey";
 import StatusIcon from "@/components/ui/StatusIcon";
 import Panel from "@/components/ui/Panel";
 import Table from "@/components/ui/Table";
@@ -3093,18 +3094,6 @@ export default function PatientDetailClient({
     return code ? code.trim().toUpperCase() : null;
   }
 
-  function toClinicalToothCode(legacyTooth: number | null | undefined): string | null {
-    if (legacyTooth == null) return null;
-    const quadrant = Math.floor(legacyTooth / 10);
-    const position = legacyTooth % 10;
-    if (position < 1 || position > 8) return null;
-    if (quadrant === 1) return `UR${position}`;
-    if (quadrant === 2) return `UL${position}`;
-    if (quadrant === 3) return `LL${position}`;
-    if (quadrant === 4) return `LR${position}`;
-    return null;
-  }
-
   function isOverlayItemVisible(
     item: R4TreatmentPlanOverlayItem,
     filter: TreatmentPlanOverlayFilter
@@ -3256,8 +3245,9 @@ export default function PatientDetailClient({
     const map = new Map<string, ToothOverlaySummary>();
     const groups = r4TreatmentOverlay?.tooth_groups ?? [];
     for (const group of groups) {
-      const toothCode = toClinicalToothCode(group.tooth);
-      if (!toothCode) continue;
+      const mappedTooth = fdiToChartToothKey(group.tooth);
+      if (!mappedTooth) continue;
+      const toothCode = mappedTooth.key;
       const visibleItems = (group.items ?? []).filter((item) =>
         isOverlayItemVisible(item, overlayFilter)
       );

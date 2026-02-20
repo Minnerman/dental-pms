@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Post-merge live sanity check completed for PR #275 overlays using patient `1014496`.
+  - Deterministic one-patient refresh run (R4 read-only):
+    - patients import: `.run/stage153/stage153_patients_1014496.json` (`patients_created=1`)
+    - TP/TPI canonical import: `.run/stage153/stage153_charting_tp_tpi_1014496.json` (`created=4`)
+    - code label sync: `.run/stage153/stage153_codes_sync_1014496.json` (`3599`, `3600`)
+  - Live UI verification on route `/patients/{id}/clinical` (`patient_id=14486`) passed:
+    - UR5 marker present (`P1`) for FDI tooth `15`
+    - UR6 marker present (`P1`) for FDI tooth `16`
+    - clicking UR5 shows `Extraction` as planned
+    - unassigned list includes `Emergency Appointment` as completed
+  - Evidence:
+    - `.run/stage153/stage153_live_sanity_1014496.json`
+    - `.run/stage153/stage153_live_sanity_1014496.png`
+- 2026-02-20: Stage 153A started (`stage153a-fdi-mapping-utility`) for explicit FDI mapping correctness.
+  - Added shared conversion utility:
+    - `frontend/lib/charting/fdiToChartToothKey.ts`
+    - contract: `fdiToChartToothKey(fdi: number) -> { quadrant, position, key } | null`
+    - supports permanent FDI quadrants `1..4` with positions `1..8` (`11..48`)
+    - rejects non-permanent/invalid values (deciduous `51..85` intentionally not mapped yet)
+  - Clinical overlay rendering now uses the shared utility (single source of truth):
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+  - Added mapping test coverage across all permanent quadrants and invalid inputs:
+    - `frontend/tests/fdi-tooth-mapping.spec.ts`
 - 2026-02-20: Stage 152A/B started (`stage152-odontogram-overlays`) for TP/TPI overlay API + treatment code label sync.
   - SQL Server code-label source discovery (read-only) completed:
     - discovery query:
