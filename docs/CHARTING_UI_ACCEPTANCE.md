@@ -13,6 +13,15 @@ This is a top-priority project goal: deliver a highly intelligible, graphical od
 - Surface selection and highlighting are predictable and consistent.
 - Restorations can be placed/visualised by surface, not only at tooth-level.
 
+### 2.1 SVG surface model (Stage 154A baseline)
+- Odontogram tooth rendering uses explicit SVG surface regions per tooth type.
+- Posterior teeth (premolar/molar): `M`, `O`, `D`, `B`, `L`.
+- Anterior teeth (incisor/canine): `M`, `I`, `D`, `B`, `L`.
+- Each surface region must expose deterministic hooks:
+  - `data-surface="<surface>"`
+  - `data-testid="tooth-surface-<toothKey>-<surface>"`
+- Surface click should set a single selected surface state per active tooth (`data-selected="true"`), and non-selected sibling surfaces remain `false`.
+
 ## 3. Symbols and restorative states
 The odontogram must render R4-equivalent visual representations for, at minimum:
 - Fillings (surface coverage)

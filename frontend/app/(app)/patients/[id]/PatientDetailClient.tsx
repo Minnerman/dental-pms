@@ -10,6 +10,11 @@ import {
   r4SurfaceCodeToSurfaceKey,
   type R4SurfaceKey,
 } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
+import OdontogramToothSvg, {
+  getOdontogramSurfaceAnchor,
+  getOdontogramToothType,
+  type OdontogramToothType,
+} from "@/components/clinical/OdontogramToothSvg";
 import StatusIcon from "@/components/ui/StatusIcon";
 import Panel from "@/components/ui/Panel";
 import Table from "@/components/ui/Table";
@@ -635,14 +640,6 @@ const surfaceOverlaySortOrder: Record<R4SurfaceKey, number> = {
   D: 5,
   L: 6,
 };
-const surfaceOverlayAnchor: Record<R4SurfaceKey, { top: string; left: string }> = {
-  B: { top: "18%", left: "50%" },
-  M: { top: "50%", left: "18%" },
-  O: { top: "50%", left: "50%" },
-  I: { top: "32%", left: "50%" },
-  D: { top: "50%", left: "82%" },
-  L: { top: "82%", left: "50%" },
-};
 
 function parseChartingDateParam(value: string | null) {
   if (!value) return "";
@@ -832,6 +829,7 @@ export default function PatientDetailClient({
   const [clinicalError, setClinicalError] = useState<string | null>(null);
   const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
+  const [selectedToothSurface, setSelectedToothSurface] = useState<R4SurfaceKey | null>(null);
   const [toothHistory, setToothHistory] = useState<ToothHistory>({
     notes: [],
     procedures: [],
@@ -2733,6 +2731,7 @@ export default function PatientDetailClient({
     setR4TreatmentOverlayLoading(false);
     setOverlayFilter("both");
     setOverlayFilterHydrated(false);
+    setSelectedToothSurface(null);
   }, [patientId]);
 
   useEffect(() => {
@@ -3212,11 +3211,15 @@ export default function PatientDetailClient({
     } as const;
   }
 
-  function getSurfaceOverlayPositionStyle(surface: R4SurfaceKey) {
+  function getSurfaceOverlayPositionStyle(
+    toothType: OdontogramToothType,
+    surface: R4SurfaceKey
+  ) {
+    const anchor = getOdontogramSurfaceAnchor(toothType, surface);
     return {
       position: "absolute",
-      top: surfaceOverlayAnchor[surface].top,
-      left: surfaceOverlayAnchor[surface].left,
+      top: anchor.top,
+      left: anchor.left,
       transform: "translate(-50%, -50%)",
     } as const;
   }
@@ -7343,7 +7346,7 @@ export default function PatientDetailClient({
                                   style={{
                                     display: "grid",
                                     gap: 6,
-                                    gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                    gridTemplateColumns: "repeat(16, minmax(40px, 1fr))",
                                   }}
                                 >
                                   {upperTeeth.map((tooth) => {
@@ -7351,6 +7354,7 @@ export default function PatientDetailClient({
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
+                                    const toothType = getOdontogramToothType(tooth);
                                     const plannedMarkerTitle = overlaySummary
                                       ? overlayMarkerTitle(overlaySummary.items, "planned")
                                       : "";
@@ -7365,11 +7369,12 @@ export default function PatientDetailClient({
                                         onClick={() => {
                                           setSelectedTooth(tooth);
                                           setNotesTooth(tooth);
+                                          setSelectedToothSurface(null);
                                         }}
                                         data-testid={`tooth-button-${tooth}`}
                                         style={{
-                                          padding: "6px 0",
-                                          minHeight: 52,
+                                          padding: "6px 0 4px",
+                                          minHeight: 84,
                                           fontWeight: 600,
                                           position: "relative",
                                           background: isActive
@@ -7383,10 +7388,23 @@ export default function PatientDetailClient({
                                           display: "flex",
                                           flexDirection: "column",
                                           alignItems: "center",
-                                          gap: 2,
+                                          gap: 4,
                                         }}
                                       >
-                                        <span>{tooth}</span>
+                                        <OdontogramToothSvg
+                                          toothKey={tooth}
+                                          toothType={toothType}
+                                          active={isActive}
+                                          selectedSurface={isActive ? selectedToothSurface : null}
+                                          onSurfaceClick={(surface) => {
+                                            setSelectedTooth(tooth);
+                                            setNotesTooth(tooth);
+                                            setSelectedToothSurface(surface);
+                                          }}
+                                        />
+                                        <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
+                                          {tooth}
+                                        </span>
                                         {overlaySummary && (
                                           <div
                                             style={{
@@ -7485,7 +7503,10 @@ export default function PatientDetailClient({
                                                 data-testid={`tooth-surface-overlay-${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
                                                 data-surface={surfaceOverlay.surface}
                                                 style={{
-                                                  ...getSurfaceOverlayPositionStyle(surfaceOverlay.surface),
+                                                  ...getSurfaceOverlayPositionStyle(
+                                                    toothType,
+                                                    surfaceOverlay.surface
+                                                  ),
                                                   display: "inline-flex",
                                                   alignItems: "center",
                                                   justifyContent: "center",
@@ -7526,7 +7547,7 @@ export default function PatientDetailClient({
                                   style={{
                                     display: "grid",
                                     gap: 6,
-                                    gridTemplateColumns: "repeat(16, minmax(34px, 1fr))",
+                                    gridTemplateColumns: "repeat(16, minmax(40px, 1fr))",
                                   }}
                                 >
                                   {lowerTeeth.map((tooth) => {
@@ -7534,6 +7555,7 @@ export default function PatientDetailClient({
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
+                                    const toothType = getOdontogramToothType(tooth);
                                     const plannedMarkerTitle = overlaySummary
                                       ? overlayMarkerTitle(overlaySummary.items, "planned")
                                       : "";
@@ -7548,11 +7570,12 @@ export default function PatientDetailClient({
                                         onClick={() => {
                                           setSelectedTooth(tooth);
                                           setNotesTooth(tooth);
+                                          setSelectedToothSurface(null);
                                         }}
                                         data-testid={`tooth-button-${tooth}`}
                                         style={{
-                                          padding: "6px 0",
-                                          minHeight: 52,
+                                          padding: "6px 0 4px",
+                                          minHeight: 84,
                                           fontWeight: 600,
                                           position: "relative",
                                           background: isActive
@@ -7566,10 +7589,23 @@ export default function PatientDetailClient({
                                           display: "flex",
                                           flexDirection: "column",
                                           alignItems: "center",
-                                          gap: 2,
+                                          gap: 4,
                                         }}
                                       >
-                                        <span>{tooth}</span>
+                                        <OdontogramToothSvg
+                                          toothKey={tooth}
+                                          toothType={toothType}
+                                          active={isActive}
+                                          selectedSurface={isActive ? selectedToothSurface : null}
+                                          onSurfaceClick={(surface) => {
+                                            setSelectedTooth(tooth);
+                                            setNotesTooth(tooth);
+                                            setSelectedToothSurface(surface);
+                                          }}
+                                        />
+                                        <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
+                                          {tooth}
+                                        </span>
                                         {overlaySummary && (
                                           <div
                                             style={{
@@ -7668,7 +7704,10 @@ export default function PatientDetailClient({
                                                 data-testid={`tooth-surface-overlay-${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
                                                 data-surface={surfaceOverlay.surface}
                                                 style={{
-                                                  ...getSurfaceOverlayPositionStyle(surfaceOverlay.surface),
+                                                  ...getSurfaceOverlayPositionStyle(
+                                                    toothType,
+                                                    surfaceOverlay.surface
+                                                  ),
                                                   display: "inline-flex",
                                                   alignItems: "center",
                                                   justifyContent: "center",
