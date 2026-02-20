@@ -9,7 +9,8 @@ export type OdontogramRestorationType =
   | "bridge"
   | "rct"
   | "implant"
-  | "denture";
+  | "denture"
+  | "other";
 
 export type OdontogramToothRestoration = {
   type: OdontogramRestorationType;
@@ -127,6 +128,36 @@ function OdontogramToothSvgImpl({
   const hasRestoration = (type: OdontogramRestorationType) =>
     restorations.some((restoration) => restoration.type === type);
 
+  const restorationTooltipForType = (type: OdontogramRestorationType): string | undefined => {
+    const matches = restorations.filter((restoration) => restoration.type === type);
+    if (matches.length === 0) return undefined;
+
+    const lines = matches.map((restoration) => {
+      const codeLabelValue = restoration.meta?.code_label;
+      const codeIdValue = restoration.meta?.code_id;
+      const label =
+        typeof codeLabelValue === "string" && codeLabelValue.trim()
+          ? codeLabelValue.trim()
+          : typeof codeIdValue === "number" || typeof codeIdValue === "string"
+            ? `Code ${String(codeIdValue)}`
+            : "Unknown code";
+      const surfaceText =
+        restoration.surfaces && restoration.surfaces.length > 0
+          ? `Surface: ${restoration.surfaces.join(",")}`
+          : "Surface: Whole tooth";
+      return `${label} (Completed) - ${surfaceText}`;
+    });
+
+    return lines.join("\n");
+  };
+
+  const crownTooltip = restorationTooltipForType("crown");
+  const bridgeTooltip = restorationTooltipForType("bridge");
+  const rctTooltip = restorationTooltipForType("rct");
+  const implantTooltip = restorationTooltipForType("implant");
+  const dentureTooltip = restorationTooltipForType("denture");
+  const otherTooltip = restorationTooltipForType("other");
+
   return (
     <svg
       viewBox="0 0 100 100"
@@ -183,8 +214,11 @@ function OdontogramToothSvgImpl({
           stroke="rgba(202, 138, 4, 0.95)"
           strokeWidth={4}
           pointerEvents="none"
+          data-tooltip={crownTooltip}
           data-testid={`tooth-restoration-${toothKey}-crown`}
-        />
+        >
+          {crownTooltip ? <title>{crownTooltip}</title> : null}
+        </path>
       )}
       {hasRestoration("bridge") && (
         <line
@@ -196,17 +230,30 @@ function OdontogramToothSvgImpl({
           strokeWidth={3}
           strokeDasharray="5 3"
           pointerEvents="none"
+          data-tooltip={bridgeTooltip}
           data-testid={`tooth-restoration-${toothKey}-bridge`}
-        />
+        >
+          {bridgeTooltip ? <title>{bridgeTooltip}</title> : null}
+        </line>
       )}
       {hasRestoration("rct") && (
-        <g pointerEvents="none" data-testid={`tooth-restoration-${toothKey}-rct`}>
+        <g
+          pointerEvents="none"
+          data-tooltip={rctTooltip}
+          data-testid={`tooth-restoration-${toothKey}-rct`}
+        >
+          {rctTooltip ? <title>{rctTooltip}</title> : null}
           <circle cx="50" cy="42" r="6" fill="rgba(2, 132, 199, 0.9)" />
           <line x1="50" y1="48" x2="50" y2="84" stroke="rgba(2, 132, 199, 0.9)" strokeWidth={2.5} />
         </g>
       )}
       {hasRestoration("implant") && (
-        <g pointerEvents="none" data-testid={`tooth-restoration-${toothKey}-implant`}>
+        <g
+          pointerEvents="none"
+          data-tooltip={implantTooltip}
+          data-testid={`tooth-restoration-${toothKey}-implant`}
+        >
+          {implantTooltip ? <title>{implantTooltip}</title> : null}
           <rect
             x="44"
             y="72"
@@ -226,8 +273,26 @@ function OdontogramToothSvgImpl({
           stroke="rgba(217, 119, 6, 0.9)"
           strokeWidth={4}
           pointerEvents="none"
+          data-tooltip={dentureTooltip}
           data-testid={`tooth-restoration-${toothKey}-denture`}
-        />
+        >
+          {dentureTooltip ? <title>{dentureTooltip}</title> : null}
+        </path>
+      )}
+      {hasRestoration("other") && (
+        <circle
+          cx="50"
+          cy="14"
+          r="5"
+          fill="rgba(99, 102, 241, 0.85)"
+          stroke="rgba(67, 56, 202, 0.95)"
+          strokeWidth={1.5}
+          pointerEvents="none"
+          data-tooltip={otherTooltip}
+          data-testid={`tooth-restoration-${toothKey}-other`}
+        >
+          {otherTooltip ? <title>{otherTooltip}</title> : null}
+        </circle>
       )}
       {missing && (
         <line

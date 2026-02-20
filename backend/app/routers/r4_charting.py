@@ -299,30 +299,7 @@ def _bool_from_payload(payload: dict[str, object], keys: tuple[str, ...]) -> boo
     return None
 
 
-def _infer_tooth_state_flags(payload: dict[str, object]) -> tuple[bool, bool]:
-    missing = _bool_from_payload(payload, ("missing", "is_missing")) is True
-    extracted = _bool_from_payload(payload, ("extracted", "is_extracted")) is True
-    status_text = str(payload.get("status") or "").strip().lower()
-    if status_text in {"missing", "tooth missing"}:
-        missing = True
-    if status_text in {"extracted", "extract", "removed"}:
-        extracted = True
-    return missing, extracted
-
-
-def _classify_restoration_type(
-    *,
-    payload: dict[str, object],
-    code_label: str | None,
-) -> str | None:
-    explicit = str(payload.get("restoration_type") or "").strip().lower()
-    if explicit in {"filling", "crown", "bridge", "rct", "implant", "denture"}:
-        return explicit
-    if explicit in {"root_canal", "root-canal", "endodontic"}:
-        return "rct"
-    if explicit in {"filling_surface", "composite", "amalgam", "restoration"}:
-        return "filling"
-
+def _is_extraction_completed_tpi(payload: dict[str, object], code_label: str | None) -> bool:
     search_material = " ".join(
         [
             str(code_label or ""),
@@ -333,29 +310,14 @@ def _classify_restoration_type(
             str(payload.get("procedure") or ""),
         ]
     ).lower()
-    if "crown" in search_material:
+    return "extract" in search_material
+
+
+def _classify_completed_tpi_restoration(code_label: str | None) -> str:
+    label = str(code_label or "").strip().lower()
+    if "crown" in label:
         return "crown"
-    if "bridge" in search_material or "pontic" in search_material or "abutment" in search_material:
-        return "bridge"
-    if (
-        "root canal" in search_material
-        or " rct" in search_material
-        or "rct " in search_material
-        or "endodont" in search_material
-    ):
-        return "rct"
-    if "implant" in search_material:
-        return "implant"
-    if "denture" in search_material or "partial denture" in search_material:
-        return "denture"
-    if (
-        "filling" in search_material
-        or "composite" in search_material
-        or "amalgam" in search_material
-        or "restoration" in search_material
-    ):
-        return "filling"
-    return None
+    return "other"
 
 
 @router.get("/perio-probes", response_model=PaginatedR4PerioProbeOut)
@@ -795,13 +757,7 @@ def get_tooth_state(
             )
             .where(
                 R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
-                R4ChartingCanonicalRecord.domain.in_(
-                    (
-                        "chart_healing_action",
-                        "treatment_plan_item",
-                        "treatment_plan_items",
-                    )
-                ),
+                R4ChartingCanonicalRecord.domain.in_(("treatment_plan_item", "treatment_plan_items")),
             )
             .order_by(
                 nullslast(R4ChartingCanonicalRecord.recorded_at.desc()),
@@ -815,10 +771,9 @@ def get_tooth_state(
 
         for record, code_label in db.execute(stmt).all():
             payload = _canonical_payload(record)
-            if record.domain in {"treatment_plan_item", "treatment_plan_items"}:
-                completed = _coerce_optional_bool(payload.get("completed"))
-                if completed is not True:
-                    continue
+            completed = _coerce_optional_bool(payload.get("completed"))
+            if completed is not True:
+                continue
 
             tooth = _coerce_optional_int(payload.get("tooth"))
             if tooth is None:
@@ -826,10 +781,12 @@ def get_tooth_state(
             if tooth is None or tooth <= 0:
                 continue
 
-            missing, extracted = _infer_tooth_state_flags(payload)
-            restoration_type = _classify_restoration_type(payload=payload, code_label=code_label)
-            if restoration_type is None and not missing and not extracted:
-                continue
+            resolved_code_id = record.code_id
+            if resolved_code_id is None:
+                resolved_code_id = _coerce_optional_int(payload.get("code_id"))
+            resolved_code_label: str | None = code_label
+            if not resolved_code_label and resolved_code_id is not None:
+                resolved_code_label = "Unknown code"
 
             tooth_key = str(tooth)
             entry = teeth.setdefault(
@@ -837,17 +794,12 @@ def get_tooth_state(
                 R4ToothStateEntryOut(restorations=[], missing=False, extracted=False),
             )
 
-            if missing:
-                entry.missing = True
-            if extracted:
+            if _is_extraction_completed_tpi(payload, resolved_code_label):
                 entry.extracted = True
-
-            if restoration_type is None:
                 continue
 
+            restoration_type = _classify_completed_tpi_restoration(resolved_code_label)
             restoration_surfaces = _extract_surface_keys(payload, record.surface)
-            if restoration_type != "filling":
-                restoration_surfaces = []
 
             dedupe_key = "|".join(
                 [
@@ -866,11 +818,15 @@ def get_tooth_state(
                 "source_domain": record.domain,
                 "source_table": record.r4_source,
                 "source_id": record.r4_source_id,
+                "completed": True,
+                "raw_surface": payload.get("surface", record.surface),
             }
-            if record.code_id is not None:
-                restoration_meta["code_id"] = record.code_id
-            if code_label:
-                restoration_meta["code_label"] = code_label
+            if resolved_code_id is not None:
+                restoration_meta["code_id"] = resolved_code_id
+            if resolved_code_label:
+                restoration_meta["code_label"] = resolved_code_label
+            if restoration_surfaces:
+                restoration_meta["mapped_surfaces"] = restoration_surfaces
             entry.restorations.append(
                 R4ToothStateRestorationOut(
                     type=restoration_type,

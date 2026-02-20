@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 155A started (`stage155a-tooth-state-from-tpi`) to make completed clinical state deterministic from canonical TP/TPI data.
+  - Backend endpoint behavior tightened:
+    - `GET /patients/{patient_id}/charting/tooth-state` now reads only canonical TP/TPI domains (`treatment_plan_item`, `treatment_plan_items`).
+    - completed-only filter enforced (`payload.completed == true`); planned rows are excluded.
+    - conservative classification for completed TP items:
+      - `code_label` contains `crown` -> restoration `type="crown"`
+      - `code_label`/payload contains `extract` -> `extracted=true` flag on the tooth
+      - otherwise -> restoration `type="other"` (generic completed-state bucket)
+    - response remains stable for empty cohorts (`teeth: {}`) and includes source/code metadata per restoration.
+  - Frontend/SVG rendering:
+    - restoration type `other` now renders as a generic marker without breaking existing crown/filling visuals.
+    - restoration markers expose deterministic `title` metadata derived from `meta.code_label`/`meta.code_id` (used by Playwright assertions, e.g. `White Crown`).
+  - Test coverage updates:
+    - backend API contract test now seeds canonical TP/TPI rows and asserts:
+      - completed-only filtering
+      - grouping by tooth
+      - extraction flag behavior
+      - code label/code id propagation
+    - backend empty-case test verifies stable empty response shape.
+    - Playwright overlay test now mocks patient `1015073` tooth-state crown data and asserts crown tooltip text and overlay-filter independence.
+  - Real-data proof artefacts:
+    - control patient (`1014496`): `.run/stage155a/tooth_state_1014496.json` (`total_restorations=0`)
+    - completed-state proof patient (`1015073`): `.run/stage155a/tooth_state_1015073.json` (`total_restorations=6`)
+    - code-label refresh stats for proof set: `.run/stage155a/stage155a_codes_sync_1015073_refresh.json`
+    - summary: `.run/stage155a/tooth_state_proof_summary.json`
+    - UI screenshot: `.run/stage155a/tooth_state_ui_1015073.png`
 - 2026-02-20: Stage 154B started (`stage154b-odontogram-restorations`) for restoration/prosthetic visual vocabulary on the SVG odontogram.
   - Data availability probe (Postgres today):
     - charting/canonical + candidate domain tables confirmed:
