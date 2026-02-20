@@ -3,6 +3,19 @@ import { memo } from "react";
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
 export type OdontogramToothType = "incisor" | "canine" | "premolar" | "molar";
+export type OdontogramRestorationType =
+  | "filling"
+  | "crown"
+  | "bridge"
+  | "rct"
+  | "implant"
+  | "denture";
+
+export type OdontogramToothRestoration = {
+  type: OdontogramRestorationType;
+  surfaces?: R4SurfaceKey[];
+  meta?: Record<string, unknown>;
+};
 
 type SurfaceShape = {
   key: R4SurfaceKey;
@@ -85,6 +98,9 @@ type Props = {
   toothKey: string;
   toothType: OdontogramToothType;
   selectedSurface?: R4SurfaceKey | null;
+  restorations?: OdontogramToothRestoration[];
+  missing?: boolean;
+  extracted?: boolean;
   active?: boolean;
   onSurfaceClick?: (surface: R4SurfaceKey) => void;
 };
@@ -93,10 +109,24 @@ function OdontogramToothSvgImpl({
   toothKey,
   toothType,
   selectedSurface = null,
+  restorations = [],
+  missing = false,
+  extracted = false,
   active = false,
   onSurfaceClick,
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
+  const fillingSurfaces = new Set<R4SurfaceKey>();
+  for (const restoration of restorations) {
+    if (restoration.type !== "filling") continue;
+    for (const surface of restoration.surfaces ?? []) {
+      fillingSurfaces.add(surface);
+    }
+  }
+
+  const hasRestoration = (type: OdontogramRestorationType) =>
+    restorations.some((restoration) => restoration.type === type);
+
   return (
     <svg
       viewBox="0 0 100 100"
@@ -115,25 +145,114 @@ function OdontogramToothSvgImpl({
       />
       {surfaces.map((surface) => {
         const isSelected = selectedSurface === surface.key;
+        const hasFilling = fillingSurfaces.has(surface.key);
         return (
-          <polygon
-            key={`${toothKey}-${surface.key}`}
-            points={surface.points}
-            data-surface={surface.key}
-            data-selected={isSelected ? "true" : "false"}
-            data-testid={`tooth-surface-${toothKey}-${surface.key}`}
-            fill={isSelected ? "rgba(51, 255, 180, 0.42)" : "rgba(148, 163, 184, 0.08)"}
-            stroke={isSelected ? "var(--accent)" : "rgba(51, 65, 85, 0.35)"}
-            strokeWidth={isSelected ? 2.4 : 1.2}
-            style={{ cursor: "pointer" }}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onSurfaceClick?.(surface.key);
-            }}
-          />
+          <g key={`${toothKey}-${surface.key}`}>
+            <polygon
+              points={surface.points}
+              data-surface={surface.key}
+              data-selected={isSelected ? "true" : "false"}
+              data-testid={`tooth-surface-${toothKey}-${surface.key}`}
+              fill={isSelected ? "rgba(51, 255, 180, 0.42)" : "rgba(148, 163, 184, 0.08)"}
+              stroke={isSelected ? "var(--accent)" : "rgba(51, 65, 85, 0.35)"}
+              strokeWidth={isSelected ? 2.4 : 1.2}
+              style={{ cursor: "pointer" }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSurfaceClick?.(surface.key);
+              }}
+            />
+            {hasFilling && (
+              <polygon
+                points={surface.points}
+                fill="rgba(239, 68, 68, 0.26)"
+                stroke="rgba(239, 68, 68, 0.6)"
+                strokeWidth={1}
+                pointerEvents="none"
+                data-testid={`tooth-restoration-${toothKey}-filling-${surface.key}`}
+              />
+            )}
+          </g>
         );
       })}
+      {hasRestoration("crown") && (
+        <path
+          d={toothOutlinePath[toothType]}
+          fill="rgba(251, 191, 36, 0.14)"
+          stroke="rgba(202, 138, 4, 0.95)"
+          strokeWidth={4}
+          pointerEvents="none"
+          data-testid={`tooth-restoration-${toothKey}-crown`}
+        />
+      )}
+      {hasRestoration("bridge") && (
+        <line
+          x1="20"
+          y1="20"
+          x2="80"
+          y2="20"
+          stroke="rgba(14, 116, 144, 0.95)"
+          strokeWidth={3}
+          strokeDasharray="5 3"
+          pointerEvents="none"
+          data-testid={`tooth-restoration-${toothKey}-bridge`}
+        />
+      )}
+      {hasRestoration("rct") && (
+        <g pointerEvents="none" data-testid={`tooth-restoration-${toothKey}-rct`}>
+          <circle cx="50" cy="42" r="6" fill="rgba(2, 132, 199, 0.9)" />
+          <line x1="50" y1="48" x2="50" y2="84" stroke="rgba(2, 132, 199, 0.9)" strokeWidth={2.5} />
+        </g>
+      )}
+      {hasRestoration("implant") && (
+        <g pointerEvents="none" data-testid={`tooth-restoration-${toothKey}-implant`}>
+          <rect
+            x="44"
+            y="72"
+            width="12"
+            height="18"
+            rx="2"
+            fill="rgba(107, 114, 128, 0.85)"
+          />
+          <line x1="44" y1="80" x2="56" y2="80" stroke="rgba(255, 255, 255, 0.7)" strokeWidth={1} />
+          <line x1="44" y1="86" x2="56" y2="86" stroke="rgba(255, 255, 255, 0.7)" strokeWidth={1} />
+        </g>
+      )}
+      {hasRestoration("denture") && (
+        <path
+          d="M18 82 Q50 98 82 82"
+          fill="none"
+          stroke="rgba(217, 119, 6, 0.9)"
+          strokeWidth={4}
+          pointerEvents="none"
+          data-testid={`tooth-restoration-${toothKey}-denture`}
+        />
+      )}
+      {missing && (
+        <line
+          x1="18"
+          y1="86"
+          x2="82"
+          y2="14"
+          stroke="rgba(220, 38, 38, 0.85)"
+          strokeWidth={3}
+          pointerEvents="none"
+          data-testid={`tooth-restoration-${toothKey}-missing`}
+        />
+      )}
+      {extracted && (
+        <line
+          x1="18"
+          y1="14"
+          x2="82"
+          y2="86"
+          stroke="rgba(220, 38, 38, 0.85)"
+          strokeWidth={3}
+          pointerEvents="none"
+          data-testid={`tooth-restoration-${toothKey}-extracted`}
+        />
+      )}
     </svg>
   );
 }

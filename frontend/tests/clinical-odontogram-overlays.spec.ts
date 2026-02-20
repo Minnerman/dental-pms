@@ -15,6 +15,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
     first_name: "Overlay",
     last_name: `Seed ${Date.now()}`,
   });
+  let toothStateRequestSeen = false;
 
   await page.route(`**/api/patients/${patientId}/charting/treatment-plan-items*`, async (route) => {
     await route.fulfill({
@@ -87,6 +88,42 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
     });
   });
 
+  await page.route(`**/api/patients/${patientId}/charting/tooth-state*`, async (route) => {
+    toothStateRequestSeen = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        patient_id: Number(patientId),
+        legacy_patient_code: 1014496,
+        teeth: {
+          "15": {
+            restorations: [
+              {
+                type: "filling",
+                surfaces: ["M"],
+                meta: { source: "mock" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "16": {
+            restorations: [
+              {
+                type: "crown",
+                surfaces: [],
+                meta: { source: "mock" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+        },
+      }),
+    });
+  });
+
   await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, {
     waitUntil: "domcontentloaded",
   });
@@ -95,6 +132,9 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("odontogram-overlay-legend")).toBeVisible();
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
   await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveText("P1");
+  expect(toothStateRequestSeen).toBeTruthy();
+  await expect(page.getByTestId("tooth-restoration-UR5-filling-M")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UR6-crown")).toBeVisible();
   await expect(page.getByTestId("tooth-surface-overlay-15-M")).toBeVisible();
   await expect(page.getByTestId("tooth-surface-overlay-15-M")).toHaveAttribute(
     "data-surface",

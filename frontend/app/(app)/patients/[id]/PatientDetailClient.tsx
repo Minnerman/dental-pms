@@ -13,6 +13,7 @@ import {
 import OdontogramToothSvg, {
   getOdontogramSurfaceAnchor,
   getOdontogramToothType,
+  type OdontogramToothRestoration,
   type OdontogramToothType,
 } from "@/components/clinical/OdontogramToothSvg";
 import StatusIcon from "@/components/ui/StatusIcon";
@@ -473,6 +474,24 @@ type R4TreatmentPlanOverlay = {
   unassigned_items: R4TreatmentPlanOverlayItem[];
 };
 
+type R4ToothStateRestoration = {
+  type: "filling" | "crown" | "bridge" | "rct" | "implant" | "denture";
+  surfaces?: R4SurfaceKey[] | null;
+  meta?: Record<string, unknown> | null;
+};
+
+type R4ToothStateEntry = {
+  restorations?: R4ToothStateRestoration[] | null;
+  missing?: boolean;
+  extracted?: boolean;
+};
+
+type R4ToothState = {
+  patient_id: number;
+  legacy_patient_code?: number | null;
+  teeth: Record<string, R4ToothStateEntry>;
+};
+
 type ToothOverlaySummary = {
   legacyTooth: number;
   plannedCount: number;
@@ -485,6 +504,12 @@ type ToothSurfaceOverlaySummary = {
   plannedCount: number;
   completedCount: number;
   items: R4TreatmentPlanOverlayItem[];
+};
+
+type ToothStateSummary = {
+  restorations: OdontogramToothRestoration[];
+  missing: boolean;
+  extracted: boolean;
 };
 
 const categoryLabels: Record<PatientCategory, string> = {
@@ -869,6 +894,9 @@ export default function PatientDetailClient({
   const [r4TreatmentOverlayError, setR4TreatmentOverlayError] = useState<string | null>(
     null
   );
+  const [r4ToothState, setR4ToothState] = useState<R4ToothState | null>(null);
+  const [r4ToothStateLoading, setR4ToothStateLoading] = useState(false);
+  const [r4ToothStateError, setR4ToothStateError] = useState<string | null>(null);
   const [clinicalViewHydrated, setClinicalViewHydrated] = useState(false);
   const [overlayFilterHydrated, setOverlayFilterHydrated] = useState(false);
   const [chartingLoaded, setChartingLoaded] = useState(false);
@@ -1675,10 +1703,37 @@ export default function PatientDetailClient({
     }
   }, [patientId, router]);
 
+  const loadToothState = useCallback(async () => {
+    setR4ToothStateLoading(true);
+    setR4ToothStateError(null);
+    try {
+      const res = await apiFetch(`/api/patients/${patientId}/charting/tooth-state?limit=5000`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403 || res.status === 404) {
+        setR4ToothState(null);
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load tooth state (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as R4ToothState;
+      setR4ToothState(data);
+    } catch (err) {
+      setR4ToothStateError(err instanceof Error ? err.message : "Failed to load tooth state");
+    } finally {
+      setR4ToothStateLoading(false);
+    }
+  }, [patientId, router]);
+
   const refreshClinicalData = useCallback(() => {
     void loadClinicalSummary();
     void loadTreatmentPlanOverlay();
-  }, [loadClinicalSummary, loadTreatmentPlanOverlay]);
+    void loadToothState();
+  }, [loadClinicalSummary, loadTreatmentPlanOverlay, loadToothState]);
 
   async function loadChartingConfig() {
     try {
@@ -2729,6 +2784,9 @@ export default function PatientDetailClient({
     setR4TreatmentOverlay(null);
     setR4TreatmentOverlayError(null);
     setR4TreatmentOverlayLoading(false);
+    setR4ToothState(null);
+    setR4ToothStateError(null);
+    setR4ToothStateLoading(false);
     setOverlayFilter("both");
     setOverlayFilterHydrated(false);
     setSelectedToothSurface(null);
@@ -3457,6 +3515,52 @@ export default function PatientDetailClient({
     };
   }, [overlayItemsByTooth, overlayUnassignedItems]);
 
+  const toothStateByTooth = useMemo(() => {
+    const map = new Map<string, ToothStateSummary>();
+    const source = r4ToothState?.teeth ?? {};
+    for (const [legacyTooth, entry] of Object.entries(source)) {
+      const toothNumber = Number(legacyTooth);
+      if (!Number.isFinite(toothNumber)) continue;
+      const mappedTooth = fdiToChartToothKey(toothNumber);
+      if (!mappedTooth) continue;
+      const restorations = (entry.restorations ?? [])
+        .map((restoration): OdontogramToothRestoration | null => {
+          const type = restoration?.type;
+          if (
+            type !== "filling" &&
+            type !== "crown" &&
+            type !== "bridge" &&
+            type !== "rct" &&
+            type !== "implant" &&
+            type !== "denture"
+          ) {
+            return null;
+          }
+          const surfaces = (restoration.surfaces ?? []).filter(
+            (surface): surface is R4SurfaceKey =>
+              surface === "M" ||
+              surface === "O" ||
+              surface === "D" ||
+              surface === "B" ||
+              surface === "L" ||
+              surface === "I"
+          );
+          return {
+            type,
+            surfaces,
+            meta: restoration.meta ?? undefined,
+          };
+        })
+        .filter((item): item is OdontogramToothRestoration => item !== null);
+      map.set(mappedTooth.key, {
+        restorations,
+        missing: entry.missing === true,
+        extracted: entry.extracted === true,
+      });
+    }
+    return map;
+  }, [r4ToothState]);
+
   const sortedClinicalNotes = useMemo(() => {
     return [...clinicalNotes].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -3488,6 +3592,16 @@ export default function PatientDetailClient({
 
   function getToothSurfaceOverlaySummary(tooth: string) {
     return overlaySurfaceByTooth.get(tooth) ?? [];
+  }
+
+  function getToothStateSummary(tooth: string) {
+    return (
+      toothStateByTooth.get(tooth) ?? {
+        restorations: [],
+        missing: false,
+        extracted: false,
+      }
+    );
   }
 
   const ledgerWithBalance = useMemo(() => {
@@ -7247,6 +7361,16 @@ export default function PatientDetailClient({
                       {overlayTotals.planned} planned · {overlayTotals.completed} completed
                     </span>
                     {r4TreatmentOverlayLoading && <span className="badge">Loading overlays…</span>}
+                    {r4ToothStateLoading && <span className="badge">Loading tooth state…</span>}
+                    {r4ToothStateError && (
+                      <span
+                        className="badge"
+                        data-testid="clinical-tooth-state-error"
+                        title={r4ToothStateError}
+                      >
+                        Tooth state unavailable
+                      </span>
+                    )}
                   </div>
                   <div
                     className="card"
@@ -7354,6 +7478,7 @@ export default function PatientDetailClient({
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
+                                    const toothStateSummary = getToothStateSummary(tooth);
                                     const toothType = getOdontogramToothType(tooth);
                                     const plannedMarkerTitle = overlaySummary
                                       ? overlayMarkerTitle(overlaySummary.items, "planned")
@@ -7396,6 +7521,9 @@ export default function PatientDetailClient({
                                           toothType={toothType}
                                           active={isActive}
                                           selectedSurface={isActive ? selectedToothSurface : null}
+                                          restorations={toothStateSummary.restorations}
+                                          missing={toothStateSummary.missing}
+                                          extracted={toothStateSummary.extracted}
                                           onSurfaceClick={(surface) => {
                                             setSelectedTooth(tooth);
                                             setNotesTooth(tooth);
@@ -7555,6 +7683,7 @@ export default function PatientDetailClient({
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
+                                    const toothStateSummary = getToothStateSummary(tooth);
                                     const toothType = getOdontogramToothType(tooth);
                                     const plannedMarkerTitle = overlaySummary
                                       ? overlayMarkerTitle(overlaySummary.items, "planned")
@@ -7597,6 +7726,9 @@ export default function PatientDetailClient({
                                           toothType={toothType}
                                           active={isActive}
                                           selectedSurface={isActive ? selectedToothSurface : null}
+                                          restorations={toothStateSummary.restorations}
+                                          missing={toothStateSummary.missing}
+                                          extracted={toothStateSummary.extracted}
                                           onSurfaceClick={(surface) => {
                                             setSelectedTooth(tooth);
                                             setNotesTooth(tooth);
