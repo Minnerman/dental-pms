@@ -61,6 +61,23 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 154A started (`stage154a-odontogram-geometry`) to move odontogram fidelity toward R4-like tooth geometry and interactive surfaces.
+  - Rendering approach upgraded:
+    - previous chart was button/div text-first rendering
+    - added SVG tooth primitive component:
+      - `frontend/components/clinical/OdontogramToothSvg.tsx`
+      - tooth-type geometry: `incisor`, `canine`, `premolar`, `molar`
+      - interactive surface regions with deterministic hooks:
+        - `data-testid="tooth-surface-<tooth>-<surface>"`
+        - `data-surface`, `data-selected`
+  - Clinical chart wiring updates:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - both arches now render via the SVG primitive while preserving FDI->chart mapping from Stage 153A
+    - surface click now selects/highlights exactly one active tooth surface
+    - overlay surface marker anchors now use tooth-type-aware surface anchors (shared geometry source)
+  - Playwright coverage added:
+    - `frontend/tests/clinical-odontogram-geometry.spec.ts`
+    - asserts clicking `UR5-M`, `UR5-D`, `UR6-M` toggles `data-selected` correctly and keeps non-selected surfaces false
 - 2026-02-20: Stage 153C completed (`stage153c-overlay-visual-language`) for overlay visual language alignment on `/patients/{id}/clinical`.
   - UI enhancements delivered in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`:
     - compact legend added with `data-testid="odontogram-overlay-legend"` (`Planned`, `Completed`, `Surface`, `Tooth`)
