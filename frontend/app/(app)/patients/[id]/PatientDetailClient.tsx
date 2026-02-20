@@ -6,6 +6,10 @@ import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { fdiToChartToothKey } from "@/lib/charting/fdiToChartToothKey";
+import {
+  r4SurfaceCodeToSurfaceKey,
+  type R4SurfaceKey,
+} from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 import StatusIcon from "@/components/ui/StatusIcon";
 import Panel from "@/components/ui/Panel";
 import Table from "@/components/ui/Table";
@@ -471,6 +475,12 @@ type ToothOverlaySummary = {
   items: R4TreatmentPlanOverlayItem[];
 };
 
+type ToothSurfaceOverlaySummary = {
+  surface: R4SurfaceKey;
+  plannedCount: number;
+  completedCount: number;
+};
+
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
   DOMICILIARY_PRIVATE: "Domiciliary (Private)",
@@ -615,6 +625,22 @@ const perioSiteSort: Record<number, number> = {
   4: 4,
   5: 5,
   6: 6,
+};
+const surfaceOverlaySortOrder: Record<R4SurfaceKey, number> = {
+  B: 1,
+  M: 2,
+  O: 3,
+  I: 4,
+  D: 5,
+  L: 6,
+};
+const surfaceOverlayAnchor: Record<R4SurfaceKey, { top: string; left: string }> = {
+  B: { top: "18%", left: "50%" },
+  M: { top: "50%", left: "18%" },
+  O: { top: "50%", left: "50%" },
+  I: { top: "32%", left: "50%" },
+  D: { top: "50%", left: "82%" },
+  L: { top: "82%", left: "50%" },
 };
 
 function parseChartingDateParam(value: string | null) {
@@ -3110,11 +3136,27 @@ export default function PatientDetailClient({
     return "Unknown code";
   }
 
-  function overlayItemSurface(item: R4TreatmentPlanOverlayItem) {
-    if (item.surface == null || item.surface === 0 || item.tooth_level) {
-      return "Whole-tooth";
+  function overlayItemSurfaceInfo(item: R4TreatmentPlanOverlayItem) {
+    const mapped = r4SurfaceCodeToSurfaceKey(item.surface);
+    if (mapped) {
+      return {
+        label: `Surface: ${mapped}`,
+        mapped,
+        unmapped: false,
+      };
     }
-    return `Surface ${item.surface}`;
+    if (item.surface == null || item.surface === 0 || item.tooth_level) {
+      return {
+        label: "Surface: Whole-tooth",
+        mapped: null,
+        unmapped: false,
+      };
+    }
+    return {
+      label: `Surface: ${item.surface} (unmapped)`,
+      mapped: null,
+      unmapped: true,
+    };
   }
 
   function overlayItemStatus(item: R4TreatmentPlanOverlayItem) {
@@ -3262,6 +3304,35 @@ export default function PatientDetailClient({
     return map;
   }, [overlayFilter, r4TreatmentOverlay]);
 
+  const overlaySurfaceByTooth = useMemo(() => {
+    const map = new Map<string, ToothSurfaceOverlaySummary[]>();
+    for (const [toothKey, bucket] of overlayItemsByTooth.entries()) {
+      const surfaceMap = new Map<R4SurfaceKey, ToothSurfaceOverlaySummary>();
+      for (const item of bucket.items) {
+        const surfaceKey = r4SurfaceCodeToSurfaceKey(item.surface);
+        if (!surfaceKey) continue;
+        const summary = surfaceMap.get(surfaceKey) ?? {
+          surface: surfaceKey,
+          plannedCount: 0,
+          completedCount: 0,
+        };
+        if (item.completed === true) {
+          summary.completedCount += 1;
+        } else {
+          summary.plannedCount += 1;
+        }
+        surfaceMap.set(surfaceKey, summary);
+      }
+      const summaries = Array.from(surfaceMap.values()).sort(
+        (a, b) => surfaceOverlaySortOrder[a.surface] - surfaceOverlaySortOrder[b.surface]
+      );
+      if (summaries.length > 0) {
+        map.set(toothKey, summaries);
+      }
+    }
+    return map;
+  }, [overlayItemsByTooth]);
+
   const selectedToothOverlay = useMemo(() => {
     if (!selectedTooth) return null;
     return overlayItemsByTooth.get(selectedTooth) ?? null;
@@ -3313,6 +3384,10 @@ export default function PatientDetailClient({
 
   function getToothOverlaySummary(tooth: string) {
     return overlayItemsByTooth.get(tooth) ?? null;
+  }
+
+  function getToothSurfaceOverlaySummary(tooth: string) {
+    return overlaySurfaceByTooth.get(tooth) ?? [];
   }
 
   const ledgerWithBalance = useMemo(() => {
@@ -7114,6 +7189,7 @@ export default function PatientDetailClient({
                                     const isActive = selectedTooth === tooth;
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
+                                    const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     return (
                                       <button
                                         key={tooth}
@@ -7126,7 +7202,9 @@ export default function PatientDetailClient({
                                         data-testid={`tooth-button-${tooth}`}
                                         style={{
                                           padding: "6px 0",
+                                          minHeight: 52,
                                           fontWeight: 600,
+                                          position: "relative",
                                           background: isActive
                                             ? "rgba(51, 255, 180, 0.18)"
                                             : undefined,
@@ -7206,6 +7284,62 @@ export default function PatientDetailClient({
                                           </div>
                                         )}
                                       </div>
+                                      {overlaySummary && surfaceOverlays.length > 0 && (
+                                        <div
+                                          style={{
+                                            position: "absolute",
+                                            inset: 0,
+                                            pointerEvents: "none",
+                                          }}
+                                          data-testid={`tooth-surface-overlays-${overlaySummary.legacyTooth}`}
+                                        >
+                                          {surfaceOverlays.map((surfaceOverlay) => {
+                                            const plannedCount = surfaceOverlay.plannedCount;
+                                            const completedCount = surfaceOverlay.completedCount;
+                                            const totalCount = plannedCount + completedCount;
+                                            const isCompletedOnly =
+                                              completedCount > 0 && plannedCount === 0;
+                                            const isMixed = plannedCount > 0 && completedCount > 0;
+                                            return (
+                                              <span
+                                                key={`${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
+                                                title={`Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}`}
+                                                data-testid={`tooth-surface-overlay-${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
+                                                data-surface={surfaceOverlay.surface}
+                                                style={{
+                                                  position: "absolute",
+                                                  top: surfaceOverlayAnchor[surfaceOverlay.surface].top,
+                                                  left: surfaceOverlayAnchor[surfaceOverlay.surface].left,
+                                                  transform: "translate(-50%, -50%)",
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  borderRadius: 999,
+                                                  minWidth: 14,
+                                                  height: 14,
+                                                  padding: "0 2px",
+                                                  fontSize: 9,
+                                                  lineHeight: 1,
+                                                  fontWeight: 700,
+                                                  border: isCompletedOnly
+                                                    ? "1px solid var(--accent)"
+                                                    : "1px solid var(--accent)",
+                                                  background: isCompletedOnly
+                                                    ? "var(--accent)"
+                                                    : isMixed
+                                                    ? "rgba(51, 255, 180, 0.18)"
+                                                    : "transparent",
+                                                  color: isCompletedOnly ? "var(--bg)" : "var(--text)",
+                                                  boxShadow: "0 0 0 1px rgba(0,0,0,0.08)",
+                                                }}
+                                              >
+                                                {surfaceOverlay.surface}
+                                                {totalCount > 1 ? totalCount : ""}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </button>
                                   );
                                 })}
@@ -7224,6 +7358,7 @@ export default function PatientDetailClient({
                                     const isActive = selectedTooth === tooth;
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
+                                    const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     return (
                                       <button
                                         key={tooth}
@@ -7236,7 +7371,9 @@ export default function PatientDetailClient({
                                         data-testid={`tooth-button-${tooth}`}
                                         style={{
                                           padding: "6px 0",
+                                          minHeight: 52,
                                           fontWeight: 600,
+                                          position: "relative",
                                           background: isActive
                                             ? "rgba(51, 255, 180, 0.18)"
                                             : undefined,
@@ -7316,6 +7453,62 @@ export default function PatientDetailClient({
                                           </div>
                                         )}
                                       </div>
+                                      {overlaySummary && surfaceOverlays.length > 0 && (
+                                        <div
+                                          style={{
+                                            position: "absolute",
+                                            inset: 0,
+                                            pointerEvents: "none",
+                                          }}
+                                          data-testid={`tooth-surface-overlays-${overlaySummary.legacyTooth}`}
+                                        >
+                                          {surfaceOverlays.map((surfaceOverlay) => {
+                                            const plannedCount = surfaceOverlay.plannedCount;
+                                            const completedCount = surfaceOverlay.completedCount;
+                                            const totalCount = plannedCount + completedCount;
+                                            const isCompletedOnly =
+                                              completedCount > 0 && plannedCount === 0;
+                                            const isMixed = plannedCount > 0 && completedCount > 0;
+                                            return (
+                                              <span
+                                                key={`${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
+                                                title={`Surface ${surfaceOverlay.surface}: planned ${plannedCount}, completed ${completedCount}`}
+                                                data-testid={`tooth-surface-overlay-${overlaySummary.legacyTooth}-${surfaceOverlay.surface}`}
+                                                data-surface={surfaceOverlay.surface}
+                                                style={{
+                                                  position: "absolute",
+                                                  top: surfaceOverlayAnchor[surfaceOverlay.surface].top,
+                                                  left: surfaceOverlayAnchor[surfaceOverlay.surface].left,
+                                                  transform: "translate(-50%, -50%)",
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  borderRadius: 999,
+                                                  minWidth: 14,
+                                                  height: 14,
+                                                  padding: "0 2px",
+                                                  fontSize: 9,
+                                                  lineHeight: 1,
+                                                  fontWeight: 700,
+                                                  border: isCompletedOnly
+                                                    ? "1px solid var(--accent)"
+                                                    : "1px solid var(--accent)",
+                                                  background: isCompletedOnly
+                                                    ? "var(--accent)"
+                                                    : isMixed
+                                                    ? "rgba(51, 255, 180, 0.18)"
+                                                    : "transparent",
+                                                  color: isCompletedOnly ? "var(--bg)" : "var(--text)",
+                                                  boxShadow: "0 0 0 1px rgba(0,0,0,0.08)",
+                                                }}
+                                              >
+                                                {surfaceOverlay.surface}
+                                                {totalCount > 1 ? totalCount : ""}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </button>
                                   );
                                 })}
@@ -7329,27 +7522,38 @@ export default function PatientDetailClient({
                               {overlayUnassignedItems.length === 0 ? (
                                 <div className="notice">No unassigned treatment plan items.</div>
                               ) : (
-                                overlayUnassignedItems.map((item) => (
-                                  <div
-                                    className="card"
-                                    style={{ margin: 0 }}
-                                    key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
-                                  >
-                                    <div className="row">
-                                      <div>
-                                        <strong>{overlayItemLabel(item)}</strong>
-                                        <div style={{ color: "var(--muted)" }}>
-                                          {overlayItemSurface(item)} · {formatShortDate(item.item_date)}
+                                overlayUnassignedItems.map((item) => {
+                                  const surfaceInfo = overlayItemSurfaceInfo(item);
+                                  return (
+                                    <div
+                                      className="card"
+                                      style={{ margin: 0 }}
+                                      key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
+                                    >
+                                      <div className="row">
+                                        <div>
+                                          <strong>{overlayItemLabel(item)}</strong>
+                                          <div style={{ color: "var(--muted)" }}>
+                                            {surfaceInfo.label} · {formatShortDate(item.item_date)}
+                                          </div>
+                                          {surfaceInfo.unmapped && (
+                                            <div
+                                              style={{ color: "var(--muted)", fontSize: 11 }}
+                                              data-testid="overlay-surface-unmapped-note"
+                                            >
+                                              Unmapped surface code; rendered as tooth-level fallback.
+                                            </div>
+                                          )}
                                         </div>
+                                        <span className="badge">{overlayItemStatus(item)}</span>
                                       </div>
-                                      <span className="badge">{overlayItemStatus(item)}</span>
+                                      <div style={{ color: "var(--muted)" }}>
+                                        TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} · Key{" "}
+                                        {item.tp_item_key ?? "—"}
+                                      </div>
                                     </div>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} · Key{" "}
-                                      {item.tp_item_key ?? "—"}
-                                    </div>
-                                  </div>
-                                ))
+                                  );
+                                })
                               )}
                             </div>
                           </Panel>
@@ -7514,28 +7718,39 @@ export default function PatientDetailClient({
                                 <div className="label">R4 treatment overlays</div>
                                 {selectedToothOverlay?.items?.length ? (
                                   <div className="stack" style={{ gap: 8 }} data-testid="overlay-tooth-items">
-                                    {selectedToothOverlay.items.map((item) => (
-                                      <div
-                                        className="card"
-                                        style={{ margin: 0 }}
-                                        key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
-                                      >
-                                        <div className="row">
-                                          <div>
-                                            <strong>{overlayItemLabel(item)}</strong>
-                                            <div style={{ color: "var(--muted)" }}>
-                                              {overlayItemSurface(item)} ·{" "}
-                                              {formatShortDate(item.item_date)}
+                                    {selectedToothOverlay.items.map((item) => {
+                                      const surfaceInfo = overlayItemSurfaceInfo(item);
+                                      return (
+                                        <div
+                                          className="card"
+                                          style={{ margin: 0 }}
+                                          key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
+                                        >
+                                          <div className="row">
+                                            <div>
+                                              <strong>{overlayItemLabel(item)}</strong>
+                                              <div style={{ color: "var(--muted)" }}>
+                                                {surfaceInfo.label} ·{" "}
+                                                {formatShortDate(item.item_date)}
+                                              </div>
+                                              {surfaceInfo.unmapped && (
+                                                <div
+                                                  style={{ color: "var(--muted)", fontSize: 11 }}
+                                                  data-testid="overlay-surface-unmapped-note"
+                                                >
+                                                  Unmapped surface code; rendered as tooth-level fallback.
+                                                </div>
+                                              )}
                                             </div>
+                                            <span className="badge">{overlayItemStatus(item)}</span>
                                           </div>
-                                          <span className="badge">{overlayItemStatus(item)}</span>
+                                          <div style={{ color: "var(--muted)" }}>
+                                            TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} ·
+                                            Key {item.tp_item_key ?? "—"}
+                                          </div>
                                         </div>
-                                        <div style={{ color: "var(--muted)" }}>
-                                          TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} ·
-                                          Key {item.tp_item_key ?? "—"}
-                                        </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 ) : (
                                   <div className="notice" data-testid="overlay-tooth-empty">
