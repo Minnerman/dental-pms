@@ -61,6 +61,18 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 156A started (`stage156a-tooth-state-classification`) to expand backend tooth-state classification buckets.
+  - Tooth-state type classification extracted to a pure function:
+    - `backend/app/services/tooth_state_classification.py`
+    - function: `classify_tooth_state_type(code_label: str | None) -> str`
+  - New conservative, ordered buckets (first-match-wins, case-insensitive):
+    - `implant`, `bridge`, `crown`, `veneer`, `inlay_onlay`, `post`, `root_canal`, `filling`, `extraction`, `denture`, `other`.
+  - Endpoint behavior retained as empty-safe:
+    - unknown/empty labels map to `other` and are still returned (not dropped).
+  - Test coverage added:
+    - focused unit tests for each bucket, rule ordering, empty labels, and unknown fallback:
+      - `backend/tests/patients/test_tooth_state_classification.py`
+    - existing tooth-state API contract test updated for extraction classification row + extracted flag.
 - 2026-02-20: Stage 155A started (`stage155a-tooth-state-from-tpi`) to make completed clinical state deterministic from canonical TP/TPI data.
   - Backend endpoint behavior tightened:
     - `GET /patients/{patient_id}/charting/tooth-state` now reads only canonical TP/TPI domains (`treatment_plan_item`, `treatment_plan_items`).
