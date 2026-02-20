@@ -1,0 +1,115 @@
+import { expect, test } from "@playwright/test";
+
+import { createPatient } from "./helpers/api";
+import { getBaseUrl, primePageAuth } from "./helpers/auth";
+
+test("clinical odontogram renders R4 overlays with filters and tooth drill-down", async ({
+  page,
+  request,
+}) => {
+  await primePageAuth(page, request);
+  const patientId = await createPatient(request, {
+    first_name: "Overlay",
+    last_name: `Seed ${Date.now()}`,
+  });
+
+  await page.route(`**/api/patients/${patientId}/charting/treatment-plan-items*`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        patient_id: Number(patientId),
+        legacy_patient_code: 1014496,
+        total_items: 3,
+        total_planned: 2,
+        total_completed: 1,
+        tooth_groups: [
+          {
+            tooth: 15,
+            planned_count: 1,
+            completed_count: 0,
+            items: [
+              {
+                tp_number: 5001,
+                tp_item: 1,
+                tp_item_key: "5001-1",
+                code_id: 3599,
+                code_label: "Extraction",
+                tooth: 15,
+                surface: 0,
+                tooth_level: true,
+                completed: false,
+                item_date: "2025-08-01T00:00:00+00:00",
+                plan_creation_date: "2025-08-01T00:00:00+00:00",
+              },
+            ],
+          },
+          {
+            tooth: 16,
+            planned_count: 1,
+            completed_count: 0,
+            items: [
+              {
+                tp_number: 5001,
+                tp_item: 2,
+                tp_item_key: "5001-2",
+                code_id: 3599,
+                code_label: "Extraction",
+                tooth: 16,
+                surface: 0,
+                tooth_level: true,
+                completed: false,
+                item_date: "2025-08-01T00:00:00+00:00",
+                plan_creation_date: "2025-08-01T00:00:00+00:00",
+              },
+            ],
+          },
+        ],
+        unassigned_items: [
+          {
+            tp_number: 5001,
+            tp_item: 3,
+            tp_item_key: "5001-3",
+            code_id: 3600,
+            code_label: "Emergency Appointment",
+            tooth: 0,
+            surface: 0,
+            tooth_level: true,
+            completed: true,
+            item_date: "2025-08-01T00:00:00+00:00",
+            plan_creation_date: "2025-08-01T00:00:00+00:00",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
+  await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveText("P1");
+  await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
+    "Emergency Appointment"
+  );
+
+  await page.getByTestId("tooth-button-UR5").click();
+  await expect(page.getByTestId("overlay-tooth-items")).toContainText("Extraction");
+  await expect(page.getByTestId("overlay-tooth-items")).toContainText("Planned");
+  await expect(page.getByTestId("overlay-tooth-items")).toContainText("5001-1");
+
+  await page.getByTestId("clinical-overlay-filter-planned").click();
+  await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
+    "No unassigned treatment plan items."
+  );
+  await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
+
+  await page.getByTestId("clinical-overlay-filter-completed").click();
+  await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveCount(0);
+  await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveCount(0);
+  await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
+    "Emergency Appointment"
+  );
+});
