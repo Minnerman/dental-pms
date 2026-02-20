@@ -11,6 +11,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
 }) => {
   mkdirSync(".run/stage153c", { recursive: true });
   mkdirSync(".run/stage155a", { recursive: true });
+  mkdirSync(".run/stage156b", { recursive: true });
   await primePageAuth(page, request);
   const patientId = await createPatient(request, {
     first_name: "Overlay",
@@ -131,6 +132,39 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
             missing: false,
             extracted: false,
           },
+          "24": {
+            restorations: [
+              {
+                type: "root_canal",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Root Canal Tx", completed: true },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "26": {
+            restorations: [
+              {
+                type: "implant",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Implant Fixture", completed: true },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "46": {
+            restorations: [
+              {
+                type: "extraction",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Planned Extraction", completed: false },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
         },
       }),
     });
@@ -147,14 +181,26 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   expect(toothStateRequestSeen).toBeTruthy();
   await expect(page.getByTestId("tooth-restoration-UR5-filling-M")).toBeVisible();
   await expect(page.getByTestId("tooth-restoration-UR6-crown")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UL4-root_canal")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UL6-implant")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-LR6-extraction")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-LR6-extraction")).toHaveAttribute(
+    "data-status",
+    "planned"
+  );
   await expect(page.getByTestId("tooth-restoration-LL6-crown")).toBeVisible();
   const crownTitle = await page
     .getByTestId("tooth-restoration-LL6-crown")
     .getAttribute("data-tooltip");
   expect(crownTitle ?? "").toContain("White Crown");
+  expect(crownTitle ?? "").toContain("Type: crown");
   expect(crownTitle ?? "").toContain("Completed");
   await page.screenshot({
     path: ".run/stage155a/tooth_state_ui_1015073.png",
+    fullPage: true,
+  });
+  await page.screenshot({
+    path: ".run/stage156b/tooth_state_ui_types.png",
     fullPage: true,
   });
   await expect(page.getByTestId("tooth-surface-overlay-15-M")).toBeVisible();
