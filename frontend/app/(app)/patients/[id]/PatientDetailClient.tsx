@@ -430,6 +430,46 @@ type PaginatedResult<T> = {
   has_more: boolean;
 };
 
+type TreatmentPlanOverlayFilter = "both" | "planned" | "completed";
+
+type R4TreatmentPlanOverlayItem = {
+  tp_number?: number | null;
+  tp_item?: number | null;
+  tp_item_key?: string | null;
+  code_id?: number | null;
+  code_label?: string | null;
+  tooth?: number | null;
+  surface?: number | null;
+  tooth_level: boolean;
+  completed?: boolean | null;
+  item_date?: string | null;
+  plan_creation_date?: string | null;
+};
+
+type R4TreatmentPlanToothGroup = {
+  tooth: number;
+  planned_count: number;
+  completed_count: number;
+  items: R4TreatmentPlanOverlayItem[];
+};
+
+type R4TreatmentPlanOverlay = {
+  patient_id: number;
+  legacy_patient_code?: number | null;
+  total_items: number;
+  total_planned: number;
+  total_completed: number;
+  tooth_groups: R4TreatmentPlanToothGroup[];
+  unassigned_items: R4TreatmentPlanOverlayItem[];
+};
+
+type ToothOverlaySummary = {
+  legacyTooth: number;
+  plannedCount: number;
+  completedCount: number;
+  items: R4TreatmentPlanOverlayItem[];
+};
+
 const categoryLabels: Record<PatientCategory, string> = {
   CLINIC_PRIVATE: "Clinic (Private)",
   DOMICILIARY_PRIVATE: "Domiciliary (Private)",
@@ -791,6 +831,13 @@ export default function PatientDetailClient({
   const [clinicalViewMode, setClinicalViewMode] = useState<
     "current" | "planned" | "history"
   >("current");
+  const [overlayFilter, setOverlayFilter] = useState<TreatmentPlanOverlayFilter>("both");
+  const [r4TreatmentOverlay, setR4TreatmentOverlay] =
+    useState<R4TreatmentPlanOverlay | null>(null);
+  const [r4TreatmentOverlayLoading, setR4TreatmentOverlayLoading] = useState(false);
+  const [r4TreatmentOverlayError, setR4TreatmentOverlayError] = useState<string | null>(
+    null
+  );
   const [clinicalViewHydrated, setClinicalViewHydrated] = useState(false);
   const [chartingLoaded, setChartingLoaded] = useState(false);
   const [chartingLoading, setChartingLoading] = useState(false);
@@ -1565,6 +1612,41 @@ export default function PatientDetailClient({
       setClinicalLoading(false);
     }
   }, [patientId, router]);
+
+  const loadTreatmentPlanOverlay = useCallback(async () => {
+    setR4TreatmentOverlayLoading(true);
+    setR4TreatmentOverlayError(null);
+    try {
+      const res = await apiFetch(
+        `/api/patients/${patientId}/charting/treatment-plan-items?limit=5000&include_planned=true&include_completed=true`
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403 || res.status === 404) {
+        setR4TreatmentOverlay(null);
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load treatment plan overlay (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as R4TreatmentPlanOverlay;
+      setR4TreatmentOverlay(data);
+    } catch (err) {
+      setR4TreatmentOverlayError(
+        err instanceof Error ? err.message : "Failed to load treatment plan overlay"
+      );
+    } finally {
+      setR4TreatmentOverlayLoading(false);
+    }
+  }, [patientId, router]);
+
+  const refreshClinicalData = useCallback(() => {
+    void loadClinicalSummary();
+    void loadTreatmentPlanOverlay();
+  }, [loadClinicalSummary, loadTreatmentPlanOverlay]);
 
   async function loadChartingConfig() {
     try {
@@ -2612,6 +2694,10 @@ export default function PatientDetailClient({
     setChartingUrlApplied(false);
     setNotesIncludeTextInLink(false);
     chartingAuditSent.current = false;
+    setR4TreatmentOverlay(null);
+    setR4TreatmentOverlayError(null);
+    setR4TreatmentOverlayLoading(false);
+    setOverlayFilter("both");
   }, [patientId]);
 
   useEffect(() => {
@@ -2627,12 +2713,12 @@ export default function PatientDetailClient({
 
   useEffect(() => {
     if (tab !== "clinical") return;
-    void loadClinicalSummary();
+    refreshClinicalData();
     if (!selectedTooth) {
       setSelectedTooth(upperTeeth[0]);
       setNotesTooth(upperTeeth[0]);
     }
-  }, [tab, loadClinicalSummary, selectedTooth]);
+  }, [tab, refreshClinicalData, selectedTooth]);
 
   useEffect(() => {
     if (tab !== "transactions") return;
@@ -3007,6 +3093,45 @@ export default function PatientDetailClient({
     return code ? code.trim().toUpperCase() : null;
   }
 
+  function toClinicalToothCode(legacyTooth: number | null | undefined): string | null {
+    if (legacyTooth == null) return null;
+    const quadrant = Math.floor(legacyTooth / 10);
+    const position = legacyTooth % 10;
+    if (position < 1 || position > 8) return null;
+    if (quadrant === 1) return `UR${position}`;
+    if (quadrant === 2) return `UL${position}`;
+    if (quadrant === 3) return `LL${position}`;
+    if (quadrant === 4) return `LR${position}`;
+    return null;
+  }
+
+  function isOverlayItemVisible(
+    item: R4TreatmentPlanOverlayItem,
+    filter: TreatmentPlanOverlayFilter
+  ) {
+    if (filter === "both") return true;
+    if (filter === "planned") return item.completed !== true;
+    return item.completed === true;
+  }
+
+  function overlayItemLabel(item: R4TreatmentPlanOverlayItem) {
+    const trimmed = item.code_label?.trim();
+    if (trimmed) return trimmed;
+    if (item.code_id != null) return String(item.code_id);
+    return "Unknown code";
+  }
+
+  function overlayItemSurface(item: R4TreatmentPlanOverlayItem) {
+    if (item.surface == null || item.surface === 0 || item.tooth_level) {
+      return "Whole-tooth";
+    }
+    return `Surface ${item.surface}`;
+  }
+
+  function overlayItemStatus(item: R4TreatmentPlanOverlayItem) {
+    return item.completed === true ? "Completed" : "Planned";
+  }
+
   function toggleChartingMeta(section: string) {
     setChartingMetaOpen((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -3127,6 +3252,50 @@ export default function PatientDetailClient({
     return treatmentPlanItems.filter((item) => item.tooth === selectedTooth);
   }, [selectedTooth, treatmentPlanItems]);
 
+  const overlayItemsByTooth = useMemo(() => {
+    const map = new Map<string, ToothOverlaySummary>();
+    const groups = r4TreatmentOverlay?.tooth_groups ?? [];
+    for (const group of groups) {
+      const toothCode = toClinicalToothCode(group.tooth);
+      if (!toothCode) continue;
+      const visibleItems = (group.items ?? []).filter((item) =>
+        isOverlayItemVisible(item, overlayFilter)
+      );
+      if (visibleItems.length === 0) continue;
+      map.set(toothCode, {
+        legacyTooth: group.tooth,
+        plannedCount: visibleItems.filter((item) => item.completed !== true).length,
+        completedCount: visibleItems.filter((item) => item.completed === true).length,
+        items: visibleItems,
+      });
+    }
+    return map;
+  }, [overlayFilter, r4TreatmentOverlay]);
+
+  const selectedToothOverlay = useMemo(() => {
+    if (!selectedTooth) return null;
+    return overlayItemsByTooth.get(selectedTooth) ?? null;
+  }, [overlayItemsByTooth, selectedTooth]);
+
+  const overlayUnassignedItems = useMemo(() => {
+    return (r4TreatmentOverlay?.unassigned_items ?? []).filter((item) =>
+      isOverlayItemVisible(item, overlayFilter)
+    );
+  }, [overlayFilter, r4TreatmentOverlay]);
+
+  const overlayTotals = useMemo(() => {
+    let planned = 0;
+    let completed = 0;
+    for (const bucket of overlayItemsByTooth.values()) {
+      planned += bucket.plannedCount;
+      completed += bucket.completedCount;
+    }
+    return {
+      planned: planned + overlayUnassignedItems.filter((item) => item.completed !== true).length,
+      completed: completed + overlayUnassignedItems.filter((item) => item.completed === true).length,
+    };
+  }, [overlayItemsByTooth, overlayUnassignedItems]);
+
   const sortedClinicalNotes = useMemo(() => {
     return [...clinicalNotes].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -3150,6 +3319,10 @@ export default function PatientDetailClient({
     }
     // TODO: add missing/extracted/deciduous/gap-closed tooth badges once stored.
     return badges;
+  }
+
+  function getToothOverlaySummary(tooth: string) {
+    return overlayItemsByTooth.get(tooth) ?? null;
   }
 
   const ledgerWithBalance = useMemo(() => {
@@ -6799,7 +6972,7 @@ export default function PatientDetailClient({
                     <button
                       className="btn btn-secondary"
                       type="button"
-                      onClick={loadClinicalSummary}
+                      onClick={refreshClinicalData}
                       disabled={clinicalLoading}
                     >
                       {clinicalLoading ? "Refreshing..." : "Refresh"}
@@ -6816,7 +6989,7 @@ export default function PatientDetailClient({
                         <button
                           className="btn btn-secondary"
                           type="button"
-                          onClick={loadClinicalSummary}
+                          onClick={refreshClinicalData}
                           disabled={clinicalLoading}
                         >
                           Retry
@@ -6871,6 +7044,63 @@ export default function PatientDetailClient({
                     <span className="badge">D Deciduous</span>
                     <span className="badge">GC Gap closed</span>
                   </div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <div className="label">R4 overlays</div>
+                    <div style={tabRowStyle} data-testid="clinical-overlay-filter">
+                      <button
+                        type="button"
+                        style={tabStyle(overlayFilter === "both", true)}
+                        onClick={() => setOverlayFilter("both")}
+                        data-testid="clinical-overlay-filter-both"
+                        data-active={overlayFilter === "both"}
+                        aria-pressed={overlayFilter === "both"}
+                      >
+                        Both
+                      </button>
+                      <button
+                        type="button"
+                        style={tabStyle(overlayFilter === "planned", true)}
+                        onClick={() => setOverlayFilter("planned")}
+                        data-testid="clinical-overlay-filter-planned"
+                        data-active={overlayFilter === "planned"}
+                        aria-pressed={overlayFilter === "planned"}
+                      >
+                        Planned
+                      </button>
+                      <button
+                        type="button"
+                        style={tabStyle(overlayFilter === "completed", true)}
+                        onClick={() => setOverlayFilter("completed")}
+                        data-testid="clinical-overlay-filter-completed"
+                        data-active={overlayFilter === "completed"}
+                        aria-pressed={overlayFilter === "completed"}
+                      >
+                        Completed
+                      </button>
+                    </div>
+                    <span className="badge" data-testid="clinical-overlay-summary">
+                      {overlayTotals.planned} planned · {overlayTotals.completed} completed
+                    </span>
+                    {r4TreatmentOverlayLoading && <span className="badge">Loading overlays…</span>}
+                  </div>
+                  {r4TreatmentOverlayError && (
+                    <div className="notice">
+                      <div
+                        className="row"
+                        style={{ justifyContent: "space-between", alignItems: "center", gap: 12 }}
+                      >
+                        <span>{r4TreatmentOverlayError}</span>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={loadTreatmentPlanOverlay}
+                          disabled={r4TreatmentOverlayLoading}
+                        >
+                          Retry overlays
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div
                     style={{
                       display: "grid",
@@ -6892,6 +7122,8 @@ export default function PatientDetailClient({
                                 >
                                   {upperTeeth.map((tooth) => {
                                     const isActive = selectedTooth === tooth;
+                                    const toothBadges = getToothBadges(tooth);
+                                    const overlaySummary = getToothOverlaySummary(tooth);
                                     return (
                                       <button
                                         key={tooth}
@@ -6920,7 +7152,48 @@ export default function PatientDetailClient({
                                         }}
                                       >
                                         <span>{tooth}</span>
-                                        {getToothBadges(tooth).length > 0 && (
+                                        {overlaySummary && (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: 4,
+                                              fontSize: 10,
+                                              lineHeight: 1,
+                                              flexWrap: "wrap",
+                                              justifyContent: "center",
+                                            }}
+                                            data-testid={`tooth-overlay-${tooth}`}
+                                          >
+                                            {overlaySummary.plannedCount > 0 && (
+                                              <span
+                                                style={{
+                                                  border: "1px solid var(--accent)",
+                                                  borderRadius: 999,
+                                                  padding: "1px 4px",
+                                                }}
+                                                title={`Planned items: ${overlaySummary.plannedCount}`}
+                                                data-testid={`tooth-overlay-planned-${overlaySummary.legacyTooth}`}
+                                              >
+                                                P{overlaySummary.plannedCount}
+                                              </span>
+                                            )}
+                                            {overlaySummary.completedCount > 0 && (
+                                              <span
+                                                style={{
+                                                  background: "var(--accent)",
+                                                  color: "var(--bg)",
+                                                  borderRadius: 999,
+                                                  padding: "1px 4px",
+                                                }}
+                                                title={`Completed items: ${overlaySummary.completedCount}`}
+                                                data-testid={`tooth-overlay-completed-${overlaySummary.legacyTooth}`}
+                                              >
+                                                C{overlaySummary.completedCount}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                        {toothBadges.length > 0 && (
                                           <div
                                             style={{
                                               display: "flex",
@@ -6932,7 +7205,7 @@ export default function PatientDetailClient({
                                             }}
                                             data-testid={`tooth-badge-${tooth}`}
                                           >
-                                            {getToothBadges(tooth).map((badge) => (
+                                            {toothBadges.map((badge) => (
                                               <span
                                                 key={`${tooth}-${badge.label}`}
                                                 title={badge.title}
@@ -6959,6 +7232,8 @@ export default function PatientDetailClient({
                                 >
                                   {lowerTeeth.map((tooth) => {
                                     const isActive = selectedTooth === tooth;
+                                    const toothBadges = getToothBadges(tooth);
+                                    const overlaySummary = getToothOverlaySummary(tooth);
                                     return (
                                       <button
                                         key={tooth}
@@ -6987,7 +7262,48 @@ export default function PatientDetailClient({
                                         }}
                                       >
                                         <span>{tooth}</span>
-                                        {getToothBadges(tooth).length > 0 && (
+                                        {overlaySummary && (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: 4,
+                                              fontSize: 10,
+                                              lineHeight: 1,
+                                              flexWrap: "wrap",
+                                              justifyContent: "center",
+                                            }}
+                                            data-testid={`tooth-overlay-${tooth}`}
+                                          >
+                                            {overlaySummary.plannedCount > 0 && (
+                                              <span
+                                                style={{
+                                                  border: "1px solid var(--accent)",
+                                                  borderRadius: 999,
+                                                  padding: "1px 4px",
+                                                }}
+                                                title={`Planned items: ${overlaySummary.plannedCount}`}
+                                                data-testid={`tooth-overlay-planned-${overlaySummary.legacyTooth}`}
+                                              >
+                                                P{overlaySummary.plannedCount}
+                                              </span>
+                                            )}
+                                            {overlaySummary.completedCount > 0 && (
+                                              <span
+                                                style={{
+                                                  background: "var(--accent)",
+                                                  color: "var(--bg)",
+                                                  borderRadius: 999,
+                                                  padding: "1px 4px",
+                                                }}
+                                                title={`Completed items: ${overlaySummary.completedCount}`}
+                                                data-testid={`tooth-overlay-completed-${overlaySummary.legacyTooth}`}
+                                              >
+                                                C{overlaySummary.completedCount}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                        {toothBadges.length > 0 && (
                                           <div
                                             style={{
                                               display: "flex",
@@ -6999,7 +7315,7 @@ export default function PatientDetailClient({
                                             }}
                                             data-testid={`tooth-badge-${tooth}`}
                                           >
-                                            {getToothBadges(tooth).map((badge) => (
+                                            {toothBadges.map((badge) => (
                                               <span
                                                 key={`${tooth}-${badge.label}`}
                                                 title={badge.title}
@@ -7015,6 +7331,36 @@ export default function PatientDetailClient({
                                 })}
                                 </div>
                               </div>
+                            </div>
+                          </Panel>
+
+                          <Panel title="Unassigned treatment items">
+                            <div className="stack" style={{ gap: 8 }} data-testid="overlay-unassigned-items">
+                              {overlayUnassignedItems.length === 0 ? (
+                                <div className="notice">No unassigned treatment plan items.</div>
+                              ) : (
+                                overlayUnassignedItems.map((item) => (
+                                  <div
+                                    className="card"
+                                    style={{ margin: 0 }}
+                                    key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
+                                  >
+                                    <div className="row">
+                                      <div>
+                                        <strong>{overlayItemLabel(item)}</strong>
+                                        <div style={{ color: "var(--muted)" }}>
+                                          {overlayItemSurface(item)} · {formatShortDate(item.item_date)}
+                                        </div>
+                                      </div>
+                                      <span className="badge">{overlayItemStatus(item)}</span>
+                                    </div>
+                                    <div style={{ color: "var(--muted)" }}>
+                                      TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} · Key{" "}
+                                      {item.tp_item_key ?? "—"}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
                             </div>
                           </Panel>
 
@@ -7175,6 +7521,40 @@ export default function PatientDetailClient({
                               </div>
 
                               <div className="stack" style={{ gap: 10 }}>
+                                <div className="label">R4 treatment overlays</div>
+                                {selectedToothOverlay?.items?.length ? (
+                                  <div className="stack" style={{ gap: 8 }} data-testid="overlay-tooth-items">
+                                    {selectedToothOverlay.items.map((item) => (
+                                      <div
+                                        className="card"
+                                        style={{ margin: 0 }}
+                                        key={item.tp_item_key ?? `${item.code_id}-${item.item_date ?? "none"}`}
+                                      >
+                                        <div className="row">
+                                          <div>
+                                            <strong>{overlayItemLabel(item)}</strong>
+                                            <div style={{ color: "var(--muted)" }}>
+                                              {overlayItemSurface(item)} ·{" "}
+                                              {formatShortDate(item.item_date)}
+                                            </div>
+                                          </div>
+                                          <span className="badge">{overlayItemStatus(item)}</span>
+                                        </div>
+                                        <div style={{ color: "var(--muted)" }}>
+                                          TP #{item.tp_number ?? "—"} · Item #{item.tp_item ?? "—"} ·
+                                          Key {item.tp_item_key ?? "—"}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="notice" data-testid="overlay-tooth-empty">
+                                    No overlay items for this tooth.
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="stack" style={{ gap: 10 }}>
                                 <div className="label">Tooth timeline</div>
                                 {clinicalViewMode !== "planned" && (
                                   <div className="stack" style={{ gap: 8 }}>
@@ -7252,7 +7632,7 @@ export default function PatientDetailClient({
                           <button
                             className="btn btn-secondary"
                             type="button"
-                            onClick={loadClinicalSummary}
+                            onClick={refreshClinicalData}
                           >
                             Refresh
                           </button>

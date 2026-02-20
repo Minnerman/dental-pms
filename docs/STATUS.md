@@ -90,6 +90,21 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
       - confirms tooth groups `15`, `16` with labels:
         - `3599 -> "Extraction"`
         - unassigned row `3600 -> "Emergency Appointment"`
+- 2026-02-20: Stage 152C delivered (`stage152c-odontogram-overlays-ui`) first odontogram overlay UI slice.
+  - Frontend clinical odontogram now consumes:
+    - `GET /api/patients/{patient_id}/charting/treatment-plan-items`
+  - UI behavior delivered:
+    - tooth-level overlay markers for planned/completed counts (side-by-side when both exist)
+    - filter toggle for overlay visibility: `Both`, `Planned`, `Completed`
+    - tooth click panel now includes R4 treatment overlay item details (`code_label` fallback `code_id`, status, surface, `tp_item_key`)
+    - unassigned overlay item section (tooth `0`) shown separately from tooth markers
+  - Mapping behavior:
+    - canonical numeric teeth (FDI-style, e.g. `15`, `16`) map to chart buttons (`UR5`, `UR6`) for rendering
+  - Test coverage:
+    - new Playwright smoke test: `frontend/tests/clinical-odontogram-overlays.spec.ts`
+    - asserts markers, filter behavior, tooth drill-down, and unassigned item rendering
+  - Evidence:
+    - `.run/stage152c/overlay_ui_patient_mock_1014496.png`
 - 2026-02-20: Stage 151 completed (`fix/spotcheck-postgres-tp-tpi`) to fix TP/TPI Postgres spotcheck retrieval.
   - Root cause from Stage 150 was confirmed and fixed:
     - `r4_charting_spotcheck` Postgres TP/TPI path previously queried `r4_treatment_plans`/`r4_treatment_plan_items`.
