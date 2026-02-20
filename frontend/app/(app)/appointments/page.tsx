@@ -163,6 +163,18 @@ type PracticeSchedule = {
 type LocationFilter = "all" | "clinic" | "visit";
 type DiaryGrouping = "chair" | "clinician";
 
+type DiaryLane = {
+  key: string;
+  label: string;
+  count: number;
+  grouping: DiaryGrouping;
+  clinicianUserId?: number;
+  clinicianLabel?: string;
+  locationType?: AppointmentLocationType;
+  location?: string | null;
+  locationText?: string | null;
+};
+
 type CalendarRange = {
   start: string;
   end: string;
@@ -233,6 +245,8 @@ const daySheetStatusLabels: Record<AppointmentStatus, string> = {
   cancelled: "Cancelled",
   no_show: "DNA",
 };
+
+const DIARY_TIME_STEP_MINUTES = 10;
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -348,6 +362,20 @@ function getRangeForView(date: Date, view: View) {
 
 function overlaps(startA: Date, endA: Date, startB: Date, endB: Date) {
   return startA < endB && endA > startB;
+}
+
+function snapDateToIncrement(value: Date, incrementMinutes: number) {
+  const incrementMs = incrementMinutes * 60_000;
+  const snappedMs = Math.round(value.getTime() / incrementMs) * incrementMs;
+  return new Date(snappedMs);
+}
+
+function snapRangeToIncrement(start: Date, end: Date, incrementMinutes: number) {
+  const snappedStart = snapDateToIncrement(start, incrementMinutes);
+  const snappedEndRaw = snapDateToIncrement(end, incrementMinutes);
+  const minEnd = new Date(snappedStart.getTime() + incrementMinutes * 60_000);
+  const snappedEnd = snappedEndRaw <= snappedStart ? minEnd : snappedEndRaw;
+  return { start: snappedStart, end: snappedEnd };
 }
 
 function formatTimeRange(start: string, end: string) {
@@ -765,13 +793,78 @@ export default function AppointmentsPage() {
     [clinicianLookup]
   );
 
-  const getChairLabel = useCallback((appt: Appointment) => {
+  const getChairLane = useCallback((appt: Appointment) => {
     const room = (appt.location || "").trim();
-    if (room) return room;
+    if (room) {
+      return {
+        key: `chair:clinic:${room.toLowerCase()}`,
+        label: room,
+        locationType: "clinic" as AppointmentLocationType,
+        location: room,
+        locationText: null,
+      };
+    }
     const locationText = (appt.location_text || "").trim();
-    if (locationText) return locationText;
-    return appt.location_type === "visit" ? "Visit" : "Unassigned";
+    if (appt.location_type === "visit") {
+      if (locationText) {
+        return {
+          key: `chair:visit:${locationText.toLowerCase()}`,
+          label: locationText,
+          locationType: "visit" as AppointmentLocationType,
+          location: null,
+          locationText,
+        };
+      }
+      return {
+        key: "chair:visit:unassigned",
+        label: "Visit",
+        locationType: "visit" as AppointmentLocationType,
+        location: null,
+        locationText: "Visit",
+      };
+    }
+    return {
+      key: "chair:clinic:unassigned",
+      label: "Unassigned",
+      locationType: "clinic" as AppointmentLocationType,
+      location: null,
+      locationText: null,
+    };
   }, []);
+
+  const getChairLabel = useCallback((appt: Appointment) => {
+    return getChairLane(appt).label;
+  }, [getChairLane]);
+
+  const getClinicianLane = useCallback(
+    (appt: Appointment) => {
+      if (appt.clinician_user_id) {
+        const label = getClinicianLabel(appt.clinician_user_id);
+        return {
+          key: `clinician:user:${appt.clinician_user_id}`,
+          label,
+          clinicianUserId: appt.clinician_user_id,
+          clinicianLabel: label,
+        };
+      }
+      const raw = (appt.clinician || "").trim();
+      if (raw) {
+        return {
+          key: `clinician:text:${raw.toLowerCase()}`,
+          label: raw,
+          clinicianUserId: undefined,
+          clinicianLabel: raw,
+        };
+      }
+      return {
+        key: "clinician:unassigned",
+        label: "Unassigned",
+        clinicianUserId: undefined,
+        clinicianLabel: undefined,
+      };
+    },
+    [getClinicianLabel]
+  );
 
   const getClinicianFilterKey = useCallback(
     (appt: Appointment) => {
@@ -787,14 +880,9 @@ export default function AppointmentsPage() {
 
   const getClinicianDisplayLabel = useCallback(
     (appt: Appointment) => {
-      if (appt.clinician_user_id) {
-        return getClinicianLabel(appt.clinician_user_id);
-      }
-      const raw = (appt.clinician || "").trim();
-      if (raw) return raw;
-      return "Unassigned";
+      return getClinicianLane(appt).label;
     },
-    [getClinicianLabel]
+    [getClinicianLane]
   );
 
   const diaryChairOptions = useMemo(() => {
@@ -858,26 +946,79 @@ export default function AppointmentsPage() {
     getClinicianFilterKey,
   ]);
 
-  const diaryColumns = useMemo(() => {
-    const counts = new Map<string, number>();
+  const diaryLanes = useMemo<DiaryLane[]>(() => {
+    const lanes = new Map<string, DiaryLane>();
     for (const appt of diaryFilteredAppointments) {
-      const label =
-        diaryGrouping === "chair"
-          ? getChairLabel(appt)
-          : getClinicianDisplayLabel(appt);
-      counts.set(label, (counts.get(label) || 0) + 1);
+      if (diaryGrouping === "chair") {
+        const chairLane = getChairLane(appt);
+        const existing = lanes.get(chairLane.key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          lanes.set(chairLane.key, {
+            key: chairLane.key,
+            label: chairLane.label,
+            count: 1,
+            grouping: "chair",
+            locationType: chairLane.locationType,
+            location: chairLane.location,
+            locationText: chairLane.locationText,
+          });
+        }
+      } else {
+        const clinicianLane = getClinicianLane(appt);
+        const existing = lanes.get(clinicianLane.key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          lanes.set(clinicianLane.key, {
+            key: clinicianLane.key,
+            label: clinicianLane.label,
+            count: 1,
+            grouping: "clinician",
+            clinicianUserId: clinicianLane.clinicianUserId,
+            clinicianLabel: clinicianLane.clinicianLabel,
+          });
+        }
+      }
     }
-    const rows = Array.from(counts.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+    const rows = Array.from(lanes.values()).sort((a, b) =>
+      a.label.localeCompare(b.label)
+    );
     if (rows.length > 0) return rows;
+    if (diaryGrouping === "chair") {
+      return [
+        {
+          key: "chair:clinic:unassigned",
+          label: "Unassigned",
+          count: 0,
+          grouping: "chair",
+          locationType: "clinic",
+          location: null,
+          locationText: null,
+        },
+      ];
+    }
     return [
       {
-        label: diaryGrouping === "chair" ? "Unassigned" : "Unassigned",
+        key: "clinician:unassigned",
+        label: "Unassigned",
         count: 0,
+        grouping: "clinician",
       },
     ];
-  }, [diaryFilteredAppointments, diaryGrouping, getChairLabel, getClinicianDisplayLabel]);
+  }, [diaryFilteredAppointments, diaryGrouping, getChairLane, getClinicianLane]);
+
+  const diaryColumns = diaryLanes;
+
+  const diaryLaneByKey = useMemo(() => {
+    return new Map(diaryLanes.map((lane) => [lane.key, lane]));
+  }, [diaryLanes]);
+
+  const calendarResources = useMemo(
+    () => diaryLanes.map((lane) => ({ id: lane.key, title: lane.label })),
+    [diaryLanes]
+  );
 
   const calendarEvents = useMemo<CalendarEvent[]>(
     () =>
@@ -888,11 +1029,11 @@ export default function AppointmentsPage() {
         end: new Date(appt.ends_at),
         resourceId:
           diaryGrouping === "chair"
-            ? getChairLabel(appt)
-            : getClinicianDisplayLabel(appt),
+            ? getChairLane(appt).key
+            : getClinicianLane(appt).key,
         resource: appt,
       })),
-    [diaryFilteredAppointments, diaryGrouping, getChairLabel, getClinicianDisplayLabel]
+    [diaryFilteredAppointments, diaryGrouping, getChairLane, getClinicianLane]
   );
 
   const selectedCalendarEvent = useMemo<CalendarEvent | undefined>(() => {
@@ -933,6 +1074,151 @@ export default function AppointmentsPage() {
         (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
       );
   }, [appointments, currentDate]);
+
+  const getLaneKeyForAppointment = useCallback(
+    (appt: Appointment) =>
+      diaryGrouping === "chair"
+        ? getChairLane(appt).key
+        : getClinicianLane(appt).key,
+    [diaryGrouping, getChairLane, getClinicianLane]
+  );
+
+  const hasLaneOverlap = useCallback(
+    ({
+      appointmentId,
+      laneKey,
+      start,
+      end,
+    }: {
+      appointmentId: number;
+      laneKey: string;
+      start: Date;
+      end: Date;
+    }) => {
+      return appointments.some((item) => {
+        if (item.id === appointmentId) return false;
+        if (item.status === "cancelled" || item.status === "no_show") return false;
+        if (getLaneKeyForAppointment(item) !== laneKey) return false;
+        return overlaps(
+          start,
+          end,
+          new Date(item.starts_at),
+          new Date(item.ends_at)
+        );
+      });
+    },
+    [appointments, getLaneKeyForAppointment]
+  );
+
+  const resolveLanePatch = useCallback(
+    (laneKey: string) => {
+      const lane = diaryLaneByKey.get(laneKey);
+      if (!lane) {
+        return {
+          error: "Unable to resolve the destination lane.",
+          lanePatch: null,
+        };
+      }
+      if (diaryGrouping === "chair") {
+        if (lane.key.endsWith(":unassigned")) {
+          return {
+            error:
+              "Move to the unassigned lane is not supported from drag/drop. Use the detail panel.",
+            lanePatch: null,
+          };
+        }
+        if (lane.locationType === "visit") {
+          const visitLabel = (lane.locationText || lane.label || "").trim() || "Visit";
+          return {
+            error: null,
+            lanePatch: {
+              locationType: "visit" as AppointmentLocationType,
+              location: null,
+              locationText: visitLabel,
+              isDomiciliary: true,
+              visitAddress: visitLabel,
+            },
+          };
+        }
+        const locationLabel = (lane.location || lane.label || "").trim();
+        if (!locationLabel) {
+          return {
+            error: "Destination chair is missing a location label.",
+            lanePatch: null,
+          };
+        }
+        return {
+          error: null,
+          lanePatch: {
+            locationType: "clinic" as AppointmentLocationType,
+            location: locationLabel,
+            locationText: null,
+            isDomiciliary: false,
+            visitAddress: null,
+          },
+        };
+      }
+      if (!lane.clinicianUserId) {
+        return {
+          error:
+            "Move to free-text or unassigned clinician lanes is not supported from drag/drop.",
+          lanePatch: null,
+        };
+      }
+      return {
+        error: null,
+        lanePatch: {
+          clinicianUserId: lane.clinicianUserId,
+          clinicianLabel: lane.clinicianLabel || lane.label,
+        },
+      };
+    },
+    [diaryGrouping, diaryLaneByKey]
+  );
+
+  const applyLanePatch = useCallback(
+    (
+      appt: Appointment,
+      lanePatch:
+        | {
+            clinicianUserId?: number;
+            clinicianLabel?: string | null;
+            locationType?: AppointmentLocationType;
+            location?: string | null;
+            locationText?: string | null;
+            isDomiciliary?: boolean;
+            visitAddress?: string | null;
+          }
+        | null
+        | undefined
+    ) => {
+      if (!lanePatch) return appt;
+      const next = { ...appt };
+      if (lanePatch.clinicianUserId) {
+        next.clinician_user_id = lanePatch.clinicianUserId;
+      }
+      if (lanePatch.clinicianLabel) {
+        next.clinician = lanePatch.clinicianLabel;
+      }
+      if (lanePatch.locationType) {
+        next.location_type = lanePatch.locationType;
+      }
+      if ("location" in lanePatch) {
+        next.location = lanePatch.location ?? null;
+      }
+      if ("locationText" in lanePatch) {
+        next.location_text = lanePatch.locationText ?? null;
+      }
+      if (lanePatch.isDomiciliary !== undefined) {
+        next.is_domiciliary = lanePatch.isDomiciliary;
+      }
+      if ("visitAddress" in lanePatch) {
+        next.visit_address = lanePatch.visitAddress ?? null;
+      }
+      return next;
+    },
+    []
+  );
 
   function selectRelativeAppointment(direction: 1 | -1) {
     if (sortedCalendarAppointmentIds.length === 0) return;
@@ -1520,13 +1806,50 @@ export default function AppointmentsPage() {
   }
 
   const updateAppointmentTimes = useCallback(
-    async (appointmentId: number, startsAt: Date, endsAt: Date) => {
+    async (
+      appointmentId: number,
+      startsAt: Date,
+      endsAt: Date,
+      lanePatch?: {
+        clinicianUserId?: number;
+        clinicianLabel?: string | null;
+        locationType?: AppointmentLocationType;
+        location?: string | null;
+        locationText?: string | null;
+        isDomiciliary?: boolean;
+        visitAddress?: string | null;
+      }
+    ) => {
+      const payload: Record<string, unknown> = {
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+      };
+      if (lanePatch) {
+        if ("clinicianUserId" in lanePatch && lanePatch.clinicianUserId) {
+          payload.clinician_user_id = lanePatch.clinicianUserId;
+        }
+        if ("clinicianLabel" in lanePatch && lanePatch.clinicianLabel) {
+          payload.clinician = lanePatch.clinicianLabel;
+        }
+        if ("locationType" in lanePatch && lanePatch.locationType) {
+          payload.location_type = lanePatch.locationType;
+        }
+        if ("location" in lanePatch && lanePatch.location !== undefined) {
+          payload.location = lanePatch.location;
+        }
+        if ("locationText" in lanePatch && lanePatch.locationText) {
+          payload.location_text = lanePatch.locationText;
+        }
+        if ("isDomiciliary" in lanePatch && lanePatch.isDomiciliary !== undefined) {
+          payload.is_domiciliary = lanePatch.isDomiciliary;
+        }
+        if ("visitAddress" in lanePatch && lanePatch.visitAddress) {
+          payload.visit_address = lanePatch.visitAddress;
+        }
+      }
       const res = await apiFetch(`/api/appointments/${appointmentId}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          starts_at: startsAt.toISOString(),
-          ends_at: endsAt.toISOString(),
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.status === 401) {
         clearToken();
@@ -2319,47 +2642,111 @@ export default function AppointmentsPage() {
     event,
     start,
     end,
+    resourceId,
   }: {
     event: CalendarEvent;
     start: Date;
     end: Date;
+    resourceId?: string | number | null;
   }) {
     if (isRescheduleLocked) return;
+    const snappedRange = snapRangeToIncrement(start, end, DIARY_TIME_STEP_MINUTES);
+    const targetStart = snappedRange.start;
+    const targetEnd = snappedRange.end;
+    const sourceLaneKey = getLaneKeyForAppointment(event.resource);
+    const requestedLaneKey =
+      resourceId === null || resourceId === undefined
+        ? sourceLaneKey
+        : String(resourceId);
+    let targetLaneKey = requestedLaneKey;
+    if (targetLaneKey === sourceLaneKey) {
+      const overlappingLanes = new Set(
+        appointments
+          .filter((item) => item.id !== event.resource.id)
+          .filter((item) =>
+            overlaps(
+              targetStart,
+              targetEnd,
+              new Date(item.starts_at),
+              new Date(item.ends_at)
+            )
+          )
+          .map((item) => getLaneKeyForAppointment(item))
+      );
+      if (overlappingLanes.size === 1) {
+        targetLaneKey = Array.from(overlappingLanes)[0];
+      }
+    }
+    const laneChanged = targetLaneKey !== sourceLaneKey;
+    const laneResolution = laneChanged
+      ? resolveLanePatch(targetLaneKey)
+      : { error: null, lanePatch: null };
+
     try {
-      if (!isRangeWithinSchedule(start, end, schedule)) {
+      if (laneResolution.error) {
+        setError(laneResolution.error);
+        await loadAppointments();
+        return;
+      }
+      if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
         setError("Reschedule is outside of working hours.");
         await loadAppointments();
         return;
       }
-      if (event.resource.clinician_user_id) {
-        const conflicts = findConflicts({
-          clinicianId: event.resource.clinician_user_id,
-          start,
-          end,
-          excludeId: event.resource.id,
-        });
-        setConflictWarning(
-          buildConflictWarning(conflicts, event.resource.clinician_user_id)
-        );
-      }
-      const confirmed = window.confirm("Reschedule this appointment?");
-      if (!confirmed) {
+      if (
+        hasLaneOverlap({
+          appointmentId: event.resource.id,
+          laneKey: targetLaneKey,
+          start: targetStart,
+          end: targetEnd,
+        })
+      ) {
+        setError("Conflict: another appointment already occupies this lane and time.");
         await loadAppointments();
         return;
       }
+
+      const targetClinicianId =
+        laneResolution.lanePatch?.clinicianUserId ?? event.resource.clinician_user_id;
+      if (targetClinicianId) {
+        const conflicts = findConflicts({
+          clinicianId: targetClinicianId,
+          start: targetStart,
+          end: targetEnd,
+          excludeId: event.resource.id,
+        });
+        setConflictWarning(buildConflictWarning(conflicts, targetClinicianId));
+      } else {
+        setConflictWarning(null);
+      }
+
       setRescheduleSavingId(event.resource.id);
       setAppointments((prev) =>
         prev.map((item) =>
           item.id === event.resource.id
-            ? { ...item, starts_at: start.toISOString(), ends_at: end.toISOString() }
+            ? applyLanePatch(
+                {
+                  ...item,
+                  starts_at: targetStart.toISOString(),
+                  ends_at: targetEnd.toISOString(),
+                },
+                laneResolution.lanePatch
+              )
             : item
         )
       );
-      const updated = await updateAppointmentTimes(event.resource.id, start, end);
+      const updated = await updateAppointmentTimes(
+        event.resource.id,
+        targetStart,
+        targetEnd,
+        laneResolution.lanePatch ?? undefined
+      );
       if (updated) {
         setAppointments((prev) =>
           prev.map((item) => (item.id === updated.id ? updated : item))
         );
+        setSelectedAppointmentId(updated.id);
+        setNotice("Appointment moved.");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to reschedule appointment";
@@ -2384,41 +2771,61 @@ export default function AppointmentsPage() {
     end: Date;
   }) {
     if (isRescheduleLocked) return;
+    const snappedRange = snapRangeToIncrement(start, end, DIARY_TIME_STEP_MINUTES);
+    const targetStart = snappedRange.start;
+    const targetEnd = snappedRange.end;
+    const laneKey = getLaneKeyForAppointment(event.resource);
+
     try {
-      if (!isRangeWithinSchedule(start, end, schedule)) {
+      if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
         setError("Resize is outside of working hours.");
+        await loadAppointments();
+        return;
+      }
+      if (
+        hasLaneOverlap({
+          appointmentId: event.resource.id,
+          laneKey,
+          start: targetStart,
+          end: targetEnd,
+        })
+      ) {
+        setError("Conflict: another appointment already occupies this lane and time.");
         await loadAppointments();
         return;
       }
       if (event.resource.clinician_user_id) {
         const conflicts = findConflicts({
           clinicianId: event.resource.clinician_user_id,
-          start,
-          end,
+          start: targetStart,
+          end: targetEnd,
           excludeId: event.resource.id,
         });
         setConflictWarning(
           buildConflictWarning(conflicts, event.resource.clinician_user_id)
         );
-      }
-      const confirmed = window.confirm("Update appointment duration?");
-      if (!confirmed) {
-        await loadAppointments();
-        return;
+      } else {
+        setConflictWarning(null);
       }
       setRescheduleSavingId(event.resource.id);
       setAppointments((prev) =>
         prev.map((item) =>
           item.id === event.resource.id
-            ? { ...item, starts_at: start.toISOString(), ends_at: end.toISOString() }
+            ? {
+                ...item,
+                starts_at: targetStart.toISOString(),
+                ends_at: targetEnd.toISOString(),
+              }
             : item
         )
       );
-      const updated = await updateAppointmentTimes(event.resource.id, start, end);
+      const updated = await updateAppointmentTimes(event.resource.id, targetStart, targetEnd);
       if (updated) {
         setAppointments((prev) =>
           prev.map((item) => (item.id === updated.id ? updated : item))
         );
+        setSelectedAppointmentId(updated.id);
+        setNotice("Appointment duration updated.");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to resize appointment";
@@ -2869,7 +3276,7 @@ export default function AppointmentsPage() {
                   </label>
                 )}
                 <div className="appointments-r4-shell-note">
-                  Time scale: 10-minute increments
+                  Time scale: {DIARY_TIME_STEP_MINUTES}-minute increments
                 </div>
               </div>
             )}
@@ -2881,9 +3288,10 @@ export default function AppointmentsPage() {
               >
                 {diaryColumns.map((column, index) => (
                   <div
-                    key={`${column.label}-${index}`}
+                    key={column.key}
                     className="appointments-r4-column"
                     data-testid={`appointments-diary-column-${index}`}
+                    data-column-key={column.key}
                     data-column-label={column.label}
                   >
                     <span className="appointments-r4-column-label">{column.label}</span>
@@ -2900,8 +3308,11 @@ export default function AppointmentsPage() {
               endAccessor="end"
               selectable
               resizable
-              step={10}
+              step={DIARY_TIME_STEP_MINUTES}
               timeslots={1}
+              resources={calendarResources}
+              resourceIdAccessor="id"
+              resourceTitleAccessor="title"
               onSelectSlot={handleSelectSlot}
               onSelectEvent={handleEventSelect}
               onDoubleClickEvent={handleEventDoubleClick}
