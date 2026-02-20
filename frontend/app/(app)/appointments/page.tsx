@@ -643,6 +643,7 @@ export default function AppointmentsPage() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [auditEntries, setAuditEntries] = useState<AppointmentAuditEntry[]>([]);
+  // Keyboard bindings are intentionally constrained for predictable diary shortcuts.
   useEffect(() => {
     function isEditableTarget(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false;
@@ -894,6 +895,26 @@ export default function AppointmentsPage() {
     [diaryFilteredAppointments, diaryGrouping, getChairLabel, getClinicianDisplayLabel]
   );
 
+  const selectedCalendarEvent = useMemo<CalendarEvent | undefined>(() => {
+    if (selectedAppointmentId === null) return undefined;
+    return calendarEvents.find(
+      (event) => event.resource.id === selectedAppointmentId
+    );
+  }, [calendarEvents, selectedAppointmentId]);
+
+  const sortedCalendarAppointmentIds = useMemo(() => {
+    return [...diaryFilteredAppointments]
+      .sort((a, b) => {
+        const startDiff =
+          new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
+        if (startDiff !== 0) return startDiff;
+        const endDiff = new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime();
+        if (endDiff !== 0) return endDiff;
+        return a.id - b.id;
+      })
+      .map((item) => item.id);
+  }, [diaryFilteredAppointments]);
+
   const isRescheduleLocked = rescheduleSavingId !== null;
 
   const highlightScrollTime = useMemo(() => {
@@ -912,6 +933,28 @@ export default function AppointmentsPage() {
         (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
       );
   }, [appointments, currentDate]);
+
+  function selectRelativeAppointment(direction: 1 | -1) {
+    if (sortedCalendarAppointmentIds.length === 0) return;
+    if (selectedAppointmentId === null) {
+      setSelectedAppointmentId(
+        direction > 0
+          ? sortedCalendarAppointmentIds[0]
+          : sortedCalendarAppointmentIds[sortedCalendarAppointmentIds.length - 1]
+      );
+      return;
+    }
+    const index = sortedCalendarAppointmentIds.indexOf(selectedAppointmentId);
+    if (index === -1) {
+      setSelectedAppointmentId(sortedCalendarAppointmentIds[0]);
+      return;
+    }
+    const nextIndex = Math.min(
+      sortedCalendarAppointmentIds.length - 1,
+      Math.max(0, index + direction)
+    );
+    setSelectedAppointmentId(sortedCalendarAppointmentIds[nextIndex]);
+  }
 
   const buildConflictWarning = useCallback(
     (
@@ -2062,11 +2105,89 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (
         event.target instanceof HTMLInputElement ||
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement
       ) {
+        return;
+      }
+      if (event.key === "Escape") {
+        let handled = false;
+        if (contextMenu) {
+          setContextMenu(null);
+          handled = true;
+        }
+        if (selectedAppointmentId !== null) {
+          setSelectedAppointmentId(null);
+          handled = true;
+        }
+        if (handled) {
+          event.preventDefault();
+          return;
+        }
+      }
+      if (event.key === "Enter" && selectedAppointmentId !== null) {
+        const appt = appointments.find((item) => item.id === selectedAppointmentId);
+        if (appt) {
+          event.preventDefault();
+          openAppointment(appt);
+          return;
+        }
+      }
+      if (
+        viewMode === "calendar" &&
+        (event.key === "ArrowUp" || event.key === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        selectRelativeAppointment(-1);
+        return;
+      }
+      if (
+        viewMode === "calendar" &&
+        (event.key === "ArrowDown" || event.key === "ArrowRight")
+      ) {
+        event.preventDefault();
+        selectRelativeAppointment(1);
+        return;
+      }
+      if (event.key === "PageUp" || event.key.toLowerCase() === "[") {
+        event.preventDefault();
+        const prev = new Date(currentDate);
+        prev.setDate(prev.getDate() - 1);
+        handleNavigate(prev);
+        if (viewMode === "calendar") {
+          const { start, end } = getRangeForView(prev, calendarView);
+          updateRange(start, end, calendarView, prev);
+        } else {
+          updateRange(prev, prev, "day", prev);
+        }
+        return;
+      }
+      if (event.key === "PageDown" || event.key.toLowerCase() === "]") {
+        event.preventDefault();
+        const next = new Date(currentDate);
+        next.setDate(next.getDate() + 1);
+        handleNavigate(next);
+        if (viewMode === "calendar") {
+          const { start, end } = getRangeForView(next, calendarView);
+          updateRange(start, end, calendarView, next);
+        } else {
+          updateRange(next, next, "day", next);
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        const today = new Date();
+        handleNavigate(today);
+        if (viewMode === "calendar") {
+          const { start, end } = getRangeForView(today, calendarView);
+          updateRange(start, end, calendarView, today);
+        } else {
+          updateRange(today, today, "day", today);
+        }
         return;
       }
       if (event.key === "Delete" && selectedAppointmentId) {
@@ -2106,7 +2227,18 @@ export default function AppointmentsPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [appointments, clipboard, lastSelectedSlot, pasteAppointment, selectedAppointmentId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    appointments,
+    calendarView,
+    clipboard,
+    contextMenu,
+    currentDate,
+    lastSelectedSlot,
+    pasteAppointment,
+    selectedAppointmentId,
+    viewMode,
+  ]);
 
   function updateRange(start: Date, end: Date, view: View, anchor: Date) {
     const normalizedEnd = normalizeRangeEnd(start, end);
@@ -2302,6 +2434,10 @@ export default function AppointmentsPage() {
   }
 
   function handleEventSelect(event: CalendarEvent) {
+    setSelectedAppointmentId(event.resource.id);
+  }
+
+  function handleEventDoubleClick(event: CalendarEvent) {
     openAppointment(event.resource);
   }
 
@@ -2386,8 +2522,15 @@ export default function AppointmentsPage() {
     );
   }
 
-  function eventStyleGetter(event: CalendarEvent) {
+  function eventStyleGetter(
+    event: CalendarEvent,
+    _start: Date,
+    _end: Date,
+    isCalendarSelected?: boolean
+  ) {
     const theme = statusThemeTokens[event.resource.status];
+    const isSelected =
+      Boolean(isCalendarSelected) || selectedAppointmentId === event.resource.id;
     const isHighlighted =
       highlightedAppointmentId && String(event.resource.id) === highlightedAppointmentId;
     return {
@@ -2396,9 +2539,9 @@ export default function AppointmentsPage() {
         borderColor: theme.border,
         color: theme.text,
         borderStyle: "solid",
-        borderWidth: isHighlighted ? 2 : 1,
-        outline: isHighlighted ? "2px solid var(--accent)" : undefined,
-        outlineOffset: isHighlighted ? 1 : undefined,
+        borderWidth: isHighlighted || isSelected ? 2 : 1,
+        outline: isHighlighted || isSelected ? "2px solid var(--accent)" : undefined,
+        outlineOffset: isHighlighted || isSelected ? 1 : undefined,
         boxShadow:
           event.resource.location_type === "visit"
             ? "0 0 0 2px rgba(255,255,255,0.5) inset"
@@ -2428,8 +2571,15 @@ export default function AppointmentsPage() {
     return {};
   }
 
-  function AppointmentEvent({ event }: { event: CalendarEvent }) {
+  function AppointmentEvent({
+    event,
+    selected,
+  }: {
+    event: CalendarEvent;
+    selected?: boolean;
+  }) {
     const appt = event.resource;
+    const isSelected = Boolean(selected) || selectedAppointmentId === appt.id;
     const patientDetail = patientLookup.get(appt.patient.id);
     const phone = patientDetail?.phone || "";
     const address = buildShortAddress(patientDetail);
@@ -2447,9 +2597,12 @@ export default function AppointmentsPage() {
     ].filter(Boolean);
     return (
       <div
-        className="appointments-r4-event"
+        className={`appointments-r4-event${isSelected ? " appointments-r4-event--selected" : ""}`}
         data-testid={`appointment-event-${appt.id}`}
         data-appointment-id={appt.id}
+        data-selected={isSelected ? "true" : "false"}
+        onClick={() => setSelectedAppointmentId(appt.id)}
+        onDoubleClick={() => openAppointment(appt)}
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -2751,10 +2904,12 @@ export default function AppointmentsPage() {
               timeslots={1}
               onSelectSlot={handleSelectSlot}
               onSelectEvent={handleEventSelect}
+              onDoubleClickEvent={handleEventDoubleClick}
               onEventDrop={handleEventDrop}
               onEventResize={handleEventResize}
               draggableAccessor={() => !isRescheduleLocked}
               resizableAccessor={() => !isRescheduleLocked}
+              selected={selectedCalendarEvent}
               view={calendarView}
               date={currentDate}
               onView={setCalendarView}
@@ -2829,11 +2984,12 @@ export default function AppointmentsPage() {
                       Boolean(appt.cancel_reason) || (noteCache[appt.id]?.length ?? 0) > 0;
                     const isHighlighted =
                       highlightedAppointmentId && String(appt.id) === highlightedAppointmentId;
+                    const isSelected = selectedAppointmentId === appt.id;
                     const alertFlags = buildPatientAlertFlags(patient ?? appt.patient);
                     return (
                       <tr
                         key={appt.id}
-                        className={`${isCancelled ? "row-muted" : ""}${isHighlighted ? " row-highlight" : ""}`}
+                        className={`${isCancelled ? "row-muted" : ""}${isHighlighted || isSelected ? " row-highlight" : ""}`}
                         onClick={() => setSelectedAppointmentId(appt.id)}
                         onDoubleClick={() => openAppointment(appt, "edit")}
                         onContextMenu={(event) => {
@@ -2914,10 +3070,44 @@ export default function AppointmentsPage() {
               gap: 6,
               minWidth: 180,
             }}
+            data-testid="appointments-context-menu"
             onClick={(event) => event.stopPropagation()}
           >
             <button
               className="btn btn-secondary"
+              data-testid="appointments-context-open"
+              onClick={() => {
+                openAppointment(contextMenu.appointment);
+                setContextMenu(null);
+              }}
+            >
+              Open
+            </button>
+            <button
+              className="btn btn-secondary"
+              data-testid="appointments-context-move"
+              onClick={() => {
+                setClipboard({ mode: "cut", appointment: contextMenu.appointment });
+                setNotice("Move mode enabled. Select a slot to paste.");
+                setContextMenu(null);
+              }}
+            >
+              Move
+            </button>
+            <button
+              className="btn btn-secondary"
+              data-testid="appointments-context-notes"
+              onClick={() => {
+                openAppointment(contextMenu.appointment, "edit");
+                setNotice("Appointment detail opened for notes/editing.");
+                setContextMenu(null);
+              }}
+            >
+              Notes
+            </button>
+            <button
+              className="btn btn-secondary"
+              data-testid="appointments-context-cancel"
               onClick={() => {
                 setCancelTarget(contextMenu.appointment);
                 setCancelReason("");
@@ -2929,52 +3119,17 @@ export default function AppointmentsPage() {
             </button>
             <button
               className="btn btn-secondary"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "arrived");
-                setContextMenu(null);
-              }}
-            >
-              Mark Arrived
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "in_progress");
-                setContextMenu(null);
-              }}
-            >
-              Mark In Progress
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "completed");
-                setContextMenu(null);
-              }}
-            >
-              Mark Complete
-            </button>
-            <button
-              className="btn btn-secondary"
+              data-testid="appointments-context-no-show"
               onClick={() => {
                 void updateAppointmentStatus(contextMenu.appointment.id, "no_show");
                 setContextMenu(null);
               }}
             >
-              Mark No Show
+              Did not attend
             </button>
             <button
               className="btn btn-secondary"
-              onClick={() => {
-                setClipboard({ mode: "cut", appointment: contextMenu.appointment });
-                setNotice("Cut appointment. Select a slot to paste.");
-                setContextMenu(null);
-              }}
-            >
-              Cut
-            </button>
-            <button
-              className="btn btn-secondary"
+              data-testid="appointments-context-copy"
               onClick={() => {
                 setClipboard({ mode: "copy", appointment: contextMenu.appointment });
                 setNotice("Copied appointment. Select a slot to paste.");
@@ -3270,7 +3425,7 @@ export default function AppointmentsPage() {
         )}
 
         {selectedAppointment && (
-          <div className="card" style={{ margin: 0 }}>
+          <div className="card" style={{ margin: 0 }} data-testid="appointment-detail-panel">
             <div className="stack">
               <div className="row">
                 <div>
@@ -3289,6 +3444,7 @@ export default function AppointmentsPage() {
                   </button>
                   <button
                     className="btn btn-secondary"
+                    data-testid="appointment-detail-close"
                     onClick={() => {
                       setSelectedAppointment(null);
                       setNotes([]);

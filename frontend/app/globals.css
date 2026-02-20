@@ -709,6 +709,11 @@ button {
   min-height: 100%;
 }
 
+.appointments-r4-event--selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .appointments-r4-event-title {
   display: flex;
   flex-wrap: wrap;

@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-20: Stage 158B started (`stage158b-diary-interactions`) for R4-like diary interaction parity (selection/open/context/keyboard scaffolding).
+  - Interaction behavior upgrades in `frontend/app/(app)/appointments/page.tsx`:
+    - selection model:
+      - single click selects appointment in calendar shell (`data-selected=true` on event card).
+      - selection highlight styling added (`appointments-r4-event--selected`).
+      - `Esc` clears selected appointment.
+    - open behavior:
+      - single click now selects only.
+      - double click opens appointment detail panel.
+      - `Enter` opens selected appointment detail panel.
+    - context menu scaffold:
+      - right-click opens menu with explicit actions and stable test IDs:
+        - `Open`, `Move`, `Notes`, `Cancel…`, `Did not attend`, `Copy`.
+      - closes on outside click and `Esc`.
+    - keyboard navigation scaffold:
+      - `ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight` moves selection across visible appointments.
+      - `PageUp` / `PageDown` moves previous/next day.
+      - `T` jumps to today.
+  - Acceptance/spec docs updated:
+    - `docs/APPOINTMENTS_UI_ACCEPTANCE.md` now contains concrete Stage 158B key map.
+  - Playwright coverage:
+    - new: `frontend/tests/appointments-diary-interactions.spec.ts`
+      - verifies click select, context menu open, outside-click close, `Esc` close+clear, `Enter` open, and double-click open.
+  - Evidence screenshots:
+    - `.run/stage158b/diary_selected_state.png`
+    - `.run/stage158b/diary_context_menu_open.png`
+    - `.run/stage158b/diary_detail_panel_open.png`
+  - Remaining Stage 158C focus:
+    - lane-aware drag/drop parity.
+    - duration-resize parity.
+    - conflict guardrails + visual feedback parity during move/resize.
 - 2026-02-20: Stage 158A started (`stage158a-diary-layout-parity`) for R4-like appointments diary shell (layout-first, day/week).
   - Diary shell layout changes (no new drag/resize behavior in this stage):
     - `frontend/app/(app)/appointments/page.tsx`

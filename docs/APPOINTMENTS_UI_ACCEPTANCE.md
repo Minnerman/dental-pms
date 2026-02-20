@@ -80,6 +80,13 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
   - Copy/cut/paste selected appointment
 - Escape:
   - Close active modal/context states
+- Stage 158B baseline key map:
+  - `Esc`: close context menu and clear selected appointment in diary shell.
+  - `Enter`: open selected appointment details.
+  - `ArrowUp`/`ArrowDown`: move appointment selection by order in current diary shell.
+  - `ArrowLeft`/`ArrowRight`: move appointment selection across current diary order/lane scaffold.
+  - `PageUp` / `PageDown`: previous day / next day.
+  - `T`: jump diary to today.
 
 ## Filtering and Search
 - Required filters:
@@ -126,4 +133,3 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
 ## Evidence Artifacts
 - Snapshot JSON: `.run/stage157/diary_snapshot_<date>_<view>.json`
 - UI screenshots: `.run/stage157/appointments_<view>_<date_or_week>.png`
-
