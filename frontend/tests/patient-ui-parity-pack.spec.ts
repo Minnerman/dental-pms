@@ -26,6 +26,12 @@ const lockedTabLabels = [
   "Notes",
   "Treatment",
 ];
+const headerBlockTestIds = [
+  "patient-header-name",
+  "patient-header-identifiers",
+  "patient-header-alerts",
+  "patient-header-actions",
+];
 
 async function assertLockedTabOrder(page: Page) {
   const tabs = page.getByTestId("patient-tabs").locator("button");
@@ -34,6 +40,18 @@ async function assertLockedTabOrder(page: Page) {
   for (const label of lockedTabLabels) {
     await expect(page.getByTestId(`patient-tab-${label}`)).toBeVisible();
   }
+}
+
+async function assertHeaderBlockOrder(page: Page) {
+  await expect(page.getByTestId("patient-header")).toBeVisible();
+  for (const testId of headerBlockTestIds) {
+    await expect(page.getByTestId(testId)).toBeVisible();
+  }
+  const blockOrder = await page
+    .getByTestId("patient-header")
+    .locator(":scope > [data-testid^='patient-header-']")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")));
+  expect(blockOrder).toEqual(headerBlockTestIds);
 }
 
 function buildShortcut(position: number) {
@@ -65,6 +83,7 @@ async function waitForPatientUiReady(
   await expect(page.getByText(new RegExp(`Patient #${patientId}\\b`))).toBeVisible({
     timeout: 20_000,
   });
+  await assertHeaderBlockOrder(page);
   await expect(page.getByTestId("patient-tabs")).toBeVisible();
   await assertLockedTabOrder(page);
   if (options?.expectChartingTab === true) {

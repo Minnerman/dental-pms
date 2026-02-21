@@ -10,21 +10,33 @@ Define a strict, testable acceptance contract for making the patient screen feel
 
 ## Scope
 - Stage 160A: evidence pack, representative patient set, screenshot harness, golden-hash guard.
-- Stage 160B: patient header + tab parity implementation and keyboard shortcut behavior.
+- Stage 160B: locked R4 default tab order/labels and keyboard shortcut behavior.
+- Stage 161: patient header parity (dense grouping, alerts, quick actions, sticky behavior decision).
 
-## Patient Header Layout
-- Name prominence:
-  - Patient full name is the dominant line.
-  - Identifier line includes patient ID and provenance metadata.
-- Demographics and identifiers:
-  - DOB and age are presented in one scan line.
-  - Contact primitives (phone/email) are visible without opening sub-panels.
-- Alerts:
-  - Allergy/medical/safeguarding/financial/access alerts are visible in header zone.
-  - Recall status badge is visible at header level.
-- Information density:
-  - Header groups are compact and scan-friendly, optimized for high-throughput usage.
-  - Grouping should mirror R4 style: identity -> risk/alerts -> contact/recall -> quick actions.
+## Header Parity (Stage 161)
+- Route `/patients/{id}/clinical` must include `data-testid="patient-header"`.
+- Required direct child blocks (strict DOM order):
+  1. `patient-header-name`
+  2. `patient-header-identifiers`
+  3. `patient-header-alerts`
+  4. `patient-header-actions`
+- `patient-header-name`:
+  - patient full name is the dominant line.
+  - includes patient ID and provenance context.
+- `patient-header-identifiers`:
+  - must include DOB and age.
+  - includes NHS number when present.
+  - includes legacy identifier/code when present.
+- `patient-header-alerts`:
+  - must surface flags for medical, financial, and notes context.
+  - must show recall badge/status at header level.
+- `patient-header-actions`:
+  - must expose quick actions (`Call`, `Email`) when supported by available patient data.
+  - includes quick route links without displacing the locked tab model.
+- Sticky decision:
+  - header remains sticky (`position: sticky`) to preserve high-throughput scanability on long pages.
+- Change control:
+  - header block IDs/order and required fields must not change unless this acceptance file, Playwright assertions, and golden hashes are updated in the same PR.
 
 ## Tabs and Navigation Model
 - Locked default order/labels (must match exactly, case-sensitive):
@@ -57,7 +69,7 @@ Define a strict, testable acceptance contract for making the patient screen feel
     - minimal activity
     - edge case with missing data
 - Screenshot pack:
-  - one screenshot per representative patient under `.run/stage160a/`.
+  - one screenshot per representative patient (stage-specific output directory allowed via env).
 - Golden hash mode:
   - `PATIENT_UI_GOLDEN_MODE=record|assert`
   - `PATIENT_UI_GOLDEN_HASHES=frontend/tests/fixtures/patient-ui-golden-hashes.json`
@@ -70,10 +82,11 @@ Define a strict, testable acceptance contract for making the patient screen feel
 - `frontend/tests/patient-ui-parity-pack.spec.ts` must cover:
   - deterministic representative patient set generation and persistence.
   - `/patients/{id}/clinical` loads for each representative patient.
-  - header and tab controls are visible before capture.
+  - header block test IDs exist and remain in strict DOM order.
+  - locked tabs exist and remain in strict label order.
   - screenshot artifact emitted per representative patient.
   - golden hash recording/assertion flow.
   - render timing within budget.
 
 ## Open Inputs
-- None for tab order/labels; the locked default list above is final for Stage 160B.
+- None. Any future contract drift requires synchronous updates to this file plus Playwright assertions and golden hashes.
