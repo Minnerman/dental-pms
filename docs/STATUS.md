@@ -61,6 +61,55 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163C scale-out chunk 4 started (`stage163c-restorative-scale-chunk4`) and completed with deterministic selection + idempotent import/parity gates for the final remainder.
+  - Cohort/ledger checkpoint:
+    - seen ledger confirmed at `800` before selection, then advanced `800 -> 974` after chunk4 append (no duplicates):
+      - `.run/seen_stage163c_restorative_treatments.txt`
+  - Deterministic selector run (`seed=17`, hashed order, exclude seen):
+    - post-exclude pool: `174` patients (`.run/stage163c/stage163c_restorative_post_exclude_pool_chunk4.csv`)
+    - selector report: `.run/stage163c/stage163c_chunk4_post_exclude_pool_selector.log`
+    - chunk4 selected: `174` patients (`.run/stage163c/stage163c_restorative_chunk4.csv`)
+  - Chunk4 import/idempotency:
+    - patients apply: `created=174` (`.run/stage163c/stage163c_chunk4_patients_apply.json`)
+    - patients rerun: `created=0`, `skipped=174` (`.run/stage163c/stage163c_chunk4_patients_rerun.json`)
+    - restorative canonical apply: `imported_created_total=762` (`.run/stage163c/stage163c_chunk4_restorative_apply.json`)
+    - restorative canonical rerun: `imported_created_total=0`, `skipped_total=762` (`.run/stage163c/stage163c_chunk4_restorative_rerun.json`)
+    - DB cross-check: `chunk_codes_count=174`, `patients_present_count=174`, `canonical_restorative_rows_count=762` (`.run/stage163c/stage163c_chunk4_db_counts.json`).
+  - Chunk4 parity:
+    - pass (`overall.status=pass`) for `restorative_treatments` (`.run/stage163c/stage163c_chunk4_restorative_parity.json`)
+    - `patients_with_data=171`, `patients_no_data=3` (warning-only no-data set).
+  - Chunk4 drop profile:
+    - summary: `.run/stage163c/stage163c_chunk4_drop_summary.json`
+    - top drop reasons:
+      - `restorative_status_ignored=668`
+      - `restorative_missing_tooth=25`
+      - `restorative_invalid_surface=15`
+    - per-patient explain sample in chunk:
+      - `.run/stage163c/stage163c_chunk4_drop_report_1015201.json` (`sql_count=3`, `pg_count=2`, `status_ignored=1`).
+  - Real restorative UI regression proof:
+    - refreshed proof file for current DB IDs:
+      - `.run/stage163c/restorative_proof_patients.json`
+    - Playwright pass: `frontend/tests/clinical-odontogram-restorative-real.spec.ts`
+    - chunk4 screenshot evidence:
+      - `.run/stage163c/chunk4/odontogram_restorative_real_16034.png`
+      - `.run/stage163c/chunk4/odontogram_restorative_real_16037.png`
+      - `.run/stage163c/chunk4/odontogram_restorative_real_16047.png`
+      - `.run/stage163c/chunk4/odontogram_restorative_real_16057.png`
+      - `.run/stage163c/chunk4/odontogram_restorative_real_16110.png`
+- 2026-02-21: Stage 163C completed for `restorative_treatments` with full-cohort close-out checks.
+  - Ledger/inventory closure:
+    - `.run/stage163c/stage163c_final_inventory_vs_ledger.json` confirms `inventory_count=974`, `ledger_count=974`, `missing_count=0`, `extra_count=0`.
+  - Full-cohort backfill/idempotency run (to ensure full DB coverage before final parity):
+    - patients apply: `created=800`, `skipped=174` (`.run/stage163c/stage163c_fullcohort_patients_apply.json`)
+    - patients rerun: `created=0`, `skipped=974` (`.run/stage163c/stage163c_fullcohort_patients_rerun.json`)
+    - restorative apply: `imported_created_total=4619`, `skipped_total=762` (`.run/stage163c/stage163c_fullcohort_restorative_apply.json`)
+    - restorative rerun: `imported_created_total=0`, `skipped_total=5381` (`.run/stage163c/stage163c_fullcohort_restorative_rerun.json`)
+  - Full-cohort parity:
+    - pass (`overall.status=pass`) for `restorative_treatments` (`.run/stage163c/stage163c_fullcohort_restorative_parity.json`)
+    - `patients_total=974`, `patients_with_data=959`, `patients_no_data=15`, `latest_match=959/959`, `latest_digest_match=959/959`.
+  - Stage 163C trend summary (chunks 1-4):
+    - restorative drop reasons remained in the same classes with `restorative_status_ignored` dominant and smaller `restorative_missing_tooth`/`restorative_invalid_surface`.
+    - real restorative odontogram regression proof remained green with screenshot evidence under `.run/stage163c/chunk1..chunk4/`.
 - 2026-02-21: Stage 163C scale-out chunk 3 started (`stage163c-restorative-scale-chunk3`) and completed with deterministic selection + idempotent import/parity gates.
   - Cohort/ledger checkpoint:
     - seen ledger confirmed at `600` before selection, then advanced `600 -> 800` after chunk3 append:
