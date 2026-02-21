@@ -61,6 +61,49 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 160A started (`stage160a-patient-ui-parity-pack`) for patient-screen R4 parity evidence + acceptance baseline.
+  - Acceptance contract added:
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - covers patient header density, tab model/order targets, keyboard shortcut expectations, screenshot/golden guard, and performance budget.
+  - Deterministic representative patient-set query implemented for parity runs:
+    - helper: `frontend/tests/helpers/patient-ui-representatives.ts`
+    - output artifact: `.run/stage160a/patient_representative_set.json`
+    - deterministic selection categories:
+      - busy appointments
+      - charting-dense
+      - alerts/notes
+      - minimal
+      - edge missing-data
+    - current local representative IDs:
+      - `14`, `25`, `58`, `69`, `112`
+    - note: current dataset fallback path was used for alerts/charting-rich categories (`0`-density cohort in scanned set), explicitly logged in the artifact.
+  - Playwright screenshot parity harness added:
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - captures `patient_ui_<id>.png` under `.run/stage160a/`
+    - currently generated:
+      - `.run/stage160a/patient_ui_14.png`
+      - `.run/stage160a/patient_ui_25.png`
+      - `.run/stage160a/patient_ui_58.png`
+      - `.run/stage160a/patient_ui_69.png`
+      - `.run/stage160a/patient_ui_112.png`
+    - adds render timing guard (`PATIENT_UI_RENDER_BUDGET_MS`, default `12000`).
+  - Golden hash guard added (record/assert mode):
+    - fixture: `frontend/tests/fixtures/patient-ui-golden-hashes.json`
+    - env controls:
+      - `PATIENT_UI_GOLDEN_MODE=record|assert`
+      - `PATIENT_UI_GOLDEN_HASHES=frontend/tests/fixtures/patient-ui-golden-hashes.json`
+      - `PATIENT_UI_SCREENSHOT_DIR` override
+  - Initial parity checklist (Stage 160A baseline):
+    - matches:
+      - sticky patient header with alerts and recall status is visible.
+      - clinical route renders both quick links and primary patient tab strip.
+      - deterministic screenshot harness and golden-hash guard are in place.
+      - render budget check is in place.
+    - top gaps for Stage 160B:
+      1. tab order/labels are not yet locked to a confirmed R4 order.
+      2. no dedicated patient tab keyboard shortcuts yet (`Ctrl/Cmd+1..n`).
+      3. header information grouping still needs explicit R4 visual density alignment.
+      4. stable test IDs for header/tabs/alerts are not yet implemented.
 - 2026-02-21: Stage 159 started (`stage159-diary-parity-hardening`) to lock R4-like diary behavior against regressions.
   - New hardening tests:
     - `frontend/tests/appointments-diary-parity-hardening.spec.ts`
