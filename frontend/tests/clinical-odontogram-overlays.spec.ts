@@ -4,6 +4,30 @@ import { expect, test } from "@playwright/test";
 
 import { createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
+import { resolvePatientRepresentativeSet } from "./helpers/patient-ui-representatives";
+
+test("clinical odontogram captures real-patient glyph evidence screenshot", async ({
+  page,
+  request,
+}) => {
+  mkdirSync(".run/stage162", { recursive: true });
+  await primePageAuth(page, request);
+  const representative = await resolvePatientRepresentativeSet(request, {
+    outputPath: ".run/stage160a/patient_representative_set.json",
+  });
+  const first = representative.patients[0];
+  expect(first).toBeTruthy();
+
+  await page.goto(`${getBaseUrl()}/patients/${first.patient_id}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Loading clinical…")).toHaveCount(0);
+  await page.screenshot({
+    path: ".run/stage162/odontogram_glyphs_real.png",
+    fullPage: true,
+  });
+});
 
 test("clinical odontogram renders R4 overlays with filters and tooth drill-down", async ({
   page,
@@ -11,6 +35,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
 }) => {
   mkdirSync(".run/stage153c", { recursive: true });
   mkdirSync(".run/stage155a", { recursive: true });
+  mkdirSync(".run/stage162", { recursive: true });
   await primePageAuth(page, request);
   const patientId = await createPatient(request, {
     first_name: "Overlay",
@@ -102,8 +127,8 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
             restorations: [
               {
                 type: "filling",
-                surfaces: ["M"],
-                meta: { source: "mock" },
+                surfaces: ["M", "O", "D"],
+                meta: { source: "mock", code_label: "MOD composite" },
               },
             ],
             missing: false,
@@ -127,9 +152,80 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
                 surfaces: [],
                 meta: { source: "mock", code_label: "White Crown", code_id: 3750 },
               },
+              {
+                type: "root_canal",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Root Canal Treatment", code_id: 3100 },
+              },
             ],
             missing: false,
             extracted: false,
+          },
+          "26": {
+            restorations: [
+              {
+                type: "bridge",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Bridge unit" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "46": {
+            restorations: [
+              {
+                type: "implant",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Implant fixture" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "11": {
+            restorations: [
+              {
+                type: "veneer",
+                surfaces: ["B"],
+                meta: { source: "mock", code_label: "Composite veneer" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "21": {
+            restorations: [
+              {
+                type: "inlay_onlay",
+                surfaces: ["I"],
+                meta: { source: "mock", code_label: "Ceramic inlay" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "31": {
+            restorations: [
+              {
+                type: "denture",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Partial denture segment" },
+              },
+            ],
+            missing: false,
+            extracted: false,
+          },
+          "25": {
+            restorations: [
+              {
+                type: "extraction",
+                surfaces: [],
+                meta: { source: "mock", code_label: "Extraction" },
+              },
+            ],
+            missing: false,
+            extracted: true,
           },
         },
       }),
@@ -146,8 +242,18 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveText("P1");
   expect(toothStateRequestSeen).toBeTruthy();
   await expect(page.getByTestId("tooth-restoration-UR5-filling-M")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UR5-filling-O")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UR5-filling-D")).toBeVisible();
   await expect(page.getByTestId("tooth-restoration-UR6-crown")).toBeVisible();
   await expect(page.getByTestId("tooth-restoration-LL6-crown")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-LL6-root_canal")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UL6-bridge")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-LR6-implant")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UR1-veneer-B")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UL1-inlay_onlay-I")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-LL1-denture")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UL5-extraction")).toBeVisible();
+  await expect(page.getByTestId("tooth-restoration-UL5-extracted")).toBeVisible();
   const crownTitle = await page
     .getByTestId("tooth-restoration-LL6-crown")
     .getAttribute("data-tooltip");
@@ -155,6 +261,10 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   expect(crownTitle ?? "").toContain("Completed");
   await page.screenshot({
     path: ".run/stage155a/tooth_state_ui_1015073.png",
+    fullPage: true,
+  });
+  await page.screenshot({
+    path: ".run/stage162/odontogram_glyphs_mock_fillings.png",
     fullPage: true,
   });
   await expect(page.getByTestId("tooth-surface-overlay-15-M")).toBeVisible();
@@ -186,6 +296,17 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("overlay-tooth-items")).toContainText(
     "Unmapped surface code; rendered as tooth-level fallback."
   );
+
+  await page.getByTestId("tooth-button-LL6").click();
+  await expect(page.getByTestId("tooth-state-restoration-crown")).toBeVisible();
+  await expect(page.getByTestId("tooth-state-restoration-root_canal")).toBeVisible();
+  await expect(
+    page.getByTestId("tooth-state-panel").locator("[data-testid^='tooth-state-restoration-'] strong")
+  ).toHaveText(["Crown", "Root canal"]);
+  await page.screenshot({
+    path: ".run/stage162/odontogram_glyphs_mock_rct.png",
+    fullPage: true,
+  });
 
   await page.getByTestId("clinical-overlay-filter-planned").click();
   await expect(page).toHaveURL(/overlay=planned/);

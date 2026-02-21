@@ -7,10 +7,17 @@ export type OdontogramRestorationType =
   | "filling"
   | "crown"
   | "bridge"
+  | "root_canal"
   | "rct"
   | "implant"
   | "denture"
+  | "veneer"
+  | "inlay_onlay"
+  | "post"
+  | "extraction"
   | "other";
+
+type NormalizedRestorationType = Exclude<OdontogramRestorationType, "rct">;
 
 export type OdontogramToothRestoration = {
   type: OdontogramRestorationType;
@@ -21,6 +28,12 @@ export type OdontogramToothRestoration = {
 type SurfaceShape = {
   key: R4SurfaceKey;
   points: string;
+};
+
+type NormalizedRestoration = {
+  type: NormalizedRestorationType;
+  surfaces: R4SurfaceKey[];
+  meta?: Record<string, unknown>;
 };
 
 const toothOutlinePath: Record<OdontogramToothType, string> = {
@@ -95,6 +108,63 @@ const surfaceAnchorByType: Record<
   },
 };
 
+const restorationRenderOrder: Record<NormalizedRestorationType, number> = {
+  filling: 1,
+  inlay_onlay: 2,
+  veneer: 3,
+  crown: 4,
+  bridge: 5,
+  root_canal: 6,
+  post: 7,
+  implant: 8,
+  denture: 9,
+  extraction: 10,
+  other: 11,
+};
+
+function normalizeRestorationType(type: OdontogramRestorationType): NormalizedRestorationType {
+  if (type === "rct") return "root_canal";
+  return type;
+}
+
+function normalizeSurfaces(surfaces: R4SurfaceKey[] | undefined): R4SurfaceKey[] {
+  const allowed = new Set<R4SurfaceKey>(["M", "O", "D", "B", "L", "I"]);
+  const unique = new Set<R4SurfaceKey>();
+  for (const surface of surfaces ?? []) {
+    if (allowed.has(surface)) unique.add(surface);
+  }
+  return Array.from(unique);
+}
+
+function restorationSortKey(item: NormalizedRestoration): string {
+  const codeLabel = typeof item.meta?.code_label === "string" ? item.meta.code_label : "";
+  const codeId =
+    typeof item.meta?.code_id === "number" || typeof item.meta?.code_id === "string"
+      ? String(item.meta.code_id)
+      : "";
+  return `${String(restorationRenderOrder[item.type]).padStart(2, "0")}|${item.type}|${item.surfaces.join("")}|${codeLabel}|${codeId}`;
+}
+
+function formatRestorationTooltip(restorations: NormalizedRestoration[]): string | undefined {
+  if (restorations.length === 0) return undefined;
+  const lines = restorations.map((restoration) => {
+    const codeLabelValue = restoration.meta?.code_label;
+    const codeIdValue = restoration.meta?.code_id;
+    const label =
+      typeof codeLabelValue === "string" && codeLabelValue.trim()
+        ? codeLabelValue.trim()
+        : typeof codeIdValue === "number" || typeof codeIdValue === "string"
+          ? `Code ${String(codeIdValue)}`
+          : "Unknown code";
+    const surfaceText =
+      restoration.surfaces.length > 0
+        ? `Surface: ${restoration.surfaces.join(",")}`
+        : "Surface: Whole tooth";
+    return `${label} (Completed) - ${surfaceText}`;
+  });
+  return lines.join("\n");
+}
+
 type Props = {
   toothKey: string;
   toothType: OdontogramToothType;
@@ -117,46 +187,82 @@ function OdontogramToothSvgImpl({
   onSurfaceClick,
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
+  const availableSurfaceKeys = new Set<R4SurfaceKey>(surfaces.map((surface) => surface.key));
+  const normalizedRestorations = restorations
+    .map((restoration): NormalizedRestoration => ({
+      type: normalizeRestorationType(restoration.type),
+      surfaces: normalizeSurfaces(restoration.surfaces).filter((surface) =>
+        availableSurfaceKeys.has(surface)
+      ),
+      meta: restoration.meta,
+    }))
+    .sort((a, b) => restorationSortKey(a).localeCompare(restorationSortKey(b)));
+
+  const restorationsByType = new Map<NormalizedRestorationType, NormalizedRestoration[]>();
+  for (const restoration of normalizedRestorations) {
+    const bucket = restorationsByType.get(restoration.type) ?? [];
+    bucket.push(restoration);
+    restorationsByType.set(restoration.type, bucket);
+  }
+
+  const hasRestoration = (type: NormalizedRestorationType) =>
+    (restorationsByType.get(type) ?? []).length > 0;
+  const restorationsForType = (type: NormalizedRestorationType) => restorationsByType.get(type) ?? [];
+  const tooltipForType = (type: NormalizedRestorationType) =>
+    formatRestorationTooltip(restorationsForType(type));
+
   const fillingSurfaces = new Set<R4SurfaceKey>();
-  for (const restoration of restorations) {
-    if (restoration.type !== "filling") continue;
-    for (const surface of restoration.surfaces ?? []) {
+  for (const restoration of restorationsForType("filling")) {
+    for (const surface of restoration.surfaces) {
       fillingSurfaces.add(surface);
     }
   }
+  const hasWholeToothFilling = restorationsForType("filling").some(
+    (restoration) => restoration.surfaces.length === 0
+  );
 
-  const hasRestoration = (type: OdontogramRestorationType) =>
-    restorations.some((restoration) => restoration.type === type);
+  const veneerSurfaces = new Set<R4SurfaceKey>();
+  for (const restoration of restorationsForType("veneer")) {
+    if (restoration.surfaces.length === 0) {
+      veneerSurfaces.add("B");
+      continue;
+    }
+    for (const surface of restoration.surfaces) {
+      veneerSurfaces.add(surface);
+    }
+  }
+  if (!availableSurfaceKeys.has("B")) {
+    veneerSurfaces.delete("B");
+  }
 
-  const restorationTooltipForType = (type: OdontogramRestorationType): string | undefined => {
-    const matches = restorations.filter((restoration) => restoration.type === type);
-    if (matches.length === 0) return undefined;
+  const inlayOnlaySurfaces = new Set<R4SurfaceKey>();
+  for (const restoration of restorationsForType("inlay_onlay")) {
+    if (restoration.surfaces.length === 0) continue;
+    for (const surface of restoration.surfaces) {
+      inlayOnlaySurfaces.add(surface);
+    }
+  }
+  if (inlayOnlaySurfaces.size === 0 && hasRestoration("inlay_onlay")) {
+    const defaultSurface: R4SurfaceKey = toothType === "incisor" || toothType === "canine" ? "I" : "O";
+    if (availableSurfaceKeys.has(defaultSurface)) {
+      inlayOnlaySurfaces.add(defaultSurface);
+    }
+  }
 
-    const lines = matches.map((restoration) => {
-      const codeLabelValue = restoration.meta?.code_label;
-      const codeIdValue = restoration.meta?.code_id;
-      const label =
-        typeof codeLabelValue === "string" && codeLabelValue.trim()
-          ? codeLabelValue.trim()
-          : typeof codeIdValue === "number" || typeof codeIdValue === "string"
-            ? `Code ${String(codeIdValue)}`
-            : "Unknown code";
-      const surfaceText =
-        restoration.surfaces && restoration.surfaces.length > 0
-          ? `Surface: ${restoration.surfaces.join(",")}`
-          : "Surface: Whole tooth";
-      return `${label} (Completed) - ${surfaceText}`;
-    });
+  const crownTooltip = tooltipForType("crown");
+  const bridgeTooltip = tooltipForType("bridge");
+  const rootCanalTooltip = tooltipForType("root_canal");
+  const postTooltip = tooltipForType("post");
+  const implantTooltip = tooltipForType("implant");
+  const dentureTooltip = tooltipForType("denture");
+  const veneerTooltip = tooltipForType("veneer");
+  const inlayOnlayTooltip = tooltipForType("inlay_onlay");
+  const otherTooltip = tooltipForType("other");
 
-    return lines.join("\n");
-  };
-
-  const crownTooltip = restorationTooltipForType("crown");
-  const bridgeTooltip = restorationTooltipForType("bridge");
-  const rctTooltip = restorationTooltipForType("rct");
-  const implantTooltip = restorationTooltipForType("implant");
-  const dentureTooltip = restorationTooltipForType("denture");
-  const otherTooltip = restorationTooltipForType("other");
+  const extractionFromRestoration = hasRestoration("extraction");
+  const extractedState = extracted || extractionFromRestoration;
+  const stateDominant = missing || extractedState;
+  const isUpperArch = toothKey.startsWith("U");
 
   return (
     <svg
@@ -170,13 +276,16 @@ function OdontogramToothSvgImpl({
     >
       <path
         d={toothOutlinePath[toothType]}
-        fill={active ? "rgba(51, 255, 180, 0.12)" : "rgba(255, 255, 255, 0.8)"}
+        fill={active ? "rgba(51, 255, 180, 0.12)" : "rgba(255, 255, 255, 0.82)"}
         stroke="rgba(17, 24, 39, 0.55)"
         strokeWidth={2}
       />
+
       {surfaces.map((surface) => {
         const isSelected = selectedSurface === surface.key;
         const hasFilling = fillingSurfaces.has(surface.key);
+        const hasVeneer = veneerSurfaces.has(surface.key);
+        const hasInlayOnlay = inlayOnlaySurfaces.has(surface.key);
         return (
           <g key={`${toothKey}-${surface.key}`}>
             <polygon
@@ -197,21 +306,58 @@ function OdontogramToothSvgImpl({
             {hasFilling && (
               <polygon
                 points={surface.points}
-                fill="rgba(239, 68, 68, 0.26)"
-                stroke="rgba(239, 68, 68, 0.6)"
-                strokeWidth={1}
+                fill="rgba(239, 68, 68, 0.30)"
+                stroke="rgba(220, 38, 38, 0.88)"
+                strokeWidth={1.15}
                 pointerEvents="none"
                 data-testid={`tooth-restoration-${toothKey}-filling-${surface.key}`}
+              />
+            )}
+            {hasVeneer && (
+              <polygon
+                points={surface.points}
+                fill="rgba(59, 130, 246, 0.24)"
+                stroke="rgba(37, 99, 235, 0.8)"
+                strokeWidth={1}
+                pointerEvents="none"
+                data-testid={`tooth-restoration-${toothKey}-veneer-${surface.key}`}
+              />
+            )}
+            {hasInlayOnlay && (
+              <polygon
+                points={surface.points}
+                fill="rgba(16, 185, 129, 0.23)"
+                stroke="rgba(5, 150, 105, 0.85)"
+                strokeWidth={1}
+                pointerEvents="none"
+                data-testid={`tooth-restoration-${toothKey}-inlay_onlay-${surface.key}`}
               />
             )}
           </g>
         );
       })}
+
+      {hasWholeToothFilling && (
+        <g pointerEvents="none" data-testid={`tooth-restoration-${toothKey}-filling-generic`}>
+          <rect
+            x="40"
+            y="44"
+            width="20"
+            height="14"
+            rx="3"
+            fill="rgba(239, 68, 68, 0.25)"
+            stroke="rgba(220, 38, 38, 0.9)"
+            strokeWidth={1.2}
+          />
+          <line x1="42" y1="51" x2="58" y2="51" stroke="rgba(220, 38, 38, 0.9)" strokeWidth={1.1} />
+        </g>
+      )}
+
       {hasRestoration("crown") && (
         <path
           d={toothOutlinePath[toothType]}
-          fill="rgba(251, 191, 36, 0.14)"
-          stroke="rgba(202, 138, 4, 0.95)"
+          fill="rgba(251, 191, 36, 0.19)"
+          stroke="rgba(180, 83, 9, 0.95)"
           strokeWidth={4}
           pointerEvents="none"
           data-tooltip={crownTooltip}
@@ -220,33 +366,61 @@ function OdontogramToothSvgImpl({
           {crownTooltip ? <title>{crownTooltip}</title> : null}
         </path>
       )}
+
       {hasRestoration("bridge") && (
-        <line
-          x1="20"
-          y1="20"
-          x2="80"
-          y2="20"
-          stroke="rgba(14, 116, 144, 0.95)"
-          strokeWidth={3}
-          strokeDasharray="5 3"
+        <g
           pointerEvents="none"
           data-tooltip={bridgeTooltip}
           data-testid={`tooth-restoration-${toothKey}-bridge`}
         >
           {bridgeTooltip ? <title>{bridgeTooltip}</title> : null}
-        </line>
-      )}
-      {hasRestoration("rct") && (
-        <g
-          pointerEvents="none"
-          data-tooltip={rctTooltip}
-          data-testid={`tooth-restoration-${toothKey}-rct`}
-        >
-          {rctTooltip ? <title>{rctTooltip}</title> : null}
-          <circle cx="50" cy="42" r="6" fill="rgba(2, 132, 199, 0.9)" />
-          <line x1="50" y1="48" x2="50" y2="84" stroke="rgba(2, 132, 199, 0.9)" strokeWidth={2.5} />
+          <line x1="18" y1="18" x2="82" y2="18" stroke="rgba(15, 118, 110, 0.95)" strokeWidth={3.2} />
+          <circle
+            cx="50"
+            cy="18"
+            r="4.2"
+            fill="rgba(204, 251, 241, 0.95)"
+            stroke="rgba(15, 118, 110, 0.95)"
+            strokeWidth={1.4}
+          />
         </g>
       )}
+
+      {hasRestoration("root_canal") && (
+        <g
+          pointerEvents="none"
+          data-tooltip={rootCanalTooltip}
+          data-testid={`tooth-restoration-${toothKey}-root_canal`}
+        >
+          {rootCanalTooltip ? <title>{rootCanalTooltip}</title> : null}
+          <line x1="50" y1="36" x2="50" y2="82" stroke="rgba(2, 132, 199, 0.95)" strokeWidth={2.4} />
+          <line x1="45" y1="40" x2="41" y2="76" stroke="rgba(2, 132, 199, 0.88)" strokeWidth={1.8} />
+          <line x1="55" y1="40" x2="59" y2="76" stroke="rgba(2, 132, 199, 0.88)" strokeWidth={1.8} />
+          <circle cx="50" cy="33" r="4" fill="rgba(186, 230, 253, 0.98)" stroke="rgba(2, 132, 199, 0.95)" strokeWidth={1.2} />
+          <circle cx="50" cy="83" r="2.8" fill="rgba(2, 132, 199, 0.95)" />
+        </g>
+      )}
+
+      {hasRestoration("post") && (
+        <g
+          pointerEvents="none"
+          data-tooltip={postTooltip}
+          data-testid={`tooth-restoration-${toothKey}-post`}
+        >
+          {postTooltip ? <title>{postTooltip}</title> : null}
+          <rect
+            x="47"
+            y="46"
+            width="6"
+            height="30"
+            rx="2"
+            fill="rgba(146, 64, 14, 0.9)"
+            stroke="rgba(120, 53, 15, 0.95)"
+            strokeWidth={1}
+          />
+        </g>
+      )}
+
       {hasRestoration("implant") && (
         <g
           pointerEvents="none"
@@ -255,30 +429,77 @@ function OdontogramToothSvgImpl({
         >
           {implantTooltip ? <title>{implantTooltip}</title> : null}
           <rect
-            x="44"
-            y="72"
-            width="12"
-            height="18"
-            rx="2"
-            fill="rgba(107, 114, 128, 0.85)"
+            x="43"
+            y="66"
+            width="14"
+            height="22"
+            rx="2.5"
+            fill="rgba(107, 114, 128, 0.87)"
+            stroke="rgba(55, 65, 81, 0.95)"
+            strokeWidth={1}
           />
-          <line x1="44" y1="80" x2="56" y2="80" stroke="rgba(255, 255, 255, 0.7)" strokeWidth={1} />
-          <line x1="44" y1="86" x2="56" y2="86" stroke="rgba(255, 255, 255, 0.7)" strokeWidth={1} />
+          <line x1="43" y1="72" x2="57" y2="72" stroke="rgba(243, 244, 246, 0.85)" strokeWidth={1} />
+          <line x1="43" y1="78" x2="57" y2="78" stroke="rgba(243, 244, 246, 0.85)" strokeWidth={1} />
+          <line x1="43" y1="84" x2="57" y2="84" stroke="rgba(243, 244, 246, 0.85)" strokeWidth={1} />
         </g>
       )}
+
       {hasRestoration("denture") && (
-        <path
-          d="M18 82 Q50 98 82 82"
-          fill="none"
-          stroke="rgba(217, 119, 6, 0.9)"
-          strokeWidth={4}
+        <g
           pointerEvents="none"
           data-tooltip={dentureTooltip}
           data-testid={`tooth-restoration-${toothKey}-denture`}
         >
           {dentureTooltip ? <title>{dentureTooltip}</title> : null}
+          {isUpperArch ? (
+            <path
+              d="M18 18 Q50 2 82 18"
+              fill="none"
+              stroke="rgba(217, 119, 6, 0.92)"
+              strokeWidth={4}
+            />
+          ) : (
+            <path
+              d="M18 82 Q50 98 82 82"
+              fill="none"
+              stroke="rgba(217, 119, 6, 0.92)"
+              strokeWidth={4}
+            />
+          )}
+        </g>
+      )}
+
+      {hasRestoration("veneer") && (
+        <path
+          d={toothOutlinePath[toothType]}
+          fill="none"
+          stroke="rgba(37, 99, 235, 0.8)"
+          strokeWidth={1.2}
+          strokeDasharray="2 2"
+          pointerEvents="none"
+          data-tooltip={veneerTooltip}
+          data-testid={`tooth-restoration-${toothKey}-veneer`}
+        >
+          {veneerTooltip ? <title>{veneerTooltip}</title> : null}
         </path>
       )}
+
+      {hasRestoration("inlay_onlay") && (
+        <circle
+          cx="50"
+          cy="50"
+          r="8"
+          fill="rgba(16, 185, 129, 0.22)"
+          stroke="rgba(5, 150, 105, 0.9)"
+          strokeWidth={1.6}
+          pointerEvents="none"
+          data-tooltip={inlayOnlayTooltip}
+          data-testid={`tooth-restoration-${toothKey}-inlay_onlay`}
+        >
+          {inlayOnlayTooltip ? <title>{inlayOnlayTooltip}</title> : null}
+        </circle>
+      )}
+
       {hasRestoration("other") && (
         <circle
           cx="50"
@@ -294,29 +515,41 @@ function OdontogramToothSvgImpl({
           {otherTooltip ? <title>{otherTooltip}</title> : null}
         </circle>
       )}
+
+      {stateDominant && (
+        <path
+          d={toothOutlinePath[toothType]}
+          fill="rgba(255, 255, 255, 0.66)"
+          stroke="none"
+          pointerEvents="none"
+        />
+      )}
+
       {missing && (
         <line
-          x1="18"
+          x1="16"
           y1="86"
-          x2="82"
+          x2="84"
           y2="14"
-          stroke="rgba(220, 38, 38, 0.85)"
-          strokeWidth={3}
+          stroke="rgba(220, 38, 38, 0.9)"
+          strokeWidth={4}
           pointerEvents="none"
           data-testid={`tooth-restoration-${toothKey}-missing`}
         />
       )}
-      {extracted && (
-        <line
-          x1="18"
-          y1="14"
-          x2="82"
-          y2="86"
-          stroke="rgba(220, 38, 38, 0.85)"
-          strokeWidth={3}
-          pointerEvents="none"
-          data-testid={`tooth-restoration-${toothKey}-extracted`}
-        />
+
+      {extractedState && (
+        <g data-testid={`tooth-restoration-${toothKey}-extraction`} pointerEvents="none">
+          <line
+            x1="16"
+            y1="14"
+            x2="84"
+            y2="86"
+            stroke="rgba(220, 38, 38, 0.9)"
+            strokeWidth={4}
+            data-testid={`tooth-restoration-${toothKey}-extracted`}
+          />
+        </g>
       )}
     </svg>
   );
