@@ -61,6 +61,43 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163D started (`stage163d-restorative-behaviour-hardening`) to harden restorative behaviour regression acceptance.
+  - Acceptance rerun doc added:
+    - `docs/ACCEPTANCE_STAGE163C_RESTORATIVE.md`
+    - linked from Stage 163C completion block in this status file.
+  - Drop-case patient selection (evidence-first from Stage 163C drop reports):
+    - selection artefact: `.run/stage163d/restorative_dropcase_patients_selected.json`
+    - `legacy_patient_code=1001442` selected for `restorative_invalid_surface` from:
+      - `.run/stage163c/stage163c_chunk1_drop_report_1001442.json` (`restorative_invalid_surface=1`)
+    - `legacy_patient_code=1015127` selected for `restorative_missing_tooth` from:
+      - `.run/stage163c/stage163c_chunk4_drop_report_1015127.json` (`restorative_missing_tooth=1`)
+  - Proof patient pack extended with the two drop-case anchors:
+    - canonical proof input refreshed: `.run/stage163c/restorative_proof_patients.json`
+    - Stage 163D copy: `.run/stage163d/restorative_proof_patients_stage163d.json`
+    - proof cohort now covers legacy codes: `1010387, 1012851, 1014697, 1011086, 1012003, 1001442, 1015127`.
+  - CI-safe restorative parity smoke (pinned 5-code cohort):
+    - fixture committed: `backend/tests/fixtures/r4/restorative_parity_smoke_patients.json`
+    - new smoke test: `backend/tests/r4_import/test_r4_restorative_parity_smoke_pinned.py`
+    - pinned legacy codes: `1010387, 1012851, 1011086, 1001442, 1015127`
+    - runtime smoke artefact: `.run/stage163d/stage163d_restorative_parity_smoke.json`
+    - result: `overall.status=pass`, `patients_total=5`, `patients_with_data=5`, `patients_no_data=0`.
+  - Stage 163D proof/data refresh artefacts:
+    - proof code file: `.run/stage163d/stage163d_proof_codes.csv`
+    - patients import stats: `.run/stage163d/stage163d_proof_patients_apply.json` (`patients_created=7`)
+    - restorative import stats: `.run/stage163d/stage163d_proof_restorative_apply.json` (`imported_created_total=80`)
+  - Real restorative UI proof run (updated Stage 163D proof file):
+    - Playwright pass: `frontend/tests/clinical-odontogram-restorative-real.spec.ts`
+    - screenshot evidence under `.run/stage163d/`:
+      - `odontogram_restorative_real_17035.png`
+      - `odontogram_restorative_real_17036.png`
+      - `odontogram_restorative_real_17037.png`
+      - `odontogram_restorative_real_17038.png`
+      - `odontogram_restorative_real_17039.png`
+      - `odontogram_restorative_real_17040.png`
+      - `odontogram_restorative_real_17041.png`
+  - Stage 163D targeted test runs:
+    - `docker compose run --rm -T backend pytest -q tests/r4_import/test_sqlserver_extract.py tests/r4_import/test_r4_import_cli.py tests/r4_import/test_r4_restorative_treatments_drop_report.py tests/r4_import/test_r4_restorative_treatments_parity_pack.py tests/r4_import/test_r4_parity_run.py tests/r4_import/test_r4_restorative_parity_smoke_pinned.py`
+    - result: `57 passed`.
 - 2026-02-21: Stage 163C scale-out chunk 4 started (`stage163c-restorative-scale-chunk4`) and completed with deterministic selection + idempotent import/parity gates for the final remainder.
   - Cohort/ledger checkpoint:
     - seen ledger confirmed at `800` before selection, then advanced `800 -> 974` after chunk4 append (no duplicates):
@@ -99,6 +136,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - 2026-02-21: Stage 163C completed for `restorative_treatments` with full-cohort close-out checks.
   - Ledger/inventory closure:
     - `.run/stage163c/stage163c_final_inventory_vs_ledger.json` confirms `inventory_count=974`, `ledger_count=974`, `missing_count=0`, `extra_count=0`.
+  - Acceptance rerun checklist:
+    - `docs/ACCEPTANCE_STAGE163C_RESTORATIVE.md`
   - Full-cohort backfill/idempotency run (to ensure full DB coverage before final parity):
     - patients apply: `created=800`, `skipped=174` (`.run/stage163c/stage163c_fullcohort_patients_apply.json`)
     - patients rerun: `created=0`, `skipped=974` (`.run/stage163c/stage163c_fullcohort_patients_rerun.json`)
