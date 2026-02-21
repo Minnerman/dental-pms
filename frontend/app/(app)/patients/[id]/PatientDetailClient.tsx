@@ -43,6 +43,9 @@ type PaymentMethod = "cash" | "card" | "bank_transfer" | "other";
 
 type Patient = {
   id: number;
+  nhs_number?: string | null;
+  legacy_id?: string | null;
+  legacy_source?: string | null;
   first_name: string;
   last_name: string;
   date_of_birth?: string | null;
@@ -3242,13 +3245,45 @@ export default function PatientDetailClient({
     setPendingScrollTarget(null);
   }, [pendingScrollTarget, tab, showBookingModal, scrollToAnchor]);
 
-  const alerts = [
-    patient?.allergies ? { label: "Allergies", tone: "danger" } : null,
-    patient?.medical_alerts ? { label: "Medical alert", tone: "warning" } : null,
-    patient?.safeguarding_notes ? { label: "Safeguarding", tone: "warning" } : null,
-    patient?.alerts_financial ? { label: "Financial", tone: "warning" } : null,
-    patient?.alerts_access ? { label: "Access", tone: "warning" } : null,
-  ].filter(Boolean) as { label: string; tone: "danger" | "warning" }[];
+  const phoneHref = buildPhoneHref(patient?.phone);
+  const emailHref = patient?.email ? `mailto:${patient.email}` : null;
+  const patientHeaderIdentifiers = [
+    { label: "Patient", value: patient ? `#${patient.id}` : "—" },
+    { label: "DOB", value: formatShortDate(patient?.date_of_birth) },
+    { label: "Age", value: formatAge(patient?.date_of_birth) },
+  ] as { label: string; value: string }[];
+  if (patient?.nhs_number?.trim()) {
+    patientHeaderIdentifiers.push({ label: "NHS no", value: patient.nhs_number.trim() });
+  }
+  if (patient?.legacy_id?.trim()) {
+    patientHeaderIdentifiers.push({ label: "Legacy ID", value: patient.legacy_id.trim() });
+  }
+  if (chartingMeta?.legacy_patient_code != null) {
+    patientHeaderIdentifiers.push({
+      label: "Legacy code",
+      value: String(chartingMeta.legacy_patient_code),
+    });
+  }
+  const headerAlertFlags = [
+    patient?.allergies || patient?.medical_alerts
+      ? {
+          label: "Medical",
+          tone: "danger",
+          value: [patient?.allergies, patient?.medical_alerts].filter(Boolean).join(" · "),
+        }
+      : null,
+    patient?.alerts_financial
+      ? { label: "Financial", tone: "warning", value: patient.alerts_financial }
+      : null,
+    patient?.safeguarding_notes || patient?.notes
+      ? {
+          label: "Notes",
+          tone: "warning",
+          value: [patient?.safeguarding_notes, patient?.notes].filter(Boolean).join(" · "),
+        }
+      : null,
+    patient?.alerts_access ? { label: "Access", tone: "warning", value: patient.alerts_access } : null,
+  ].filter(Boolean) as { label: string; tone: "danger" | "warning"; value: string }[];
 
   function normalizeToothCode(code?: string | null) {
     return code ? code.trim().toUpperCase() : null;
@@ -3731,6 +3766,13 @@ export default function PatientDetailClient({
       age -= 1;
     }
     return `${age}`;
+  }
+
+  function buildPhoneHref(value?: string | null) {
+    if (!value) return null;
+    const normalized = value.replace(/[^\d+]/g, "");
+    if (!normalized) return null;
+    return `tel:${normalized}`;
   }
 
   function formatDurationMinutes(start: string, end: string) {
@@ -4718,19 +4760,42 @@ export default function PatientDetailClient({
       ) : patient ? (
         <div className="stack">
           <div className="card" style={{ position: "sticky", top: 12, zIndex: 1 }}>
-            <div className="stack" style={{ gap: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-                <div>
-                  <h2 style={{ margin: 0 }}>
-                    {patient.first_name} {patient.last_name}
-                  </h2>
-                  <div style={{ color: "var(--muted)" }}>
-                    Patient #{patient.id} • Created by {patient.created_by.email}
-                  </div>
+            <div className="stack" style={{ gap: 12 }} data-testid="patient-header">
+              <div data-testid="patient-header-name" className="stack" style={{ gap: 6 }}>
+                <h2 style={{ margin: 0 }}>
+                  {patient.first_name} {patient.last_name}
+                </h2>
+                <div style={{ color: "var(--muted)", display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <span>Patient #{patient.id}</span>
+                  <span>Category {categoryLabels[patient.patient_category]}</span>
+                  <span>Care {careSettingLabels[patient.care_setting]}</span>
+                  <span>Created by {patient.created_by.email}</span>
                 </div>
+              </div>
+
+              <div data-testid="patient-header-identifiers" className="stack" style={{ gap: 6 }}>
+                <div className="label">Identifiers</div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {patientHeaderIdentifiers.map((item) => (
+                    <div key={item.label}>
+                      <div className="label">{item.label}</div>
+                      <div>{item.value || "—"}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div data-testid="patient-header-alerts" className="stack" style={{ gap: 8 }}>
+                <div className="label">Alerts and flags</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  {alerts.length === 0 && <span className="badge">No alerts</span>}
-                  {alerts.map((alert) => (
+                  {headerAlertFlags.length === 0 && <span className="badge">No alerts</span>}
+                  {headerAlertFlags.map((alert) => (
                     <span
                       key={alert.label}
                       className="badge"
@@ -4751,8 +4816,68 @@ export default function PatientDetailClient({
                     <span className="badge">Recall not set</span>
                   )}
                 </div>
+                {headerAlertFlags.length > 0 && (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {headerAlertFlags.map((alert) => (
+                      <div key={`${alert.label}-detail`}>
+                        <strong>{alert.label}:</strong> {alert.value}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
+              <div data-testid="patient-header-actions" className="stack" style={{ gap: 8 }}>
+                <div className="label">Quick actions</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  {phoneHref ? (
+                    <a className="btn btn-secondary" href={phoneHref}>
+                      Call
+                    </a>
+                  ) : (
+                    <span className="badge">No phone</span>
+                  )}
+                  {emailHref ? (
+                    <a className="btn btn-secondary" href={emailHref}>
+                      Email
+                    </a>
+                  ) : (
+                    <span className="badge">No email</span>
+                  )}
+                  <button className="btn btn-secondary" type="button" onClick={copyAddress}>
+                    Copy address
+                  </button>
+                  {copyNotice && <span className="badge">{copyNotice}</span>}
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <div className="label">Quick links</div>
+                  <div style={tabRowStyle}>
+                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}`}>
+                      Main route
+                    </Link>
+                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/clinical`}>
+                      Clinical route
+                    </Link>
+                    {chartingViewerEnabled && (
+                      <Link
+                        style={tabStyle(tab === "charting", true)}
+                        href={`/patients/${patientId}/charting`}
+                      >
+                        Charting
+                      </Link>
+                    )}
+                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
+                      Timeline
+                    </Link>
+                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/audit`}>
+                      Audit
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="stack" style={{ gap: 12, marginTop: 12 }}>
               <div
                 style={{
                   display: "grid",
@@ -4761,12 +4886,12 @@ export default function PatientDetailClient({
                 }}
               >
                 <div>
-                  <div className="label">DOB</div>
-                  <div>{patient.date_of_birth || "—"}</div>
-                </div>
-                <div>
                   <div className="label">Phone</div>
                   <div>{patient.phone || "—"}</div>
+                </div>
+                <div>
+                  <div className="label">Email</div>
+                  <div>{patient.email || "—"}</div>
                 </div>
                 <div>
                   <div className="label">Recall due</div>
@@ -4778,22 +4903,6 @@ export default function PatientDetailClient({
                     <span className="badge">
                       {recallStatusLabels[patient.recall_status || "due"]}
                     </span>
-                  </div>
-                </div>
-                <div>
-                  <div className="label">Email</div>
-                  <div>{patient.email || "—"}</div>
-                </div>
-                <div>
-                  <div className="label">Category</div>
-                  <div>
-                    <span className="badge">{categoryLabels[patient.patient_category]}</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="label">Care setting</div>
-                  <div>
-                    <span className="badge">{careSettingLabels[patient.care_setting]}</span>
                   </div>
                 </div>
                 <div>
@@ -4823,15 +4932,13 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 6 }}>
                     <div className="label">Visit summary</div>
                     <div>
-                      <strong>Visit address:</strong>{" "}
-                      {patient.visit_address_text || "—"}
+                      <strong>Visit address:</strong> {patient.visit_address_text || "—"}
                     </div>
                     <div>
                       <strong>Access notes:</strong> {patient.access_notes || "—"}
                     </div>
                     <div>
-                      <strong>Primary contact:</strong>{" "}
-                      {patient.primary_contact_name || "—"}{" "}
+                      <strong>Primary contact:</strong> {patient.primary_contact_name || "—"}{" "}
                       {patient.primary_contact_relationship
                         ? `(${patient.primary_contact_relationship})`
                         : ""}
@@ -4860,64 +4967,6 @@ export default function PatientDetailClient({
                     <div>
                       <strong>Notes:</strong> {patient.referral_notes || "—"}
                     </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button className="btn btn-secondary" type="button" onClick={copyAddress}>
-                  Copy address
-                </button>
-                {copyNotice && <span className="badge">{copyNotice}</span>}
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <div className="label">Quick links</div>
-                <div style={tabRowStyle}>
-                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}`}>
-                    Main route
-                  </Link>
-                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}/clinical`}>
-                    Clinical route
-                  </Link>
-                  {chartingViewerEnabled && (
-                    <Link style={tabStyle(tab === "charting", true)} href={`/patients/${patientId}/charting`}>
-                      Charting
-                    </Link>
-                  )}
-                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
-                    Timeline
-                  </Link>
-                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}/audit`}>
-                    Audit
-                  </Link>
-                </div>
-              </div>
-
-              {(patient.allergies ||
-                patient.medical_alerts ||
-                patient.safeguarding_notes ||
-                patient.alerts_financial ||
-                patient.alerts_access) && (
-                <div className="grid grid-3">
-                  <div className="stack" style={{ gap: 6 }}>
-                    <div className="label">Allergies</div>
-                    <div>{patient.allergies || "—"}</div>
-                  </div>
-                  <div className="stack" style={{ gap: 6 }}>
-                    <div className="label">Medical alerts</div>
-                    <div>{patient.medical_alerts || "—"}</div>
-                  </div>
-                  <div className="stack" style={{ gap: 6 }}>
-                    <div className="label">Safeguarding</div>
-                    <div>{patient.safeguarding_notes || "—"}</div>
-                  </div>
-                  <div className="stack" style={{ gap: 6 }}>
-                    <div className="label">Financial</div>
-                    <div>{patient.alerts_financial || "—"}</div>
-                  </div>
-                  <div className="stack" style={{ gap: 6 }}>
-                    <div className="label">Access needs</div>
-                    <div>{patient.alerts_access || "—"}</div>
                   </div>
                 </div>
               )}
