@@ -61,6 +61,21 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 159 started (`stage159-diary-parity-hardening`) to lock R4-like diary behavior against regressions.
+  - New hardening tests:
+    - `frontend/tests/appointments-diary-parity-hardening.spec.ts`
+      - sampled start-time positioning parity against snapshot data.
+      - status visual mapping parity for `booked`/`arrived`/`completed`.
+      - drag/drop + resize reflected by `GET /appointments/snapshot`.
+      - light render timing guard (`APPOINTMENTS_DIARY_RENDER_BUDGET_MS`, default `12000`).
+  - Screenshot golden drift control:
+    - `frontend/tests/appointments-diary-parity-pack.spec.ts` now supports hash-based controlled mode:
+      - `APPOINTMENTS_DIARY_GOLDEN_MODE=record` writes baseline hashes.
+      - `APPOINTMENTS_DIARY_GOLDEN_MODE=assert` compares current screenshots to baseline hashes.
+      - `APPOINTMENTS_DIARY_GOLDEN_HASHES` customizes baseline manifest path.
+  - Diary parity state:
+    - achieved: shell layout, interactions, drag/resize, shortcuts, snapshot parity checks.
+    - remaining: optional screenshot-diff visual review gate in CI, and advanced dense-week collision ergonomics parity.
 - 2026-02-20: Stage 158D started (`stage158d-diary-polish-layer`) for R4-like diary polish (shortcuts, real context actions, fast navigation).
   - Diary polish upgrades in `frontend/app/(app)/appointments/page.tsx`:
     - keyboard shortcuts:

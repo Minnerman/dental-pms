@@ -155,9 +155,17 @@ Define a strict, testable acceptance contract for making Dental PMS appointments
   - Drag/drop moves appointment by time and lane.
   - Resize adjusts appointment duration in 10-minute increments.
   - Overlap attempt in same lane is blocked with visible feedback.
+- Stage 159 hardening:
+  - Sampled appointment start-time positioning in UI aligns with snapshot start times.
+  - Status visual mapping (booked/arrived/completed at minimum) is asserted.
+  - Drag/resize results are validated against `GET /appointments/snapshot`.
 - Context and shortcuts:
   - Right-click menu core actions work.
   - Keyboard shortcuts for new/search/copy/cut/paste/escape work.
+- Screenshot drift control:
+  - parity screenshot harness supports golden-hash recording and assertion modes:
+    - `APPOINTMENTS_DIARY_GOLDEN_MODE=record`
+    - `APPOINTMENTS_DIARY_GOLDEN_MODE=assert`
 - Filters:
   - Filter toggles update visible dataset deterministically.
   - URL date/view persistence remains stable after refresh.
