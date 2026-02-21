@@ -1,0 +1,17 @@
+{
+  "representative_days": [
+    "2026-01-15",
+    "2026-01-10",
+    "2026-02-04",
+    "2026-01-20",
+    "2026-01-19"
+  ],
+  "hashes": {
+    "appointments_day_2026-01-15.png": "6ad361088ee4a2ffb2418ea416d4888f5bb2513176e91d42f802e4441cce57ff",
+    "appointments_day_2026-01-10.png": "1de0af2af9d4364d9999c30220cb3d545e25016bb9601f09af48729a6bf1122a",
+    "appointments_day_2026-02-04.png": "feb4d44a961b0fc8217aa1753c685dd6c4284ae173322e97e96e8090dee47ec1",
+    "appointments_day_2026-01-20.png": "73943160b4aec08f95bca2ee937488bbd3da2663a96fadea6784cacd3a4b66c9",
+    "appointments_day_2026-01-19.png": "9ada2f0872e36c443213a16804b203de4d7572def2cc71c84cabb374bd36dfce",
+    "appointments_week_2026-01-15.png": "73a4aac84c99d2f50289f4e1945c97a710e5d01dc1a733e3a73fa70edc817a01"
+  }
+}
