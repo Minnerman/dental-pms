@@ -12,59 +12,59 @@ def test_apply_drop_reason_skeleton_counts_reasons_and_includes_non_restorative_
 
     rows = [
         CompletedTreatmentFindingRow(
-            legacy_patient_code=None,
-            completed_at=date(2020, 1, 1),
+            patient_code=None,
+            completed_date=date(2020, 1, 1),
             tooth=11,
             code_id=1,
             treatment_label="Soft Tissue Examination",
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1001,
-            completed_at=None,
+            patient_code=1001,
+            completed_date=None,
             tooth=11,
             code_id=1,
             treatment_label="Soft Tissue Examination",
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1001,
-            completed_at=date(2020, 1, 2),
+            patient_code=1001,
+            completed_date=date(2020, 1, 2),
             tooth=None,
             code_id=1,
             treatment_label="Soft Tissue Examination",
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1001,
-            completed_at=date(2020, 1, 3),
+            patient_code=1001,
+            completed_date=date(2020, 1, 3),
             tooth=11,
             code_id=None,
             treatment_label="Soft Tissue Examination",
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1001,
-            completed_at=date(2020, 1, 4),
+            patient_code=1001,
+            completed_date=date(2020, 1, 4),
             tooth=11,
             code_id=2,
             treatment_label="Crown",
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1001,
-            completed_at=date(2020, 1, 5),
+            patient_code=1001,
+            completed_date=date(2020, 1, 5),
             tooth=11,
             code_id=3,
             treatment_label="Soft Tissue Examination",
             ref_id=900,
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1001,
-            completed_at=date(2020, 1, 6),
+            patient_code=1001,
+            completed_date=date(2020, 1, 6),
             tooth=12,
             code_id=4,
             treatment_label="Soft Tissue Examination",
             ref_id=900,
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1002,
-            completed_at=date(2020, 1, 7),
+            patient_code=1002,
+            completed_date=date(2020, 1, 7),
             tooth=22,
             code_id=5,
             treatment_label="Exam and cleaning together",
@@ -75,7 +75,7 @@ def test_apply_drop_reason_skeleton_counts_reasons_and_includes_non_restorative_
     accepted, report = apply_drop_reason_skeleton(rows, date_from=date_from, date_to=date_to)
 
     assert len(accepted) == 2
-    assert {row.legacy_patient_code for row in accepted} == {1001, 1002}
+    assert {row.patient_code for row in accepted} == {1001, 1002}
     assert report.missing_patient_code == 1
     assert report.out_of_window == 1
     assert report.missing_tooth == 1
@@ -91,8 +91,8 @@ def test_apply_drop_reason_skeleton_uses_fallback_key_when_ref_id_missing():
 
     rows = [
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1010,
-            completed_at=date(2020, 2, 1),
+            patient_code=1010,
+            completed_date=date(2020, 2, 1),
             tooth=14,
             code_id=20,
             treatment_label="Soft Tissue Examination",
@@ -101,8 +101,8 @@ def test_apply_drop_reason_skeleton_uses_fallback_key_when_ref_id_missing():
             tp_item=2,
         ),
         CompletedTreatmentFindingRow(
-            legacy_patient_code=1010,
-            completed_at=date(2020, 2, 1),
+            patient_code=1010,
+            completed_date=date(2020, 2, 1),
             tooth=14,
             code_id=20,
             treatment_label="Soft Tissue Examination",

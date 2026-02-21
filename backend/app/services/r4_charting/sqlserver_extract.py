@@ -6,6 +6,9 @@ import hashlib
 from typing import Iterable
 
 from app.services.r4_charting.canonical_types import CanonicalRecordInput
+from app.services.r4_charting.completed_treatment_findings_import import (
+    collect_completed_treatment_finding_canonical_records,
+)
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
 
@@ -48,6 +51,13 @@ class SqlServerExtractReport:
     restorative_status_ignored: int = 0
     restorative_not_completed: int = 0
     restorative_missing_code_id: int = 0
+    missing_patient_code: int = 0
+    missing_tooth: int = 0
+    missing_code_id: int = 0
+    out_of_window: int = 0
+    restorative_classified: int = 0
+    duplicate_key: int = 0
+    included: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return {
@@ -59,6 +69,13 @@ class SqlServerExtractReport:
             "restorative_status_ignored": self.restorative_status_ignored,
             "restorative_not_completed": self.restorative_not_completed,
             "restorative_missing_code_id": self.restorative_missing_code_id,
+            "missing_patient_code": self.missing_patient_code,
+            "missing_tooth": self.missing_tooth,
+            "missing_code_id": self.missing_code_id,
+            "out_of_window": self.out_of_window,
+            "restorative_classified": self.restorative_classified,
+            "duplicate_key": self.duplicate_key,
+            "included": self.included,
         }
 
 
@@ -388,6 +405,31 @@ class SqlServerChartingExtractor:
                     )
                 )
 
+        if _include("completed_treatment_findings", "completed_treatment_finding") and hasattr(
+            self._source, "list_completed_treatment_findings"
+        ):
+            findings_rows = self._iter_completed_treatment_findings(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
+            finding_records, findings_report = collect_completed_treatment_finding_canonical_records(
+                findings_rows,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            records.extend(finding_records)
+            report.missing_patient_code += findings_report.missing_patient_code
+            report.missing_tooth += findings_report.missing_tooth
+            report.missing_code_id += findings_report.missing_code_id
+            report.out_of_window += findings_report.out_of_window
+            report.restorative_classified += findings_report.restorative_classified
+            report.duplicate_key += findings_report.duplicate_key
+            report.included += findings_report.included
+
         if _include("bpe_furcation", "bpe_furcations"):
             for row in self._iter_bpe_furcations(
                 patients_from=patients_from,
@@ -698,6 +740,49 @@ class SqlServerChartingExtractor:
                     include_not_completed=True,
                     require_tooth=False,
                     status_descriptions=None,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_completed_treatment_findings(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        date_from: date | None,
+        date_to: date | None,
+        limit: int | None,
+    ):
+        if not hasattr(self._source, "list_completed_treatment_findings"):
+            return
+        if not patient_codes:
+            yield from self._source.list_completed_treatment_findings(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_completed_treatment_findings(
+                    patients_from=code,
+                    patients_to=code,
+                    date_from=date_from,
+                    date_to=date_to,
+                    limit=batch_limit,
                 ):
                     yield item
                     if remaining is not None:

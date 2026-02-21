@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163F pipeline wiring started (`stage163f-completed-treatment-findings-pipeline`) for `completed_treatment_findings` (no scale-out in this PR).
+  - Pipeline components added:
+    - SQL Server source extraction:
+      - `backend/app/services/r4_import/sqlserver_source.py`
+      - method: `list_completed_treatment_findings()` from `dbo.vwCompletedTreatmentTransactions`
+      - window semantics aligned with scout inventory: `CompletedDate >= date_from` and `< date_to` (end-exclusive).
+    - charting canonical extraction + filters:
+      - `backend/app/services/r4_charting/completed_treatment_findings_import.py`
+      - `backend/app/services/r4_charting/sqlserver_extract.py`
+      - drop-reasons tracked: `missing_patient_code`, `missing_tooth`, `missing_code_id`, `out_of_window`, `restorative_classified`, `duplicate_key`.
+    - CLI import domain wiring:
+      - `backend/app/scripts/r4_import.py` (`--domains completed_treatment_findings` under `--entity charting_canonical`)
+    - drop report + parity pack:
+      - `backend/app/scripts/r4_completed_treatment_findings_drop_report.py`
+      - `backend/app/scripts/r4_completed_treatment_findings_parity_pack.py`
+      - `backend/app/scripts/r4_parity_run.py` domain list includes `completed_treatment_findings`.
+  - Stage 163F bounded trial commands (pipeline check, no scale-out):
+    - import dry-run:
+      - `python -m app.scripts.r4_import --source sqlserver --entity charting_canonical --patient-codes-file /tmp/stage163f_small_cohort.csv --charting-from 2017-01-01 --charting-to 2026-02-01 --domains completed_treatment_findings --stats-out /tmp/stage163f_pipeline_trial_stats.json --output-json /tmp/stage163f_pipeline_trial_report.json`
+    - parity run:
+      - `python -m app.scripts.r4_parity_run --domains completed_treatment_findings --date-from 2017-01-01 --date-to 2026-02-01 --patient-codes-file /tmp/stage163f_small_cohort.csv --output-json /tmp/stage163f_pipeline_trial_parity.json`
+    - drop explain:
+      - `python -m app.scripts.r4_completed_treatment_findings_drop_report --patient-code <legacy_code> --date-from 2017-01-01 --date-to 2026-02-01 --output-json /tmp/stage163f_pipeline_trial_drop_report.json`
+  - Stage 163F artefact target paths for pipeline checks:
+    - `.run/stage163f/stage163f_pipeline_trial_stats.json`
+    - `.run/stage163f/stage163f_pipeline_trial_report.json`
+    - `.run/stage163f/stage163f_pipeline_trial_parity.json`
+    - `.run/stage163f/stage163f_pipeline_trial_drop_report_<legacy_code>.json`
 - 2026-02-21: Stage 163F started (`stage163f-completed-treatment-findings-import-scout`) to scout the next charting domain after restorative hardening.
   - Selected scout domain: `completed_treatment_findings` from `dbo.vwCompletedTreatmentTransactions` (read-only).
   - Domain selection rationale (evidence-first):
