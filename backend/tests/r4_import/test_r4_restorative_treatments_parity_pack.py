@@ -77,3 +77,53 @@ def test_build_parity_report_latest_key_and_digest_match(monkeypatch):
     assert patient["latest_digest_match"] is True
     assert patient["canonical_latest_key"]["ref_id"] == 100
     assert patient["sqlserver_latest_key"]["ref_id"] == 100
+
+
+def test_sqlserver_rows_filters_invalid_surface_and_requires_code_id():
+    class _DummyItem:
+        def __init__(
+            self,
+            *,
+            patient_code=1001,
+            recorded_at=datetime(2025, 1, 1),
+            surface=0,
+            code_id=400,
+            ref_id=100,
+        ):
+            self.patient_code = patient_code
+            self.recorded_at = recorded_at
+            self.completion_date = None
+            self.transaction_date = None
+            self.creation_date = None
+            self.acceptance_date = None
+            self.ref_id = ref_id
+            self.tp_number = 1
+            self.tp_item = 1
+            self.tp_item_key = 200
+            self.trans_code = 300
+            self.code_id = code_id
+            self.tooth = 16
+            self.surface = surface
+            self.status_code = 1
+            self.status_description = "Fillings"
+            self.description = "Composite filling"
+            self.complete = True
+            self.completed = True
+
+    class _DummySource:
+        def list_restorative_treatments(self, **kwargs):
+            assert kwargs["require_code_id"] is True
+            return [
+                _DummyItem(surface=0, ref_id=101),
+                _DummyItem(surface=224, ref_id=102),
+            ]
+
+    rows = pack._sqlserver_rows(
+        _DummySource(),
+        1001,
+        date_from=datetime(2024, 1, 1).date(),
+        date_to=datetime(2026, 1, 1).date(),
+        row_limit=100,
+    )
+    assert len(rows) == 1
+    assert rows[0]["ref_id"] == 101

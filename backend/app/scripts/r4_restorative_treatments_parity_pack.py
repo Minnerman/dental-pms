@@ -12,6 +12,8 @@ from app.db.session import SessionLocal
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
+_RESTORATIVE_SURFACE_VALID_MASK = 0b111111
+
 
 def _parse_patient_codes_csv(raw: str) -> list[int]:
     out: list[int] = []
@@ -58,6 +60,14 @@ def _in_date_window(value: datetime | None, start: date | None, end: date | None
     if end and day > end:
         return False
     return True
+
+
+def _is_valid_restorative_surface(surface: int | None) -> bool:
+    if surface is None or surface == 0:
+        return True
+    if surface < 0:
+        return False
+    return (surface & ~_RESTORATIVE_SURFACE_VALID_MASK) == 0
 
 
 def _latest_sort_tuple(row: dict[str, object]) -> tuple[str, int, int, int, int, int]:
@@ -178,6 +188,7 @@ def _sqlserver_rows(
         date_from=date_from,
         date_to=date_to,
         limit=row_limit,
+        require_code_id=True,
     ):
         recorded_at = (
             item.recorded_at
@@ -186,6 +197,8 @@ def _sqlserver_rows(
             or item.creation_date
         )
         if not _in_date_window(recorded_at, date_from, date_to):
+            continue
+        if not _is_valid_restorative_surface(item.surface):
             continue
         rows.append(
             {
