@@ -61,6 +61,44 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163C scale-out chunk 1 started (`stage163c-restorative-scale-chunk1`) using deterministic selection + seen ledger resume.
+  - Cohort/ledger checkpoint:
+    - restorative inventory remains `974` in-window patients (`.run/stage163c/restorative_treatments_inventory.csv`).
+    - Stage 163C seen ledger seeded from Stage 163B and advanced from `200 -> 400`:
+      - `.run/seen_stage163c_restorative_treatments.txt`
+  - Deterministic selector run (`seed=17`, hashed order, exclude seen):
+    - post-exclude pool: `774` patients (`.run/stage163c/stage163c_restorative_post_exclude_pool.csv`).
+    - chunk1 selected: `200` patients (`.run/stage163c/stage163c_restorative_chunk1.csv`).
+  - Chunk1 import/idempotency:
+    - patients apply: `created=200` (`.run/stage163c/stage163c_chunk1_patients_apply.json`)
+    - patients rerun: `created=0`, `skipped=200` (`.run/stage163c/stage163c_chunk1_patients_rerun.json`)
+    - restorative canonical apply: `imported_created_total=888` (`.run/stage163c/stage163c_chunk1_restorative_apply.json`)
+    - restorative canonical rerun: `imported_created_total=0`, `skipped_total=888` (`.run/stage163c/stage163c_chunk1_restorative_rerun.json`)
+    - DB cross-check: `chunk_codes_count=200`, `patients_present_count=200`, `canonical_restorative_rows_count=888` (`.run/stage163c/stage163c_chunk1_db_counts.json`).
+  - Drop-reason hardening applied to parity comparator:
+    - `backend/app/scripts/r4_restorative_treatments_parity_pack.py` now aligns SQL comparator rows with canonical inclusion rules for this domain:
+      - requires `code_id` on SQL source rows
+      - ignores invalid restorative surface bitmasks
+    - regression test added in `backend/tests/r4_import/test_r4_restorative_treatments_parity_pack.py`.
+  - Chunk1 parity:
+    - pass (`overall.status=pass`) for `restorative_treatments` (`.run/stage163c/stage163c_chunk1_restorative_parity.json`)
+    - `patients_with_data=196`, `patients_no_data=4` (warning-only no-data set).
+  - Chunk1 drop profile:
+    - summary: `.run/stage163c/stage163c_chunk1_drop_summary.json`
+    - top drop reasons:
+      - `restorative_status_ignored=942`
+      - `restorative_missing_tooth=37`
+      - `restorative_invalid_surface=24`
+    - per-patient explain sample in chunk:
+      - `.run/stage163c/stage163c_chunk1_drop_report_1001442.json` (`sql_count=23`, `pg_count=3`, drops explained by `status_ignored=18`, `invalid_surface=1`).
+  - Real restorative UI regression proof refreshed against current DB patient IDs:
+    - proof file: `.run/stage163c/restorative_proof_patients.json` (5 patients, includes pinned legacy code `1014579`).
+    - screenshots:
+      - `.run/stage163c/odontogram_restorative_real_15444.png`
+      - `.run/stage163c/odontogram_restorative_real_15388.png`
+      - `.run/stage163c/odontogram_restorative_real_15367.png`
+      - `.run/stage163c/odontogram_restorative_real_15311.png`
+      - `.run/stage163c/odontogram_restorative_real_15357.png`
 - 2026-02-21: Stage 163C started (`stage163c-restorative-scale-hardening`) with explain/guard-first hardening for `restorative_treatments`.
   - Canonical drop-reason hardening:
     - SQL Server extraction widened for restorative diagnostics in `backend/app/services/r4_import/sqlserver_source.py`:
