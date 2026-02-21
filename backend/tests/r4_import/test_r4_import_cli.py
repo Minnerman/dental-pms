@@ -802,3 +802,7 @@ def test_cli_charting_canonical_stats_out_separates_candidates_and_dropped(tmp_p
     assert payload["stats"]["dropped_out_of_range_total"] == 3
     assert payload["stats"]["dropped_missing_date_total"] == 2
     assert payload["stats"]["candidates_total"] == 5
+    assert payload["stats"]["dropped_reasons"] == {
+        "missing_date": 2,
+        "out_of_range": 3,
+    }

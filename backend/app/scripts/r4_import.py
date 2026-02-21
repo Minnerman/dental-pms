@@ -353,6 +353,20 @@ def _int_value(value: object) -> int:
     return int(value) if isinstance(value, int) else 0
 
 
+def _dropped_reason_totals(dropped: dict[str, object]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for key, value in dropped.items():
+        if isinstance(value, int):
+            out[key] = value
+    return out
+
+
+def _dropped_candidates_total(dropped: dict[str, object]) -> int:
+    totals = _dropped_reason_totals(dropped)
+    totals.pop("undated_included", None)
+    return sum(totals.values())
+
+
 def _normalize_charting_stats(
     *,
     stats: dict[str, object],
@@ -362,13 +376,12 @@ def _normalize_charting_stats(
     if not isinstance(dropped, dict):
         dropped = {}
     candidates_total = _int_value(report.get("total_records"))
-    candidates_total += _int_value(dropped.get("out_of_range"))
-    candidates_total += _int_value(dropped.get("missing_date"))
-    candidates_total += _int_value(dropped.get("duplicate_unique_key"))
+    candidates_total += _dropped_candidates_total(dropped)
 
     by_source = report.get("by_source")
     if not isinstance(by_source, dict):
         by_source = {}
+    dropped_reasons = _dropped_reason_totals(dropped)
 
     normalized: dict[str, object] = {
         "total": _int_value(stats.get("total")),
@@ -385,6 +398,7 @@ def _normalize_charting_stats(
         "undated_included_total": _int_value(dropped.get("undated_included")),
         "unmapped_patients_total": _int_value(stats.get("unmapped_patients")),
         "by_source_fetched": by_source,
+        "dropped_reasons": dropped_reasons,
     }
     return normalized
 
@@ -429,9 +443,7 @@ def _finalize_charting_report(
         "skipped": _int_value(stats.get("skipped")),
         "unmapped_patients": _int_value(stats.get("unmapped_patients")),
         "candidates_total": _int_value(report.get("total_records"))
-        + _int_value(dropped.get("out_of_range"))
-        + _int_value(dropped.get("missing_date"))
-        + _int_value(dropped.get("duplicate_unique_key")),
+        + _dropped_candidates_total(dropped),
         "imported_created_total": _int_value(stats.get("created")),
         "imported_updated_total": _int_value(stats.get("updated")),
         "skipped_total": _int_value(stats.get("skipped")),
@@ -439,6 +451,7 @@ def _finalize_charting_report(
         "dropped_missing_date_total": _int_value(dropped.get("missing_date")),
         "undated_included_total": _int_value(dropped.get("undated_included")),
         "unmapped_patients_total": _int_value(stats.get("unmapped_patients")),
+        "dropped_reasons": _dropped_reason_totals(dropped),
     }
     report.update(
         {
@@ -651,6 +664,7 @@ def _run_charting_canonical_batched(
         "by_source_fetched": aggregate_by_source,
         "batches_total": len(batches),
         "batches_completed": completed_batches,
+        "dropped_reasons": aggregate_dropped,
     }
 
     final_report: dict[str, object] = {

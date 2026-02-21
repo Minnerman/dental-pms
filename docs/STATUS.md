@@ -61,6 +61,52 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163C started (`stage163c-restorative-scale-hardening`) with explain/guard-first hardening for `restorative_treatments`.
+  - Canonical drop-reason hardening:
+    - SQL Server extraction widened for restorative diagnostics in `backend/app/services/r4_import/sqlserver_source.py`:
+      - `list_restorative_treatments(...)` now supports optional controls for `require_tooth`, `status_descriptions`, and `require_code_id`.
+      - when `require_tooth=False`, rows with null tooth now flow through (needed to count `missing_tooth` drops explicitly).
+    - extractor reason counters added in `backend/app/services/r4_charting/sqlserver_extract.py`:
+      - `restorative_missing_tooth`
+      - `restorative_invalid_surface`
+      - `restorative_status_ignored`
+      - `restorative_not_completed`
+      - `restorative_missing_code_id`
+    - charting canonical CLI stats now expose per-run dropped reason maps:
+      - `backend/app/scripts/r4_import.py` adds `stats.dropped_reasons` and uses reason totals when computing `candidates_total`.
+  - New diagnostic script:
+    - `backend/app/scripts/r4_restorative_treatments_drop_report.py`
+    - output includes:
+      - `sql_count`
+      - `pg_count`
+      - `pg_rows_by_status`
+      - `pg_rows_by_type`
+      - `dropped_reasons`
+      - `delta_sql_minus_pg`
+  - Stage 163C mismatch evidence for `patient_code=1000487` (window `2017-01-01..2026-02-01`):
+    - drop report: `.run/stage163c/stage163c_restorative_drop_report_1000487.json`
+    - key result:
+      - `sql_count=53`
+      - `pg_count=25`
+      - `delta_sql_minus_pg=28`
+      - primary dropped reasons:
+        - `restorative_status_ignored=25`
+        - `restorative_invalid_surface=3`
+      - explanation: this gap is currently fully explained by explicit restorative status filtering plus invalid-surface rejection in canonical extraction.
+  - Regression hardening pack for non-crown glyph rendering:
+    - new Playwright spec: `frontend/tests/clinical-odontogram-restorative-real.spec.ts`
+    - deterministic proof-patient set artifact:
+      - `.run/stage163c/restorative_proof_patients.json`
+      - includes `5` patients, pinned proof legacy code `1014579`
+    - evidence screenshots:
+      - `.run/stage163c/odontogram_restorative_real_15189.png`
+      - `.run/stage163c/odontogram_restorative_real_15184.png`
+      - `.run/stage163c/odontogram_restorative_real_15188.png`
+      - `.run/stage163c/odontogram_restorative_real_15186.png`
+      - `.run/stage163c/odontogram_restorative_real_15187.png`
+  - Stage 163C scope status:
+    - explain/guard-first slice completed (drop reasons + report + regression proof pack).
+    - deterministic scale-out from `200 -> 974` remains pending follow-up chunks.
 - 2026-02-21: Stage 163B started (`stage163b-restorative-import-parity`) to import the first real restorative charting domain (`restorative_treatments` from `dbo.vwTreatments`) into canonical records and feed `tooth-state`.
   - Canonical domain plumbing completed:
     - SQL Server source reader added: `list_restorative_treatments` in `backend/app/services/r4_import/sqlserver_source.py` (SELECT-only; completed + tooth-specific restorative statuses).
