@@ -18,6 +18,7 @@ from app.services.r4_import.types import (
     R4TreatmentPlan,
     R4TreatmentPlanItem,
     R4RestorativeTreatment,
+    R4CompletedTreatmentFinding,
     R4TreatmentPlanReview,
     R4ToothSystem,
     R4ToothSurface,
@@ -3315,6 +3316,97 @@ class R4SqlServerSource:
                 expiry_date=row.get("expiry_date"),
                 expired_by=int(row["expired_by"]) if row.get("expired_by") is not None else None,
                 deleted_at=row.get("deleted_at"),
+            )
+
+    def list_completed_treatment_findings(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4CompletedTreatmentFinding]:
+        patient_col = self._require_column(
+            "vwCompletedTreatmentTransactions", ["PatientCode", "patientcode"]
+        )
+        completed_col = self._require_column(
+            "vwCompletedTreatmentTransactions", ["CompletedDate", "completiondate"]
+        )
+        code_col = self._pick_column("vwCompletedTreatmentTransactions", ["CodeID", "codeid"])
+        treatment_col = self._pick_column("vwCompletedTreatmentTransactions", ["Treatment", "treatment"])
+        tooth_col = self._pick_column("vwCompletedTreatmentTransactions", ["tooth", "Tooth"])
+        ref_id_col = self._pick_column("vwCompletedTreatmentTransactions", ["refid", "RefId", "RefID"])
+        tp_number_col = self._pick_column(
+            "vwCompletedTreatmentTransactions", ["TPNumber", "tpNumber", "TPNum", "TPNo"]
+        )
+        tp_item_col = self._pick_column("vwCompletedTreatmentTransactions", ["TPItem", "tpitem"])
+        clinic_col = self._pick_column("vwCompletedTreatmentTransactions", ["ClinicCode", "cliniccode"])
+        provider_col = self._pick_column(
+            "vwCompletedTreatmentTransactions", ["ProvidersCode", "providercode", "ProviderCode"]
+        )
+
+        where_parts: list[str] = []
+        params: list[Any] = []
+
+        range_clause, range_params = self._build_range_filter(patient_col, patients_from, patients_to)
+        if range_clause:
+            where_parts.append(range_clause.replace("WHERE", "").strip())
+            params.extend(range_params)
+
+        if date_from:
+            where_parts.append(f"{completed_col} >= ?")
+            params.append(datetime.combine(date_from, datetime.min.time()))
+        if date_to:
+            # Keep end-exclusive semantics aligned with Stage 163F scout inventory.
+            where_parts.append(f"{completed_col} < ?")
+            params.append(datetime.combine(date_to, datetime.min.time()))
+
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        select_cols = [
+            f"{patient_col} AS patient_code",
+            f"{completed_col} AS completed_date",
+        ]
+        if code_col:
+            select_cols.append(f"{code_col} AS code_id")
+        if treatment_col:
+            select_cols.append(f"{treatment_col} AS treatment_label")
+        if tooth_col:
+            select_cols.append(f"{tooth_col} AS tooth")
+        if ref_id_col:
+            select_cols.append(f"{ref_id_col} AS ref_id")
+        if tp_number_col:
+            select_cols.append(f"{tp_number_col} AS tp_number")
+        if tp_item_col:
+            select_cols.append(f"{tp_item_col} AS tp_item")
+        if clinic_col:
+            select_cols.append(f"{clinic_col} AS clinic_code")
+        if provider_col:
+            select_cols.append(f"{provider_col} AS provider_code")
+
+        order_cols = [f"{completed_col} DESC", f"{patient_col} ASC"]
+        if ref_id_col:
+            order_cols.append(f"{ref_id_col} DESC")
+        rows = self._query(
+            (
+                f"SELECT TOP (?) {', '.join(select_cols)} "
+                "FROM dbo.vwCompletedTreatmentTransactions WITH (NOLOCK) "
+                f"{where_sql} "
+                f"ORDER BY {', '.join(order_cols)}"
+            ),
+            [limit if limit is not None else 1000000, *params],
+        )
+        for row in rows:
+            yield R4CompletedTreatmentFinding(
+                patient_code=int(row["patient_code"]) if row.get("patient_code") is not None else None,
+                completed_date=row.get("completed_date"),
+                code_id=int(row["code_id"]) if row.get("code_id") is not None else None,
+                tooth=int(row["tooth"]) if row.get("tooth") is not None else None,
+                treatment_label=(row.get("treatment_label") or "").strip() or None,
+                ref_id=int(row["ref_id"]) if row.get("ref_id") is not None else None,
+                tp_number=int(row["tp_number"]) if row.get("tp_number") is not None else None,
+                tp_item=int(row["tp_item"]) if row.get("tp_item") is not None else None,
+                clinic_code=int(row["clinic_code"]) if row.get("clinic_code") is not None else None,
+                provider_code=int(row["provider_code"]) if row.get("provider_code") is not None else None,
             )
 
     def list_treatment_plan_reviews(

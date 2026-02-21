@@ -111,6 +111,7 @@ _CHARTING_CANONICAL_DOMAINS = {
     "bpe_furcation",
     "chart_healing_actions",
     "restorative_treatments",
+    "completed_treatment_findings",
     "patient_notes",
     "treatment_plans",
     "treatment_notes",
@@ -353,9 +354,14 @@ def _int_value(value: object) -> int:
     return int(value) if isinstance(value, int) else 0
 
 
+_NON_DROP_REASON_KEYS = {"undated_included", "included"}
+
+
 def _dropped_reason_totals(dropped: dict[str, object]) -> dict[str, int]:
     out: dict[str, int] = {}
     for key, value in dropped.items():
+        if key in _NON_DROP_REASON_KEYS:
+            continue
         if isinstance(value, int):
             out[key] = value
     return out
@@ -363,7 +369,6 @@ def _dropped_reason_totals(dropped: dict[str, object]) -> dict[str, int]:
 
 def _dropped_candidates_total(dropped: dict[str, object]) -> int:
     totals = _dropped_reason_totals(dropped)
-    totals.pop("undated_included", None)
     return sum(totals.values())
 
 
@@ -777,7 +782,8 @@ def main() -> int:
         default=None,
         help=(
             "Optional comma-separated charting canonical domains "
-            "(perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,treatment_plans,treatment_notes,treatment_plan_items)."
+            "(perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,"
+            "completed_treatment_findings,patient_notes,treatment_plans,treatment_notes,treatment_plan_items)."
         ),
     )
     parser.add_argument(

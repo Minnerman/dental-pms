@@ -154,6 +154,19 @@ class R4RestorativeTreatment(BaseModel):
     deleted_at: datetime | None = None
 
 
+class R4CompletedTreatmentFinding(BaseModel):
+    patient_code: int | None = None
+    completed_date: datetime | None = None
+    code_id: int | None = None
+    tooth: int | None = None
+    treatment_label: str | None = None
+    ref_id: int | None = None
+    tp_number: int | None = None
+    tp_item: int | None = None
+    clinic_code: int | None = None
+    provider_code: int | None = None
+
+
 class R4TreatmentPlanReview(BaseModel):
     patient_code: int = Field(..., ge=1)
     tp_number: int = Field(..., ge=1)
