@@ -61,6 +61,23 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 160B started (`stage160b-patient-ui-parity-impl`) to lock patient tab order/labels and shortcuts to the R4 default contract.
+  - Patient tab strip is now locked in exact order/labels:
+    - `Personal`, `Medical`, `Schemes`, `Appointments`, `Financial`, `Comms`, `Notes`, `Treatment`
+  - Primary patient tab strip uses stable test hooks:
+    - container: `data-testid="patient-tabs"`
+    - tabs: `data-testid="patient-tab-<Label>"` (for example `patient-tab-Personal`)
+  - Non-locked extension tabs are grouped under `Custom` and rendered after the locked strip.
+  - Keyboard shortcuts now map to locked order:
+    - `Ctrl/Cmd+1..8` => `Personal..Treatment`
+    - shortcuts are ignored while typing in input/textarea/select/contenteditable elements.
+  - Playwright parity coverage hardened:
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+      - strict locked-tab order assertion in DOM order
+      - strict locked-tab test ID presence checks
+      - keyboard shortcut navigation assertions for `Ctrl/Cmd+1..8`
+  - Acceptance contract updated:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` now locks the default tab list and requires acceptance+test updates for any future order/label changes.
 - 2026-02-21: Stage 160A started (`stage160a-patient-ui-parity-pack`) for patient-screen R4 parity evidence + acceptance baseline.
   - Acceptance contract added:
     - `docs/PATIENT_UI_ACCEPTANCE.md`

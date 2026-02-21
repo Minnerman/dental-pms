@@ -22,7 +22,7 @@ test("recording a payment updates status and enables receipt download", async ({
   await primePageAuth(page, request);
   await page.goto(`${getBaseUrl()}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
 
-  await page.getByRole("button", { name: /Invoices/ }).click();
+  await page.getByTestId("patient-tab-Financial").click();
 
   const invoiceRow = page.locator("tr", { hasText: issued.invoice_number });
   await expect(invoiceRow).toBeVisible({ timeout: 15_000 });

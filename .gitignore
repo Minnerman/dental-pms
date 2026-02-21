@@ -32,3 +32,4 @@ frontend/tsconfig.tsbuildinfo
 *.tsbuildinfo
 tmp/
 .run/
+test-results/
