@@ -61,6 +61,56 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163F chunk1 started (`stage163f-completed-treatment-findings-scale-chunk1`) and completed with deterministic selection + idempotent import/parity/drop/UI proof gates.
+  - Pre-chunk guard fix (filter alignment):
+    - chunk selection initially collapsed to `accepted_patients=179` due treating `tooth <= 0` as missing in completed-findings filtering.
+    - aligned back to Stage 163F scout semantics (`missing_tooth` only when `tooth IS NULL`) in:
+      - `backend/app/services/r4_charting/completed_treatment_findings_import.py`
+    - post-fix inventory recheck restored expected scout scale:
+      - `rows_in_window=15902`, `accepted_patients=2886` (`.run/stage163f/stage163f_chunk1_selector.log`).
+  - Deterministic chunk1 selection (seed `17`, ledger exclude):
+    - ledger path: `.run/seen_stage163f_completed_treatment_findings.txt` (`pre=0`, `post=200`, duplicates `0`).
+    - post-exclude pool: `2886` patients:
+      - `.run/stage163f/stage163f_completed_treatment_findings_post_exclude_pool.csv`
+    - chunk1 cohort: `200` patients:
+      - `.run/stage163f/stage163f_completed_treatment_findings_chunk1.csv`
+  - Import apply/rerun (window `2017-01-01..2026-02-01`):
+    - patients apply: `created=200`, `updated=0`, `skipped=0`:
+      - `.run/stage163f/stage163f_chunk1_patients_apply.json`
+    - patients rerun: `created=0`, `updated=0`, `skipped=200`:
+      - `.run/stage163f/stage163f_chunk1_patients_rerun.json`
+    - completed findings apply: `imported_created_total=771`, `candidates_total=1226`:
+      - `.run/stage163f/stage163f_chunk1_completed_treatment_findings_apply.json`
+      - `.run/stage163f/stage163f_chunk1_completed_treatment_findings_apply_report.json`
+    - completed findings rerun: `imported_created_total=0`, `skipped_total=771`:
+      - `.run/stage163f/stage163f_chunk1_completed_treatment_findings_rerun.json`
+      - `.run/stage163f/stage163f_chunk1_completed_treatment_findings_rerun_report.json`
+  - DB cross-check:
+    - `chunk_codes_count=200`, `patients_present_count=200`,
+      `canonical_completed_treatment_findings_rows_count=771`:
+      - `.run/stage163f/stage163f_chunk1_db_counts.json`
+  - Parity gate:
+    - `overall.status=pass` and domain summary `patients_with_data=200`, `patients_no_data=0`:
+      - `.run/stage163f/stage163f_chunk1_completed_treatment_findings_parity.json`
+  - Drop guard:
+    - summary: `dropped_total_excluding_non_drop_counters=455` with dominant
+      `restorative_classified=455`:
+      - `.run/stage163f/stage163f_chunk1_drop_summary.json`
+    - explain sample (`legacy_patient_code=1000420`): SQL vs PG aligned (`delta_sql_minus_pg=0`);
+      SQL-side dropped reasons show `restorative_classified=15`, `out_of_window=7`:
+      - `.run/stage163f/stage163f_chunk1_drop_report_1000420.json`
+  - UI proof (scaffold flipped to real passing spec):
+    - updated spec:
+      - `frontend/tests/clinical-odontogram-completed-treatment-findings.spec.ts`
+    - refreshed proof patients with mapped `patient_id`:
+      - `.run/stage163f/stage163f_completed_treatment_findings_proof_patients.json`
+    - Playwright run: `1 passed`
+    - screenshots:
+      - `.run/stage163f/chunk1/odontogram_completed_treatment_findings_real_17272.png`
+      - `.run/stage163f/chunk1/odontogram_completed_treatment_findings_real_17283.png`
+      - `.run/stage163f/chunk1/odontogram_completed_treatment_findings_real_17289.png`
+      - `.run/stage163f/chunk1/odontogram_completed_treatment_findings_real_17324.png`
+      - `.run/stage163f/chunk1/odontogram_completed_treatment_findings_real_17362.png`
 - 2026-02-21: Stage 163F pipeline wiring started (`stage163f-completed-treatment-findings-pipeline`) for `completed_treatment_findings` (no scale-out in this PR).
   - Pipeline components added:
     - SQL Server source extraction:
