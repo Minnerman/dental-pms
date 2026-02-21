@@ -61,6 +61,47 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 162A started (`stage162-odontogram-restorative-glyphs`) for strict R4-like restorative glyph semantics in the clinical odontogram.
+  - SVG restorative renderer hardened in `frontend/components/clinical/OdontogramToothSvg.tsx`:
+    - first-wave core glyphs:
+      - `filling` surface shading (`M/O/D/B/L/I`) + whole-tooth fallback mark
+      - `crown` full-coverage ring
+      - `root_canal` canal-line + apex marker
+      - `implant` root fixture glyph
+      - `extraction` strike state (dominating extracted view)
+    - second-wave visible stubs:
+      - `bridge` connector/pontic marker
+      - `denture` arch-segment marker
+      - `veneer` facial surface shading
+      - `inlay_onlay` occlusal/incisal inlay marker
+      - `post` pin marker
+  - Tooth-state type compatibility expanded in `PatientDetailClient`:
+    - accepts backend classification types:
+      - `implant`, `bridge`, `crown`, `veneer`, `inlay_onlay`, `post`, `root_canal`, `filling`, `extraction`, `denture`, `other`
+    - normalizes legacy `rct` -> `root_canal`
+    - deterministic sorting for multi-restoration teeth
+    - extracted state now also inferred from restoration type `extraction`
+  - Selected-tooth click panel now exposes full restorative list:
+    - section `R4 completed restorative state`
+    - deterministic item list with stable hooks:
+      - `data-testid="tooth-state-panel"`
+      - `data-testid="tooth-state-restoration-<type>"`
+  - Proof-patient scanner output (evidence-driven):
+    - `.run/stage162/proof_patients_by_type.json`
+    - Stage 160A representative IDs plus known Stage 155 proof IDs were scanned.
+    - current local dataset contains no live `tooth-state` restorations for scanned candidates (and no matches in first 400 patient IDs), so non-crown glyph assertions are locked via mocked tooth-state payloads in Playwright.
+  - Playwright coverage expanded in `frontend/tests/clinical-odontogram-overlays.spec.ts`:
+    - asserts crown glyph on tooth `36` (mocked completed-state record)
+    - asserts mocked fillings render per-surface (`M/O/D`)
+    - asserts mocked root canal glyph renders
+    - asserts second-wave stub glyph visibility (`bridge`, `implant`, `veneer`, `inlay_onlay`, `denture`, extraction state)
+    - asserts selected-tooth restorative list order for multi-restoration tooth (`Crown` then `Root canal`)
+  - Stage 162 screenshot evidence:
+    - `.run/stage162/odontogram_glyphs_real.png`
+    - `.run/stage162/odontogram_glyphs_mock_fillings.png`
+    - `.run/stage162/odontogram_glyphs_mock_rct.png`
+  - Acceptance contract updated:
+    - `docs/CHARTING_UI_ACCEPTANCE.md` now includes `Restorative glyph set (Stage 162)` and change-control requirements.
 - 2026-02-21: Stage 160B started (`stage160b-patient-ui-parity-impl`) to lock patient tab order/labels and shortcuts to the R4 default contract.
   - Patient tab strip is now locked in exact order/labels:
     - `Personal`, `Medical`, `Schemes`, `Appointments`, `Financial`, `Comms`, `Notes`, `Treatment`

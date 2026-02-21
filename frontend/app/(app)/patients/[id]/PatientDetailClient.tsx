@@ -478,7 +478,19 @@ type R4TreatmentPlanOverlay = {
 };
 
 type R4ToothStateRestoration = {
-  type: "filling" | "crown" | "bridge" | "rct" | "implant" | "denture" | "other";
+  type:
+    | "filling"
+    | "crown"
+    | "bridge"
+    | "root_canal"
+    | "rct"
+    | "implant"
+    | "denture"
+    | "veneer"
+    | "inlay_onlay"
+    | "post"
+    | "extraction"
+    | "other";
   surfaces?: R4SurfaceKey[] | null;
   meta?: Record<string, unknown> | null;
 };
@@ -667,6 +679,34 @@ const surfaceOverlaySortOrder: Record<R4SurfaceKey, number> = {
   I: 4,
   D: 5,
   L: 6,
+};
+const toothStateRestorationSortOrder: Record<R4ToothStateRestoration["type"], number> = {
+  filling: 1,
+  inlay_onlay: 2,
+  veneer: 3,
+  crown: 4,
+  bridge: 5,
+  root_canal: 6,
+  rct: 6,
+  post: 7,
+  implant: 8,
+  denture: 9,
+  extraction: 10,
+  other: 11,
+};
+const toothStateRestorationLabels: Record<R4ToothStateRestoration["type"], string> = {
+  filling: "Filling",
+  crown: "Crown",
+  bridge: "Bridge",
+  root_canal: "Root canal",
+  rct: "Root canal",
+  implant: "Implant",
+  denture: "Denture",
+  veneer: "Veneer",
+  inlay_onlay: "Inlay/onlay",
+  post: "Post",
+  extraction: "Extraction",
+  other: "Other",
 };
 
 function parseChartingDateParam(value: string | null) {
@@ -3629,14 +3669,19 @@ export default function PatientDetailClient({
       if (!mappedTooth) continue;
       const restorations = (entry.restorations ?? [])
         .map((restoration): OdontogramToothRestoration | null => {
-          const type = restoration?.type;
+          const rawType = restoration?.type;
+          const type = rawType === "rct" ? "root_canal" : rawType;
           if (
             type !== "filling" &&
             type !== "crown" &&
             type !== "bridge" &&
-            type !== "rct" &&
+            type !== "root_canal" &&
             type !== "implant" &&
             type !== "denture" &&
+            type !== "veneer" &&
+            type !== "inlay_onlay" &&
+            type !== "post" &&
+            type !== "extraction" &&
             type !== "other"
           ) {
             return null;
@@ -3656,15 +3701,35 @@ export default function PatientDetailClient({
             meta: restoration.meta ?? undefined,
           };
         })
-        .filter((item): item is OdontogramToothRestoration => item !== null);
+        .filter((item): item is OdontogramToothRestoration => item !== null)
+        .sort((a, b) => {
+          const orderA = toothStateRestorationSortOrder[a.type];
+          const orderB = toothStateRestorationSortOrder[b.type];
+          if (orderA !== orderB) return orderA - orderB;
+          const surfacesA = (a.surfaces ?? []).join("");
+          const surfacesB = (b.surfaces ?? []).join("");
+          if (surfacesA !== surfacesB) return surfacesA.localeCompare(surfacesB);
+          const labelA =
+            typeof a.meta?.code_label === "string" ? a.meta.code_label : String(a.meta?.code_id ?? "");
+          const labelB =
+            typeof b.meta?.code_label === "string" ? b.meta.code_label : String(b.meta?.code_id ?? "");
+          return labelA.localeCompare(labelB);
+        });
+      const extractedFromRestoration = restorations.some(
+        (restoration) => restoration.type === "extraction"
+      );
       map.set(mappedTooth.key, {
         restorations,
         missing: entry.missing === true,
-        extracted: entry.extracted === true,
+        extracted: entry.extracted === true || extractedFromRestoration,
       });
     }
     return map;
   }, [r4ToothState]);
+  const selectedToothState = useMemo(() => {
+    if (!selectedTooth) return null;
+    return toothStateByTooth.get(selectedTooth) ?? { restorations: [], missing: false, extracted: false };
+  }, [selectedTooth, toothStateByTooth]);
 
   const sortedClinicalNotes = useMemo(() => {
     return [...clinicalNotes].sort(
@@ -8200,6 +8265,59 @@ export default function PatientDetailClient({
                                 ) : (
                                   <div className="notice" data-testid="overlay-tooth-empty">
                                     No overlay items for this tooth.
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="stack" style={{ gap: 10 }} data-testid="tooth-state-panel">
+                                <div className="label">R4 completed restorative state</div>
+                                {selectedToothState &&
+                                (selectedToothState.restorations.length > 0 ||
+                                  selectedToothState.missing ||
+                                  selectedToothState.extracted) ? (
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                      {selectedToothState.missing && <span className="badge">Missing</span>}
+                                      {selectedToothState.extracted && (
+                                        <span className="badge">Extracted</span>
+                                      )}
+                                    </div>
+                                    {selectedToothState.restorations.map((restoration, index) => {
+                                      const codeLabel =
+                                        typeof restoration.meta?.code_label === "string"
+                                          ? restoration.meta.code_label
+                                          : null;
+                                      const codeId =
+                                        typeof restoration.meta?.code_id === "number" ||
+                                        typeof restoration.meta?.code_id === "string"
+                                          ? String(restoration.meta.code_id)
+                                          : null;
+                                      return (
+                                        <div
+                                          className="card"
+                                          style={{ margin: 0 }}
+                                          key={`${restoration.type}-${(restoration.surfaces ?? []).join("")}-${index}`}
+                                          data-testid={`tooth-state-restoration-${restoration.type}`}
+                                        >
+                                          <div>
+                                            <strong>
+                                              {toothStateRestorationLabels[restoration.type] || "Restoration"}
+                                            </strong>
+                                          </div>
+                                          <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                                            Surface:{" "}
+                                            {restoration.surfaces && restoration.surfaces.length > 0
+                                              ? restoration.surfaces.join(",")
+                                              : "Whole tooth"}
+                                            {codeLabel ? ` · ${codeLabel}` : codeId ? ` · Code ${codeId}` : ""}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="notice" data-testid="tooth-state-empty">
+                                    No completed restorative state for this tooth.
                                   </div>
                                 )}
                               </div>
