@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163A started (`stage163a-restorative-domain-discovery`) to select the first genuine R4 restorative charting domain (non-TP-derived) for import.
+  - Evidence-first SQL Server discovery artifacts added:
+    - `.run/stage163a/rg_restorative_candidates.txt`
+    - `.run/stage163a/sqlserver_tables_probe.txt`
+    - `.run/stage163a/sqlserver_tables_shortlist.txt`
+    - `.run/stage163a/restorative_domain_profile.txt`
+    - `.run/stage163a/vwtreatments_restorative_statuses.txt`
+    - `.run/stage163a/restorative_vwtreatments_domain_counts.txt`
+  - Discovery findings (read-only):
+    - schema keyword probe found `116` candidate `dbo` tables/views with chart/restorative/tooth/surface signals.
+    - `dbo.ChartHealingActions` in this source has only `8` columns (`ID`, `PatientCode`, `UserCode`, `TPNumber`, `AppointmentNeedId`, `CodeId`, `Time`, `Action`) and no tooth/surface fields.
+    - strongest restorative candidates for first domain:
+      - `dbo.vwTreatments` (`patientcode`, `Tooth`, `Surface`, `StatusDescription`, `CompletionDate`, `transactionDate`) with `67,965` rows.
+      - `dbo.Transactions` (`PatientCode`, `Tooth`, `Surface`, `CodeID`, `Status`, `Date`) with `513,471` rows.
+      - `dbo.vwCompletedTreatmentTransactions` (`PatientCode`, `tooth`, `CompletedDate`, `CodeID`) but no surface field.
+  - First domain selected: `restorative_treatments` (from `dbo.vwTreatments`) for high-value restorative semantics with lower ambiguity:
+    - restorative status labels are explicit (for example `Fillings`, `Crown`, `Root Filling`, `Implant`, `Partial Denture`, `Extraction`, `Post`).
+    - cohort filter locks to completed, tooth-specific rows (`Completed=1`, `Tooth > 0`) in a bounded date window.
+  - Cohort selector implemented (read-only only):
+    - new extractor: `get_distinct_restorative_treatments_patient_codes` in `backend/app/services/r4_charting/sqlserver_extract.py`.
+    - new domain in `backend/app/scripts/r4_cohort_select.py`: `restorative_treatments`.
+    - tests added/updated:
+      - `backend/tests/r4_import/test_sqlserver_extract.py`
+      - `backend/tests/r4_import/test_r4_cohort_select.py`
+  - Stage 163A inventory probe for selected domain:
+    - command:
+      - `python -m app.scripts.r4_cohort_select --domains restorative_treatments --date-from 2017-01-01 --date-to 2026-02-01 --limit 50000 --mode union --output .run/stage163a/restorative_treatments_2017_2026_codes.csv`
+    - result: `domain_counts.restorative_treatments=974` distinct patient codes (`candidates_before_exclude=974`, `remaining_after_exclude=974`).
+    - artifacts:
+      - `.run/stage163a/restorative_treatments_inventory.txt`
+      - `.run/stage163a/restorative_treatments_2017_2026_codes.csv`
 - 2026-02-21: Stage 162A started (`stage162-odontogram-restorative-glyphs`) for strict R4-like restorative glyph semantics in the clinical odontogram.
   - SVG restorative renderer hardened in `frontend/components/clinical/OdontogramToothSvg.tsx`:
     - first-wave core glyphs:

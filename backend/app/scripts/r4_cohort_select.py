@@ -15,6 +15,7 @@ from app.services.r4_charting.sqlserver_extract import (
     get_distinct_chart_healing_actions_patient_codes,
     get_distinct_patient_notes_patient_codes,
     get_distinct_perioprobe_patient_codes,
+    get_distinct_restorative_treatments_patient_codes,
     get_distinct_treatment_plans_patient_codes,
     get_distinct_treatment_notes_patient_codes,
     get_distinct_treatment_plan_items_patient_codes,
@@ -26,6 +27,7 @@ ALL_DOMAINS = (
     "bpe",
     "bpe_furcation",
     "chart_healing_actions",
+    "restorative_treatments",
     "patient_notes",
     "treatment_plans",
     "treatment_notes",
@@ -66,6 +68,8 @@ def _build_domain_codes(
         return get_distinct_bpe_furcation_patient_codes(date_from, date_to, limit=limit)
     if domain == "chart_healing_actions":
         return get_distinct_chart_healing_actions_patient_codes(date_from, date_to, limit=limit)
+    if domain == "restorative_treatments":
+        return get_distinct_restorative_treatments_patient_codes(date_from, date_to, limit=limit)
     if domain == "patient_notes":
         return get_distinct_patient_notes_patient_codes(date_from, date_to, limit=limit)
     if domain == "treatment_notes":
@@ -229,12 +233,12 @@ def main() -> int:
     parser.add_argument(
         "--domains",
         default=(
-            "perioprobe,bpe,bpe_furcation,chart_healing_actions,patient_notes,"
+            "perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
             "treatment_plans,treatment_notes,treatment_plan_items"
         ),
         help=(
             "Comma-separated subset: "
-            "perioprobe,bpe,bpe_furcation,chart_healing_actions,patient_notes,"
+            "perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
             "treatment_plans,treatment_notes,treatment_plan_items."
         ),
     )
