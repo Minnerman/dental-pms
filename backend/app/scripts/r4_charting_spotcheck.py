@@ -156,6 +156,50 @@ def _pg_treatment_plan_items_from_canonical(
     return rows
 
 
+def _pg_restorative_treatments_from_canonical(
+    session: Session,
+    patient_code: int,
+    limit: int,
+) -> list[dict[str, object]]:
+    stmt = (
+        select(R4ChartingCanonicalRecord)
+        .where(
+            R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
+            R4ChartingCanonicalRecord.domain.in_(("restorative_treatment", "restorative_treatments")),
+        )
+        .order_by(
+            R4ChartingCanonicalRecord.recorded_at.desc(),
+            R4ChartingCanonicalRecord.r4_source_id.desc(),
+        )
+    )
+    rows: list[dict[str, object]] = []
+    for record in session.execute(stmt.limit(limit)).scalars().all():
+        payload = _canonical_payload(record)
+        row = {
+            "patient_code": payload.get("patient_code", record.legacy_patient_code),
+            "recorded_at": payload.get("recorded_at", record.recorded_at),
+            "creation_date": payload.get("creation_date"),
+            "acceptance_date": payload.get("acceptance_date", record.entered_at),
+            "completion_date": payload.get("completion_date", record.recorded_at),
+            "transaction_date": payload.get("transaction_date"),
+            "ref_id": payload.get("ref_id"),
+            "tp_number": payload.get("tp_number"),
+            "tp_item": payload.get("tp_item"),
+            "tp_item_key": payload.get("tp_item_key", record.r4_source_id),
+            "trans_code": payload.get("trans_code"),
+            "code_id": payload.get("code_id", record.code_id),
+            "tooth": payload.get("tooth", record.tooth),
+            "surface": payload.get("surface", record.surface),
+            "status_code": payload.get("status_code"),
+            "status_description": payload.get("status_description", record.status),
+            "description": payload.get("description"),
+            "complete": payload.get("complete"),
+            "completed": payload.get("completed"),
+        }
+        rows.append({key: _format_dt(value) for key, value in row.items()})
+    return rows
+
+
 def _sortable(value) -> str:
     if value is None:
         return ""
@@ -264,6 +308,18 @@ def _sqlserver_treatment_plans(source: R4SqlServerSource, patient_code: int, lim
 def _sqlserver_treatment_plan_items(source: R4SqlServerSource, patient_code: int, limit: int):
     return _normalize_rows(
         source.list_treatment_plan_items(
+            patients_from=patient_code,
+            patients_to=patient_code,
+            date_from=None,
+            date_to=None,
+            limit=limit,
+        )
+    )
+
+
+def _sqlserver_restorative_treatments(source: R4SqlServerSource, patient_code: int, limit: int):
+    return _normalize_rows(
+        source.list_restorative_treatments(
             patients_from=patient_code,
             patients_to=patient_code,
             date_from=None,
@@ -423,6 +479,8 @@ ENTITY_ALIASES = {
     "treatment_plans": "treatment_plans",
     "treatment_plan_items": "treatment_plan_items",
     "treatment_plan_item": "treatment_plan_items",
+    "restorative_treatments": "restorative_treatments",
+    "restorative_treatment": "restorative_treatments",
     "chart_healing_actions": "chart_healing_actions",
     "chart_actions": "chart_healing_actions",
     "bpe": "bpe",
@@ -484,6 +542,27 @@ ENTITY_COLUMNS = {
         "discretionary_cost",
         "material",
         "arch_code",
+    ],
+    "restorative_treatments": [
+        "patient_code",
+        "recorded_at",
+        "creation_date",
+        "acceptance_date",
+        "completion_date",
+        "transaction_date",
+        "ref_id",
+        "tp_number",
+        "tp_item",
+        "tp_item_key",
+        "trans_code",
+        "code_id",
+        "tooth",
+        "surface",
+        "status_code",
+        "status_description",
+        "description",
+        "complete",
+        "completed",
     ],
     "chart_healing_actions": [
         "patient_code",
@@ -566,6 +645,7 @@ ENTITY_SORT_KEYS = {
     "treatment_notes": ["patient_code", "note_date", "legacy_treatment_note_id"],
     "treatment_plans": ["patient_code", "tp_number"],
     "treatment_plan_items": ["patient_code", "tp_number", "tp_item", "tp_item_key"],
+    "restorative_treatments": ["patient_code", "recorded_at", "ref_id", "tp_item_key", "tooth"],
     "chart_healing_actions": ["patient_code", "action_date", "legacy_action_id"],
     "bpe": ["patient_code", "recorded_at", "legacy_bpe_id", "legacy_bpe_key"],
     "bpe_furcations": ["patient_code", "recorded_at", "legacy_bpe_id", "tooth", "furcation"],
@@ -582,6 +662,7 @@ ENTITY_DATE_FIELDS = {
     "treatment_notes": ["note_date"],
     "treatment_plans": ["creation_date"],
     "treatment_plan_items": ["item_date", "completed_date"],
+    "restorative_treatments": ["recorded_at", "completion_date", "transaction_date", "creation_date"],
     "chart_healing_actions": ["action_date"],
     "bpe": ["recorded_at"],
     "bpe_furcations": ["recorded_at"],
@@ -595,6 +676,7 @@ ENTITY_LINKAGE = {
     "treatment_notes": "treatment_notes.patient_code",
     "treatment_plans": "treatment_plans.patient_code",
     "treatment_plan_items": "canonical_records.legacy_patient_code",
+    "restorative_treatments": "canonical_records.legacy_patient_code",
     "chart_healing_actions": "chart_healing_actions.patient_code",
     "bpe": "bpe.patient_code_or_bpe_id",
     "bpe_furcations": "bpefurcation.bpe_id_join",
@@ -697,6 +779,15 @@ def _normalize_entity_rows(
                 payload["tp_item"] = payload.get("legacy_tp_item")
             if payload.get("tp_item_key") is None and payload.get("legacy_tp_item_key") is not None:
                 payload["tp_item_key"] = payload.get("legacy_tp_item_key")
+        elif entity == "restorative_treatments":
+            if payload.get("patient_code") is None and payload.get("legacy_patient_code") is not None:
+                payload["patient_code"] = payload.get("legacy_patient_code")
+            if payload.get("recorded_at") is None:
+                payload["recorded_at"] = (
+                    payload.get("completion_date")
+                    or payload.get("transaction_date")
+                    or payload.get("creation_date")
+                )
         elif entity == "patient_notes":
             if payload.get("legacy_note_key") is None:
                 payload["legacy_note_key"] = _build_legacy_key(
@@ -834,6 +925,18 @@ def main() -> int:
         if "treatment_plan_items" in entities:
             sqlserver["treatment_plan_items"] = _sqlserver_treatment_plan_items(source, patient_code, args.limit)
             postgres["treatment_plan_items"] = _pg_treatment_plan_items_from_canonical(
+                session,
+                patient_code,
+                args.limit,
+            )
+
+        if "restorative_treatments" in entities:
+            sqlserver["restorative_treatments"] = _sqlserver_restorative_treatments(
+                source,
+                patient_code,
+                args.limit,
+            )
+            postgres["restorative_treatments"] = _pg_restorative_treatments_from_canonical(
                 session,
                 patient_code,
                 args.limit,

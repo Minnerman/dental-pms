@@ -17,6 +17,7 @@ from app.services.r4_import.types import (
     R4User,
     R4TreatmentPlan,
     R4TreatmentPlanItem,
+    R4RestorativeTreatment,
     R4TreatmentPlanReview,
     R4ToothSystem,
     R4ToothSurface,
@@ -31,6 +32,34 @@ from app.services.r4_import.types import (
     R4TreatmentNote,
     R4TemporaryNote,
     R4OldPatientNote,
+)
+
+
+_RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS = (
+    "abutment",
+    "adjust denture",
+    "bridge additions",
+    "bridges additional tooth items",
+    "crown",
+    "crowns/inlays additions",
+    "denture prior treatment",
+    "dentures addl tooth items",
+    "dentures additional items",
+    "extraction",
+    "extraction additional items",
+    "extraction incl bone removal",
+    "extraction of soft tissue",
+    "fillings",
+    "fillings additional tooth items",
+    "full lower denture",
+    "full upper denture",
+    "implant",
+    "inlay/crown add. tooth items",
+    "partial denture",
+    "post",
+    "reline denture",
+    "root filling",
+    "root fillings additional items",
 )
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
@@ -3065,6 +3094,220 @@ class R4SqlServerSource:
                 )
                 if remaining is not None:
                     remaining -= 1
+
+    def list_restorative_treatments(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
+        include_not_completed: bool = False,
+    ) -> Iterable[R4RestorativeTreatment]:
+        patient_col = self._require_column("vwTreatments", ["PatientCode", "patientcode"])
+        tooth_col = self._require_column("vwTreatments", ["Tooth", "tooth"])
+        surface_col = self._pick_column("vwTreatments", ["Surface", "surface"])
+        status_desc_col = self._require_column(
+            "vwTreatments", ["StatusDescription", "statusdescription"]
+        )
+        status_col = self._pick_column("vwTreatments", ["Status"])
+        complete_col = self._pick_column("vwTreatments", ["Complete"])
+        completed_col = self._pick_column("vwTreatments", ["Completed"])
+        code_col = self._pick_column("vwTreatments", ["CodeID"])
+        subtype_col = self._pick_column("vwTreatments", ["SubTypeCode"])
+        description_col = self._pick_column("vwTreatments", ["description", "Description"])
+        creation_col = self._pick_column("vwTreatments", ["CreationDate"])
+        acceptance_col = self._pick_column("vwTreatments", ["AcceptanceDate"])
+        completion_col = self._pick_column("vwTreatments", ["CompletionDate"])
+        trans_date_col = self._pick_column("vwTreatments", ["transactionDate", "TransactionDate"])
+        tp_number_col = self._pick_column("vwTreatments", ["tpNumber", "TPNumber"])
+        tp_item_col = self._pick_column("vwTreatments", ["tpitem", "TPItem"])
+        tp_item_key_col = self._pick_column("vwTreatments", ["tpitemkey", "TPItemKey"])
+        trans_code_col = self._pick_column("vwTreatments", ["TransCode"])
+        ref_id_col = self._pick_column("vwTreatments", ["RefId", "refid"])
+        condition_col = self._pick_column("vwTreatments", ["Condition"])
+        item_user_col = self._pick_column("vwTreatments", ["itemUserCode"])
+        trans_user_col = self._pick_column("vwTreatments", ["TransactionUserCode"])
+        recorded_by_col = self._pick_column("vwTreatments", ["RecordedBy"])
+        patient_cost_col = self._pick_column("vwTreatments", ["PatientCost"])
+        dpb_cost_col = self._pick_column("vwTreatments", ["DPBCost"])
+        clinic_code_col = self._pick_column("vwTreatments", ["ClinicCode"])
+        material_code_col = self._pick_column("vwTreatments", ["MaterialCode"])
+        main_stage_item_col = self._pick_column("vwTreatments", ["MainStageItem"])
+        stage_no_col = self._pick_column("vwTreatments", ["StageNo"])
+        type_code_col = self._pick_column("vwTreatments", ["typecode", "TypeCode"])
+        expiry_date_col = self._pick_column("vwTreatments", ["ExpiryDate"])
+        expired_by_col = self._pick_column("vwTreatments", ["ExpiredBy"])
+        deleted_col = self._pick_column("vwTreatments", ["deleted", "Deleted"])
+
+        recorded_col = completion_col or trans_date_col or creation_col
+        if (date_from is not None or date_to is not None) and not recorded_col:
+            raise RuntimeError(
+                "vwTreatments missing CompletionDate/transactionDate/CreationDate; cannot apply date filter."
+            )
+
+        where_parts: list[str] = [
+            f"{patient_col} IS NOT NULL",
+            f"{tooth_col} IS NOT NULL",
+            f"{tooth_col} > 0",
+            f"LOWER(CONVERT(nvarchar(200), {status_desc_col})) IN ({', '.join('?' for _ in _RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS)})",
+        ]
+        params: list[Any] = [*list(_RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS)]
+
+        range_clause, range_params = self._build_range_filter(patient_col, patients_from, patients_to)
+        if range_clause:
+            where_parts.append(range_clause.replace("WHERE", "").strip())
+            params.extend(range_params)
+
+        if recorded_col:
+            date_clause, date_params = self._build_date_filter(recorded_col, date_from, date_to)
+            if date_clause:
+                where_parts.append(date_clause.replace("WHERE", "").strip())
+                params.extend(date_params)
+
+        if not include_not_completed:
+            completion_checks: list[str] = []
+            if completed_col:
+                completion_checks.append(f"{completed_col} = 1")
+            if complete_col:
+                completion_checks.append(f"{complete_col} = 1")
+            if completion_checks:
+                where_parts.append(f"({' OR '.join(completion_checks)})")
+
+        select_cols: list[str] = [f"{patient_col} AS patient_code"]
+        if creation_col:
+            select_cols.append(f"{creation_col} AS creation_date")
+        if acceptance_col:
+            select_cols.append(f"{acceptance_col} AS acceptance_date")
+        if completion_col:
+            select_cols.append(f"{completion_col} AS completion_date")
+        if trans_date_col:
+            select_cols.append(f"{trans_date_col} AS transaction_date")
+        if recorded_col:
+            select_cols.append(f"{recorded_col} AS recorded_at")
+        if complete_col:
+            select_cols.append(f"{complete_col} AS complete")
+        if completed_col:
+            select_cols.append(f"{completed_col} AS completed")
+        if code_col:
+            select_cols.append(f"{code_col} AS code_id")
+        if subtype_col:
+            select_cols.append(f"{subtype_col} AS subtype_code")
+        if status_col:
+            select_cols.append(f"{status_col} AS status_code")
+        select_cols.append(f"{status_desc_col} AS status_description")
+        if description_col:
+            select_cols.append(f"{description_col} AS description")
+        if tp_number_col:
+            select_cols.append(f"{tp_number_col} AS tp_number")
+        if tp_item_col:
+            select_cols.append(f"{tp_item_col} AS tp_item")
+        if tp_item_key_col:
+            select_cols.append(f"{tp_item_key_col} AS tp_item_key")
+        if trans_code_col:
+            select_cols.append(f"{trans_code_col} AS trans_code")
+        if ref_id_col:
+            select_cols.append(f"{ref_id_col} AS ref_id")
+        select_cols.append(f"{tooth_col} AS tooth")
+        if surface_col:
+            select_cols.append(f"{surface_col} AS surface")
+        if condition_col:
+            select_cols.append(f"{condition_col} AS condition")
+        if item_user_col:
+            select_cols.append(f"{item_user_col} AS item_user_code")
+        if trans_user_col:
+            select_cols.append(f"{trans_user_col} AS transaction_user_code")
+        if recorded_by_col:
+            select_cols.append(f"{recorded_by_col} AS recorded_by")
+        if patient_cost_col:
+            select_cols.append(f"{patient_cost_col} AS patient_cost")
+        if dpb_cost_col:
+            select_cols.append(f"{dpb_cost_col} AS dpb_cost")
+        if clinic_code_col:
+            select_cols.append(f"{clinic_code_col} AS clinic_code")
+        if material_code_col:
+            select_cols.append(f"{material_code_col} AS material_code")
+        if main_stage_item_col:
+            select_cols.append(f"{main_stage_item_col} AS main_stage_item")
+        if stage_no_col:
+            select_cols.append(f"{stage_no_col} AS stage_no")
+        if type_code_col:
+            select_cols.append(f"{type_code_col} AS type_code")
+        if expiry_date_col:
+            select_cols.append(f"{expiry_date_col} AS expiry_date")
+        if expired_by_col:
+            select_cols.append(f"{expired_by_col} AS expired_by")
+        if deleted_col:
+            select_cols.append(f"{deleted_col} AS deleted_at")
+
+        if recorded_col:
+            order_by = f"{recorded_col} DESC, {patient_col} ASC"
+        else:
+            order_by = f"{patient_col} ASC"
+        if ref_id_col:
+            order_by = f"{order_by}, {ref_id_col} DESC"
+
+        rows = self._query(
+            (
+                f"SELECT TOP (?) {', '.join(select_cols)} "
+                "FROM dbo.vwTreatments WITH (NOLOCK) "
+                f"WHERE {' AND '.join(where_parts)} "
+                f"ORDER BY {order_by}"
+            ),
+            [limit if limit is not None else 1000000, *params],
+        )
+        for row in rows:
+            patient_code = row.get("patient_code")
+            tooth = row.get("tooth")
+            if patient_code is None or tooth is None:
+                continue
+            status_description = (row.get("status_description") or "").strip() or None
+            description = (row.get("description") or "").strip() or None
+            material_code = (row.get("material_code") or "").strip() or None
+            yield R4RestorativeTreatment(
+                patient_code=int(patient_code),
+                creation_date=row.get("creation_date"),
+                acceptance_date=row.get("acceptance_date"),
+                completion_date=row.get("completion_date"),
+                transaction_date=row.get("transaction_date"),
+                recorded_at=row.get("recorded_at"),
+                complete=_coerce_bool(row.get("complete"), default=False),
+                completed=_coerce_bool(row.get("completed"), default=False),
+                code_id=int(row["code_id"]) if row.get("code_id") is not None else None,
+                subtype_code=int(row["subtype_code"]) if row.get("subtype_code") is not None else None,
+                status_code=int(row["status_code"]) if row.get("status_code") is not None else None,
+                status_description=status_description,
+                description=description,
+                tp_number=int(row["tp_number"]) if row.get("tp_number") is not None else None,
+                tp_item=int(row["tp_item"]) if row.get("tp_item") is not None else None,
+                tp_item_key=int(row["tp_item_key"]) if row.get("tp_item_key") is not None else None,
+                trans_code=int(row["trans_code"]) if row.get("trans_code") is not None else None,
+                ref_id=int(row["ref_id"]) if row.get("ref_id") is not None else None,
+                tooth=int(tooth),
+                surface=int(row["surface"]) if row.get("surface") is not None else None,
+                condition=int(row["condition"]) if row.get("condition") is not None else None,
+                item_user_code=(
+                    int(row["item_user_code"]) if row.get("item_user_code") is not None else None
+                ),
+                transaction_user_code=(
+                    int(row["transaction_user_code"])
+                    if row.get("transaction_user_code") is not None
+                    else None
+                ),
+                recorded_by=int(row["recorded_by"]) if row.get("recorded_by") is not None else None,
+                patient_cost=float(row["patient_cost"]) if row.get("patient_cost") is not None else None,
+                dpb_cost=float(row["dpb_cost"]) if row.get("dpb_cost") is not None else None,
+                clinic_code=int(row["clinic_code"]) if row.get("clinic_code") is not None else None,
+                material_code=material_code,
+                main_stage_item=(
+                    int(row["main_stage_item"]) if row.get("main_stage_item") is not None else None
+                ),
+                stage_no=int(row["stage_no"]) if row.get("stage_no") is not None else None,
+                type_code=int(row["type_code"]) if row.get("type_code") is not None else None,
+                expiry_date=row.get("expiry_date"),
+                expired_by=int(row["expired_by"]) if row.get("expired_by") is not None else None,
+                deleted_at=row.get("deleted_at"),
+            )
 
     def list_treatment_plan_reviews(
         self,

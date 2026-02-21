@@ -676,6 +676,115 @@ def test_tooth_state_endpoint_returns_empty_teeth_when_no_completed_items(api_cl
         session.close()
 
 
+def test_tooth_state_prefers_real_restorative_domain_over_tp_proxy(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    crown_code_id: int | None = None
+    filling_code_id: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 998500000 + (uuid4().int % 100000)
+        code_seed = legacy_code % 100000
+        crown_code_id = 930000 + code_seed
+        filling_code_id = 940000 + code_seed
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+
+        session.add_all(
+            [
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=crown_code_id,
+                    description="White Crown",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=filling_code_id,
+                    description="Composite filling",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage163b-tooth-state-{legacy_code}-proxy",
+                    domain="treatment_plan_item",
+                    r4_source="dbo.TreatmentPlanItems",
+                    r4_source_id="proxy-1",
+                    legacy_patient_code=legacy_code,
+                    tooth=15,
+                    surface=1,
+                    code_id=crown_code_id,
+                    payload={
+                        "tooth": 15,
+                        "surface": 1,
+                        "code_id": crown_code_id,
+                        "completed": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage163b-tooth-state-{legacy_code}-real",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="real-1",
+                    legacy_patient_code=legacy_code,
+                    tooth=15,
+                    surface=3,
+                    code_id=filling_code_id,
+                    payload={
+                        "tooth": 15,
+                        "surface": 3,
+                        "code_id": filling_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/tooth-state?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        tooth_15 = payload["teeth"]["15"]
+        assert len(tooth_15["restorations"]) == 1
+        assert tooth_15["restorations"][0]["type"] == "filling"
+        assert tooth_15["restorations"][0]["surfaces"] == ["M", "O"]
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            if crown_code_id is not None and filling_code_id is not None:
+                session.execute(
+                    delete(R4Treatment).where(
+                        R4Treatment.legacy_source == "r4",
+                        R4Treatment.legacy_treatment_code.in_(
+                            [crown_code_id, filling_code_id]
+                        ),
+                    )
+                )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
+        session.close()
+
+
 def test_charting_requires_auth(api_client, auth_headers):
     session = SessionLocal()
     patient_id = None

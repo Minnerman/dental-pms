@@ -87,6 +87,12 @@ def test_parse_patient_codes_arg_rejects_mutual_exclusion(tmp_path):
         raise AssertionError("expected RuntimeError for mutually exclusive args")
 
 
+def test_parse_charting_domains_accepts_restorative_treatments():
+    assert r4_import_script._parse_charting_domains_arg("restorative_treatments") == [
+        "restorative_treatments"
+    ]
+
+
 def test_cli_rejects_patient_codes_with_range(monkeypatch):
     monkeypatch.setattr(
         sys,

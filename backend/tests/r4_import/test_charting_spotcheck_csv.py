@@ -136,6 +136,14 @@ def test_treatment_plan_entity_aliases_parse_to_canonical_names():
     assert entities == ["treatment_plans", "treatment_plan_items"]
 
 
+def test_restorative_treatments_alias_parsing_is_backward_compatible():
+    entities = _parse_entities(
+        "restorative_treatment,restorative_treatments",
+        ENTITY_ALIASES,
+    )
+    assert entities == ["restorative_treatments"]
+
+
 def test_surface_definitions_normalization_maps_legacy_fields():
     rows = _normalize_entity_rows(
         "surface_definitions",
@@ -144,6 +152,15 @@ def test_surface_definitions_normalization_maps_legacy_fields():
     )
     assert rows[0]["legacy_tooth_id"] == 11
     assert rows[0]["legacy_surface_no"] == 2
+
+
+def test_restorative_treatments_normalization_sets_recorded_at_fallback():
+    rows = _normalize_entity_rows(
+        "restorative_treatments",
+        [{"completion_date": "2025-01-02T00:00:00+00:00", "patient_code": 1000}],
+        patient_code=1000,
+    )
+    assert rows[0]["recorded_at"] == "2025-01-02T00:00:00+00:00"
 
 
 def test_spotcheck_json_reads_tp_tpi_postgres_from_canonical_records(monkeypatch, capsys):

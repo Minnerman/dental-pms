@@ -309,6 +309,58 @@ class SqlServerChartingExtractor:
                     )
                 )
 
+        if _include("restorative_treatments", "restorative_treatment") and hasattr(
+            self._source, "list_restorative_treatments"
+        ):
+            for item in self._iter_restorative_treatments(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            ):
+                recorded_at = (
+                    item.recorded_at
+                    or item.completion_date
+                    or item.transaction_date
+                    or item.creation_date
+                )
+                if not _date_in_range(recorded_at, date_from, date_to, report):
+                    continue
+                if item.ref_id is not None:
+                    source_id = str(item.ref_id)
+                elif item.tp_item_key is not None:
+                    source_id = f"tpitemkey:{item.tp_item_key}"
+                elif item.patient_code is not None and item.tp_number is not None and item.tp_item is not None:
+                    source_id = f"{item.patient_code}:{item.tp_number}:{item.tp_item}"
+                elif (
+                    item.patient_code is not None
+                    and item.trans_code is not None
+                    and recorded_at is not None
+                ):
+                    source_id = f"{item.patient_code}:{item.trans_code}:{recorded_at.isoformat()}"
+                else:
+                    source_id = f"{item.patient_code}:{item.code_id}:{item.tooth}:{item.surface}:{recorded_at}"
+                status = item.status_description
+                if not status and item.status_code is not None:
+                    status = str(item.status_code)
+                records.append(
+                    CanonicalRecordInput(
+                        domain="restorative_treatment",
+                        r4_source="dbo.vwTreatments",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=recorded_at,
+                        entered_at=item.acceptance_date,
+                        tooth=item.tooth,
+                        surface=item.surface,
+                        code_id=item.code_id,
+                        status=status,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
         if _include("bpe_furcation", "bpe_furcations"):
             for row in self._iter_bpe_furcations(
                 patients_from=patients_from,
@@ -565,6 +617,49 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_treatment_plan_items(
+                    patients_from=code,
+                    patients_to=code,
+                    date_from=date_from,
+                    date_to=date_to,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_restorative_treatments(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        date_from: date | None,
+        date_to: date | None,
+        limit: int | None,
+    ):
+        if not hasattr(self._source, "list_restorative_treatments"):
+            return
+        if not patient_codes:
+            yield from self._source.list_restorative_treatments(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_restorative_treatments(
                     patients_from=code,
                     patients_to=code,
                     date_from=date_from,
