@@ -264,9 +264,29 @@ def _surface_key(value: object | None) -> str | None:
     }.get(numeric)
 
 
+def _surface_keys_from_bitmask(mask: int) -> list[str]:
+    if mask <= 0:
+        return []
+    ordered_bits: tuple[tuple[int, str], ...] = (
+        (1, "M"),
+        (2, "O"),
+        (4, "D"),
+        (8, "B"),
+        (16, "L"),
+        (32, "I"),
+    )
+    out: list[str] = []
+    for bit, key in ordered_bits:
+        if mask & bit:
+            out.append(key)
+    return out
+
+
 def _extract_surface_keys(
     payload: dict[str, object],
     fallback_surface: object | None,
+    *,
+    bitmask: bool = False,
 ) -> list[str]:
     values: list[object] = []
     raw_surfaces = payload.get("surfaces")
@@ -283,6 +303,14 @@ def _extract_surface_keys(
 
     surface_keys: list[str] = []
     for value in values:
+        if bitmask:
+            numeric = _coerce_optional_int(value)
+            if numeric is None:
+                continue
+            for key in _surface_keys_from_bitmask(numeric):
+                if key not in surface_keys:
+                    surface_keys.append(key)
+            continue
         surface_key = _surface_key(value)
         if surface_key is None:
             continue
@@ -737,7 +765,14 @@ def get_tooth_state(
             )
             .where(
                 R4ChartingCanonicalRecord.legacy_patient_code == patient_code,
-                R4ChartingCanonicalRecord.domain.in_(("treatment_plan_item", "treatment_plan_items")),
+                R4ChartingCanonicalRecord.domain.in_(
+                    (
+                        "restorative_treatment",
+                        "restorative_treatments",
+                        "treatment_plan_item",
+                        "treatment_plan_items",
+                    )
+                ),
             )
             .order_by(
                 nullslast(R4ChartingCanonicalRecord.recorded_at.desc()),
@@ -748,10 +783,19 @@ def get_tooth_state(
 
         teeth: dict[str, R4ToothStateEntryOut] = {}
         seen_restorations: dict[str, set[str]] = {}
+        real_domain_names = {"restorative_treatment", "restorative_treatments"}
+        proxy_domain_names = {"treatment_plan_item", "treatment_plan_items"}
+        candidate_rows: list[tuple[R4ChartingCanonicalRecord, dict[str, object], str | None, str]] = []
+        real_teeth: set[str] = set()
 
         for record, code_label in db.execute(stmt).all():
             payload = _canonical_payload(record)
             completed = _coerce_optional_bool(payload.get("completed"))
+            domain = (record.domain or "").strip().lower()
+            if completed is None and domain in real_domain_names:
+                completed = _coerce_optional_bool(payload.get("complete"))
+            if completed is None and domain in real_domain_names:
+                completed = True
             if completed is not True:
                 continue
 
@@ -760,15 +804,28 @@ def get_tooth_state(
                 tooth = record.tooth
             if tooth is None or tooth <= 0:
                 continue
+            tooth_key = str(tooth)
+            if domain in real_domain_names:
+                real_teeth.add(tooth_key)
+            candidate_rows.append((record, payload, code_label, tooth_key))
+
+        for record, payload, code_label, tooth_key in candidate_rows:
+            domain = (record.domain or "").strip().lower()
+            if tooth_key in real_teeth and domain in proxy_domain_names:
+                continue
 
             resolved_code_id = record.code_id
             if resolved_code_id is None:
                 resolved_code_id = _coerce_optional_int(payload.get("code_id"))
             resolved_code_label: str | None = code_label
+            if not resolved_code_label:
+                raw_label = payload.get("description") or payload.get("status_description")
+                resolved_code_label = str(raw_label).strip() if raw_label is not None else None
+            if resolved_code_label == "":
+                resolved_code_label = None
             if not resolved_code_label and resolved_code_id is not None:
                 resolved_code_label = "Unknown code"
 
-            tooth_key = str(tooth)
             entry = teeth.setdefault(
                 tooth_key,
                 R4ToothStateEntryOut(restorations=[], missing=False, extracted=False),
@@ -778,7 +835,12 @@ def get_tooth_state(
             if restoration_type == "extraction":
                 entry.extracted = True
 
-            restoration_surfaces = _extract_surface_keys(payload, record.surface)
+            use_bitmask_surfaces = domain in real_domain_names
+            restoration_surfaces = _extract_surface_keys(
+                payload,
+                record.surface,
+                bitmask=use_bitmask_surfaces,
+            )
 
             dedupe_key = "|".join(
                 [

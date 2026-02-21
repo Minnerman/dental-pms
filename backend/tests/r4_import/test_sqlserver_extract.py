@@ -652,3 +652,107 @@ def test_collect_canonical_records_includes_treatment_notes_with_date_bounds():
     assert treatment[0].domain == "treatment_note"
     assert treatment[0].r4_source_id == "11"
     assert dropped["out_of_range"] == 0
+
+
+class DummyRestorativeTreatment:
+    def __init__(self, patient_code, *, ref_id, completion_date, status_description, tooth, surface, code_id):
+        self.patient_code = patient_code
+        self.ref_id = ref_id
+        self.tp_item_key = None
+        self.tp_number = 1
+        self.tp_item = 1
+        self.trans_code = 1
+        self.creation_date = completion_date
+        self.acceptance_date = completion_date
+        self.completion_date = completion_date
+        self.transaction_date = completion_date
+        self.recorded_at = completion_date
+        self.complete = True
+        self.completed = True
+        self.status_code = 3
+        self.status_description = status_description
+        self.description = "Composite filling"
+        self.code_id = code_id
+        self.tooth = tooth
+        self.surface = surface
+
+    def model_dump(self):
+        return {
+            "patient_code": self.patient_code,
+            "ref_id": self.ref_id,
+            "tp_item_key": self.tp_item_key,
+            "tp_number": self.tp_number,
+            "tp_item": self.tp_item,
+            "trans_code": self.trans_code,
+            "creation_date": self.creation_date,
+            "acceptance_date": self.acceptance_date,
+            "completion_date": self.completion_date,
+            "transaction_date": self.transaction_date,
+            "recorded_at": self.recorded_at,
+            "complete": self.complete,
+            "completed": self.completed,
+            "status_code": self.status_code,
+            "status_description": self.status_description,
+            "description": self.description,
+            "code_id": self.code_id,
+            "tooth": self.tooth,
+            "surface": self.surface,
+        }
+
+
+def test_collect_canonical_records_includes_restorative_treatments_with_date_bounds():
+    class RestorativeSource(DummySourceForNotes):
+        def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+        def list_treatment_notes(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+        ):
+            return []
+
+        def list_restorative_treatments(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+            include_not_completed=False,
+        ):
+            assert date_from == date(2010, 1, 1)
+            assert date_to == date(2026, 2, 1)
+            assert include_not_completed is False
+            return [
+                DummyRestorativeTreatment(
+                    patients_from,
+                    ref_id=101,
+                    completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                    status_description="Fillings",
+                    tooth=16,
+                    surface=20,
+                    code_id=5001,
+                ),
+            ]
+
+    extractor = object.__new__(extract.SqlServerChartingExtractor)
+    extractor._source = RestorativeSource()
+    records, dropped = extractor.collect_canonical_records(
+        patient_codes=[1016312],
+        date_from=date(2010, 1, 1),
+        date_to=date(2026, 2, 1),
+        limit=10,
+    )
+    restorative = [r for r in records if r.r4_source == "dbo.vwTreatments"]
+    assert len(restorative) == 1
+    assert restorative[0].domain == "restorative_treatment"
+    assert restorative[0].r4_source_id == "101"
+    assert restorative[0].status == "Fillings"
+    assert restorative[0].code_id == 5001
+    assert restorative[0].tooth == 16
+    assert restorative[0].surface == 20
+    assert dropped["out_of_range"] == 0

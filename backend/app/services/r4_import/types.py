@@ -117,6 +117,43 @@ class R4TreatmentPlanItem(BaseModel):
     arch_code: int | None = None
 
 
+class R4RestorativeTreatment(BaseModel):
+    patient_code: int = Field(..., ge=1)
+    creation_date: datetime | None = None
+    acceptance_date: datetime | None = None
+    completion_date: datetime | None = None
+    transaction_date: datetime | None = None
+    recorded_at: datetime | None = None
+    complete: bool = False
+    completed: bool = False
+    code_id: int | None = None
+    subtype_code: int | None = None
+    status_code: int | None = None
+    status_description: str | None = None
+    description: str | None = None
+    tp_number: int | None = None
+    tp_item: int | None = None
+    tp_item_key: int | None = None
+    trans_code: int | None = None
+    ref_id: int | None = None
+    tooth: int | None = None
+    surface: int | None = None
+    condition: int | None = None
+    item_user_code: int | None = None
+    transaction_user_code: int | None = None
+    recorded_by: int | None = None
+    patient_cost: float | None = None
+    dpb_cost: float | None = None
+    clinic_code: int | None = None
+    material_code: str | None = None
+    main_stage_item: int | None = None
+    stage_no: int | None = None
+    type_code: int | None = None
+    expiry_date: datetime | None = None
+    expired_by: int | None = None
+    deleted_at: datetime | None = None
+
+
 class R4TreatmentPlanReview(BaseModel):
     patient_code: int = Field(..., ge=1)
     tp_number: int = Field(..., ge=1)

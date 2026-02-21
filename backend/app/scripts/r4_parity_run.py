@@ -13,6 +13,7 @@ from app.scripts import (
     r4_chart_healing_actions_parity_pack,
     r4_patient_notes_parity_pack,
     r4_perioprobe_parity_pack,
+    r4_restorative_treatments_parity_pack,
     r4_treatment_plans_parity_pack,
     r4_treatment_plan_items_parity_pack,
     r4_treatment_notes_parity_pack,
@@ -23,6 +24,7 @@ ALL_DOMAINS = (
     "bpe",
     "bpe_furcation",
     "chart_healing_actions",
+    "restorative_treatments",
     "perioprobe",
     "patient_notes",
     "treatment_plans",
@@ -208,6 +210,15 @@ def run_parity(
                     patient_codes=patient_codes,
                     charting_from=date_from,
                     charting_to=date_to,
+                    row_limit=row_limit,
+                    include_sqlserver=True,
+                )
+            elif domain == "restorative_treatments":
+                domain_report = r4_restorative_treatments_parity_pack.build_parity_report(
+                    session,
+                    patient_codes=patient_codes,
+                    date_from=date_from,
+                    date_to=date_to,
                     row_limit=row_limit,
                     include_sqlserver=True,
                 )

@@ -61,6 +61,43 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163B started (`stage163b-restorative-import-parity`) to import the first real restorative charting domain (`restorative_treatments` from `dbo.vwTreatments`) into canonical records and feed `tooth-state`.
+  - Canonical domain plumbing completed:
+    - SQL Server source reader added: `list_restorative_treatments` in `backend/app/services/r4_import/sqlserver_source.py` (SELECT-only; completed + tooth-specific restorative statuses).
+    - charting extractor now emits canonical `domain=restorative_treatment` from `dbo.vwTreatments` in `backend/app/services/r4_charting/sqlserver_extract.py`.
+    - importer domain allowlist updated in `backend/app/scripts/r4_import.py`: `restorative_treatments`.
+    - parity pack + runner wiring added:
+      - `backend/app/scripts/r4_restorative_treatments_parity_pack.py`
+      - `backend/app/scripts/r4_parity_run.py`
+    - spotcheck coverage added for `restorative_treatments` in `backend/app/scripts/r4_charting_spotcheck.py`.
+  - Tooth-state integration completed in `backend/app/routers/r4_charting.py`:
+    - `GET /patients/{patient_id}/charting/tooth-state` now reads restorative canonical rows (`restorative_treatment[s]`) in addition to TP/TPI proxy rows.
+    - for overlapping teeth, real restorative rows are preferred over TP-derived proxy rows.
+    - restorative surface bitmasks are decoded to `M/O/D/B/L/I` for odontogram rendering.
+  - Stage 163B deterministic cohort + imports (seed `17`, cap `200`):
+    - cohort file: `.run/stage163b/stage163b_restorative_cohort.csv` (`200` patient codes).
+    - patients import (pre-existing cohort in this DB):
+      - apply: `.run/stage163b/stage163b_patients_apply.json` (`created=0`, `updated=0`, `skipped=200`)
+      - rerun: `.run/stage163b/stage163b_patients_rerun.json` (`created=0`, `updated=0`, `skipped=200`)
+    - charting canonical import:
+      - apply: `.run/stage163b/stage163b_restorative_apply.json` (`candidates_total=1619`, `imported_created_total=1619`, `unmapped_patients_total=0`, `dropped_out_of_range_total=0`)
+      - resume: `.run/stage163b/stage163b_restorative_resume.json` (`imported_created_total=0`, `imported_updated_total=0`, `skipped_total=1619`)
+  - Parity gate:
+    - `.run/stage163b/stage163b_restorative_parity.json`
+    - result: `overall.status=pass`; domain `restorative_treatments` `patients_with_data=200/200`, `latest_match=200/200`, `latest_digest_match=200/200`.
+  - Treatment code label sync for imported restorative codes:
+    - extracted cohort code IDs: `.run/stage163b/stage163b_restorative_code_ids.txt` (`122` code IDs).
+    - sync apply stats: `.run/stage163b/stage163b_code_sync.json` (`created=122`, `updated=0`, `missing_codes_total=0`).
+  - Tooth-state proof (real restorative rows, non-crown types present):
+    - proof payload: `.run/stage163b/stage163b_tooth_state_proof_1014579.json`
+    - proof patient: `legacy_patient_code=1014579` (`patient_id=14986`)
+    - endpoint evidence: `total_restorations=33`, types include `filling`, `root_canal`, `extraction`, `denture`, `post`, `crown`.
+  - Spotcheck evidence (`restorative_treatments` entity only):
+    - `.run/stage163b/stage163b_spotcheck_restorative_1014579.json` (`sqlserver_rows=33`, `postgres_rows=33`)
+    - `.run/stage163b/stage163b_spotcheck_restorative_1000487.json` (`sqlserver_rows=45`, `postgres_rows=28`)
+    - `.run/stage163b/stage163b_spotcheck_restorative_1000747.json` (`sqlserver_rows=2`, `postgres_rows=2`)
+  - Seen ledger updated:
+    - `.run/seen_stage163b_restorative_treatments.txt` now contains `200` cohort patient codes.
 - 2026-02-21: Stage 163A started (`stage163a-restorative-domain-discovery`) to select the first genuine R4 restorative charting domain (non-TP-derived) for import.
   - Evidence-first SQL Server discovery artifacts added:
     - `.run/stage163a/rg_restorative_candidates.txt`
