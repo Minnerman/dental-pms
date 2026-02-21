@@ -3103,6 +3103,9 @@ class R4SqlServerSource:
         date_to: date | None = None,
         limit: int | None = None,
         include_not_completed: bool = False,
+        require_tooth: bool = True,
+        status_descriptions: tuple[str, ...] | None = _RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS,
+        require_code_id: bool = False,
     ) -> Iterable[R4RestorativeTreatment]:
         patient_col = self._require_column("vwTreatments", ["PatientCode", "patientcode"])
         tooth_col = self._require_column("vwTreatments", ["Tooth", "tooth"])
@@ -3146,13 +3149,17 @@ class R4SqlServerSource:
                 "vwTreatments missing CompletionDate/transactionDate/CreationDate; cannot apply date filter."
             )
 
-        where_parts: list[str] = [
-            f"{patient_col} IS NOT NULL",
-            f"{tooth_col} IS NOT NULL",
-            f"{tooth_col} > 0",
-            f"LOWER(CONVERT(nvarchar(200), {status_desc_col})) IN ({', '.join('?' for _ in _RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS)})",
-        ]
-        params: list[Any] = [*list(_RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS)]
+        where_parts: list[str] = [f"{patient_col} IS NOT NULL"]
+        params: list[Any] = []
+        if require_tooth:
+            where_parts.extend([f"{tooth_col} IS NOT NULL", f"{tooth_col} > 0"])
+        if status_descriptions is not None:
+            where_parts.append(
+                f"LOWER(CONVERT(nvarchar(200), {status_desc_col})) IN ({', '.join('?' for _ in status_descriptions)})"
+            )
+            params.extend(list(status_descriptions))
+        if require_code_id and code_col:
+            where_parts.append(f"{code_col} IS NOT NULL")
 
         range_clause, range_params = self._build_range_filter(patient_col, patients_from, patients_to)
         if range_clause:
@@ -3259,8 +3266,9 @@ class R4SqlServerSource:
         for row in rows:
             patient_code = row.get("patient_code")
             tooth = row.get("tooth")
-            if patient_code is None or tooth is None:
+            if patient_code is None:
                 continue
+            tooth_value = int(tooth) if tooth is not None else None
             status_description = (row.get("status_description") or "").strip() or None
             description = (row.get("description") or "").strip() or None
             material_code = (row.get("material_code") or "").strip() or None
@@ -3283,7 +3291,7 @@ class R4SqlServerSource:
                 tp_item_key=int(row["tp_item_key"]) if row.get("tp_item_key") is not None else None,
                 trans_code=int(row["trans_code"]) if row.get("trans_code") is not None else None,
                 ref_id=int(row["ref_id"]) if row.get("ref_id") is not None else None,
-                tooth=int(tooth),
+                tooth=tooth_value,
                 surface=int(row["surface"]) if row.get("surface") is not None else None,
                 condition=int(row["condition"]) if row.get("condition") is not None else None,
                 item_user_code=(

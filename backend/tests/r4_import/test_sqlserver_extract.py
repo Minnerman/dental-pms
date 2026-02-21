@@ -723,10 +723,15 @@ def test_collect_canonical_records_includes_restorative_treatments_with_date_bou
             date_to=None,
             limit=None,
             include_not_completed=False,
+            require_tooth=True,
+            status_descriptions=None,
+            require_code_id=False,
         ):
             assert date_from == date(2010, 1, 1)
             assert date_to == date(2026, 2, 1)
-            assert include_not_completed is False
+            assert include_not_completed is True
+            assert require_tooth is False
+            assert status_descriptions is None
             return [
                 DummyRestorativeTreatment(
                     patients_from,
@@ -756,3 +761,121 @@ def test_collect_canonical_records_includes_restorative_treatments_with_date_bou
     assert restorative[0].tooth == 16
     assert restorative[0].surface == 20
     assert dropped["out_of_range"] == 0
+
+
+def test_collect_canonical_records_restorative_drop_reasons_are_counted():
+    class RestorativeSource(DummySourceForNotes):
+        def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+        def list_treatment_notes(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+        ):
+            return []
+
+        def list_restorative_treatments(
+            self,
+            patients_from=None,
+            patients_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+            include_not_completed=False,
+            require_tooth=True,
+            status_descriptions=None,
+            require_code_id=False,
+        ):
+            missing_tooth = DummyRestorativeTreatment(
+                patients_from,
+                ref_id=201,
+                completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                status_description="Fillings",
+                tooth=16,
+                surface=0,
+                code_id=5001,
+            )
+            missing_tooth.tooth = None
+
+            invalid_surface = DummyRestorativeTreatment(
+                patients_from,
+                ref_id=202,
+                completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                status_description="Fillings",
+                tooth=16,
+                surface=128,
+                code_id=5001,
+            )
+
+            ignored_status = DummyRestorativeTreatment(
+                patients_from,
+                ref_id=203,
+                completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                status_description="Planned",
+                tooth=16,
+                surface=0,
+                code_id=5001,
+            )
+
+            not_completed = DummyRestorativeTreatment(
+                patients_from,
+                ref_id=204,
+                completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                status_description="Fillings",
+                tooth=16,
+                surface=0,
+                code_id=5001,
+            )
+            not_completed.complete = False
+            not_completed.completed = False
+
+            missing_code = DummyRestorativeTreatment(
+                patients_from,
+                ref_id=205,
+                completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                status_description="Fillings",
+                tooth=16,
+                surface=0,
+                code_id=5001,
+            )
+            missing_code.code_id = None
+
+            valid = DummyRestorativeTreatment(
+                patients_from,
+                ref_id=206,
+                completion_date=datetime(2023, 5, 1, 9, 0, 0),
+                status_description="Fillings",
+                tooth=16,
+                surface=0,
+                code_id=5001,
+            )
+            return [
+                missing_tooth,
+                invalid_surface,
+                ignored_status,
+                not_completed,
+                missing_code,
+                valid,
+            ]
+
+    extractor = object.__new__(extract.SqlServerChartingExtractor)
+    extractor._source = RestorativeSource()
+    records, dropped = extractor.collect_canonical_records(
+        patient_codes=[1016312],
+        date_from=date(2010, 1, 1),
+        date_to=date(2026, 2, 1),
+        domains=["restorative_treatments"],
+        limit=20,
+    )
+    restorative = [r for r in records if r.r4_source == "dbo.vwTreatments"]
+    assert len(restorative) == 1
+    assert restorative[0].r4_source_id == "206"
+    assert dropped["restorative_missing_tooth"] == 1
+    assert dropped["restorative_invalid_surface"] == 1
+    assert dropped["restorative_status_ignored"] == 1
+    assert dropped["restorative_not_completed"] == 1
+    assert dropped["restorative_missing_code_id"] == 1

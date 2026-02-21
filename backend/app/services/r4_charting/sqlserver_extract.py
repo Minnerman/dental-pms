@@ -35,6 +35,7 @@ _RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS = {
     "extraction incl bone removal",
     "extraction of soft tissue",
 }
+_RESTORATIVE_SURFACE_VALID_MASK = 0b111111
 
 
 @dataclass
@@ -42,12 +43,22 @@ class SqlServerExtractReport:
     missing_date: int = 0
     out_of_range: int = 0
     undated_included: int = 0
+    restorative_missing_tooth: int = 0
+    restorative_invalid_surface: int = 0
+    restorative_status_ignored: int = 0
+    restorative_not_completed: int = 0
+    restorative_missing_code_id: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return {
             "missing_date": self.missing_date,
             "out_of_range": self.out_of_range,
             "undated_included": self.undated_included,
+            "restorative_missing_tooth": self.restorative_missing_tooth,
+            "restorative_invalid_surface": self.restorative_invalid_surface,
+            "restorative_status_ignored": self.restorative_status_ignored,
+            "restorative_not_completed": self.restorative_not_completed,
+            "restorative_missing_code_id": self.restorative_missing_code_id,
         }
 
 
@@ -342,6 +353,22 @@ class SqlServerChartingExtractor:
                     source_id = f"{item.patient_code}:{item.trans_code}:{recorded_at.isoformat()}"
                 else:
                     source_id = f"{item.patient_code}:{item.code_id}:{item.tooth}:{item.surface}:{recorded_at}"
+                status_norm = str(item.status_description or "").strip().lower()
+                if status_norm not in _RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS:
+                    report.restorative_status_ignored += 1
+                    continue
+                if not (item.completed or item.complete):
+                    report.restorative_not_completed += 1
+                    continue
+                if item.tooth is None or item.tooth <= 0:
+                    report.restorative_missing_tooth += 1
+                    continue
+                if item.code_id is None:
+                    report.restorative_missing_code_id += 1
+                    continue
+                if not _is_valid_restorative_surface(item.surface):
+                    report.restorative_invalid_surface += 1
+                    continue
                 status = item.status_description
                 if not status and item.status_code is not None:
                     status = str(item.status_code)
@@ -649,6 +676,9 @@ class SqlServerChartingExtractor:
                 date_from=date_from,
                 date_to=date_to,
                 limit=limit,
+                include_not_completed=True,
+                require_tooth=False,
+                status_descriptions=None,
             )
             return
         remaining = limit
@@ -665,6 +695,9 @@ class SqlServerChartingExtractor:
                     date_from=date_from,
                     date_to=date_to,
                     limit=batch_limit,
+                    include_not_completed=True,
+                    require_tooth=False,
+                    status_descriptions=None,
                 ):
                     yield item
                     if remaining is not None:
@@ -1390,6 +1423,16 @@ def _date_in_range(
         report.out_of_range += 1
         return False
     return True
+
+
+def _is_valid_restorative_surface(surface: int | None) -> bool:
+    if surface is None:
+        return True
+    if surface == 0:
+        return True
+    if surface < 0:
+        return False
+    return (surface & ~_RESTORATIVE_SURFACE_VALID_MASK) == 0
 
 
 def _coerce_date(value: date | str) -> date:
