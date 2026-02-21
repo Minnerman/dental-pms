@@ -207,6 +207,67 @@ def test_get_distinct_treatment_notes_patient_codes_dedupes_and_orders(monkeypat
     assert captured["params"][0] == 5
 
 
+def test_get_distinct_restorative_treatments_patient_codes_dedupes_and_orders(monkeypatch):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def _pick_column(self, table, candidates):
+            if table != "vwTreatments":
+                return None
+            for candidate in candidates:
+                if candidate in {"PatientCode", "patientcode"}:
+                    return "patientcode"
+                if candidate in {"StatusDescription", "statusdescription"}:
+                    return "StatusDescription"
+                if candidate in {"Tooth", "tooth"}:
+                    return "Tooth"
+                if candidate in {"CompletionDate", "transactionDate"}:
+                    return "CompletionDate"
+                if candidate in {"Completed", "Complete"}:
+                    return "Completed"
+            return None
+
+        def _query(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return [
+                {"patient_code": 301},
+                {"patient_code": 302},
+                {"patient_code": 301},
+                {"patient_code": None},
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_restorative_treatments_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [301, 302]
+    assert "FROM dbo.vwTreatments" in captured["query"]
+    assert "LOWER(CONVERT(nvarchar(200), StatusDescription)) IN" in captured["query"]
+    assert "Completed = 1" in captured["query"]
+    assert "Tooth > 0" in captured["query"]
+    assert "ORDER BY MAX(CompletionDate) DESC, patientcode ASC" in captured["query"]
+    assert captured["params"][0] == 5
+    assert captured["params"][1] == date(2017, 1, 1)
+    assert captured["params"][2] == date(2026, 2, 1)
+
+
 def test_get_distinct_bpe_furcation_patient_codes_dedupes_and_orders(monkeypatch):
     captured = {}
 

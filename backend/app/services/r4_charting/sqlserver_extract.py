@@ -9,6 +9,34 @@ from app.services.r4_charting.canonical_types import CanonicalRecordInput
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
 
+_RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS = {
+    "fillings",
+    "fillings additional tooth items",
+    "crown",
+    "crowns/inlays additions",
+    "inlay/crown add. tooth items",
+    "root filling",
+    "root fillings additional items",
+    "implant",
+    "post",
+    "partial denture",
+    "adjust denture",
+    "dentures additional items",
+    "dentures addl tooth items",
+    "full upper denture",
+    "full lower denture",
+    "reline denture",
+    "denture prior treatment",
+    "bridge additions",
+    "bridges additional tooth items",
+    "abutment",
+    "extraction",
+    "extraction additional items",
+    "extraction incl bone removal",
+    "extraction of soft tissue",
+}
+
+
 @dataclass
 class SqlServerExtractReport:
     missing_date: int = 0
@@ -1123,6 +1151,77 @@ def get_distinct_treatment_plans_patient_codes(
         codes.append(code)
         if len(codes) >= limit:
             break
+    return codes
+
+
+def get_distinct_restorative_treatments_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("vwTreatments", ["PatientCode", "patientcode"])  # noqa: SLF001
+    status_col = source._pick_column("vwTreatments", ["StatusDescription", "statusdescription"])  # noqa: SLF001
+    tooth_col = source._pick_column("vwTreatments", ["Tooth", "tooth"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "vwTreatments",
+        ["CompletionDate", "transactionDate", "CreationDate", "Date"],
+    )
+    completed_col = source._pick_column("vwTreatments", ["Completed", "Complete"])  # noqa: SLF001
+
+    if not patient_col or not status_col or not tooth_col or not date_col:
+        raise RuntimeError(
+            "vwTreatments missing patient/status/tooth/date columns; cannot fetch restorative codes."
+        )
+
+    statuses = sorted(_RESTORATIVE_TREATMENT_STATUS_DESCRIPTIONS)
+    status_placeholders = ", ".join(["?"] * len(statuses))
+    where_parts = [
+        f"{patient_col} IS NOT NULL",
+        f"{date_col} >= ?",
+        f"{date_col} < ?",
+        f"{tooth_col} IS NOT NULL",
+        f"{tooth_col} > 0",
+        f"LOWER(CONVERT(nvarchar(200), {status_col})) IN ({status_placeholders})",
+    ]
+    if completed_col:
+        where_parts.append(f"{completed_col} = 1")
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.vwTreatments WITH (NOLOCK) "
+            f"WHERE {' AND '.join(where_parts)} "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to, *statuses],
+    )
+
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
     return codes
 
 

@@ -7,6 +7,7 @@ def test_parse_domains_csv_defaults_include_treatment_plan_items():
         "bpe",
         "bpe_furcation",
         "chart_healing_actions",
+        "restorative_treatments",
         "patient_notes",
         "treatment_plans",
         "treatment_notes",
@@ -173,6 +174,12 @@ def test_parse_domains_csv_accepts_patient_notes():
 def test_parse_domains_csv_accepts_chart_healing_actions():
     assert r4_cohort_select._parse_domains_csv("chart_healing_actions") == [
         "chart_healing_actions"
+    ]
+
+
+def test_parse_domains_csv_accepts_restorative_treatments():
+    assert r4_cohort_select._parse_domains_csv("restorative_treatments") == [
+        "restorative_treatments"
     ]
 
 
