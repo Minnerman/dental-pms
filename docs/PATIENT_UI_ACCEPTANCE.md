@@ -27,25 +27,24 @@ Define a strict, testable acceptance contract for making the patient screen feel
   - Grouping should mirror R4 style: identity -> risk/alerts -> contact/recall -> quick actions.
 
 ## Tabs and Navigation Model
-- Primary tab strip should follow R4-oriented clinical workflow ordering.
-- Baseline target order for Stage 160B (pending Amir exact order confirmation):
-  1. Summary
-  2. Clinical
-  3. Charting (when feature enabled)
-  4. Appointments/Transactions
-  5. Treatment Plans/Estimates
-  6. Notes
-  7. Financial (Invoices/Ledger)
-  8. Recalls
-  9. Documents/Attachments
-  10. Timeline/Audit
+- Locked default order/labels (must match exactly, case-sensitive):
+  1. Personal
+  2. Medical
+  3. Schemes
+  4. Appointments
+  5. Financial
+  6. Comms
+  7. Notes
+  8. Treatment
+- Custom tabs are extension-only and must be appended after `Treatment` under a `Custom` group.
+- This locked order must not change unless this acceptance file and Playwright assertions are updated in the same PR.
 - Active state:
   - Strong active tab affordance.
   - Clear distinction between primary tabs and quick links.
 
 ## Keyboard Shortcuts
 - Stage 160B target:
-  - `Ctrl/Cmd + 1..9` maps to primary patient tabs.
+  - `Ctrl/Cmd + 1..8` maps to the locked tab order above.
   - `Esc` closes any transient panel/menu and returns to stable patient view state.
   - Shortcut behavior should not trigger while typing in input/textarea/select fields.
 
@@ -77,4 +76,4 @@ Define a strict, testable acceptance contract for making the patient screen feel
   - render timing within budget.
 
 ## Open Inputs
-- Exact R4 tab labels/order should be confirmed by Amir and then locked as strict assertions in Stage 160B.
+- None for tab order/labels; the locked default list above is final for Stage 160B.

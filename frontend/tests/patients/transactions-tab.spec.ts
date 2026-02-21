@@ -118,7 +118,7 @@ test("patient transactions tab renders, paginates, and filters", async ({
   await primePageAuth(page, request);
   await page.goto(`${getBaseUrl()}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
 
-  await page.getByTestId("patient-tab-transactions").click();
+  await page.getByTestId("patient-tab-Appointments").click();
 
   const table = page.getByTestId("transactions-table");
   const empty = page.getByTestId("transactions-empty");

@@ -714,6 +714,49 @@ type PatientTab =
   | "documents"
   | "attachments";
 
+const PATIENT_TABS = [
+  { key: "personal", label: "Personal" },
+  { key: "medical", label: "Medical" },
+  { key: "schemes", label: "Schemes" },
+  { key: "appointments", label: "Appointments" },
+  { key: "financial", label: "Financial" },
+  { key: "comms", label: "Comms" },
+  { key: "notes", label: "Notes" },
+  { key: "treatment", label: "Treatment" },
+] as const;
+
+type LockedPatientTabKey = (typeof PATIENT_TABS)[number]["key"];
+
+const LOCKED_TAB_TO_CONTENT_TAB: Record<LockedPatientTabKey, PatientTab> = {
+  personal: "summary",
+  medical: "clinical",
+  schemes: "recalls",
+  appointments: "transactions",
+  financial: "invoices",
+  comms: "documents",
+  notes: "notes",
+  treatment: "estimates",
+};
+
+function resolveLockedTabFromContentTab(tab: PatientTab): LockedPatientTabKey {
+  if (tab === "summary") return "personal";
+  if (tab === "clinical") return "medical";
+  if (tab === "recalls") return "schemes";
+  if (tab === "transactions") return "appointments";
+  if (tab === "invoices" || tab === "ledger") return "financial";
+  if (tab === "documents" || tab === "attachments") return "comms";
+  if (tab === "notes") return "notes";
+  return "treatment";
+}
+
+function isEditableShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target.closest("[contenteditable='true']")) return true;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
 export default function PatientDetailClient({
   id,
   initialTab,
@@ -735,6 +778,9 @@ export default function PatientDetailClient({
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [tab, setTab] = useState<PatientTab>(initialTab ?? "summary");
+  const [activeLockedTab, setActiveLockedTab] = useState<LockedPatientTabKey>(
+    resolveLockedTabFromContentTab(initialTab ?? "summary")
+  );
   const [clinicalTab, setClinicalTab] = useState<"chart" | "treatment" | "notes">(
     "chart"
   );
@@ -1011,6 +1057,16 @@ export default function PatientDetailClient({
       notesFilterQueryDebounced,
     ]
   );
+
+  const activateContentTab = useCallback((nextTab: PatientTab) => {
+    setTab(nextTab);
+    setActiveLockedTab(resolveLockedTabFromContentTab(nextTab));
+  }, []);
+
+  const activateLockedTab = useCallback((nextTab: LockedPatientTabKey) => {
+    setActiveLockedTab(nextTab);
+    setTab(LOCKED_TAB_TO_CONTENT_TAB[nextTab]);
+  }, []);
 
   const loadPatient = useCallback(async () => {
     setLoading(true);
@@ -2794,14 +2850,14 @@ export default function PatientDetailClient({
 
   useEffect(() => {
     if (!initialTab) return;
-    setTab(initialTab);
-  }, [initialTab, chartingViewerEnabled]);
+    activateContentTab(initialTab);
+  }, [initialTab, activateContentTab]);
 
   useEffect(() => {
     if (!isChartingRoute && tab === "charting" && !chartingViewerEnabled) {
-      setTab("summary");
+      activateContentTab("summary");
     }
-  }, [tab, chartingViewerEnabled, isChartingRoute]);
+  }, [tab, chartingViewerEnabled, isChartingRoute, activateContentTab]);
 
   useEffect(() => {
     if (tab !== "clinical") return;
@@ -2818,6 +2874,19 @@ export default function PatientDetailClient({
     const fromUrl = getTransactionFiltersFromParams(searchParams);
     void loadTransactions({ reset: true, overrides: fromUrl });
   }, [tab, transactionsLoaded, searchParams, loadTransactions]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (isEditableShortcutTarget(event.target)) return;
+      const position = Number.parseInt(event.key, 10);
+      if (!Number.isFinite(position) || position < 1 || position > PATIENT_TABS.length) return;
+      event.preventDefault();
+      activateLockedTab(PATIENT_TABS[position - 1].key);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activateLockedTab]);
 
   const applyChartingFiltersFromParams = useCallback((params: URLSearchParams) => {
     const chartingKeys = Array.from(params.keys()).filter(
@@ -3158,12 +3227,12 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (!patient || handledBookParam) return;
     if (searchParams?.get("book") === "1") {
-      setTab("summary");
+      activateContentTab("summary");
       openBookingModal();
       setPendingScrollTarget("patient-book-appointment");
       setHandledBookParam(true);
     }
-  }, [patient, handledBookParam, searchParams, openBookingModal]);
+  }, [patient, handledBookParam, searchParams, openBookingModal, activateContentTab]);
 
   useEffect(() => {
     if (!pendingScrollTarget) return;
@@ -4804,45 +4873,22 @@ export default function PatientDetailClient({
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <div className="label">Quick links</div>
                 <div style={tabRowStyle}>
-                  <Link
-                    style={tabStyle(tab === "summary", true)}
-                    href={`/patients/${patientId}`}
-                    aria-current={tab === "summary" ? "page" : undefined}
-                  >
-                    Summary
+                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}`}>
+                    Main route
                   </Link>
-                  <Link
-                    style={tabStyle(tab === "clinical", true)}
-                    href={`/patients/${patientId}/clinical`}
-                    aria-current={tab === "clinical" ? "page" : undefined}
-                  >
-                    Clinical
+                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}/clinical`}>
+                    Clinical route
                   </Link>
                   {chartingViewerEnabled && (
-                    <Link
-                      style={tabStyle(tab === "charting", true)}
-                      href={`/patients/${patientId}/charting`}
-                      aria-current={tab === "charting" ? "page" : undefined}
-                    >
+                    <Link style={tabStyle(tab === "charting", true)} href={`/patients/${patientId}/charting`}>
                       Charting
                     </Link>
                   )}
-                  <Link
-                    style={tabStyle(tab === "documents", true)}
-                    href={`/patients/${patientId}/documents`}
-                    aria-current={tab === "documents" ? "page" : undefined}
-                  >
-                    Documents
-                  </Link>
-                  <Link
-                    style={tabStyle(tab === "attachments", true)}
-                    href={`/patients/${patientId}/attachments`}
-                    aria-current={tab === "attachments" ? "page" : undefined}
-                  >
-                    Attachments
-                  </Link>
                   <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
                     Timeline
+                  </Link>
+                  <Link style={tabStyle(false, true)} href={`/patients/${patientId}/audit`}>
+                    Audit
                   </Link>
                 </div>
               </div>
@@ -4880,101 +4926,74 @@ export default function PatientDetailClient({
 
           <div className="card">
             <div className="stack">
-              <div style={tabRowStyle}>
-                <button
-                  style={tabStyle(tab === "summary")}
-                  onClick={() => setTab("summary")}
-                  type="button"
-                  aria-current={tab === "summary" ? "page" : undefined}
+              <div className="stack" style={{ gap: 10 }}>
+                <div
+                  style={tabRowStyle}
+                  data-testid="patient-tabs"
+                  role="tablist"
+                  aria-label="Patient tabs"
                 >
-                  Summary
-                </button>
-                <Link
-                  style={tabStyle(tab === "clinical")}
-                  href={`/patients/${patientId}/clinical`}
-                  aria-current={tab === "clinical" ? "page" : undefined}
+                  {PATIENT_TABS.map((lockedTab, index) => {
+                    const isActive = activeLockedTab === lockedTab.key;
+                    return (
+                      <button
+                        key={lockedTab.key}
+                        style={tabStyle(isActive)}
+                        onClick={() => activateLockedTab(lockedTab.key)}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-current={isActive ? "page" : undefined}
+                        data-testid={`patient-tab-${lockedTab.label}`}
+                        title={`Ctrl/Cmd+${index + 1}`}
+                      >
+                        {lockedTab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
                 >
-                  Clinical
-                </Link>
-                {chartingViewerEnabled && (
-                  <Link
-                    style={tabStyle(tab === "charting")}
-                    href={`/patients/${patientId}/charting`}
-                    aria-current={tab === "charting" ? "page" : undefined}
-                    data-testid="patient-tab-charting"
-                  >
-                    Charting
-                  </Link>
-                )}
-                <Link
-                  style={tabStyle(tab === "documents")}
-                  href={`/patients/${patientId}/documents`}
-                  aria-current={tab === "documents" ? "page" : undefined}
-                >
-                  Documents
-                </Link>
-                <Link
-                  style={tabStyle(tab === "attachments")}
-                  href={`/patients/${patientId}/attachments`}
-                  aria-current={tab === "attachments" ? "page" : undefined}
-                >
-                  Attachments
-                </Link>
-                <button
-                  style={tabStyle(tab === "notes")}
-                  onClick={() => setTab("notes")}
-                  type="button"
-                  aria-current={tab === "notes" ? "page" : undefined}
-                >
-                  Notes ({notes.length})
-                </button>
-                <button
-                  style={tabStyle(tab === "invoices")}
-                  onClick={() => setTab("invoices")}
-                  type="button"
-                  aria-current={tab === "invoices" ? "page" : undefined}
-                >
-                  Invoices ({invoices.length})
-                </button>
-                <button
-                  style={tabStyle(tab === "ledger")}
-                  onClick={() => setTab("ledger")}
-                  type="button"
-                  aria-current={tab === "ledger" ? "page" : undefined}
-                >
-                  Ledger ({ledgerEntries.length})
-                </button>
-                <button
-                  style={tabStyle(tab === "transactions")}
-                  onClick={() => setTab("transactions")}
-                  type="button"
-                  aria-current={tab === "transactions" ? "page" : undefined}
-                  data-testid="patient-tab-transactions"
-                >
-                  Transactions ({transactions.length})
-                </button>
-                <button
-                  style={tabStyle(tab === "recalls")}
-                  onClick={() => setTab("recalls")}
-                  type="button"
-                  aria-current={tab === "recalls" ? "page" : undefined}
-                >
-                  Recalls ({recalls.length})
-                </button>
-                <button
-                  style={tabStyle(tab === "estimates")}
-                  onClick={() => setTab("estimates")}
-                  type="button"
-                  aria-current={tab === "estimates" ? "page" : undefined}
-                >
-                  Estimates ({estimates.length})
-                </button>
-                <Link style={tabStyle(false)} href={`/patients/${patientId}/timeline`}>
-                  Timeline
-                </Link>
-                <Link style={tabStyle(false)} href={`/patients/${patientId}/audit`}>
-                  Audit
-                </Link>
+                  <div className="label">Custom</div>
+                  <div style={tabRowStyle}>
+                    {chartingViewerEnabled && (
+                      <Link
+                        style={tabStyle(tab === "charting", true)}
+                        href={`/patients/${patientId}/charting`}
+                        aria-current={tab === "charting" ? "page" : undefined}
+                        data-testid="patient-tab-charting"
+                      >
+                        Charting
+                      </Link>
+                    )}
+                    <Link
+                      style={tabStyle(tab === "documents", true)}
+                      href={`/patients/${patientId}/documents`}
+                      aria-current={tab === "documents" ? "page" : undefined}
+                    >
+                      Documents
+                    </Link>
+                    <Link
+                      style={tabStyle(tab === "attachments", true)}
+                      href={`/patients/${patientId}/attachments`}
+                      aria-current={tab === "attachments" ? "page" : undefined}
+                    >
+                      Attachments
+                    </Link>
+                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
+                      Timeline
+                    </Link>
+                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/audit`}>
+                      Audit
+                    </Link>
+                  </div>
+                </div>
               </div>
 
               {tab === "summary" ? (
@@ -5028,7 +5047,7 @@ export default function PatientDetailClient({
                         type="button"
                         className="btn btn-secondary"
                         onClick={() => {
-                          setTab("summary");
+                          activateContentTab("summary");
                           setPendingScrollTarget("patient-appointments");
                         }}
                       >
@@ -5134,7 +5153,7 @@ export default function PatientDetailClient({
                                 className="btn btn-primary"
                                 type="button"
                                 onClick={() => {
-                                  setTab("invoices");
+                                  activateContentTab("invoices");
                                 }}
                               >
                                 Create invoice
