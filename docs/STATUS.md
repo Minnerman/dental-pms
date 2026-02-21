@@ -61,6 +61,44 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163F started (`stage163f-completed-treatment-findings-import-scout`) to scout the next charting domain after restorative hardening.
+  - Selected scout domain: `completed_treatment_findings` from `dbo.vwCompletedTreatmentTransactions` (read-only).
+  - Domain selection rationale (evidence-first):
+    - current data slice has large in-window coverage with deterministic patient linkage:
+      - `rows_in_window=15902`, `patients_in_window=2933`
+      - tooth-linked rows present for all in-window rows (`rows_with_tooth=15902`).
+    - unlike `chart_healing_actions` / `treatment_plan_reviews` / `old_patient_notes` (0-row in this slice), this view is non-empty and immediately scannable.
+    - this scout intentionally excludes restorative-classified rows already covered by Stage 163C (`restorative_classified=6029`) to focus next-stage findings behavior.
+  - Stage 163F scouting implementation (no import apply/parity yet):
+    - new drop-reason skeleton helper:
+      - `backend/app/services/r4_charting/completed_treatment_findings_scout.py`
+      - reasons tracked: `missing_patient_code`, `missing_tooth`, `missing_code_id`, `out_of_window`, `restorative_classified`, `duplicate_key`, `included`.
+    - new read-only inventory script:
+      - `backend/app/scripts/r4_completed_treatment_findings_inventory.py`
+      - outputs deterministic hashed cohort (`seed=17`) + top code distribution + drop-skeleton counters.
+    - Playwright scaffold (placeholder, skipped by design in scout stage):
+      - `frontend/tests/clinical-odontogram-completed-treatment-findings.spec.ts`
+  - Stage 163F scout artefacts:
+    - inventory JSON:
+      - `.run/stage163f/stage163f_completed_treatment_findings_inventory.json`
+    - deterministic first chunk cohort CSV (200 patients):
+      - `.run/stage163f/stage163f_completed_treatment_findings_cohort.csv`
+    - drop-skeleton summary:
+      - `.run/stage163f/stage163f_completed_treatment_findings_drop_skeleton.json`
+    - proof patient seed set (legacy codes):
+      - `.run/stage163f/stage163f_completed_treatment_findings_proof_patients.json`
+  - Stage 163F scout headline metrics (window `2017-01-01..2026-02-01`):
+    - accepted non-restorative findings rows: `9873`
+    - accepted patients: `2886`
+    - selected deterministic scout chunk (`seed=17`, limit `200`): `selected_count=200`
+    - top grouped code classifications in top-50 codes:
+      - `other=31`, `denture=8`, `filling=6`, `extraction=5`
+  - Proposed Stage 163F scale-out plan (next PRs):
+    - deterministic chunking: `200` patients per chunk, hashed order with `seed=17`
+    - seen ledger path: `.run/seen_stage163f_completed_treatment_findings.txt`
+    - estimated chunk count from scout inventory: `15` total (`14x200 + 1x86`)
+    - parity shape (for implementation stage): compare latest findings digest per patient keyed by
+      `(legacy_patient_code, completed_at, tooth, code_id, ref_id|tp_number+tp_item)` after applying the same drop filters.
 - 2026-02-21: Stage 163E started (`stage163e-restorative-ux-hardening`) for restorative charting UX/behaviour hardening (interaction-focused).
   - Acceptance rerun doc added:
     - `docs/ACCEPTANCE_STAGE163E_RESTORATIVE_UX.md`
