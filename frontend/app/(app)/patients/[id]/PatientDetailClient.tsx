@@ -650,6 +650,18 @@ const lowerTeeth = [
 ];
 
 const allTeeth = [...upperTeeth, ...lowerTeeth];
+type ChartSelectionState = {
+  tooth: string | null;
+  surface: R4SurfaceKey | null;
+};
+const restorativeShortcutSurfaceByKey: Record<string, R4SurfaceKey> = {
+  m: "M",
+  o: "O",
+  d: "D",
+  b: "B",
+  l: "L",
+  i: "I",
+};
 const bpeSextants = ["UR", "UA", "UL", "LL", "LA", "LR"];
 const initialChartingViewerEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
 const chartingPageSize = 500;
@@ -944,6 +956,10 @@ export default function PatientDetailClient({
   const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
   const [selectedToothSurface, setSelectedToothSurface] = useState<R4SurfaceKey | null>(null);
+  const [chartSelectionUndoState, setChartSelectionUndoState] =
+    useState<ChartSelectionState | null>(null);
+  const [chartSelectionRedoState, setChartSelectionRedoState] =
+    useState<ChartSelectionState | null>(null);
   const [toothHistory, setToothHistory] = useState<ToothHistory>({
     notes: [],
     procedures: [],
@@ -1110,6 +1126,90 @@ export default function PatientDetailClient({
     setActiveLockedTab(nextTab);
     setTab(LOCKED_TAB_TO_CONTENT_TAB[nextTab]);
   }, []);
+
+  const applyChartSelection = useCallback(
+    (
+      nextTooth: string | null,
+      nextSurface: R4SurfaceKey | null,
+      options?: { trackHistory?: boolean }
+    ) => {
+      const normalizedSurface = nextTooth ? nextSurface : null;
+      const current: ChartSelectionState = {
+        tooth: selectedTooth,
+        surface: selectedToothSurface,
+      };
+      if (current.tooth === nextTooth && current.surface === normalizedSurface) {
+        return;
+      }
+      setSelectedTooth(nextTooth);
+      setSelectedToothSurface(normalizedSurface);
+      if (nextTooth) {
+        setNotesTooth(nextTooth);
+      } else {
+        setNotesTooth("");
+      }
+      if (options?.trackHistory === false) {
+        return;
+      }
+      setChartSelectionUndoState(current);
+      setChartSelectionRedoState(null);
+    },
+    [selectedTooth, selectedToothSurface]
+  );
+
+  const toggleChartSurfaceSelection = useCallback(
+    (surface: R4SurfaceKey) => {
+      if (!selectedTooth) return;
+      const nextSurface = selectedToothSurface === surface ? null : surface;
+      applyChartSelection(selectedTooth, nextSurface);
+    },
+    [applyChartSelection, selectedTooth, selectedToothSurface]
+  );
+
+  const selectAdjacentChartTooth = useCallback(
+    (direction: 1 | -1) => {
+      const anchor = selectedTooth ?? upperTeeth[0];
+      const index = allTeeth.indexOf(anchor);
+      const safeIndex = index >= 0 ? index : 0;
+      const nextIndex = (safeIndex + direction + allTeeth.length) % allTeeth.length;
+      applyChartSelection(allTeeth[nextIndex], null);
+    },
+    [applyChartSelection, selectedTooth]
+  );
+
+  const undoChartSelection = useCallback(() => {
+    if (!chartSelectionUndoState) return;
+    const current: ChartSelectionState = {
+      tooth: selectedTooth,
+      surface: selectedToothSurface,
+    };
+    setSelectedTooth(chartSelectionUndoState.tooth);
+    setSelectedToothSurface(chartSelectionUndoState.surface);
+    if (chartSelectionUndoState.tooth) {
+      setNotesTooth(chartSelectionUndoState.tooth);
+    } else {
+      setNotesTooth("");
+    }
+    setChartSelectionRedoState(current);
+    setChartSelectionUndoState(null);
+  }, [chartSelectionUndoState, selectedTooth, selectedToothSurface]);
+
+  const redoChartSelection = useCallback(() => {
+    if (!chartSelectionRedoState) return;
+    const current: ChartSelectionState = {
+      tooth: selectedTooth,
+      surface: selectedToothSurface,
+    };
+    setSelectedTooth(chartSelectionRedoState.tooth);
+    setSelectedToothSurface(chartSelectionRedoState.surface);
+    if (chartSelectionRedoState.tooth) {
+      setNotesTooth(chartSelectionRedoState.tooth);
+    } else {
+      setNotesTooth("");
+    }
+    setChartSelectionUndoState(current);
+    setChartSelectionRedoState(null);
+  }, [chartSelectionRedoState, selectedTooth, selectedToothSurface]);
 
   const loadPatient = useCallback(async () => {
     setLoading(true);
@@ -2888,7 +2988,11 @@ export default function PatientDetailClient({
     setR4ToothStateLoading(false);
     setOverlayFilter("both");
     setOverlayFilterHydrated(false);
+    setSelectedTooth(null);
     setSelectedToothSurface(null);
+    setNotesTooth("");
+    setChartSelectionUndoState(null);
+    setChartSelectionRedoState(null);
   }, [patientId]);
 
   useEffect(() => {
@@ -2906,10 +3010,9 @@ export default function PatientDetailClient({
     if (tab !== "clinical") return;
     refreshClinicalData();
     if (!selectedTooth) {
-      setSelectedTooth(upperTeeth[0]);
-      setNotesTooth(upperTeeth[0]);
+      applyChartSelection(upperTeeth[0], null, { trackHistory: false });
     }
-  }, [tab, refreshClinicalData, selectedTooth]);
+  }, [tab, refreshClinicalData, selectedTooth, applyChartSelection]);
 
   useEffect(() => {
     if (tab !== "transactions") return;
@@ -2930,6 +3033,59 @@ export default function PatientDetailClient({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activateLockedTab]);
+
+  useEffect(() => {
+    if (tab !== "clinical" || clinicalTab !== "chart") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableShortcutTarget(event.target)) return;
+      const key = event.key;
+      const keyLower = key.toLowerCase();
+      const hasModifier = event.ctrlKey || event.metaKey || event.altKey;
+      if (event.ctrlKey || event.metaKey) {
+        if (event.altKey) return;
+        if (keyLower === "z") {
+          event.preventDefault();
+          if (event.shiftKey) {
+            redoChartSelection();
+          } else {
+            undoChartSelection();
+          }
+          return;
+        }
+        if (keyLower === "y" && !event.shiftKey) {
+          event.preventDefault();
+          redoChartSelection();
+        }
+        return;
+      }
+
+      if (hasModifier || event.shiftKey) return;
+      if (key === "ArrowLeft") {
+        event.preventDefault();
+        selectAdjacentChartTooth(-1);
+        return;
+      }
+      if (key === "ArrowRight") {
+        event.preventDefault();
+        selectAdjacentChartTooth(1);
+        return;
+      }
+      const shortcutSurface = restorativeShortcutSurfaceByKey[keyLower];
+      if (shortcutSurface) {
+        event.preventDefault();
+        toggleChartSurfaceSelection(shortcutSurface);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    clinicalTab,
+    redoChartSelection,
+    selectAdjacentChartTooth,
+    tab,
+    toggleChartSurfaceSelection,
+    undoChartSelection,
+  ]);
 
   const applyChartingFiltersFromParams = useCallback((params: URLSearchParams) => {
     const chartingKeys = Array.from(params.keys()).filter(
@@ -7507,6 +7663,36 @@ export default function PatientDetailClient({
                     )}
                   </div>
                   <div
+                    className="row"
+                    style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}
+                    data-testid="clinical-selection-toolbar"
+                  >
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      data-testid="clinical-selection-undo"
+                      onClick={undoChartSelection}
+                      disabled={!chartSelectionUndoState}
+                    >
+                      Undo
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      data-testid="clinical-selection-redo"
+                      onClick={redoChartSelection}
+                      disabled={!chartSelectionRedoState}
+                    >
+                      Redo
+                    </button>
+                    <span className="badge" data-testid="clinical-selection-state">
+                      Tooth {selectedTooth ?? "—"} · Surface {selectedToothSurface ?? "None"}
+                    </span>
+                    <span className="badge" data-testid="clinical-selection-shortcuts">
+                      Surface keys: M O D B L I · Arrows: tooth nav · Ctrl/Cmd+Z undo
+                    </span>
+                  </div>
+                  <div
                     className="card"
                     style={{ margin: 0, padding: "8px 10px" }}
                     data-testid="odontogram-overlay-legend"
@@ -7625,12 +7811,9 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => {
-                                          setSelectedTooth(tooth);
-                                          setNotesTooth(tooth);
-                                          setSelectedToothSurface(null);
-                                        }}
+                                        onClick={() => applyChartSelection(tooth, null)}
                                         data-testid={`tooth-button-${tooth}`}
+                                        data-selected={isActive ? "true" : "false"}
                                         style={{
                                           padding: "6px 0 4px",
                                           minHeight: 84,
@@ -7658,11 +7841,12 @@ export default function PatientDetailClient({
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
                                           extracted={toothStateSummary.extracted}
-                                          onSurfaceClick={(surface) => {
-                                            setSelectedTooth(tooth);
-                                            setNotesTooth(tooth);
-                                            setSelectedToothSurface(surface);
-                                          }}
+                                          onSurfaceClick={(surface) =>
+                                            applyChartSelection(
+                                              tooth,
+                                              isActive && selectedToothSurface === surface ? null : surface
+                                            )
+                                          }
                                         />
                                         <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
                                           {tooth}
@@ -7830,12 +8014,9 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => {
-                                          setSelectedTooth(tooth);
-                                          setNotesTooth(tooth);
-                                          setSelectedToothSurface(null);
-                                        }}
+                                        onClick={() => applyChartSelection(tooth, null)}
                                         data-testid={`tooth-button-${tooth}`}
+                                        data-selected={isActive ? "true" : "false"}
                                         style={{
                                           padding: "6px 0 4px",
                                           minHeight: 84,
@@ -7863,11 +8044,12 @@ export default function PatientDetailClient({
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
                                           extracted={toothStateSummary.extracted}
-                                          onSurfaceClick={(surface) => {
-                                            setSelectedTooth(tooth);
-                                            setNotesTooth(tooth);
-                                            setSelectedToothSurface(surface);
-                                          }}
+                                          onSurfaceClick={(surface) =>
+                                            applyChartSelection(
+                                              tooth,
+                                              isActive && selectedToothSurface === surface ? null : surface
+                                            )
+                                          }
                                         />
                                         <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
                                           {tooth}

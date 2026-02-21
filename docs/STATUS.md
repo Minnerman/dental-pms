@@ -61,6 +61,45 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-21: Stage 163E started (`stage163e-restorative-ux-hardening`) for restorative charting UX/behaviour hardening (interaction-focused).
+  - Acceptance rerun doc added:
+    - `docs/ACCEPTANCE_STAGE163E_RESTORATIVE_UX.md`
+  - Clinical chart interaction hardening in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`:
+    - added restorative chart selection toolbar with visible state:
+      - `data-testid=clinical-selection-toolbar`
+      - `data-testid=clinical-selection-state`
+      - `data-testid=clinical-selection-undo`
+      - `data-testid=clinical-selection-redo`
+    - added keyboard interactions for clinical chart mode:
+      - surface toggles: `M/O/D/B/L/I`
+      - tooth navigation: `ArrowLeft` / `ArrowRight`
+      - undo/redo: `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl+Y`
+    - tooth buttons now expose deterministic selected state:
+      - `data-testid=tooth-button-*` with `data-selected=true|false`
+    - clicking an already-selected surface now toggles surface selection off.
+  - New Playwright UX regression:
+    - `frontend/tests/clinical-odontogram-restorative-ux.spec.ts`
+    - covers click + keyboard surface toggles, keyboard tooth navigation, and keyboard undo/redo.
+  - Stage 163E proof-data refresh (to keep real-patient UI proof deterministic after local DB resets):
+    - `.run/stage163e/stage163e_proof_codes.csv`
+    - `.run/stage163e/stage163e_proof_patients_apply.json` (`patients_created=7`)
+    - `.run/stage163e/stage163e_proof_restorative_apply.json` (`imported_created_total=80`)
+    - refreshed proof file with current patient IDs:
+      - `.run/stage163e/restorative_proof_patients_stage163e.json`
+  - Stage 163E UI evidence:
+    - UX screenshot: `.run/stage163e/odontogram_restorative_ux_17098.png`
+    - real restorative screenshots:
+      - `.run/stage163e/odontogram_restorative_real_17099.png`
+      - `.run/stage163e/odontogram_restorative_real_17100.png`
+      - `.run/stage163e/odontogram_restorative_real_17101.png`
+      - `.run/stage163e/odontogram_restorative_real_17102.png`
+      - `.run/stage163e/odontogram_restorative_real_17103.png`
+      - `.run/stage163e/odontogram_restorative_real_17104.png`
+      - `.run/stage163e/odontogram_restorative_real_17105.png`
+  - Stage 163E test runs:
+    - `cd frontend && npm run -s typecheck` (pass)
+    - `cd frontend && ADMIN_EMAIL=... ADMIN_PASSWORD=... RESTORATIVE_UX_ARTIFACT_DIR=/home/amir/dental-pms/.run/stage163e npx playwright test tests/clinical-odontogram-restorative-ux.spec.ts --reporter=line` (pass; `1 passed`)
+    - `cd frontend && ADMIN_EMAIL=... ADMIN_PASSWORD=... RESTORATIVE_PROOF_PATIENTS_FILE=/home/amir/dental-pms/.run/stage163e/restorative_proof_patients_stage163e.json RESTORATIVE_ODONTOGRAM_ARTIFACT_DIR=/home/amir/dental-pms/.run/stage163e npx playwright test tests/clinical-odontogram-restorative-real.spec.ts --reporter=line` (pass; `1 passed`)
 - 2026-02-21: Stage 163D started (`stage163d-restorative-behaviour-hardening`) to harden restorative behaviour regression acceptance.
   - Acceptance rerun doc added:
     - `docs/ACCEPTANCE_STAGE163C_RESTORATIVE.md`
