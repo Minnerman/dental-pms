@@ -88,7 +88,8 @@ def filter_completed_treatment_findings(
         if item.patient_code is None:
             report.missing_patient_code += 1
             continue
-        if item.tooth is None or item.tooth <= 0:
+        # Keep scout semantics: tooth=0 is present-but-unspecified in this source, while NULL is missing.
+        if item.tooth is None:
             report.missing_tooth += 1
             continue
         if item.code_id is None:
