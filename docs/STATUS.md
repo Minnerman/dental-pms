@@ -131,7 +131,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `.run/stage163g/*temporary_notes*_drop*.json`
     - `.run/stage163g/*temporary_notes*_parity*.json`
 - 2026-02-22: Stage 163G pipeline/parity PR merged (`feat(stage163g): temporary notes pipeline + parity`, PR `#323`) on `master`.
-  - merged `master` SHA: `82470c4` (`82470c41b0f632038c7f2abf0dbec42c1e9b692d`)
+  - merged `master` SHA: `82470c4` (`82470c45896d3a5ae9628eb6a57eb54f3dbc98af`)
   - post-merge verification on `master` (green):
     - `./ops/health.sh`: OK
     - `./ops/verify.sh`: OK
