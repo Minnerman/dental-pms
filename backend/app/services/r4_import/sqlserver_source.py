@@ -2057,7 +2057,7 @@ class R4SqlServerSource:
         patients_to: int | None = None,
     ) -> list[dict[str, Any]]:
         patient_col = self._require_column("TemporaryNotes", ["PatientCode"])
-        note_col = self._pick_column("TemporaryNotes", ["Note", "Notes", "NoteText"])
+        note_col = self._pick_column("TemporaryNotes", ["NoteBody", "Note", "Notes", "NoteText"])
         updated_col = self._pick_column("TemporaryNotes", ["UpdatedAt", "LastEditDate", "Date"])
         select_cols = [f"{patient_col} AS patient_code"]
         if note_col:
@@ -4416,7 +4416,11 @@ class R4SqlServerSource:
         limit: int | None = None,
     ) -> Iterable[R4TemporaryNote]:
         patient_col = self._require_column("TemporaryNotes", ["PatientCode"])
-        note_col = self._pick_column("TemporaryNotes", ["Note", "Notes", "NoteText"])
+        row_id_col = self._pick_column(
+            "TemporaryNotes",
+            ["TemporaryNoteID", "TemporaryNoteId", "ID", "Id", "RecordID", "RowID"],
+        )
+        note_col = self._pick_column("TemporaryNotes", ["NoteBody", "Note", "Notes", "NoteText"])
         date_col = self._pick_column("TemporaryNotes", ["UpdatedAt", "LastEditDate", "Date"])
         user_col = self._pick_column("TemporaryNotes", ["UserCode", "EnteredBy"])
         last_patient: int | None = None
@@ -4442,6 +4446,8 @@ class R4SqlServerSource:
                 params.append(last_patient)
             where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
             select_cols = [f"{patient_col} AS patient_code"]
+            if row_id_col:
+                select_cols.append(f"{row_id_col} AS source_row_id")
             if note_col:
                 select_cols.append(f"{note_col} AS note")
             if date_col:
@@ -4462,6 +4468,9 @@ class R4SqlServerSource:
                 last_patient = int(patient_code)
                 yield R4TemporaryNote(
                     patient_code=last_patient,
+                    source_row_id=(
+                        int(row["source_row_id"]) if row.get("source_row_id") is not None else None
+                    ),
                     note=(row.get("note") or "").strip() or None,
                     legacy_updated_at=row.get("legacy_updated_at"),
                     user_code=int(row["user_code"]) if row.get("user_code") is not None else None,

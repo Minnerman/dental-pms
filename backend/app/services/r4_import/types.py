@@ -291,7 +291,8 @@ class R4TreatmentNote(BaseModel):
 
 
 class R4TemporaryNote(BaseModel):
-    patient_code: int = Field(..., ge=1)
+    patient_code: int | None = None
+    source_row_id: int | None = None
     note: str | None = None
     legacy_updated_at: datetime | None = None
     user_code: int | None = None

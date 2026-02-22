@@ -105,6 +105,31 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - pivot artefacts were written locally under `.run/stage163g_pivot/` (candidate table/view probes + `TemporaryNotes` column probe).
   - Proposed Stage 163G next step (follow-up PR):
     - decide whether to (a) wire `temporary_notes` through selector/import/parity as a low-risk canonical completeness domain, or (b) skip/deprioritize and scout a new charting source outside current hidden-source set (e.g. missing-tooth/condition table if identified in discovery SQL).
+- 2026-02-22: Stage 163G pipeline/parity ready (`stage163g-temporary-notes-pipeline`) for `temporary_notes` using `dbo.TemporaryNotes`.
+  - Canonical source mapping:
+    - text column: `dbo.TemporaryNotes.NoteBody`
+    - date column: `LastEditDate`
+    - patient column: `PatientCode`
+    - optional source row identifier (when present): `TemporaryNoteID`/`ID`/`RecordID`/`RowID` variants
+  - Canonical import/parity filters (kept aligned across extractor, import dry-run/drop report, and parity SQL-side):
+    - `missing_patient_code`
+    - `missing_date`
+    - `out_of_window` (`date_to` end-exclusive in temporary-notes filter/parity pack)
+    - `blank_note` (`LEN(LTRIM(RTRIM(NoteBody))) == 0`)
+    - quality counters tracked alongside drops: `accepted_nonblank_note`, `accepted_blank_note`
+  - CLI/parity wiring added:
+    - `r4_import.py --entity charting_canonical --domains temporary_notes`
+    - `r4_parity_run.py --domains temporary_notes`
+    - `r4_temporary_notes_drop_report.py` (single-patient SQL vs canonical explain)
+    - `r4_temporary_notes_parity_pack.py` (patient-scoped parity pack)
+  - Bounded trial (pre-scale-out) commands:
+    - import dry-run/apply (example 5-patient proof cohort): `python -m app.scripts.r4_import --source sqlserver --entity charting_canonical --patient-codes 1015822,1014816,1015455,1015758,1014071 --charting-from 2017-01-01 --charting-to 2026-02-01 --domains temporary_notes --stats-out .run/stage163g/stage163g_temporary_notes_import_stats.json --output-json .run/stage163g/stage163g_temporary_notes_import_report.json`
+    - parity pack (same cohort): `python -m app.scripts.r4_temporary_notes_parity_pack --patient-codes 1015822,1014816,1015455,1015758,1014071 --date-from 2017-01-01 --date-to 2026-02-01 --output-json .run/stage163g/stage163g_temporary_notes_parity.json`
+  - Expected local artefact paths for Stage 163G runs (not committed):
+    - `.run/stage163g/*temporary_notes*_stats.json`
+    - `.run/stage163g/*temporary_notes*_report.json`
+    - `.run/stage163g/*temporary_notes*_drop*.json`
+    - `.run/stage163g/*temporary_notes*_parity*.json`
 - 2026-02-22: Stage 163F completed (`completed_treatment_findings`) with final ledger closure + full-cohort parity pass.
   - Final ledger closure:
     - final seen ledger count confirmed `2886` (all accepted patients accounted for, duplicates `0`):
