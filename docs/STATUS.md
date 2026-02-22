@@ -61,6 +61,73 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-22: Stage 163F completed (`completed_treatment_findings`) with final ledger closure + full-cohort parity pass.
+  - Final ledger closure:
+    - final seen ledger count confirmed `2886` (all accepted patients accounted for, duplicates `0`):
+      - `.run/seen_stage163f_completed_treatment_findings.txt`
+    - inventory-vs-ledger closure JSON confirms `accepted_patients_total=2886`, `ledger_total=2886`,
+      `missing=0`, `extra=0`, `duplicates=0`:
+      - `.run/stage163f/stage163f_final_inventory_vs_ledger.json`
+  - Full-cohort parity close-out:
+    - generated parity input list for all accepted patients (`2886`):
+      - `.run/stage163f/stage163f_fullcohort_completed_treatment_findings_codes.txt`
+    - reran full-cohort parity for `completed_treatment_findings` across all accepted patients
+      (post-proof `verify.sh` resets DB state, so parity was rerun after rehydrating the full cohort):
+      - `.run/stage163f/stage163f_fullcohort_completed_treatment_findings_parity.json`
+      - headline results: `overall.status=pass`, `patients_total=2886`, `patients_with_data=2886`, `patients_no_data=0`
+  - UI proof evidence:
+    - standardized proof flow passed for final chunk (`Playwright: 1 passed`), screenshots under:
+      - `.run/stage163f/chunk15/`
+- 2026-02-22: Stage 163F chunk15 started (`stage163f-completed-treatment-findings-scale-chunk15`) and completed as the final partial cohort (`86` patients) with deterministic selection + idempotent import/parity/drop/UI proof gates.
+  - Deterministic selector run (same Stage 163F inventory semantics, seed `17`, hashed order):
+    - refreshed full ordered inventory: `accepted_patients=2886`:
+      - `.run/stage163f/stage163f_chunk15_inventory_full.json`
+      - `.run/stage163f/stage163f_chunk15_full_pool_raw.csv`
+    - selector report (exclude seen ledger + chunk15 final-partial extraction):
+      - `.run/stage163f/stage163f_chunk15_selector.log`
+      - selector summary: `ledger_pre_lines=2800`, `post_exclude_pool_count=86`, `chunk_selected_count=86`, `chunk_overlap_with_ledger_count=0`
+    - chunk15 cohort CSV (`86` patients):
+      - `.run/stage163f/stage163f_completed_treatment_findings_chunk15.csv`
+  - Ledger checkpoint / append:
+    - confirmed no overlap before append, then advanced seen ledger `2800 -> 2886` with no duplicates:
+      - `.run/seen_stage163f_completed_treatment_findings.txt`
+      - `.run/stage163f/stage163f_chunk15_ledger_update.json`
+  - Import apply/rerun (window `2017-01-01..2026-02-01`):
+    - patients apply: `created=86`, `updated=0`, `skipped=0`:
+      - `.run/stage163f/stage163f_chunk15_patients_apply.json`
+    - patients rerun: `created=0`, `updated=0`, `skipped=86`:
+      - `.run/stage163f/stage163f_chunk15_patients_rerun.json`
+    - completed findings apply: `imported_created_total=226`, `candidates_total=359`:
+      - `.run/stage163f/stage163f_chunk15_completed_treatment_findings_apply.json`
+      - `.run/stage163f/stage163f_chunk15_completed_treatment_findings_apply_report.json`
+    - completed findings rerun: `imported_created_total=0`, `skipped_total=226`:
+      - `.run/stage163f/stage163f_chunk15_completed_treatment_findings_rerun.json`
+      - `.run/stage163f/stage163f_chunk15_completed_treatment_findings_rerun_report.json`
+  - DB cross-check:
+    - `chunk_codes_count=86`, `patients_present_count=86`,
+      `canonical_completed_treatment_findings_rows_count=226`:
+      - `.run/stage163f/stage163f_chunk15_db_counts.json`
+  - Parity gate:
+    - `overall.status=pass` and domain summary `patients_total=86`, `patients_with_data=86`, `patients_no_data=0`:
+      - `.run/stage163f/stage163f_chunk15_completed_treatment_findings_parity.json`
+  - Drop guard:
+    - summary: `dropped_total_excluding_non_drop_counters=133` with dominant
+      `restorative_classified=133`:
+      - `.run/stage163f/stage163f_chunk15_drop_summary.json`
+    - explain sample (`legacy_patient_code=1015504`): SQL vs PG aligned (`delta_sql_minus_pg=0`);
+      SQL-side dropped reasons show `restorative_classified=2`, `out_of_window=0`:
+      - `.run/stage163f/stage163f_chunk15_drop_report_1015504.json`
+  - UI proof (standardized post-`verify.sh` proof refresh flow):
+    - proof helper rerun after `./ops/verify.sh` refreshed current proof IDs (`updated_patient_ids=5`):
+      - `.run/stage163f/stage163f_chunk15_proof_seed_refresh_after_verify.log`
+      - `.run/stage163f/stage163f_completed_treatment_findings_proof_patients.json`
+    - Playwright run (with `.env` admin credentials exported): `1 passed`
+    - chunk15 screenshots:
+      - `.run/stage163f/chunk15/odontogram_completed_treatment_findings_real_21088.png`
+      - `.run/stage163f/chunk15/odontogram_completed_treatment_findings_real_21089.png`
+      - `.run/stage163f/chunk15/odontogram_completed_treatment_findings_real_21090.png`
+      - `.run/stage163f/chunk15/odontogram_completed_treatment_findings_real_21091.png`
+      - `.run/stage163f/chunk15/odontogram_completed_treatment_findings_real_21092.png`
 - 2026-02-22: Stage 163F chunk14 started (`stage163f-completed-treatment-findings-scale-chunk14`) and completed with deterministic selection + idempotent import/parity/drop/UI proof gates.
   - Deterministic selector run (same Stage 163F inventory semantics, seed `17`, hashed order):
     - refreshed full ordered inventory: `accepted_patients=2886`:
