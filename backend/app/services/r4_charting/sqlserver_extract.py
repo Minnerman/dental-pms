@@ -9,6 +9,9 @@ from app.services.r4_charting.canonical_types import CanonicalRecordInput
 from app.services.r4_charting.completed_treatment_findings_import import (
     collect_completed_treatment_finding_canonical_records,
 )
+from app.services.r4_charting.temporary_notes_import import (
+    collect_temporary_note_canonical_records,
+)
 from app.services.r4_import.sqlserver_source import R4SqlServerConfig, R4SqlServerSource
 
 
@@ -55,8 +58,11 @@ class SqlServerExtractReport:
     missing_tooth: int = 0
     missing_code_id: int = 0
     out_of_window: int = 0
+    blank_note: int = 0
     restorative_classified: int = 0
     duplicate_key: int = 0
+    accepted_nonblank_note: int = 0
+    accepted_blank_note: int = 0
     included: int = 0
 
     def as_dict(self) -> dict[str, int]:
@@ -73,8 +79,11 @@ class SqlServerExtractReport:
             "missing_tooth": self.missing_tooth,
             "missing_code_id": self.missing_code_id,
             "out_of_window": self.out_of_window,
+            "blank_note": self.blank_note,
             "restorative_classified": self.restorative_classified,
             "duplicate_key": self.duplicate_key,
+            "accepted_nonblank_note": self.accepted_nonblank_note,
+            "accepted_blank_note": self.accepted_blank_note,
             "included": self.included,
         }
 
@@ -268,6 +277,32 @@ class SqlServerChartingExtractor:
                         payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
                     )
                 )
+
+        if _include("temporary_notes", "temporary_note") and hasattr(
+            self._source, "list_temporary_notes"
+        ):
+            temporary_note_rows = self._iter_temporary_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            )
+            temporary_note_records, temporary_notes_report = (
+                collect_temporary_note_canonical_records(
+                    temporary_note_rows,
+                    date_from=date_from,
+                    date_to=date_to,
+                )
+            )
+            records.extend(temporary_note_records)
+            report.missing_patient_code += temporary_notes_report.missing_patient_code
+            report.missing_date += temporary_notes_report.missing_date
+            report.out_of_window += temporary_notes_report.out_of_window
+            report.blank_note += temporary_notes_report.blank_note
+            report.duplicate_key += temporary_notes_report.duplicate_key
+            report.accepted_nonblank_note += temporary_notes_report.accepted_nonblank_note
+            report.accepted_blank_note += temporary_notes_report.accepted_blank_note
+            report.included += temporary_notes_report.included
 
         if _include("treatment_plans", "treatment_plan"):
             for item in self._iter_treatment_plans(
@@ -649,6 +684,41 @@ class SqlServerChartingExtractor:
                     patients_to=code,
                     date_from=date_from,
                     date_to=date_to,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_temporary_notes(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_temporary_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_temporary_notes(
+                    patients_from=code,
+                    patients_to=code,
                     limit=batch_limit,
                 ):
                     yield item

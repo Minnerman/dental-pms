@@ -113,6 +113,7 @@ _CHARTING_CANONICAL_DOMAINS = {
     "restorative_treatments",
     "completed_treatment_findings",
     "patient_notes",
+    "temporary_notes",
     "treatment_plans",
     "treatment_notes",
     "treatment_plan_items",
@@ -354,7 +355,12 @@ def _int_value(value: object) -> int:
     return int(value) if isinstance(value, int) else 0
 
 
-_NON_DROP_REASON_KEYS = {"undated_included", "included"}
+_NON_DROP_REASON_KEYS = {
+    "undated_included",
+    "included",
+    "accepted_nonblank_note",
+    "accepted_blank_note",
+}
 
 
 def _dropped_reason_totals(dropped: dict[str, object]) -> dict[str, int]:
@@ -669,7 +675,7 @@ def _run_charting_canonical_batched(
         "by_source_fetched": aggregate_by_source,
         "batches_total": len(batches),
         "batches_completed": completed_batches,
-        "dropped_reasons": aggregate_dropped,
+        "dropped_reasons": _dropped_reason_totals(aggregate_dropped),
     }
 
     final_report: dict[str, object] = {
@@ -783,7 +789,7 @@ def main() -> int:
         help=(
             "Optional comma-separated charting canonical domains "
             "(perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,"
-            "completed_treatment_findings,patient_notes,treatment_plans,treatment_notes,treatment_plan_items)."
+            "completed_treatment_findings,patient_notes,temporary_notes,treatment_plans,treatment_notes,treatment_plan_items)."
         ),
     )
     parser.add_argument(
