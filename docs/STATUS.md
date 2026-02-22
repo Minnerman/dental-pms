@@ -61,6 +61,66 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-22: Stage 163F chunk2 started (`stage163f-completed-treatment-findings-scale-chunk2`) and completed with deterministic selection + idempotent import/parity/drop/UI proof gates, plus proof refresh hardening.
+  - Deterministic selector run (same Stage 163F inventory semantics, seed `17`, hashed order):
+    - refreshed full ordered inventory: `accepted_patients=2886`:
+      - `.run/stage163f/stage163f_chunk2_inventory_full.json`
+      - `.run/stage163f/stage163f_chunk2_full_pool_raw.csv`
+    - selector report (exclude seen ledger + chunk2 extraction):
+      - `.run/stage163f/stage163f_chunk2_selector.log`
+      - selector summary: `ledger_pre_lines=200`, `post_exclude_pool_count=2686`, `chunk_selected_count=200`, `chunk_overlap_with_ledger_count=0`
+    - post-exclude pool CSV (remaining deterministic order after ledger exclusion):
+      - `.run/stage163f/stage163f_completed_treatment_findings_post_exclude_pool_chunk2.csv`
+    - chunk2 cohort CSV (`200` patients):
+      - `.run/stage163f/stage163f_completed_treatment_findings_chunk2.csv`
+  - Ledger checkpoint / append:
+    - confirmed no overlap before append, then advanced seen ledger `200 -> 400` with no duplicates:
+      - `.run/seen_stage163f_completed_treatment_findings.txt`
+      - `.run/stage163f/stage163f_chunk2_ledger_update.json`
+  - Import apply/rerun (window `2017-01-01..2026-02-01`):
+    - patients apply: `created=200`, `updated=0`, `skipped=0`:
+      - `.run/stage163f/stage163f_chunk2_patients_apply.json`
+    - patients rerun: `created=0`, `updated=0`, `skipped=200`:
+      - `.run/stage163f/stage163f_chunk2_patients_rerun.json`
+    - completed findings apply: `imported_created_total=737`, `candidates_total=1095`:
+      - `.run/stage163f/stage163f_chunk2_completed_treatment_findings_apply.json`
+      - `.run/stage163f/stage163f_chunk2_completed_treatment_findings_apply_report.json`
+    - completed findings rerun: `imported_created_total=0`, `skipped_total=737`:
+      - `.run/stage163f/stage163f_chunk2_completed_treatment_findings_rerun.json`
+      - `.run/stage163f/stage163f_chunk2_completed_treatment_findings_rerun_report.json`
+  - DB cross-check:
+    - `chunk_codes_count=200`, `patients_present_count=200`,
+      `canonical_completed_treatment_findings_rows_count=737`:
+      - `.run/stage163f/stage163f_chunk2_db_counts.json`
+  - Parity gate:
+    - `overall.status=pass` and domain summary `patients_with_data=200`, `patients_no_data=0`:
+      - `.run/stage163f/stage163f_chunk2_completed_treatment_findings_parity.json`
+  - Drop guard:
+    - summary: `dropped_total_excluding_non_drop_counters=358` with dominant
+      `restorative_classified=358`:
+      - `.run/stage163f/stage163f_chunk2_drop_summary.json`
+    - explain sample (`legacy_patient_code=1000363`): SQL vs PG aligned (`delta_sql_minus_pg=0`);
+      SQL-side dropped reasons show `restorative_classified=6`, `out_of_window=18`:
+      - `.run/stage163f/stage163f_chunk2_drop_report_1000363.json`
+  - UI proof + proof refresh hardening:
+    - added repeatable proof refresh helper (read-only R4 import + local `patient_id` refresh by `legacy_patient_code`):
+      - `backend/app/scripts/r4_completed_treatment_findings_proof_seed.py`
+    - helper run was used before Playwright because local proof IDs can drift after container recreates/base-compose verify; refresh updated current proof IDs (`updated_patient_ids=5`):
+      - `.run/stage163f/stage163f_completed_treatment_findings_proof_patients.json`
+    - post-`verify.sh` hardening check reran the helper and refreshed proof IDs again (`updated_patient_ids=5`), confirming the stale-ID issue is reproducible locally and handled by the helper:
+      - `.run/stage163f/stage163f_chunk2_proof_seed_refresh_rerun.log`
+    - Playwright run: `1 passed`
+    - chunk2 screenshots:
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17781.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17782.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17783.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17784.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17785.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17840.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17841.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17842.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17843.png`
+      - `.run/stage163f/chunk2/odontogram_completed_treatment_findings_real_17844.png`
 - 2026-02-21: Stage 163F chunk1 started (`stage163f-completed-treatment-findings-scale-chunk1`) and completed with deterministic selection + idempotent import/parity/drop/UI proof gates.
   - Pre-chunk guard fix (filter alignment):
     - chunk selection initially collapsed to `accepted_patients=179` due treating `tooth <= 0` as missing in completed-findings filtering.
