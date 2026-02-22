@@ -61,6 +61,45 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-22: Stage 163G started (`stage163g-temporary-notes-import-scout`) to scout the next non-empty charting-like domain after Stage 163F close-out.
+  - Selected scout domain: `temporary_notes` from `dbo.TemporaryNotes` (read-only).
+  - Domain selection rationale (evidence-first):
+    - unscouted hidden charting-like sources probed in current window (`2017-01-01..2026-02-01`):
+      - `dbo.PerioPlaque`: `0` rows
+      - `dbo.TreatmentPlanReviews`: `0` rows
+      - `dbo.OldPatientNotes`: `0` rows
+      - `dbo.TemporaryNotes`: non-zero (`rows_total=16968`, in-window dated rows present)
+    - `temporary_notes` is the only non-empty remaining charting-like source among these candidates, so it is the next scoutable domain even though note-quality signal is weak (see quality counters below).
+  - Stage 163G scouting implementation (read-only, no import apply/parity wiring yet):
+    - ad-hoc read-only inventory/drop-skeleton scout run via `R4SqlServerSource.list_temporary_notes(...)`
+      to establish deterministic cohort + data-quality signal before pipeline work.
+    - no CLI/parity wiring changes in this scout PR yet (`temporary_notes` remains outside
+      current `r4_cohort_select` / `r4_import --domains` / `r4_parity_run` allowlists).
+  - Stage 163G scout artefacts:
+    - inventory JSON:
+      - `.run/stage163g/stage163g_temporary_notes_inventory.json`
+    - ordered full accepted pool CSV:
+      - `.run/stage163g/stage163g_temporary_notes_full_pool_raw.csv`
+    - deterministic scout cohort CSV (200 patients, `seed=17`):
+      - `.run/stage163g/stage163g_temporary_notes_cohort.csv`
+    - drop-skeleton + quality counters:
+      - `.run/stage163g/stage163g_temporary_notes_drop_skeleton.json`
+    - proof patient scaffold (legacy codes only; patient_id placeholders):
+      - `.run/stage163g/stage163g_temporary_notes_proof_patients.json`
+    - run log:
+      - `.run/stage163g/stage163g_temporary_notes_inventory_run.log`
+  - Stage 163G scout headline metrics (window `2017-01-01..2026-02-01`):
+    - source totals: `rows_total=16968`, `patients_total=16968`
+    - rows with date values: `5556`
+    - accepted in-window rows/patients for scout cohorting: `accepted_rows=1822`, `accepted_patients=1822`
+    - deterministic scout chunk (`seed=17`, limit `200`): `selected_count=200`
+    - proof scaffold patients: `5` legacy codes (`patient_id=null` placeholders)
+  - Drop skeleton / quality signal (scout-only):
+    - drop reasons: `missing_date=11412`, `out_of_window=3734`, `included=1822`
+    - quality counters on accepted rows: `accepted_blank_note=1822`, `accepted_nonblank_note=0`
+    - note: all accepted in-window temporary-note rows are currently blank (`note_length=0`), so this domain appears low-value for UI proof despite being non-empty.
+  - Proposed Stage 163G next step (follow-up PR):
+    - decide whether to (a) wire `temporary_notes` through selector/import/parity as a low-risk canonical completeness domain, or (b) skip/deprioritize and scout a new charting source outside current hidden-source set (e.g. missing-tooth/condition table if identified in discovery SQL).
 - 2026-02-22: Stage 163F completed (`completed_treatment_findings`) with final ledger closure + full-cohort parity pass.
   - Final ledger closure:
     - final seen ledger count confirmed `2886` (all accepted patients accounted for, duplicates `0`):
