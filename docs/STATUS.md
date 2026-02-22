@@ -98,6 +98,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - drop reasons: `missing_date=11412`, `out_of_window=3734`, `included=1822`
     - quality counters on accepted rows: `accepted_blank_note=1822`, `accepted_nonblank_note=0`
     - note: all accepted in-window temporary-note rows are currently blank (`note_length=0`), so this domain appears low-value for UI proof despite being non-empty.
+  - Pivot amendment (read-only follow-up scout, local artefacts only; do not commit `.run/stage163g_pivot/`):
+    - initial "blank notes" conclusion was caused by checking the wrong text column in `dbo.TemporaryNotes`.
+    - correct text column is `dbo.TemporaryNotes.NoteBody` (patient/date keys confirmed: `PatientCode`, `LastEditDate`).
+    - pivot probe shows in-window temporary notes `rows_in_window=1822`, `nonblank_rows_in_window=1734` (`95.17%` nonblank).
+    - pivot artefacts were written locally under `.run/stage163g_pivot/` (candidate table/view probes + `TemporaryNotes` column probe).
   - Proposed Stage 163G next step (follow-up PR):
     - decide whether to (a) wire `temporary_notes` through selector/import/parity as a low-risk canonical completeness domain, or (b) skip/deprioritize and scout a new charting source outside current hidden-source set (e.g. missing-tooth/condition table if identified in discovery SQL).
 - 2026-02-22: Stage 163F completed (`completed_treatment_findings`) with final ledger closure + full-cohort parity pass.
