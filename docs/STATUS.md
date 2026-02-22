@@ -61,6 +61,58 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-22: Stage 163F chunk4 started (`stage163f-completed-treatment-findings-scale-chunk4`) and completed with deterministic selection + idempotent import/parity/drop/UI proof gates.
+  - Deterministic selector run (same Stage 163F inventory semantics, seed `17`, hashed order):
+    - refreshed full ordered inventory: `accepted_patients=2886`:
+      - `.run/stage163f/stage163f_chunk4_inventory_full.json`
+      - `.run/stage163f/stage163f_chunk4_full_pool_raw.csv`
+    - selector report (exclude seen ledger + chunk4 extraction):
+      - `.run/stage163f/stage163f_chunk4_selector.log`
+      - selector summary: `ledger_pre_lines=600`, `post_exclude_pool_count=2286`, `chunk_selected_count=200`, `chunk_overlap_with_ledger_count=0`
+    - post-exclude pool CSV (remaining deterministic order after ledger exclusion):
+      - `.run/stage163f/stage163f_completed_treatment_findings_post_exclude_pool_chunk4.csv`
+    - chunk4 cohort CSV (`200` patients):
+      - `.run/stage163f/stage163f_completed_treatment_findings_chunk4.csv`
+  - Ledger checkpoint / append:
+    - confirmed no overlap before append, then advanced seen ledger `600 -> 800` with no duplicates:
+      - `.run/seen_stage163f_completed_treatment_findings.txt`
+      - `.run/stage163f/stage163f_chunk4_ledger_update.json`
+  - Import apply/rerun (window `2017-01-01..2026-02-01`):
+    - patients apply: `created=200`, `updated=0`, `skipped=0`:
+      - `.run/stage163f/stage163f_chunk4_patients_apply.json`
+    - patients rerun: `created=0`, `updated=0`, `skipped=200`:
+      - `.run/stage163f/stage163f_chunk4_patients_rerun.json`
+    - completed findings apply: `imported_created_total=677`, `candidates_total=1103`:
+      - `.run/stage163f/stage163f_chunk4_completed_treatment_findings_apply.json`
+      - `.run/stage163f/stage163f_chunk4_completed_treatment_findings_apply_report.json`
+    - completed findings rerun: `imported_created_total=0`, `skipped_total=677`:
+      - `.run/stage163f/stage163f_chunk4_completed_treatment_findings_rerun.json`
+      - `.run/stage163f/stage163f_chunk4_completed_treatment_findings_rerun_report.json`
+  - DB cross-check:
+    - `chunk_codes_count=200`, `patients_present_count=200`,
+      `canonical_completed_treatment_findings_rows_count=677`:
+      - `.run/stage163f/stage163f_chunk4_db_counts.json`
+  - Parity gate:
+    - `overall.status=pass` and domain summary `patients_with_data=200`, `patients_no_data=0`:
+      - `.run/stage163f/stage163f_chunk4_completed_treatment_findings_parity.json`
+  - Drop guard:
+    - summary: `dropped_total_excluding_non_drop_counters=426` with dominant
+      `restorative_classified=426`:
+      - `.run/stage163f/stage163f_chunk4_drop_summary.json`
+    - explain sample (`legacy_patient_code=1013242`): SQL vs PG aligned (`delta_sql_minus_pg=0`);
+      SQL-side dropped reasons show `restorative_classified=30`, `out_of_window=7`:
+      - `.run/stage163f/stage163f_chunk4_drop_report_1013242.json`
+  - UI proof (standardized post-`verify.sh` proof refresh flow):
+    - proof helper rerun after `./ops/verify.sh` refreshed current proof IDs (`updated_patient_ids=5`):
+      - `.run/stage163f/stage163f_chunk4_proof_seed_refresh_after_verify.log`
+      - `.run/stage163f/stage163f_completed_treatment_findings_proof_patients.json`
+    - Playwright run: `1 passed`
+    - chunk4 screenshots:
+      - `.run/stage163f/chunk4/odontogram_completed_treatment_findings_real_18412.png`
+      - `.run/stage163f/chunk4/odontogram_completed_treatment_findings_real_18413.png`
+      - `.run/stage163f/chunk4/odontogram_completed_treatment_findings_real_18414.png`
+      - `.run/stage163f/chunk4/odontogram_completed_treatment_findings_real_18415.png`
+      - `.run/stage163f/chunk4/odontogram_completed_treatment_findings_real_18416.png`
 - 2026-02-22: Stage 163F chunk3 started (`stage163f-completed-treatment-findings-scale-chunk3`) and completed with deterministic selection + idempotent import/parity/drop/UI proof gates.
   - Deterministic selector run (same Stage 163F inventory semantics, seed `17`, hashed order):
     - refreshed full ordered inventory: `accepted_patients=2886`:
