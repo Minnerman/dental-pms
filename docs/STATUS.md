@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-23: Stage 163H chunk1 completed (`stage163h-appt-notes-chunk1`) for `appointment_notes` scale-out (parity-proof only; no UI proof yet).
+  - base `master` after Stage 163H pipeline merge (PR `#334`): `1491883` (`1491883db34577beb37117642640fa9b91836ebe`)
+  - Deterministic selector (seed `17`, hashed order, ledger exclusion, cap `200`) against Stage 163H scout accepted pool:
+    - selector report: `.run/stage163h/chunk1/stage163h_appointment_notes_chunk1_selection_report.json`
+    - selected patient codes: `.run/stage163h/chunk1/stage163h_appointment_notes_chunk1_patient_codes.txt`
+    - selector headline counts: `accepted_patients_total=1136`, `post_exclude_pool_count=1136`, `selected_count=200`, `selected_overlap_with_ledger=0`
+  - Ledger update (Stage 163H appointment-notes domain ledger):
+    - ledger path: `.run/seen_stage163h_appointment_notes.txt`
+    - update JSON: `.run/stage163h/chunk1/stage163h_chunk1_ledger_update.json`
+    - ledger counts: `pre_count=0`, `appended_count=200`, `post_count=200`, `duplicates_after_append=0`
+  - Patients import (`r4_import --entity patients`, selected `200` codes):
+    - apply stats: `.run/stage163h/chunk1/stage163h_chunk1_patients_apply.json` (`patients_created=200`, `patients_updated=0`, `patients_skipped=0`)
+    - rerun stats: `.run/stage163h/chunk1/stage163h_chunk1_patients_rerun.json` (`patients_created=0`, `patients_updated=0`, `patients_skipped=200`)
+  - Appointment notes canonical import (`r4_import --entity charting_canonical --domains appointment_notes`, window `2017-01-01..2026-02-01`):
+    - apply report: `.run/stage163h/chunk1/stage163h_chunk1_appt_notes_apply_report.json`
+    - rerun report: `.run/stage163h/chunk1/stage163h_chunk1_appt_notes_rerun_report.json`
+    - apply headline: `candidates_total=1996`, `imported_created_total=312`, `imported_updated_total=0`, `skipped_total=0`
+    - rerun headline (idempotency): `imported_created_total=0`, `imported_updated_total=0`, `skipped_total=312`
+    - drop summary JSON: `.run/stage163h/chunk1/stage163h_chunk1_appt_notes_drop_summary.json`
+    - drop distribution (apply totals): `blank_note=1006`, `out_of_window=678`, `missing_patient_code=0`, `missing_appt_id=0`, `missing_date=0`
+  - DB cross-check:
+    - counts JSON: `.run/stage163h/chunk1/stage163h_chunk1_db_counts.json`
+    - headline: `chunk_codes_count=200`, `patients_present_count=200`, `canonical_appointment_notes_rows_count=312` (matches apply created total)
+  - Parity + explain proof (Option A / parity-only for chunk1):
+    - parity pack JSON: `.run/stage163h/chunk1/stage163h_chunk1_appt_notes_parity_pack.json`
+    - parity run JSON: `.run/stage163h/chunk1/stage163h_chunk1_appt_notes_parity_run.json`
+    - parity headline (`appointment_notes`): `status=pass`, `patients_total=200`, `patients_with_data=200`, `patients_no_data=0`, latest/digest `200/200`
+    - explain sample (`patient_code=1015455`): `.run/stage163h/chunk1/stage163h_chunk1_appt_notes_drop_explain_1015455.json` (`delta_sql_minus_pg=0`, `latest_match=true`, `latest_digest_match=true`)
+  - Stage 163H chunk progress after chunk1:
+    - ledger progress: `200/1136`
+    - remaining accepted patients: `936` (planned chunks `2-5` of `200` + final chunk `136`)
 - 2026-02-23: Stage 163H pipeline/parity ready (`stage163h-appointment-notes-pipeline`) for `appointment_notes` from `dbo.vwAppointmentDetails.notes`.
   - Domain definition (locked):
     - source/view: `dbo.vwAppointmentDetails`
