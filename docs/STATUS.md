@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-23: Stage 163H pipeline/parity ready (`stage163h-appointment-notes-pipeline`) for `appointment_notes` from `dbo.vwAppointmentDetails.notes`.
+  - Domain definition (locked):
+    - source/view: `dbo.vwAppointmentDetails`
+    - note column: `notes`
+    - appointment key: `apptid` (required; rows with null/invalid values drop as `missing_appt_id`)
+    - patient linkage: `patientcode` (rows with null linkage drop as `missing_patient_code`)
+    - date key/window anchor: `appointmentDateTimevalue`
+  - Canonical import/parity filters (kept aligned across extractor/import/parity/drop report):
+    - `missing_patient_code`
+    - `missing_appt_id`
+    - `missing_date`
+    - `out_of_window` (end-exclusive `date_to`)
+    - `blank_note` (`LEN(LTRIM(RTRIM(notes))) == 0`)
+    - quality counters tracked: `accepted_nonblank_note`, `accepted_blank_note`
+  - CLI/parity wiring added:
+    - `r4_import.py --entity charting_canonical --domains appointment_notes`
+    - `r4_parity_run.py --domains appointment_notes`
+    - `r4_appointment_notes_drop_report.py` (single-patient SQL vs canonical explain)
+    - `r4_appointment_notes_parity_pack.py` (patient-scoped parity pack)
+  - Stage 163H scout baseline (from `.run/stage163h/stage163h_appointment_notes_inventory.json`):
+    - `accepted_patients=1136`, `accepted_rows=2124`
+    - in-window nonblank rate: `2159/13596` (`15.88%`)
+    - warning: scout shows many rows with `missing_patient_code=1752`; these are dropped by design and should not block cohort scale-out parity on patient-scoped runs
+  - Scale-out planning (deterministic hashed cohorts, seed `17`, ledger exclusion):
+    - seen ledger path: `.run/seen_stage163h_appointment_notes.txt`
+    - planned chunks: `5 x 200` + final `136` (total `1136` accepted patients)
 - 2026-02-23: Stage 163H scout completed (`stage163h-appt-notes-or-questionnaire-scout`) comparing two high-signal note candidates for post-163G scale-out (read-only inventory only; no import/parity wiring yet).
   - Candidate A: `completed_questionnaire_notes` from `dbo.CompletedQuestionnaire.Notes` (`PatientCode`, `DateTime`)
     - artefacts:

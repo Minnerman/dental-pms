@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 from app.services.r4_import.types import (
     R4Appointment,
+    R4AppointmentNote,
     R4AppointmentRecord,
     R4Patient,
     R4Treatment,
@@ -2447,6 +2448,91 @@ class R4SqlServerSource:
                 )
                 if remaining is not None:
                     remaining -= 1
+
+    def list_appointment_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4AppointmentNote]:
+        appt_id_col = self._require_column("vwAppointmentDetails", ["apptid"])
+        starts_col = self._require_column("vwAppointmentDetails", ["appointmentDateTimevalue"])
+        patient_col = self._require_column("vwAppointmentDetails", ["patientcode"])
+        notes_col = self._require_column("vwAppointmentDetails", ["notes"])
+        provider_col = self._pick_column("vwAppointmentDetails", ["providerCode"])
+        status_col = self._pick_column("vwAppointmentDetails", ["status"])
+        cancelled_col = self._pick_column("vwAppointmentDetails", ["cancelled"])
+        clinic_col = self._pick_column("vwAppointmentDetails", ["cliniccode"])
+        treatment_col = self._pick_column("vwAppointmentDetails", ["treatmentcode"])
+        type_col = self._pick_column("vwAppointmentDetails", ["appointmentType"])
+        flag_col = self._pick_column("vwAppointmentDetails", ["apptflag"])
+
+        where_parts: list[str] = []
+        params: list[Any] = []
+        range_clause, range_params = self._build_range_filter(patient_col, patients_from, patients_to)
+        if range_clause:
+            where_parts.append(range_clause.replace("WHERE", "").strip())
+            params.extend(range_params)
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+        select_cols = [
+            f"{appt_id_col} AS source_apptid",
+            f"{patient_col} AS patient_code",
+            f"{starts_col} AS appointment_datetime",
+            f"{notes_col} AS note",
+        ]
+        if provider_col:
+            select_cols.append(f"{provider_col} AS clinician_code")
+        if status_col:
+            select_cols.append(f"{status_col} AS status")
+        if cancelled_col:
+            select_cols.append(f"{cancelled_col} AS cancelled")
+        if clinic_col:
+            select_cols.append(f"{clinic_col} AS clinic_code")
+        if treatment_col:
+            select_cols.append(f"{treatment_col} AS treatment_code")
+        if type_col:
+            select_cols.append(f"{type_col} AS appointment_type")
+        if flag_col:
+            select_cols.append(f"{flag_col} AS appt_flag")
+
+        sql = (
+            f"SELECT {', '.join(select_cols)} FROM dbo.vwAppointmentDetails WITH (NOLOCK) "
+            f"{where_sql} "
+            f"ORDER BY {appt_id_col} ASC, {starts_col} ASC"
+        )
+        if limit is not None:
+            sql = (
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.vwAppointmentDetails WITH (NOLOCK) "
+                f"{where_sql} "
+                f"ORDER BY {appt_id_col} ASC, {starts_col} ASC"
+            )
+            rows = self._query(sql, [limit, *params])
+        else:
+            rows = self._query(sql, params)
+
+        for row in rows:
+            clinician_code = row.get("clinician_code")
+            clinic_code = row.get("clinic_code")
+            treatment_code = row.get("treatment_code")
+            appt_flag = row.get("appt_flag")
+            source_apptid = row.get("source_apptid")
+            patient_code = row.get("patient_code")
+            yield R4AppointmentNote(
+                source_apptid=int(source_apptid) if source_apptid is not None else None,
+                patient_code=int(patient_code) if patient_code is not None else None,
+                appointment_datetime=row.get("appointment_datetime"),
+                note=(row.get("note") or "").strip() or None,
+                clinician_code=int(clinician_code) if clinician_code is not None else None,
+                clinic_code=int(clinic_code) if clinic_code is not None else None,
+                treatment_code=int(treatment_code) if treatment_code is not None else None,
+                appointment_type=(row.get("appointment_type") or "").strip() or None,
+                status=(row.get("status") or "").strip() or None,
+                cancelled=_coerce_bool(row.get("cancelled"), default=False)
+                if row.get("cancelled") is not None
+                else None,
+                appt_flag=int(appt_flag) if appt_flag is not None else None,
+            )
 
     def list_treatments(self, limit: int | None = None) -> Iterable[R4Treatment]:
         code_col = self._require_column(

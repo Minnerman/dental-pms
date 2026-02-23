@@ -6,6 +6,9 @@ import hashlib
 from typing import Iterable
 
 from app.services.r4_charting.canonical_types import CanonicalRecordInput
+from app.services.r4_charting.appointment_notes_import import (
+    collect_appointment_note_canonical_records,
+)
 from app.services.r4_charting.completed_treatment_findings_import import (
     collect_completed_treatment_finding_canonical_records,
 )
@@ -55,6 +58,7 @@ class SqlServerExtractReport:
     restorative_not_completed: int = 0
     restorative_missing_code_id: int = 0
     missing_patient_code: int = 0
+    missing_appt_id: int = 0
     missing_tooth: int = 0
     missing_code_id: int = 0
     out_of_window: int = 0
@@ -76,6 +80,7 @@ class SqlServerExtractReport:
             "restorative_not_completed": self.restorative_not_completed,
             "restorative_missing_code_id": self.restorative_missing_code_id,
             "missing_patient_code": self.missing_patient_code,
+            "missing_appt_id": self.missing_appt_id,
             "missing_tooth": self.missing_tooth,
             "missing_code_id": self.missing_code_id,
             "out_of_window": self.out_of_window,
@@ -277,6 +282,33 @@ class SqlServerChartingExtractor:
                         payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
                     )
                 )
+
+        if _include("appointment_notes", "appointment_note") and hasattr(
+            self._source, "list_appointment_notes"
+        ):
+            appointment_note_rows = self._iter_appointment_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            )
+            appointment_note_records, appointment_notes_report = (
+                collect_appointment_note_canonical_records(
+                    appointment_note_rows,
+                    date_from=date_from,
+                    date_to=date_to,
+                )
+            )
+            records.extend(appointment_note_records)
+            report.missing_patient_code += appointment_notes_report.missing_patient_code
+            report.missing_appt_id += appointment_notes_report.missing_appt_id
+            report.missing_date += appointment_notes_report.missing_date
+            report.out_of_window += appointment_notes_report.out_of_window
+            report.blank_note += appointment_notes_report.blank_note
+            report.duplicate_key += appointment_notes_report.duplicate_key
+            report.accepted_nonblank_note += appointment_notes_report.accepted_nonblank_note
+            report.accepted_blank_note += appointment_notes_report.accepted_blank_note
+            report.included += appointment_notes_report.included
 
         if _include("temporary_notes", "temporary_note") and hasattr(
             self._source, "list_temporary_notes"
@@ -717,6 +749,41 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_temporary_notes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_appointment_notes(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_appointment_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_appointment_notes(
                     patients_from=code,
                     patients_to=code,
                     limit=batch_limit,

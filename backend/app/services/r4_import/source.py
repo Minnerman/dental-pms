@@ -5,6 +5,7 @@ from typing import Iterable, Protocol
 
 from app.services.r4_import.types import (
     R4Appointment,
+    R4AppointmentNote,
     R4AppointmentRecord,
     R4Patient,
     R4Treatment,
@@ -182,6 +183,14 @@ class R4Source(Protocol):
         patients_to: int | None = None,
         limit: int | None = None,
     ) -> Iterable[R4TemporaryNote]:
+        raise NotImplementedError
+
+    def list_appointment_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4AppointmentNote]:
         raise NotImplementedError
 
     def list_old_patient_notes(
