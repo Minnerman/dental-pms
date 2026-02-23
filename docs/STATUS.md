@@ -61,6 +61,38 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-02-23: Stage 163H scout completed (`stage163h-appt-notes-or-questionnaire-scout`) comparing two high-signal note candidates for post-163G scale-out (read-only inventory only; no import/parity wiring yet).
+  - Candidate A: `completed_questionnaire_notes` from `dbo.CompletedQuestionnaire.Notes` (`PatientCode`, `DateTime`)
+    - artefacts:
+      - `.run/stage163h/stage163h_completed_questionnaire_notes_inventory.json`
+      - `.run/stage163h/stage163h_completed_questionnaire_notes_full_pool.csv`
+      - `.run/stage163h/stage163h_completed_questionnaire_notes_cohort.csv`
+      - `.run/stage163h/stage163h_completed_questionnaire_notes_drop_skeleton.json`
+      - `.run/stage163h/stage163h_completed_questionnaire_notes_proof_patients.json`
+    - headline metrics (window `2017-01-01..2026-02-01`, seed `17`, cohort limit `200`):
+      - `rows_total=8716`, `patients_total=4158`
+      - `rows_in_window=8610`, `patients_in_window=4069`
+      - `nonblank_rows_in_window=4363` (`50.67%`)
+      - `accepted_rows=4363`, `accepted_patients=1679`, `selected_count=200`
+      - drops/quality: `out_of_window=106`, `blank_note=4247`, `included=4363`; `accepted_nonblank_note=4363`, `accepted_blank_note=4247`
+      - date/linkage quality: no `missing_date` drops; no `missing_patient_code` drops in scout window
+  - Candidate B: `appointment_notes` from `dbo.vwAppointmentDetails.notes` (preferred over raw `dbo.Appts.Notes`; columns `patientcode`, `appointmentDateTimevalue`, `apptid`)
+    - artefacts:
+      - `.run/stage163h/stage163h_appointment_notes_inventory.json`
+      - `.run/stage163h/stage163h_appointment_notes_full_pool.csv`
+      - `.run/stage163h/stage163h_appointment_notes_cohort.csv`
+      - `.run/stage163h/stage163h_appointment_notes_drop_skeleton.json`
+      - `.run/stage163h/stage163h_appointment_notes_proof_patients.json`
+    - headline metrics (window `2017-01-01..2026-02-01`, seed `17`, cohort limit `200`):
+      - `rows_total=100891`, `patients_total=14723`
+      - `rows_in_window=13596`, `patients_in_window=3466`
+      - `nonblank_rows_in_window=2159` (`15.88%`)
+      - `accepted_rows=2124`, `accepted_patients=1136`, `selected_count=200`
+      - drops/quality: `missing_patient_code=1752`, `out_of_window=85820`, `blank_note=11195`, `included=2124`; `accepted_nonblank_note=2124`, `accepted_blank_note=11195`
+      - linkage/date notes: canonical appointment view provides `apptid` + appointment datetime + note text (good for diary-oriented parity wiring)
+  - Stage 163H scout recommendation (winner for next pipeline/parity scale-out):
+    - choose `appointment_notes` first despite lower nonblank rate because it is directly tied to diary/calendar workflow and already comes from canonical appointment view rows (`vwAppointmentDetails`, `apptid`)
+    - keep `completed_questionnaire_notes` as the immediate follow-on candidate (higher text density / cleaner linkage, lower parity-wiring risk)
 - 2026-02-22: Stage 163G started (`stage163g-temporary-notes-import-scout`) to scout the next non-empty charting-like domain after Stage 163F close-out.
   - Selected scout domain: `temporary_notes` from `dbo.TemporaryNotes` (read-only).
   - Domain selection rationale (evidence-first):
