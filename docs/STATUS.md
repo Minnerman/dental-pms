@@ -352,6 +352,47 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - ledger update report: `.run/stage163g/chunk8/stage163g_chunk8_ledger_update.json`
     - counts: `pre_count=1400`, `appended_count=200`, `post_count=1600`, `duplicates_after_append=0`
   - Progress checkpoint: Stage 163G temporary_notes seen ledger now `1600/1730`; remaining accepted pool `130`.
+- 2026-02-22: Stage 163G chunk9 started (`stage163g-temp-notes-chunk9`) and completed as the final partial cohort (`130` patients) with deterministic hashed selection + idempotent import/parity gates (parity-only proof; no Playwright).
+  - Deterministic selector (seed `1`, hashed order, ledger exclusion) rebuilt using Stage 163G pipeline filters (`blank_note` dropped):
+    - selector report: `.run/stage163g/chunk9/stage163g_temporary_notes_chunk9_selection_report.json`
+    - refreshed full accepted pool CSV (nonblank + in-window): `.run/stage163g/stage163g_temporary_notes_full_pool_nonblank.csv`
+    - selected cohort files (`130` patients): `.run/stage163g/chunk9/stage163g_temporary_notes_chunk9_codes.txt`, `.run/stage163g/chunk9/stage163g_temporary_notes_chunk9.csv`
+    - post-exclude pool snapshot (final remainder before selection): `.run/stage163g/chunk9/stage163g_temporary_notes_chunk9_post_exclude_pool.csv`
+    - selector headline counts: `source_rows_total=16968`, `accepted_rows_total=1730`, `accepted_patients_total=1730`, `post_exclude_pool_count=130`, `selected_count=130`, `selected_overlap_with_ledger=0`
+    - selector drop/quality counters (full Stage 163G pool under current filter semantics): `missing_date=11412`, `out_of_window=3734`, `blank_note=92`, `duplicate_key=0`, `accepted_nonblank_note=1730`, `accepted_blank_note=92`
+    - note: chunk9 is non-contiguous patient-code selection (hashed order); `selected_min_patient_code=1000697`, `selected_max_patient_code=1016797` are orientation only (not a safe contiguous import range).
+  - Patients import (`r4_import --entity patients`):
+    - apply stats JSON: `.run/stage163g/chunk9/stage163g_chunk9_patients_apply_stats.json` (`patients_created=130`, `patients_updated=0`, `patients_skipped=0`)
+    - rerun stats JSON: `.run/stage163g/chunk9/stage163g_chunk9_patients_rerun_stats.json` (`patients_created=0`, `patients_updated=0`, `patients_skipped=130`)
+  - Temporary notes canonical import (`r4_import --entity charting_canonical --domains temporary_notes`):
+    - apply stats/report: `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_apply_stats.json`, `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_apply_report.json`
+    - rerun stats/report: `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_rerun_stats.json`, `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_rerun_report.json`
+    - apply headline: `batches_completed=2`, `candidates_total=130`, `imported_created_total=130`, `imported_updated_total=0`, `skipped_total=0`, `dropped_reasons` all `0`
+    - idempotency rerun headline: `imported_created_total=0`, `imported_updated_total=0`, `skipped_total=130`, `dropped_reasons` all `0`
+  - Drop/parity evidence:
+    - chunk drop summary JSON (from apply report totals): `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_drop_summary.json` (`dropped_reasons` all `0` for selected accepted cohort)
+    - single-patient drop explain sample (`patient_code=1015626`): `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_drop_explain_1015626.json` (`delta_sql_minus_pg=0`, `latest_match=true`, `latest_digest_match=true`)
+    - parity pack JSON: `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_parity_pack.json` (`overall.status=pass`, `patients_total=130`, `patients_with_data=130`, `patients_no_data=0`, latest/digest `130/130`)
+    - consolidated parity run JSON + per-domain JSON: `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_parity_run.json`, `.run/stage163g/chunk9/stage163g_chunk9_temp_notes_parity_run_domains/temporary_notes.json` (`temporary_notes` summary `pass`, `130/130`)
+  - Ledger update:
+    - ledger file: `.run/seen_stage163g_temporary_notes.txt`
+    - ledger update report: `.run/stage163g/chunk9/stage163g_chunk9_ledger_update.json`
+    - counts: `pre_count=1600`, `appended_count=130`, `post_count=1730`, `duplicates_after_append=0`
+  - Progress checkpoint: Stage 163G temporary_notes seen ledger now `1730/1730`; remaining accepted pool `0`.
+- 2026-02-22: Stage 163G completed (`temporary_notes`) with final ledger closure + full-cohort parity pass.
+  - Final ledger closure:
+    - final seen ledger count confirmed `1730` (all accepted patients accounted for, duplicates `0`):
+      - `.run/seen_stage163g_temporary_notes.txt`
+    - inventory-vs-ledger closure JSON confirms `accepted_patients_total=1730`, `ledger_total=1730`, `missing=0`, `extra=0`, `duplicates=0`:
+      - `.run/stage163g/stage163g_final_inventory_vs_ledger.json`
+  - Full-cohort parity close-out:
+    - post-chunk8 `verify.sh` reset DB state, so full-cohort parity was run after rehydrating the full Stage 163G cohort (`1730` patients) from the final seen ledger:
+      - patients rehydrate stats: `.run/stage163g/stage163g_fullcohort_patients_rehydrate_stats.json`
+      - temporary_notes rehydrate stats/report: `.run/stage163g/stage163g_fullcohort_temp_notes_rehydrate_stats.json`, `.run/stage163g/stage163g_fullcohort_temp_notes_rehydrate_report.json`
+    - full-cohort parity JSON + per-domain JSON:
+      - `.run/stage163g/stage163g_fullcohort_temporary_notes_parity.json`
+      - `.run/stage163g/stage163g_fullcohort_temporary_notes_parity_domains/temporary_notes.json`
+      - headline results: `overall.status=pass`, `patients_total=1730`, `patients_with_data=1730`, `patients_no_data=0`, latest/digest `1730/1730`
 - 2026-02-22: Stage 163F completed (`completed_treatment_findings`) with final ledger closure + full-cohort parity pass.
   - Final ledger closure:
     - final seen ledger count confirmed `2886` (all accepted patients accounted for, duplicates `0`):
