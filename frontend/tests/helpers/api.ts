@@ -31,6 +31,11 @@ type AppointmentOverrides = {
   location_text?: string;
 };
 
+type AppointmentNoteOverrides = {
+  body?: string;
+  note_type?: "clinical" | "admin";
+};
+
 type InvoiceOverrides = {
   issue_date?: string | null;
   due_date?: string | null;
@@ -130,6 +135,27 @@ export async function createAppointment(
       location_type: overrides.location_type ?? "clinic",
       location: overrides.location ?? "Room 1",
       location_text: overrides.location_text ?? "",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
+export async function createAppointmentNote(
+  request: APIRequestContext,
+  patientId: string,
+  appointmentId: number,
+  overrides: AppointmentNoteOverrides = {}
+) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const response = await request.post(`${baseURL}/api/notes`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      patient_id: Number(patientId),
+      appointment_id: appointmentId,
+      body: overrides.body ?? `Appointment note ${Date.now()}`,
+      note_type: overrides.note_type ?? "clinical",
     },
   });
   expect(response.ok()).toBeTruthy();

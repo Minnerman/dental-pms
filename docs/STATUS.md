@@ -61,6 +61,21 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Stage 163H chunk2 completed on `stage163h-chunk2` as the smallest clearly-supported appointment-notes UI slice from `master@7798816`.
+  - Scope recovered from repo evidence: the appointment-notes backend/router/import work already existed, and the appointments drawer already exposed a working quick-note flow, so chunk2 was taken as UI hardening/proof rather than new API surface.
+  - Implemented appointment-detail note-state hardening in `frontend/app/(app)/appointments/page.tsx`:
+    - opening or closing an appointment now resets the quick-note draft instead of leaking it into the next appointment
+    - appointment-note loads are now request-scoped so stale responses do not overwrite the currently open appointment drawer
+    - note-cache bodies are refreshed on drawer load and after note create so day-sheet note indicators stay in sync
+  - Added focused UI coverage in `frontend/tests/appointments-diary-interactions.spec.ts` with API helper support in `frontend/tests/helpers/api.ts`.
+    - proof case: `appointment detail notes stay scoped to the selected appointment and refresh row state`
+    - evidence: open appointment A with existing note, type unsaved draft, open appointment B, assert empty quick-note field + B-only notes, add note to B, assert day-sheet note icon appears without reload
+  - Validation on this stop-point:
+    - `npm run typecheck` (frontend host workspace) -> pass
+    - `npx playwright test tests/appointments-diary-interactions.spec.ts --grep "appointment detail notes stay scoped"` with `.env` loaded -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `302 passed, 2 skipped`
 - 2026-03-14: Continuity cleanup completed on `fix/duplicate-appointment-notes-router`.
   - Removed duplicate `appointment_notes` router registration/imports from `backend/app/main.py`; runtime route count is now `1` for `/appointments/{appointment_id}/notes`.
   - Added backend regression test coverage for single appointment-notes route registration.

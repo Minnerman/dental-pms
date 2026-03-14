@@ -749,6 +749,7 @@ export default function AppointmentsPage() {
     useState<AppointmentLocationType | null>(null);
   const [modalLocationText, setModalLocationText] = useState<string | null>(null);
   const [modalLocation, setModalLocation] = useState<string | null>(null);
+  const loadAppointmentNotesRequestId = useRef(0);
 
   const activeClinicianUserId = showNewModal
     ? modalClinicianUserId ?? clinicianUserId
@@ -1624,7 +1625,15 @@ export default function AppointmentsPage() {
     };
   }, [schedule]);
 
+  function resetAppointmentNotesState() {
+    loadAppointmentNotesRequestId.current += 1;
+    setNoteBody("");
+    setNotes([]);
+    setLoadingNotes(false);
+  }
+
   function openAppointment(appt: Appointment, mode: "view" | "edit" = "view") {
+    resetAppointmentNotesState();
     setSelectedAppointment(appt);
     setSelectedAppointmentId(appt.id);
     setIsEditingAppointment(mode === "edit");
@@ -2139,6 +2148,7 @@ export default function AppointmentsPage() {
   }
 
   async function loadAppointmentNotes(appointmentId: number) {
+    const requestId = ++loadAppointmentNotesRequestId.current;
     setLoadingNotes(true);
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}/notes`);
@@ -2149,11 +2159,21 @@ export default function AppointmentsPage() {
       }
       if (res.ok) {
         const data = (await res.json()) as AppointmentNote[];
+        if (requestId !== loadAppointmentNotesRequestId.current) return;
         setNotes(data);
+        const bodies = data.map((note) => note.body).filter(Boolean);
+        setNoteCache((prev) => ({ ...prev, [appointmentId]: bodies }));
+      } else {
+        if (requestId !== loadAppointmentNotesRequestId.current) return;
+        setNotes([]);
+        setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
       }
     } catch {
+      if (requestId !== loadAppointmentNotesRequestId.current) return;
       setNotes([]);
+      setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
     } finally {
+      if (requestId !== loadAppointmentNotesRequestId.current) return;
       setLoadingNotes(false);
     }
   }
@@ -2208,14 +2228,16 @@ export default function AppointmentsPage() {
   async function addAppointmentNote(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedAppointment || !noteBody.trim()) return;
+    const appointmentId = selectedAppointment.id;
+    const patientId = selectedAppointment.patient.id;
     setSaving(true);
     setError(null);
     try {
       const res = await apiFetch("/api/notes", {
         method: "POST",
         body: JSON.stringify({
-          patient_id: selectedAppointment.patient.id,
-          appointment_id: selectedAppointment.id,
+          patient_id: patientId,
+          appointment_id: appointmentId,
           body: noteBody.trim(),
           note_type: "clinical",
         }),
@@ -2230,7 +2252,7 @@ export default function AppointmentsPage() {
         throw new Error(msg || `Failed to add note (HTTP ${res.status})`);
       }
       setNoteBody("");
-      await loadAppointmentNotes(selectedAppointment.id);
+      await loadAppointmentNotes(appointmentId);
       setNotice("Note added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add note");
@@ -2510,7 +2532,7 @@ export default function AppointmentsPage() {
         }
         if (selectedAppointment) {
           setSelectedAppointment(null);
-          setNotes([]);
+          resetAppointmentNotesState();
           setDetailPatient(null);
           setIsEditingAppointment(false);
           setAuditOpen(false);
@@ -3995,7 +4017,7 @@ export default function AppointmentsPage() {
                     data-testid="appointment-detail-close"
                     onClick={() => {
                       setSelectedAppointment(null);
-                      setNotes([]);
+                      resetAppointmentNotesState();
                       setDetailPatient(null);
                       setIsEditingAppointment(false);
                     }}
