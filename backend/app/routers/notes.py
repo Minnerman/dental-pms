@@ -88,6 +88,24 @@ def _create_note_record(
     return note
 
 
+def _require_appointment_note(
+    db: Session,
+    *,
+    appointment_id: int,
+    note_id: int,
+    include_deleted: bool = False,
+) -> Note:
+    appointment = db.get(Appointment, appointment_id)
+    if appointment is None or appointment.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    note = db.get(Note, note_id)
+    if note is None or note.appointment_id != appointment_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+    if not include_deleted and note.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+    return note
+
+
 @patient_router.get("", response_model=list[NoteOut])
 def list_notes(
     patient_id: int,
@@ -171,6 +189,124 @@ def create_appointment_note(
         user=user,
         request_id=request_id,
     )
+
+
+@appointment_router.patch("/{note_id}", response_model=NoteOut)
+def update_appointment_note(
+    appointment_id: int,
+    note_id: int,
+    payload: NoteUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    note = _require_appointment_note(
+        db,
+        appointment_id=appointment_id,
+        note_id=note_id,
+        include_deleted=False,
+    )
+
+    before_data = snapshot_model(note)
+    if payload.body is not None:
+        note.body = payload.body
+    if payload.note_type is not None:
+        note.note_type = payload.note_type
+    note.updated_by_user_id = user.id
+    db.add(note)
+    log_event(
+        db,
+        actor=user,
+        action="note.updated",
+        entity_type="note",
+        entity_id=str(note.id),
+        before_data=before_data,
+        after_obj=note,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@appointment_router.post("/{note_id}/archive", response_model=NoteOut)
+def archive_appointment_note(
+    appointment_id: int,
+    note_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    note = _require_appointment_note(
+        db,
+        appointment_id=appointment_id,
+        note_id=note_id,
+        include_deleted=True,
+    )
+    if note.deleted_at is not None:
+        return note
+
+    before_data = snapshot_model(note)
+    note.deleted_at = datetime.now(timezone.utc)
+    note.deleted_by_user_id = user.id
+    note.updated_by_user_id = user.id
+    db.add(note)
+    log_event(
+        db,
+        actor=user,
+        action="note.archived",
+        entity_type="note",
+        entity_id=str(note.id),
+        before_data=before_data,
+        after_obj=note,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@appointment_router.post("/{note_id}/restore", response_model=NoteOut)
+def restore_appointment_note(
+    appointment_id: int,
+    note_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    request_id: str | None = Header(default=None),
+):
+    note = _require_appointment_note(
+        db,
+        appointment_id=appointment_id,
+        note_id=note_id,
+        include_deleted=True,
+    )
+    if note.deleted_at is None:
+        return note
+
+    before_data = snapshot_model(note)
+    note.deleted_at = None
+    note.deleted_by_user_id = None
+    note.updated_by_user_id = user.id
+    db.add(note)
+    log_event(
+        db,
+        actor=user,
+        action="note.restored",
+        entity_type="note",
+        entity_id=str(note.id),
+        before_data=before_data,
+        after_obj=note,
+        request_id=request_id,
+        ip_address=request.client.host if request else None,
+    )
+    db.commit()
+    db.refresh(note)
+    return note
 
 
 @patient_router.post("/{note_id}/archive", response_model=NoteOut)
