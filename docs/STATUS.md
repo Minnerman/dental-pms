@@ -61,6 +61,21 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Stage 163H chunk3 continued on dependent branch `stage163h-chunk3-calendar-note-proof` from validated parent `stage163h-chunk2@f3a9b8f`.
+  - Scope recovered from repo evidence: the calendar context-menu `Add note` action opens the shared appointment drawer in edit mode (`openAppointment(..., "edit")`), so the next proof slice was to cover that path specifically rather than broaden into new API work.
+  - Implemented the smallest calendar-note path hardening in `frontend/app/(app)/appointments/page.tsx`:
+    - after edit-mode note creation, the drawer now reloads appointment notes so view mode shows the new note immediately
+    - the same reload refreshes note-cache bodies so visible note state stays aligned after saving from the calendar/context-menu path
+    - note-create failures in edit mode now surface as real errors instead of silently succeeding
+  - Added focused calendar/context-menu UI proof in `frontend/tests/appointments-diary-interactions.spec.ts`.
+    - proof case: `calendar context-menu Add note keeps drawer state scoped and refreshes visible note state`
+    - evidence: context-menu `Add note` opens the correct appointment in edit mode, the edit-note draft does not leak into the next appointment, saving a note switches back to view mode with the new note visible, and the day-sheet note icon appears after closing the drawer
+  - Validation on this stop-point:
+    - `npm run typecheck` (frontend host workspace) -> pass
+    - `npx playwright test tests/appointments-diary-interactions.spec.ts --grep "calendar context-menu Add note keeps drawer state scoped and refreshes visible note state"` with `.env` loaded -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added beyond existing app guardrails, and no R4-side mutation occurred.
 - 2026-03-14: Stage 163H chunk2 completed on `stage163h-chunk2` as the smallest clearly-supported appointment-notes UI slice from `master@7798816`.
   - Scope recovered from repo evidence: the appointment-notes backend/router/import work already existed, and the appointments drawer already exposed a working quick-note flow, so chunk2 was taken as UI hardening/proof rather than new API surface.
   - Implemented appointment-detail note-state hardening in `frontend/app/(app)/appointments/page.tsx`:

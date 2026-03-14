@@ -2393,8 +2393,10 @@ export default function AppointmentsPage() {
         throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
       }
       const updated = (await res.json()) as Appointment;
+      setSelectedAppointment(updated);
+      setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       if (editNoteBody.trim()) {
-        await apiFetch("/api/notes", {
+        const noteRes = await apiFetch("/api/notes", {
           method: "POST",
           body: JSON.stringify({
             patient_id: updated.patient.id,
@@ -2403,10 +2405,18 @@ export default function AppointmentsPage() {
             note_type: "clinical",
           }),
         });
+        if (noteRes.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!noteRes.ok) {
+          const msg = await noteRes.text();
+          throw new Error(msg || `Failed to add note (HTTP ${noteRes.status})`);
+        }
         setEditNoteBody("");
+        await loadAppointmentNotes(updated.id);
       }
-      setSelectedAppointment(updated);
-      setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       setIsEditingAppointment(false);
       setNotice("Appointment updated.");
       await loadAppointments();
