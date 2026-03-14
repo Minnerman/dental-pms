@@ -387,3 +387,102 @@ test("calendar context-menu Add note keeps drawer state scoped and refreshes vis
     .first();
   await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
+
+test("appointment drawer note actions use appointment-scoped edit archive and restore routes", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `ACT${unique}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    starts_at: `${date}T09:00:00.000Z`,
+    ends_at: `${date}T09:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-ACT-${unique}`,
+  });
+  const createdNote = await createAppointmentNote(request, appointment.id, {
+    body: `Appointment note actions ${unique}`,
+  });
+  const updatedNote = `Appointment note updated ${unique}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/appointments?date=${date}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-day-sheet").click();
+
+  const row = page
+    .locator(".day-sheet-table tbody tr")
+    .filter({ hasText: `ACT${unique}` })
+    .first();
+  await expect(row).toBeVisible({ timeout: 20_000 });
+
+  await row.click();
+  await page.keyboard.press("Enter");
+
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel.getByText(createdNote.body)).toBeVisible({ timeout: 15_000 });
+
+  await detailPanel.locator('[data-testid^="appointment-note-edit-"]').first().click();
+  await detailPanel
+    .locator('[data-testid^="appointment-note-edit-body-"]')
+    .first()
+    .fill(updatedNote);
+  const editResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(
+        `/api/appointments/${appointment.id}/notes/${createdNote.id}`
+      )
+  );
+  await detailPanel.getByRole("button", { name: "Save note" }).click();
+  const editResponse = await editResponsePromise;
+  expect(editResponse.ok()).toBeTruthy();
+  await expect(detailPanel.getByText(updatedNote)).toBeVisible({ timeout: 15_000 });
+
+  const archiveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(
+        `/api/appointments/${appointment.id}/notes/${createdNote.id}/archive`
+      )
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await detailPanel.locator('[data-testid^="appointment-note-archive-"]').first().click();
+  const archiveResponse = await archiveResponsePromise;
+  expect(archiveResponse.ok()).toBeTruthy();
+  await expect(detailPanel.getByText("No notes yet.")).toBeVisible({ timeout: 15_000 });
+
+  await page.getByTestId("appointment-detail-close").click();
+  await expect(row.locator(".day-sheet-note-icon")).toHaveCount(0);
+
+  await row.click();
+  await page.keyboard.press("Enter");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+  await detailPanel.getByTestId("appointments-notes-show-archived").check();
+  await expect(detailPanel.getByText(updatedNote)).toBeVisible({ timeout: 15_000 });
+
+  const restoreResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(
+        `/api/appointments/${appointment.id}/notes/${createdNote.id}/restore`
+      )
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await detailPanel.locator('[data-testid^="appointment-note-restore-"]').first().click();
+  const restoreResponse = await restoreResponsePromise;
+  expect(restoreResponse.ok()).toBeTruthy();
+  await expect(detailPanel.getByText(updatedNote)).toBeVisible({ timeout: 15_000 });
+
+  await page.getByTestId("appointment-detail-close").click();
+  await expect(row.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
+});

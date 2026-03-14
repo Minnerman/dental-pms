@@ -128,9 +128,12 @@ type UserOption = {
 
 type AppointmentNote = {
   id: number;
+  note_type: "clinical" | "admin";
   body: string;
   created_at: string;
+  updated_at: string;
   created_by: Actor;
+  deleted_at?: string | null;
 };
 
 type PracticeHour = {
@@ -613,6 +616,13 @@ export default function AppointmentsPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [notes, setNotes] = useState<AppointmentNote[]>([]);
+  const [showArchivedNotes, setShowArchivedNotes] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNoteBody, setEditingNoteBody] = useState("");
+  const [savingNoteAction, setSavingNoteAction] = useState<{
+    noteId: number;
+    action: "edit" | "archive" | "restore";
+  } | null>(null);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [detailPatient, setDetailPatient] = useState<PatientDetail | null>(null);
   const [loadingPatientDetail, setLoadingPatientDetail] = useState(false);
@@ -1636,6 +1646,10 @@ export default function AppointmentsPage() {
     loadAppointmentNotesRequestId.current += 1;
     setNoteBody("");
     setNotes([]);
+    setShowArchivedNotes(false);
+    setEditingNoteId(null);
+    setEditingNoteBody("");
+    setSavingNoteAction(null);
     setLoadingNotes(false);
   }
 
@@ -2193,11 +2207,20 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function loadAppointmentNotes(appointmentId: number) {
+  async function loadAppointmentNotes(
+    appointmentId: number,
+    options?: { includeDeleted?: boolean }
+  ) {
     const requestId = ++loadAppointmentNotesRequestId.current;
+    const includeDeleted = options?.includeDeleted ?? showArchivedNotes;
     setLoadingNotes(true);
     try {
-      const res = await apiFetch(`/api/appointments/${appointmentId}/notes`);
+      const params = new URLSearchParams();
+      if (includeDeleted) params.set("include_deleted", "true");
+      const query = params.toString();
+      const res = await apiFetch(
+        `/api/appointments/${appointmentId}/notes${query ? `?${query}` : ""}`
+      );
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
@@ -2207,7 +2230,10 @@ export default function AppointmentsPage() {
         const data = (await res.json()) as AppointmentNote[];
         if (requestId !== loadAppointmentNotesRequestId.current) return;
         setNotes(data);
-        const bodies = data.map((note) => note.body).filter(Boolean);
+        const bodies = data
+          .filter((note) => !note.deleted_at)
+          .map((note) => note.body)
+          .filter(Boolean);
         setNoteCache((prev) => ({ ...prev, [appointmentId]: bodies }));
       } else {
         if (requestId !== loadAppointmentNotesRequestId.current) return;
@@ -2221,6 +2247,89 @@ export default function AppointmentsPage() {
     } finally {
       if (requestId !== loadAppointmentNotesRequestId.current) return;
       setLoadingNotes(false);
+    }
+  }
+
+  function beginAppointmentNoteEdit(note: AppointmentNote) {
+    setEditingNoteId(note.id);
+    setEditingNoteBody(note.body);
+    setError(null);
+    setNotice(null);
+  }
+
+  async function saveAppointmentNoteEdit(note: AppointmentNote) {
+    if (!selectedAppointment || !editingNoteBody.trim()) return;
+    const appointmentId = selectedAppointment.id;
+    setSavingNoteAction({ noteId: note.id, action: "edit" });
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await apiFetch(`/api/appointments/${appointmentId}/notes/${note.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          body: editingNoteBody.trim(),
+        }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update note (HTTP ${res.status})`);
+      }
+      setEditingNoteId(null);
+      setEditingNoteBody("");
+      await loadAppointmentNotes(appointmentId, { includeDeleted: showArchivedNotes });
+      setNotice("Note updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update note");
+    } finally {
+      setSavingNoteAction(null);
+    }
+  }
+
+  async function toggleAppointmentNoteArchive(note: AppointmentNote) {
+    if (!selectedAppointment) return;
+    const action = note.deleted_at ? "restore" : "archive";
+    if (!confirm(`${note.deleted_at ? "Restore" : "Archive"} this note?`)) return;
+    const appointmentId = selectedAppointment.id;
+    setSavingNoteAction({ noteId: note.id, action });
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await apiFetch(
+        `/api/appointments/${appointmentId}/notes/${note.id}/${action}`,
+        {
+          method: "POST",
+        }
+      );
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to ${action} note (HTTP ${res.status})`);
+      }
+      if (editingNoteId === note.id) {
+        setEditingNoteId(null);
+        setEditingNoteBody("");
+      }
+      await loadAppointmentNotes(appointmentId, { includeDeleted: showArchivedNotes });
+      setNotice(
+        note.deleted_at
+          ? "Note restored."
+          : showArchivedNotes
+            ? "Note archived."
+            : "Note archived. Enable Show archived to restore it."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} note`);
+    } finally {
+      setSavingNoteAction(null);
     }
   }
 
@@ -4519,16 +4628,152 @@ export default function AppointmentsPage() {
                     <div className="badge">Loading notes…</div>
                   ) : (
                     <div className="stack">
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          color: "var(--muted)",
+                          fontSize: 12,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          data-testid="appointments-notes-show-archived"
+                          checked={showArchivedNotes}
+                          onChange={(event) => {
+                            const next = event.target.checked;
+                            setShowArchivedNotes(next);
+                            setEditingNoteId(null);
+                            setEditingNoteBody("");
+                            if (selectedAppointment) {
+                              void loadAppointmentNotes(selectedAppointment.id, {
+                                includeDeleted: next,
+                              });
+                            }
+                          }}
+                        />
+                        Show archived
+                      </label>
                       {notes.length === 0 ? (
                         <div className="notice">No notes yet.</div>
                       ) : (
                         notes.map((note) => (
-                          <div key={note.id} className="card" style={{ margin: 0 }}>
-                            <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                              {note.created_by?.email || "—"} ·{" "}
-                              {new Date(note.created_at).toLocaleString()}
+                          <div
+                            key={note.id}
+                            className="card"
+                            data-testid={`appointment-note-card-${note.id}`}
+                            style={{ margin: 0 }}
+                          >
+                            <div
+                              className="row"
+                              style={{
+                                alignItems: "flex-start",
+                                justifyContent: "space-between",
+                                gap: 12,
+                              }}
+                            >
+                              <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                                {note.created_by?.email || "—"} ·{" "}
+                                {new Date(note.created_at).toLocaleString()}
+                                {note.deleted_at && (
+                                  <>
+                                    {" "}
+                                    · Archived {new Date(note.deleted_at).toLocaleString()}
+                                  </>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                {!note.deleted_at ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      data-testid={`appointment-note-edit-${note.id}`}
+                                      onClick={() => beginAppointmentNoteEdit(note)}
+                                      disabled={Boolean(savingNoteAction)}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      data-testid={`appointment-note-archive-${note.id}`}
+                                      onClick={() => void toggleAppointmentNoteArchive(note)}
+                                      disabled={Boolean(savingNoteAction)}
+                                    >
+                                      {savingNoteAction?.noteId === note.id &&
+                                      savingNoteAction.action === "archive"
+                                        ? "Archiving..."
+                                        : "Archive"}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    data-testid={`appointment-note-restore-${note.id}`}
+                                    onClick={() => void toggleAppointmentNoteArchive(note)}
+                                    disabled={Boolean(savingNoteAction)}
+                                  >
+                                    {savingNoteAction?.noteId === note.id &&
+                                    savingNoteAction.action === "restore"
+                                      ? "Restoring..."
+                                      : "Restore"}
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <div style={{ marginTop: 6 }}>{note.body}</div>
+                            {editingNoteId === note.id && !note.deleted_at ? (
+                              <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+                                <label className="label">Edit note</label>
+                                <textarea
+                                  className="input"
+                                  rows={3}
+                                  data-testid={`appointment-note-edit-body-${note.id}`}
+                                  value={editingNoteBody}
+                                  onChange={(event) =>
+                                    setEditingNoteBody(event.target.value)
+                                  }
+                                />
+                                <div className="row">
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    data-testid={`appointment-note-save-${note.id}`}
+                                    onClick={() => void saveAppointmentNoteEdit(note)}
+                                    disabled={
+                                      !editingNoteBody.trim() || Boolean(savingNoteAction)
+                                    }
+                                  >
+                                    {savingNoteAction?.noteId === note.id &&
+                                    savingNoteAction.action === "edit"
+                                      ? "Saving..."
+                                      : "Save note"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => {
+                                      setEditingNoteId(null);
+                                      setEditingNoteBody("");
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  whiteSpace: "pre-wrap",
+                                  color: note.deleted_at ? "var(--muted)" : undefined,
+                                }}
+                              >
+                                {note.body}
+                              </div>
+                            )}
                           </div>
                         ))
                       )}
