@@ -61,6 +61,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Stage 163H chunk6 continued on `stage163h-chunk6-note-route-symmetry` from `master@a61739d` to complete the remaining appointment-note route symmetry for update/archive/restore without broadening into general note API cleanup.
+  - Remaining asymmetry recovered from repo evidence: appointment notes already had appointment-scoped list/create routes, but note update/archive/restore still only existed as global `/notes/{note_id}...` or patient-scoped `/patients/{patient_id}/notes/{note_id}...` operations.
+  - Symmetry improvement implemented:
+    - added appointment-scoped update at `PATCH /appointments/{appointment_id}/notes/{note_id}`
+    - added appointment-scoped archive at `POST /appointments/{appointment_id}/notes/{note_id}/archive`
+    - added appointment-scoped restore at `POST /appointments/{appointment_id}/notes/{note_id}/restore`
+    - enforced appointment-scoped note lookup so these routes only operate on notes that belong to the target appointment
+  - Compatibility decision:
+    - kept the existing global and patient-scoped update/archive/restore routes in place for backward compatibility
+    - the new appointment-scoped routes are an additive symmetry layer rather than a breaking migration
+  - Files changed in this slice:
+    - `backend/app/routers/notes.py`
+    - `backend/tests/appointments/test_appointment_notes_api.py`
+    - `backend/tests/appointments/test_appointment_notes_route_registration.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose build backend` -> pass
+    - `docker compose run --rm backend pytest -q tests/appointments/test_appointment_notes_api.py tests/appointments/test_appointment_notes_route_registration.py tests/appointments/test_appointments_snapshot.py` -> `10 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+  - R4 untouched: no R4-side mutation or integration change was made.
 - 2026-03-14: Stage 163H chunk5 continued on `stage163h-chunk5-note-api-symmetry` from `master@7d8dadc` to reduce appointment-note API asymmetry without reopening the merged UI slices.
   - Current asymmetry recovered from repo evidence: appointment-scoped note reads already used `GET /appointments/{appointment_id}/notes`, but appointment-note creation in the appointments UI still went through global `POST /notes` with both `patient_id` and `appointment_id` in the request body.
   - Symmetry improvement implemented:
