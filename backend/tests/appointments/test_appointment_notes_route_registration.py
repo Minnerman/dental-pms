@@ -10,5 +10,7 @@ def test_appointment_notes_router_registered_once():
         if isinstance(route, APIRoute) and route.path == "/appointments/{appointment_id}/notes"
     ]
 
-    assert len(matching_routes) == 1
-    assert matching_routes[0].methods == {"GET"}
+    route_methods = sorted(tuple(sorted(route.methods)) for route in matching_routes)
+
+    assert len(matching_routes) == 2
+    assert route_methods == [("GET",), ("POST",)]

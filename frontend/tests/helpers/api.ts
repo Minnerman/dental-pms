@@ -143,17 +143,14 @@ export async function createAppointment(
 
 export async function createAppointmentNote(
   request: APIRequestContext,
-  patientId: string,
   appointmentId: number,
   overrides: AppointmentNoteOverrides = {}
 ) {
   const token = await ensureAuthReady(request);
   const baseURL = getBaseUrl();
-  const response = await request.post(`${baseURL}/api/notes`, {
+  const response = await request.post(`${baseURL}/api/appointments/${appointmentId}/notes`, {
     headers: { Authorization: `Bearer ${token}` },
     data: {
-      patient_id: Number(patientId),
-      appointment_id: appointmentId,
       body: overrides.body ?? `Appointment note ${Date.now()}`,
       note_type: overrides.note_type ?? "clinical",
     },

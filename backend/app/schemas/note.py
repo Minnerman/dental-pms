@@ -14,6 +14,11 @@ class NoteCreate(BaseModel):
     appointment_id: Optional[int] = None
 
 
+class AppointmentNoteCreate(BaseModel):
+    body: str
+    note_type: NoteType = NoteType.clinical
+
+
 class NoteUpdate(BaseModel):
     body: Optional[str] = None
     note_type: Optional[NoteType] = None
