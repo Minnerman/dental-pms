@@ -56,6 +56,21 @@ async function firstDiaryEvent(page: Page) {
   return events.first();
 }
 
+async function openAppointmentNoteEditorFromContextMenu(
+  page: Page,
+  appointmentId: number
+) {
+  const eventCard = page.getByTestId(`appointment-event-${appointmentId}`);
+  await expect(eventCard).toBeVisible({ timeout: 20_000 });
+  await eventCard.click({ button: "right" });
+  await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
+  await page
+    .getByTestId("appointments-context-notes")
+    .evaluate((element) => (element as HTMLButtonElement).click());
+  await expect(page.getByTestId("appointment-detail-panel")).toBeVisible({ timeout: 15_000 });
+  return eventCard;
+}
+
 test("diary interaction parity: select, open, context menu, escape, enter", async ({
   page,
   request,
@@ -292,5 +307,76 @@ test("appointment detail notes stay scoped to the selected appointment and refre
   await expect(detailPanel.getByText(newNote)).toBeVisible({ timeout: 15_000 });
 
   await page.getByTestId("appointment-detail-close").click();
+  await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
+});
+
+test("calendar context-menu Add note keeps drawer state scoped and refreshes visible note state", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const patientWithNotesId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `CTXA${unique}`,
+  });
+  const patientWithoutNotesId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `CTXB${unique}`,
+  });
+  const appointmentWithNotes = await createAppointment(request, patientWithNotesId, {
+    starts_at: `${date}T09:00:00.000Z`,
+    ends_at: `${date}T09:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-CAL-A-${unique}`,
+  });
+  const appointmentWithoutNotes = await createAppointment(request, patientWithoutNotesId, {
+    starts_at: `${date}T10:00:00.000Z`,
+    ends_at: `${date}T10:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-CAL-B-${unique}`,
+  });
+  const existingNote = `Calendar existing note ${unique}`;
+  const newNote = `Calendar added note ${unique}`;
+
+  await createAppointmentNote(request, patientWithNotesId, appointmentWithNotes.id, {
+    body: existingNote,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/appointments?date=${date}&view=day`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-calendar").click();
+  await switchToDayView(page);
+
+  await openAppointmentNoteEditorFromContextMenu(page, appointmentWithNotes.id);
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  const editNote = detailPanel.getByPlaceholder("Add a note for this appointment");
+  await expect(detailPanel).toContainText(`CTXA${unique}`);
+  await expect(editNote).toHaveValue("");
+  await editNote.fill("Unsaved calendar note draft should not leak");
+  await page.getByTestId("appointment-detail-close").click();
+  await expect(detailPanel).toHaveCount(0);
+
+  await openAppointmentNoteEditorFromContextMenu(page, appointmentWithoutNotes.id);
+  await expect(detailPanel).toContainText(`CTXB${unique}`);
+  await expect(editNote).toHaveValue("");
+
+  await editNote.fill(newNote);
+  await detailPanel.getByRole("button", { name: "Save changes" }).click();
+  await expect(detailPanel.getByPlaceholder("Add a note for this appointment")).toHaveCount(0);
+  await expect(detailPanel.getByText(newNote)).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel.getByText(existingNote)).toHaveCount(0);
+
+  await page.getByTestId("appointment-detail-close").click();
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const secondRow = page
+    .locator(".day-sheet-table tbody tr")
+    .filter({ hasText: `CTXB${unique}` })
+    .first();
   await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
