@@ -5,6 +5,12 @@
 - Use SELECT-only queries and read-only credentials only.
 - Avoid any tool/script that could write to R4 under any circumstance.
 
+# Legacy Notice
+- This file is legacy handover context from earlier stages and is not the current restart point.
+- For the live restart baseline, start with `docs/STATUS.md`.
+- For current parity/import operator steps, use `docs/RUNBOOK_IMPORT_PARITY.md`.
+- For current backup/restore operations, use `docs/OPS_BACKUPS.md`.
+
 # Codex end-of-session / handover note
 
 ## Stage 108 / R4 patients-only import

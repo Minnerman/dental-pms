@@ -25,6 +25,7 @@ frontend/test-results/
 # backups
 backups/
 *.bak
+*.bak.*
 
 # OS
 .DS_Store

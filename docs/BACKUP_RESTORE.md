@@ -1,5 +1,10 @@
 # Backup & Restore (Postgres)
 
+## Legacy Note
+- This file is retained as legacy quick-reference guidance only.
+- The canonical operator runbook is `docs/OPS_BACKUPS.md`.
+- If this file and `docs/OPS_BACKUPS.md` differ, follow `docs/OPS_BACKUPS.md`.
+
 ## Warnings
 - Restore overwrites data. Double-check the target before proceeding.
 - Keep backups off the server too (encrypted external drive or secure cloud storage).
