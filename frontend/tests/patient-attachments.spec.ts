@@ -25,9 +25,6 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
   );
   await uploadInput.setInputFiles(fixturePath);
 
-  const row = page.locator(".card", { hasText: "sample.pdf" }).first();
-  await expect(row).toBeVisible({ timeout: 15_000 });
-
   const token = await ensureAuthReady(request);
   let attachmentId: number | null = null;
   await expect
@@ -57,9 +54,12 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
     throw new Error("Attachment id not available after upload");
   }
 
+  const row = page.getByTestId(`attachment-card-${attachmentId}`);
+  await expect(row).toBeVisible({ timeout: 15_000 });
+
   const [previewPage] = await Promise.all([
     page.waitForEvent("popup"),
-    row.getByRole("button", { name: "Preview" }).click(),
+    page.getByTestId(`attachment-preview-${attachmentId}`).click(),
   ]);
   const previewRes = await request.get(
     `${getBaseUrl()}/api/attachments/${attachmentId}/preview`,
@@ -70,11 +70,11 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    row.getByRole("button", { name: "Download" }).click(),
+    page.getByTestId(`attachment-download-${attachmentId}`).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/sample\.pdf/i);
 
   page.once("dialog", (dialog) => dialog.accept());
-  await row.getByRole("button", { name: "Delete" }).click();
+  await page.getByTestId(`attachment-delete-${attachmentId}`).click();
   await expect(row).toHaveCount(0);
 });
