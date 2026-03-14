@@ -61,6 +61,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Continuity cleanup completed on `fix/duplicate-appointment-notes-router`.
+  - Removed duplicate `appointment_notes` router registration/imports from `backend/app/main.py`; runtime route count is now `1` for `/appointments/{appointment_id}/notes`.
+  - Added backend regression test coverage for single appointment-notes route registration.
+  - Removed tracked frontend backup artefacts (`frontend/app/page.tsx.bak*`) and ignored `*.bak.*`.
+  - Marked `docs/CODEX_HANDOVER.md` and `docs/BACKUP_RESTORE.md` as legacy pointers so restart/backup guidance now clearly flows through `docs/STATUS.md`, `docs/RUNBOOK_IMPORT_PARITY.md`, and `docs/OPS_BACKUPS.md`.
 - 2026-02-23: Stage 163H chunk1 completed (`stage163h-appt-notes-chunk1`) for `appointment_notes` scale-out (parity-proof only; no UI proof yet).
   - base `master` after Stage 163H pipeline merge (PR `#334`): `1491883` (`1491883db34577beb37117642640fa9b91836ebe`)
   - Deterministic selector (seed `17`, hashed order, ledger exclusion, cap `200`) against Stage 163H scout accepted pool:
