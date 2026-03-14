@@ -2275,15 +2275,12 @@ export default function AppointmentsPage() {
     e.preventDefault();
     if (!selectedAppointment || !noteBody.trim()) return;
     const appointmentId = selectedAppointment.id;
-    const patientId = selectedAppointment.patient.id;
     setSaving(true);
     setError(null);
     try {
-      const res = await apiFetch("/api/notes", {
+      const res = await apiFetch(`/api/appointments/${appointmentId}/notes`, {
         method: "POST",
         body: JSON.stringify({
-          patient_id: patientId,
-          appointment_id: appointmentId,
           body: noteBody.trim(),
           note_type: "clinical",
         }),
@@ -2442,11 +2439,9 @@ export default function AppointmentsPage() {
       setSelectedAppointment(updated);
       setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       if (editNoteBody.trim()) {
-        const noteRes = await apiFetch("/api/notes", {
+        const noteRes = await apiFetch(`/api/appointments/${updated.id}/notes`, {
           method: "POST",
           body: JSON.stringify({
-            patient_id: updated.patient.id,
-            appointment_id: updated.id,
             body: editNoteBody.trim(),
             note_type: "clinical",
           }),

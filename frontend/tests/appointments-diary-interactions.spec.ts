@@ -265,7 +265,7 @@ test("appointment detail notes stay scoped to the selected appointment and refre
   const existingNote = `Existing appointment note ${unique}`;
   const newNote = `Fresh drawer note ${unique}`;
 
-  await createAppointmentNote(request, patientWithNotesId, appointmentWithNotes.id, {
+  await createAppointmentNote(request, appointmentWithNotes.id, {
     body: existingNote,
   });
 
@@ -348,7 +348,7 @@ test("calendar context-menu Add note keeps drawer state scoped and refreshes vis
   const existingNote = `Calendar existing note ${unique}`;
   const newNote = `Calendar added note ${unique}`;
 
-  await createAppointmentNote(request, patientWithNotesId, appointmentWithNotes.id, {
+  await createAppointmentNote(request, appointmentWithNotes.id, {
     body: existingNote,
   });
 

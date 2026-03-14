@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Stage 163H chunk5 continued on `stage163h-chunk5-note-api-symmetry` from `master@7d8dadc` to reduce appointment-note API asymmetry without reopening the merged UI slices.
+  - Current asymmetry recovered from repo evidence: appointment-scoped note reads already used `GET /appointments/{appointment_id}/notes`, but appointment-note creation in the appointments UI still went through global `POST /notes` with both `patient_id` and `appointment_id` in the request body.
+  - Symmetry improvement implemented:
+    - added appointment-scoped note creation at `POST /appointments/{appointment_id}/notes` with a route-scoped payload (`body`, `note_type`)
+    - switched the appointments UI note-create callers to that appointment-scoped route for both quick-add and edit-mode save flows
+    - added shared backend validation so note creates cannot silently link an `appointment_id` to the wrong `patient_id`
+  - Compatibility decision:
+    - kept global `POST /notes` in place for backward compatibility
+    - compatibility is now explicit: global callers may still create notes, but if they include `appointment_id` it must belong to the supplied `patient_id`
+  - Files changed in this slice:
+    - `backend/app/routers/notes.py`
+    - `backend/app/schemas/note.py`
+    - `backend/tests/appointments/test_appointment_notes_api.py`
+    - `backend/tests/appointments/test_appointment_notes_route_registration.py`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/helpers/api.ts`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose build backend` -> pass
+    - `docker compose run --rm backend pytest -q tests/appointments/test_appointment_notes_api.py tests/appointments/test_appointment_notes_route_registration.py tests/appointments/test_appointments_snapshot.py` -> `7 passed`
+    - `npm run typecheck` (frontend host workspace) -> pass
+    - `npx playwright test tests/appointments-diary-interactions.spec.ts --grep "appointment detail notes stay scoped|calendar context-menu Add note keeps drawer state scoped and refreshes visible note state"` with `.env` loaded -> `2 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+  - R4 untouched: no R4-side mutation or integration change was made.
 - 2026-03-14: Stage 163H chunk4 continued on `stage163h-chunk4-context-menu-clickability` from `master@8955a9f` to fix the calendar context-menu viewport bug.
   - Root cause recovered from repo evidence: the appointments context menu rendered at raw right-click coordinates with no viewport clamping, so the final `Add note` action could land outside the visible/clickable viewport; the previous proof used a DOM-triggered click only to bypass that geometry bug.
   - Implemented the smallest local UI fix in `frontend/app/(app)/appointments/page.tsx`:
