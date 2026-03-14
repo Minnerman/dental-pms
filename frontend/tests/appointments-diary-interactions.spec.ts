@@ -63,10 +63,17 @@ async function openAppointmentNoteEditorFromContextMenu(
   const eventCard = page.getByTestId(`appointment-event-${appointmentId}`);
   await expect(eventCard).toBeVisible({ timeout: 20_000 });
   await eventCard.click({ button: "right" });
-  await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
-  await page
-    .getByTestId("appointments-context-notes")
-    .evaluate((element) => (element as HTMLButtonElement).click());
+  const contextMenu = page.getByTestId("appointments-context-menu");
+  await expect(contextMenu).toBeVisible();
+  const menuBox = await contextMenu.boundingBox();
+  expect(menuBox).not.toBeNull();
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height);
+  await page.getByTestId("appointments-context-notes").click();
   await expect(page.getByTestId("appointment-detail-panel")).toBeVisible({ timeout: 15_000 });
   return eventCard;
 }

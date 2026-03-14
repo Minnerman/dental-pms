@@ -571,10 +571,12 @@ function isRangeWithinSchedule(
 }
 
 export default function AppointmentsPage() {
+  const contextMenuMargin = 12;
   const router = useRouter();
   const searchParams = useSearchParams();
   const patientSearchRef = useRef<HTMLInputElement | null>(null);
   const diarySearchRef = useRef<HTMLInputElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -635,6 +637,11 @@ export default function AppointmentsPage() {
     y: number;
     appointment: Appointment;
   } | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{
+    top: number;
+    left: number;
+    ready: boolean;
+  }>({ top: 0, left: 0, ready: false });
   const [clipboard, setClipboard] = useState<{
     mode: "cut" | "copy";
     appointment: Appointment;
@@ -1973,6 +1980,45 @@ export default function AppointmentsPage() {
     const handleClose = () => setContextMenu(null);
     window.addEventListener("click", handleClose);
     return () => window.removeEventListener("click", handleClose);
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      setContextMenuPosition({ top: 0, left: 0, ready: false });
+      return;
+    }
+
+    setContextMenuPosition({
+      top: contextMenu.y,
+      left: contextMenu.x,
+      ready: false,
+    });
+
+    const updatePosition = () => {
+      const menu = contextMenuRef.current;
+      if (!menu) return;
+      const rect = menu.getBoundingClientRect();
+      const maxLeft = Math.max(
+        contextMenuMargin,
+        window.innerWidth - rect.width - contextMenuMargin
+      );
+      const maxTop = Math.max(
+        contextMenuMargin,
+        window.innerHeight - rect.height - contextMenuMargin
+      );
+      setContextMenuPosition({
+        top: Math.max(contextMenuMargin, Math.min(contextMenu.y, maxTop)),
+        left: Math.max(contextMenuMargin, Math.min(contextMenu.x, maxLeft)),
+        ready: true,
+      });
+    };
+
+    const frame = window.requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updatePosition);
+    };
   }, [contextMenu]);
 
   useEffect(() => {
@@ -3609,16 +3655,18 @@ export default function AppointmentsPage() {
         )}
         {contextMenu && (
           <div
+            ref={contextMenuRef}
             className="card"
             style={{
               position: "fixed",
-              top: contextMenu.y,
-              left: contextMenu.x,
+              top: contextMenuPosition.top,
+              left: contextMenuPosition.left,
               zIndex: 50,
               padding: 8,
               display: "grid",
               gap: 6,
               minWidth: 180,
+              visibility: contextMenuPosition.ready ? "visible" : "hidden",
             }}
             data-testid="appointments-context-menu"
             onClick={(event) => event.stopPropagation()}

@@ -61,6 +61,25 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Stage 163H chunk4 continued on `stage163h-chunk4-context-menu-clickability` from `master@8955a9f` to fix the calendar context-menu viewport bug.
+  - Root cause recovered from repo evidence: the appointments context menu rendered at raw right-click coordinates with no viewport clamping, so the final `Add note` action could land outside the visible/clickable viewport; the previous proof used a DOM-triggered click only to bypass that geometry bug.
+  - Implemented the smallest local UI fix in `frontend/app/(app)/appointments/page.tsx`:
+    - measured the context-menu box after render
+    - clamped menu `top/left` to the viewport with a small margin
+    - kept the menu hidden until its corrected position is ready
+  - Updated the focused Playwright proof in `frontend/tests/appointments-diary-interactions.spec.ts`:
+    - restored a normal click on `appointments-context-notes`
+    - asserted the context-menu bounding box stays within the viewport before clicking `Add note`
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `npm run typecheck` (frontend host workspace) -> pass
+    - `npx playwright test tests/appointments-diary-interactions.spec.ts --grep "calendar context-menu Add note keeps drawer state scoped and refreshes visible note state"` with `.env` loaded -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+  - R4 untouched: no R4-side mutation or integration change was made.
 - 2026-03-14: Stage 163H chunk3 continued on dependent branch `stage163h-chunk3-calendar-note-proof` from validated parent `stage163h-chunk2@f3a9b8f`.
   - Scope recovered from repo evidence: the calendar context-menu `Add note` action opens the shared appointment drawer in edit mode (`openAppointment(..., "edit")`), so the next proof slice was to cover that path specifically rather than broaden into new API work.
   - Implemented the smallest calendar-note path hardening in `frontend/app/(app)/appointments/page.tsx`:
