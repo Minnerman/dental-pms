@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { createAppointment, createPatient } from "./helpers/api";
+import { createAppointment, createAppointmentNote, createPatient } from "./helpers/api";
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
 const stage158bDir = path.resolve(__dirname, "..", "..", ".run", "stage158b");
@@ -210,4 +210,87 @@ test("diary polish parity: shortcuts and context status action persist", async (
     path: path.join(stage158dDir, "shortcut_navigation.png"),
     fullPage: true,
   });
+});
+
+test("appointment detail notes stay scoped to the selected appointment and refresh row state", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const patientWithNotesId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `APPTA${unique}`,
+  });
+  const patientWithoutNotesId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `APPTB${unique}`,
+  });
+  const appointmentWithNotes = await createAppointment(request, patientWithNotesId, {
+    starts_at: `${date}T09:00:00.000Z`,
+    ends_at: `${date}T09:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-A-${unique}`,
+  });
+  const appointmentWithoutNotes = await createAppointment(request, patientWithoutNotesId, {
+    starts_at: `${date}T10:00:00.000Z`,
+    ends_at: `${date}T10:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-B-${unique}`,
+  });
+  const existingNote = `Existing appointment note ${unique}`;
+  const newNote = `Fresh drawer note ${unique}`;
+
+  await createAppointmentNote(request, patientWithNotesId, appointmentWithNotes.id, {
+    body: existingNote,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/appointments?date=${date}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-day-sheet").click();
+
+  const firstRow = page
+    .locator(".day-sheet-table tbody tr")
+    .filter({ hasText: `APPTA${unique}` })
+    .first();
+  const secondRow = page
+    .locator(".day-sheet-table tbody tr")
+    .filter({ hasText: `APPTB${unique}` })
+    .first();
+  await expect(firstRow).toBeVisible({ timeout: 20_000 });
+  await expect(secondRow).toBeVisible({ timeout: 20_000 });
+
+  await firstRow.click();
+  await expect(firstRow).toHaveClass(/row-highlight/);
+  await page.keyboard.press("Enter");
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  const quickNote = detailPanel.getByPlaceholder("Add a brief clinical note");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel).toContainText(`APPTA${unique}`);
+  await expect(detailPanel.getByText(existingNote)).toBeVisible();
+
+  await quickNote.fill("Unsaved note draft should not leak");
+  await page.getByTestId("appointment-detail-close").click();
+  await expect(detailPanel).toHaveCount(0);
+
+  await secondRow.click();
+  await expect(secondRow).toHaveClass(/row-highlight/);
+  await page.keyboard.press("Enter");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel).toContainText(`APPTB${unique}`);
+  await expect(quickNote).toHaveValue("");
+  await expect(detailPanel.getByText("No notes yet.")).toBeVisible();
+  await expect(detailPanel.getByText(existingNote)).toHaveCount(0);
+
+  await quickNote.fill(newNote);
+  await detailPanel.getByRole("button", { name: "Add note" }).click();
+  await expect(detailPanel.getByText(newNote)).toBeVisible({ timeout: 15_000 });
+
+  await page.getByTestId("appointment-detail-close").click();
+  await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
