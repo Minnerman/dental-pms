@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-14: Stage 163H chunk8 completed on `stage163h-chunk8-note-actions-ui` from `master@80d9be6` to expose appointment-note edit/archive/restore controls in the appointments drawer and wire them to the appointment-scoped note item routes.
+  - UI gap confirmed from repo evidence: the appointments drawer already supported appointment-note create/list, but had no edit/archive/restore controls to exercise the appointment-scoped item routes added in chunk6.
+  - Exact UI controls added in `frontend/app/(app)/appointments/page.tsx`:
+    - `Edit` action on active appointment-note cards with inline note-body editing
+    - `Archive` action on active appointment-note cards
+    - `Show archived` toggle in the drawer notes section
+    - `Restore` action on archived appointment-note cards when archived notes are shown
+  - Appointment-scoped routes now exercised directly by the appointments UI:
+    - `PATCH /appointments/{appointment_id}/notes/{note_id}`
+    - `POST /appointments/{appointment_id}/notes/{note_id}/archive`
+    - `POST /appointments/{appointment_id}/notes/{note_id}/restore`
+  - Drawer note refresh behavior stays aligned with the existing note-cache/day-sheet icon flow:
+    - edit updates the visible note body in place
+    - archive removes the note from the default active list and clears the day-sheet note icon when no active notes remain
+    - restore brings the note back and restores the day-sheet note icon
+  - Out of scope in this slice:
+    - note type editing in the appointments drawer
+    - broader note UX redesign or general note API cleanup
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts --grep "appointment detail notes stay scoped|calendar context-menu Add note keeps drawer state scoped and refreshes visible note state|appointment drawer note actions use appointment-scoped edit archive and restore routes"` -> `3 passed`
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-14: Stage 163H chunk6 continued on `stage163h-chunk6-note-route-symmetry` from `master@a61739d` to complete the remaining appointment-note route symmetry for update/archive/restore without broadening into general note API cleanup.
   - Remaining asymmetry recovered from repo evidence: appointment notes already had appointment-scoped list/create routes, but note update/archive/restore still only existed as global `/notes/{note_id}...` or patient-scoped `/patients/{patient_id}/notes/{note_id}...` operations.
   - Symmetry improvement implemented:
