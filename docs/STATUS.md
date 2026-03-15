@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk18 completed on `stage163h-chunk18-patient-recall-download-parity` from `master@67da2a1` to bring patient-page recall letter downloads into parity with the stronger recalls-page filename handling.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - patient-page recall download flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - recalls-page recall download flow in `frontend/app/(app)/recalls/page.tsx`
+    - patient recall letter backend route in `backend/app/routers/patients.py`
+    - existing download proof patterns in `frontend/tests/recalls-export.spec.ts`, `frontend/tests/patient-document-pdf.spec.ts`, `frontend/tests/appointments-runsheet.spec.ts`, and `frontend/tests/reports-month-pack.spec.ts`
+  - Evidence for choosing this slice:
+    - patient-page recall letter generation is already a live workflow
+    - the stronger header-aware filename handling already existed on the recalls page for the same recall letter route
+    - the patient page still synthesized its own fallback filename instead of honoring the backend `Content-Disposition` contract
+    - the change was frontend-only and had a narrow focused proof path
+  - Exact slice implemented:
+    - updated the patient-page recall letter download flow to use the same header-aware filename resolution already used elsewhere in the repo
+    - preserved the existing patient-page fallback filename as a fallback only when no usable header filename is present
+    - added focused Playwright coverage proving the patient-page `Generate letter` action disables while downloading and honors the header-provided PDF filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-recall-letter.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-recall-letter.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk17 completed on `stage163h-chunk17-patient-document-pdf-hardening` from `master@3cfd544` to harden the patient document PDF download flow without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
