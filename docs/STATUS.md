@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk15 completed on `stage163h-chunk15-runsheet-download-hardening` from `master@5c35297` to harden the existing visit run-sheet download flow without broadening into diary print/export redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/APPOINTMENTS_UI_ACCEPTANCE.md`
+    - current run-sheet download flow in `frontend/app/(app)/appointments/page.tsx`
+    - existing download/filename proof patterns in `frontend/tests/billing-payment.spec.ts`, `frontend/tests/recalls-export.spec.ts`, and `frontend/tests/patient-attachments.spec.ts`
+  - Evidence for choosing this slice:
+    - the appointments UI already exposed a `Download run sheet` action for visit workflows
+    - `docs/APPOINTMENTS_UI_ACCEPTANCE.md` explicitly keeps run-sheet export in scope while broader diary print/export parity remains future work
+    - unlike receipt/export/attachment downloads elsewhere in the repo, the run-sheet flow had no in-flight UX and did not follow the stronger filename hardening pattern
+  - Exact slice implemented:
+    - added in-flight disabled state and `Downloading run sheet...` button text while the run-sheet fetch is active
+    - added a stable test hook for the run-sheet action button
+    - hardened the client download filename so it now prefers `Content-Disposition` when informative and otherwise falls back to a deterministic `run-sheet-visit-<date_or_range>.pdf` filename
+    - added focused Playwright coverage proving the button disables while downloading and the fallback filename is used when the response only provides the generic `run-sheet.pdf` header
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-runsheet.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-runsheet.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk14 completed on `stage163h-chunk14-patient-header-density` from `master@a0111fe` to tighten patient header visual density without broadening into patient-page redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

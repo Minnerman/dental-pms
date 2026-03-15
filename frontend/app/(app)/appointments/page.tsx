@@ -140,6 +140,20 @@ function noteTypeLabel(noteType: AppointmentNote["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
 }
 
+function filenameFromHeader(header: string | null) {
+  if (!header) return null;
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const asciiMatch = header.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1] ?? null;
+}
+
 type AppointmentLanePatch = {
   clinicianUserId?: number | null;
   clinicianLabel?: string | null;
@@ -198,6 +212,14 @@ type CalendarRange = {
   view: View;
   anchor: string;
 };
+
+function buildRunSheetFilename(
+  range: CalendarRange,
+  location: AppointmentLocationType = "visit"
+) {
+  const scope = range.start === range.end ? range.start : `${range.start}-to-${range.end}`;
+  return `run-sheet-${location}-${scope}.pdf`;
+}
 
 type DiaryUndoState = {
   token: number;
@@ -625,6 +647,7 @@ export default function AppointmentsPage() {
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [downloadingRunSheet, setDownloadingRunSheet] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [diaryUndo, setDiaryUndo] = useState<DiaryUndoState | null>(null);
@@ -2035,8 +2058,9 @@ export default function AppointmentsPage() {
   }
 
   async function downloadRunSheet() {
-    if (!range) return;
+    if (!range || downloadingRunSheet) return;
     setError(null);
+    setDownloadingRunSheet(true);
     try {
       const params = new URLSearchParams();
       params.set("date", range.start);
@@ -2055,18 +2079,22 @@ export default function AppointmentsPage() {
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const label =
-        range.view === "week" || range.view === "agenda"
-          ? `week-of-${range.start}`
-          : range.start;
+      const fallbackFilename = buildRunSheetFilename(range, "visit");
+      const headerFilename = filenameFromHeader(res.headers.get("Content-Disposition"));
+      const filename =
+        headerFilename && headerFilename.toLowerCase() !== "run-sheet.pdf"
+          ? headerFilename
+          : fallbackFilename;
       link.href = url;
-      link.download = `Run_Sheet_${label}.pdf`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download run sheet");
+    } finally {
+      setDownloadingRunSheet(false);
     }
   }
 
@@ -3466,8 +3494,13 @@ export default function AppointmentsPage() {
             {locationFilter === "visit" &&
               range &&
               ["day", "week", "agenda"].includes(range.view) && (
-                <button className="btn btn-secondary" onClick={downloadRunSheet}>
-                  Download run sheet
+                <button
+                  className="btn btn-secondary"
+                  onClick={downloadRunSheet}
+                  disabled={downloadingRunSheet}
+                  data-testid="appointments-download-run-sheet"
+                >
+                  {downloadingRunSheet ? "Downloading run sheet..." : "Download run sheet"}
                 </button>
               )}
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
