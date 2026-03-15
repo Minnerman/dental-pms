@@ -86,6 +86,7 @@ export default function PatientDocuments({
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
+  const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
 
   const loadMe = useCallback(async () => {
     try {
@@ -293,7 +294,9 @@ export default function PatientDocuments({
   }
 
   async function downloadDocumentPdf(doc: PatientDocument) {
+    if (downloadingDocumentPdfId !== null) return;
     setError(null);
+    setDownloadingDocumentPdfId(doc.id);
     try {
       const res = await apiFetch(`/api/patient-documents/${doc.id}/download?format=pdf`);
       if (res.status === 401) {
@@ -318,6 +321,8 @@ export default function PatientDocuments({
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download PDF");
+    } finally {
+      setDownloadingDocumentPdfId(null);
     }
   }
 
@@ -498,6 +503,7 @@ export default function PatientDocuments({
                     key={doc.id}
                     className="card"
                     style={{ margin: 0, display: "flex", justifyContent: "space-between", gap: 12 }}
+                    data-testid={`patient-document-card-${doc.id}`}
                   >
                     <div>
                       <div style={{ fontWeight: 600 }}>{doc.title}</div>
@@ -517,8 +523,10 @@ export default function PatientDocuments({
                         className="btn btn-secondary"
                         type="button"
                         onClick={() => downloadDocumentPdf(doc)}
+                        disabled={downloadingDocumentPdfId !== null}
+                        data-testid={`patient-document-download-pdf-${doc.id}`}
                       >
-                        Download PDF
+                        {downloadingDocumentPdfId === doc.id ? "Downloading PDF..." : "Download PDF"}
                       </button>
                       <button
                         className="btn btn-secondary"
