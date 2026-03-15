@@ -29,6 +29,12 @@ type FinanceTrends = {
 
 type RangePreset = 7 | 30 | 90;
 
+function filenameFromHeader(header: string | null) {
+  if (!header) return null;
+  const match = /filename="([^"]+)"/.exec(header);
+  return match?.[1] ?? null;
+}
+
 function buildRange(days: number) {
   const end = new Date();
   const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
@@ -50,6 +56,7 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [year, setYear] = useState(() => new Date().getFullYear());
+  const [downloadingMonthPack, setDownloadingMonthPack] = useState<"pdf" | "zip" | null>(null);
 
   function formatCurrency(pence: number) {
     return new Intl.NumberFormat("en-GB", {
@@ -108,7 +115,9 @@ export default function ReportsPage() {
   }
 
   async function downloadMonthPack(format: "pdf" | "zip") {
+    if (downloadingMonthPack) return;
     setError(null);
+    setDownloadingMonthPack(format);
     try {
       const params = new URLSearchParams({
         year: String(year),
@@ -128,15 +137,19 @@ export default function ReportsPage() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const filename = res.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/\"/g, "");
+      const filename =
+        filenameFromHeader(res.headers.get("Content-Disposition")) ||
+        `finance_pack_${year}_${String(month).padStart(2, "0")}.${format}`;
       link.href = url;
-      link.download = filename || `finance_pack_${year}_${String(month).padStart(2, "0")}.${format}`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download month pack");
+    } finally {
+      setDownloadingMonthPack(null);
     }
   }
 
@@ -218,15 +231,19 @@ export default function ReportsPage() {
                   className="btn btn-secondary"
                   type="button"
                   onClick={() => void downloadMonthPack("pdf")}
+                  disabled={downloadingMonthPack !== null}
+                  data-testid="reports-month-pack-pdf"
                 >
-                  Download PDF
+                  {downloadingMonthPack === "pdf" ? "Downloading PDF..." : "Download PDF"}
                 </button>
                 <button
                   className="btn btn-secondary"
                   type="button"
                   onClick={() => void downloadMonthPack("zip")}
+                  disabled={downloadingMonthPack !== null}
+                  data-testid="reports-month-pack-zip"
                 >
-                  Download ZIP
+                  {downloadingMonthPack === "zip" ? "Downloading ZIP..." : "Download ZIP"}
                 </button>
               </div>
             </div>
