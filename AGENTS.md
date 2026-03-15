@@ -8,6 +8,7 @@ Workflow
 - Work only on a branch (never commit directly on master).
 - Keep changes staged by topic; prefer multiple small commits over one huge commit.
 - Update docs/STATUS.md only once the work is real and tests pass.
+- For Dental PMS PR review/merge work, use `docs/CODEX_PR_REVIEW_TEMPLATE.md`.
 
 Required checks
 - bash ops/health.sh
