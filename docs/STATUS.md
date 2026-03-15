@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk22 completed on `stage163h-chunk22-templates-download-hardening` from `master@2f1e62a` to harden templates page downloads without broadening into templates-page redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - templates page download flow in `frontend/app/(app)/templates/page.tsx`
+    - template download filename contract in `backend/app/routers/document_templates.py`
+    - existing focused proof patterns in `frontend/tests/patient-template-download.spec.ts`, `frontend/tests/patient-document-pdf.spec.ts`, `frontend/tests/patient-document-text.spec.ts`, and `frontend/tests/patient-document-attach-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the templates page already exposed live `Download` actions, so this was hardening rather than a new workflow
+    - the backend already emitted deterministic template filenames via `Content-Disposition`
+    - unlike the recently hardened download surfaces, the templates page download flow had no in-flight disabled state, no stable test hooks, and no focused Playwright proof
+  - Exact slice implemented:
+    - added a local in-flight disabled state for templates page downloads
+    - changed the active button text to `Downloading...` while the template download request is in flight
+    - added stable test ids for template rows and row download buttons
+    - added focused Playwright coverage proving the templates page download button disables while downloading and the browser honors the backend-provided template filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/templates/page.tsx`
+    - `frontend/tests/templates-download.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/templates-download.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk21 completed on `stage163h-chunk21-patient-template-download-hardening` from `master@92792be` to harden patient-page template downloads without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

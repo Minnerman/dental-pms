@@ -63,6 +63,7 @@ export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | DocumentTemplateKind>("all");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -259,7 +260,9 @@ export default function TemplatesPage() {
   }
 
   async function downloadTemplate(template: DocumentTemplate) {
+    if (downloadingTemplateId !== null) return;
     setError(null);
+    setDownloadingTemplateId(template.id);
     try {
       const res = await apiFetch(`/api/document-templates/${template.id}/download`);
       if (res.status === 401) {
@@ -285,6 +288,8 @@ export default function TemplatesPage() {
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download template");
+    } finally {
+      setDownloadingTemplateId(null);
     }
   }
 
@@ -333,7 +338,7 @@ export default function TemplatesPage() {
               </thead>
               <tbody>
                 {templates.map((template) => (
-                  <tr key={template.id}>
+                  <tr key={template.id} data-testid={`template-row-${template.id}`}>
                     <td>
                       <button
                         className="btn btn-secondary"
@@ -351,8 +356,10 @@ export default function TemplatesPage() {
                           className="btn btn-secondary"
                           type="button"
                           onClick={() => downloadTemplate(template)}
+                          disabled={downloadingTemplateId !== null}
+                          data-testid={`template-download-${template.id}`}
                         >
-                          Download
+                          {downloadingTemplateId === template.id ? "Downloading..." : "Download"}
                         </button>
                         {isSuperadmin && (
                           <button
@@ -534,8 +541,10 @@ export default function TemplatesPage() {
                   className="btn btn-secondary"
                   type="button"
                   onClick={() => selected && downloadTemplate(selected)}
+                  disabled={downloadingTemplateId !== null}
+                  data-testid="template-detail-download"
                 >
-                  Download
+                  {selected && downloadingTemplateId === selected.id ? "Downloading..." : "Download"}
                 </button>
               </div>
             </div>
