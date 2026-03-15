@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk12 started on `stage163h-chunk12-diary-undo` from `master@26e0d98` to add the remaining repo-backed one-step undo UX for diary move/resize.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/APPOINTMENTS_UI_ACCEPTANCE.md`
+    - `docs/V1_FINISH_LINE.md`
+    - appointments drag/resize save flow and current notice rendering in `frontend/app/(app)/appointments/page.tsx`
+    - diary drag/resize and interaction proofs in `frontend/tests/appointments-diary-drag-resize.spec.ts` and `frontend/tests/appointments-diary-interactions.spec.ts`
+  - Exact undo behavior implemented:
+    - successful diary move now shows a temporary toast with an `Undo` button
+    - successful diary resize now shows the same temporary undo toast
+    - undo is available for 10 seconds after the confirmed successful save
+    - clicking `Undo` restores the immediately previous appointment time/lane state through the existing appointment update route
+    - latest successful move/resize replaces any earlier still-open undo state
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-drag-resize.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-drag-resize.spec.ts` -> `1 passed`
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Repo-guided recovery chose Outcome A on `stage163h-chunk11-clinical-tooth-badges` from `master@e6010cb` to complete the next clearly evidenced clinical-chart badge slice.
   - What was inspected before choosing the slice:
     - `docs/STATUS.md`

@@ -65,7 +65,7 @@ async function setAppointmentStatus(
   expect(response.ok()).toBeTruthy();
 }
 
-test("diary drag/drop + resize parity: move lane/time, resize, and block overlap", async ({
+test("diary drag/drop + resize parity: move and resize support one-step undo", async ({
   page,
   request,
 }) => {
@@ -127,6 +127,8 @@ test("diary drag/drop + resize parity: move lane/time, resize, and block overlap
   await expect(laneTargetEvent).toBeVisible({ timeout: 20_000 });
   await expect(overlapEvent).toBeVisible({ timeout: 20_000 });
 
+  const originalMovable = await getAppointmentById(request, movable.id);
+
   await movableEvent.dragTo(laneTargetEvent);
   await expect
     .poll(async () => (await getAppointmentById(request, movable.id)).location ?? "", {
@@ -138,10 +140,25 @@ test("diary drag/drop + resize parity: move lane/time, resize, and block overlap
       timeout: 20_000,
     })
     .toContain(`${testDate}T11:00`);
+  await expect(page.getByTestId("appointments-diary-undo-toast")).toContainText(
+    "Appointment moved."
+  );
   await page.screenshot({
     path: path.join(stage158cDir, "drag_move.png"),
     fullPage: true,
   });
+  await page.getByTestId("appointments-diary-undo-button").click();
+  await expect(page.getByTestId("appointments-diary-undo-toast")).toHaveCount(0);
+  await expect
+    .poll(async () => (await getAppointmentById(request, movable.id)).location ?? "", {
+      timeout: 20_000,
+    })
+    .toBe(originalMovable.location ?? "");
+  await expect
+    .poll(async () => (await getAppointmentById(request, movable.id)).starts_at, {
+      timeout: 20_000,
+    })
+    .toBe(originalMovable.starts_at);
 
   const resizableEvent = page
     .locator(".rbc-addons-dnd-resizable", {
@@ -163,6 +180,7 @@ test("diary drag/drop + resize parity: move lane/time, resize, and block overlap
   const slotStep = Math.max(6, slotB.y - slotA.y);
   const handleX = handleBox.x + handleBox.width / 2;
   const handleY = handleBox.y + handleBox.height / 2;
+  const originalResizeState = await getAppointmentById(request, movable.id);
   await page.mouse.move(handleX, handleY);
   await page.mouse.down();
   await page.mouse.move(handleX, handleY + slotStep * 3 + 2, { steps: 10 });
@@ -175,10 +193,37 @@ test("diary drag/drop + resize parity: move lane/time, resize, and block overlap
       );
     }, { timeout: 20_000 })
     .toBeGreaterThan(30);
+  await expect(page.getByTestId("appointments-diary-undo-toast")).toContainText(
+    "Appointment duration updated."
+  );
   await page.screenshot({
     path: path.join(stage158cDir, "resize.png"),
     fullPage: true,
   });
+  await page.getByTestId("appointments-diary-undo-button").click();
+  await expect(page.getByTestId("appointments-diary-undo-toast")).toHaveCount(0);
+  await expect
+    .poll(async () => (await getAppointmentById(request, movable.id)).starts_at, {
+      timeout: 20_000,
+    })
+    .toBe(originalResizeState.starts_at);
+  await expect
+    .poll(async () => (await getAppointmentById(request, movable.id)).ends_at, {
+      timeout: 20_000,
+    })
+    .toBe(originalResizeState.ends_at);
+
+  await movableEvent.dragTo(laneTargetEvent);
+  await expect
+    .poll(async () => (await getAppointmentById(request, movable.id)).location ?? "", {
+      timeout: 20_000,
+    })
+    .toBe(targetRoom);
+  await expect(page.getByTestId("appointments-diary-undo-toast")).toContainText(
+    "Undo is available for 10 seconds."
+  );
+  await page.waitForTimeout(10_500);
+  await expect(page.getByTestId("appointments-diary-undo-toast")).toHaveCount(0);
 
   const beforeOverlapAttempt = await getAppointmentById(request, movable.id);
   await movableEvent.dragTo(overlapEvent);
