@@ -140,6 +140,16 @@ function noteTypeLabel(noteType: AppointmentNote["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
 }
 
+type AppointmentLanePatch = {
+  clinicianUserId?: number | null;
+  clinicianLabel?: string | null;
+  locationType?: AppointmentLocationType | null;
+  location?: string | null;
+  locationText?: string | null;
+  isDomiciliary?: boolean;
+  visitAddress?: string | null;
+};
+
 type PracticeHour = {
   day_of_week: number;
   start_time: string | null;
@@ -187,6 +197,16 @@ type CalendarRange = {
   end: string;
   view: View;
   anchor: string;
+};
+
+type DiaryUndoState = {
+  token: number;
+  appointmentId: number;
+  kind: "move" | "resize";
+  previousStartsAt: string;
+  previousEndsAt: string;
+  previousLanePatch: AppointmentLanePatch;
+  expiresAt: number;
 };
 
 type ConflictWarning = {
@@ -254,6 +274,7 @@ const daySheetStatusLabels: Record<AppointmentStatus, string> = {
 };
 
 const DIARY_TIME_STEP_MINUTES = 10;
+const DIARY_UNDO_WINDOW_MS = 10_000;
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -606,6 +627,7 @@ export default function AppointmentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [diaryUndo, setDiaryUndo] = useState<DiaryUndoState | null>(null);
   const [conflictChecking, setConflictChecking] = useState(false);
   const conflictCheckKeyRef = useRef<string>("");
   const conflictCheckTimerRef = useRef<number | null>(null);
@@ -696,6 +718,7 @@ export default function AppointmentsPage() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [auditEntries, setAuditEntries] = useState<AppointmentAuditEntry[]>([]);
+  const diaryUndoTokenRef = useRef(0);
   // Keyboard bindings are intentionally constrained for predictable diary shortcuts.
   useEffect(() => {
     function isEditableTarget(target: EventTarget | null) {
@@ -764,6 +787,24 @@ export default function AppointmentsPage() {
     }, 0);
     return () => window.clearTimeout(focusTimer);
   }, [showNewModal]);
+
+  useEffect(() => {
+    if (!diaryUndo) return;
+    const remaining = Math.max(0, diaryUndo.expiresAt - Date.now());
+    if (remaining === 0) {
+      setDiaryUndo((current) =>
+        current?.token === diaryUndo.token ? null : current
+      );
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setDiaryUndo((current) =>
+        current?.token === diaryUndo.token ? null : current
+      );
+    }, remaining);
+    return () => window.clearTimeout(timeout);
+  }, [diaryUndo]);
+
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
   const [modalClinicianUserId, setModalClinicianUserId] = useState<string | null>(null);
@@ -1211,21 +1252,39 @@ export default function AppointmentsPage() {
     [diaryGrouping, diaryLaneByKey]
   );
 
+  const buildAppointmentLanePatch = useCallback(
+    (appt: Appointment): AppointmentLanePatch => ({
+      clinicianUserId: appt.clinician_user_id ?? null,
+      clinicianLabel: appt.clinician ?? null,
+      locationType: appt.location_type,
+      location: appt.location ?? null,
+      locationText: appt.location_text ?? null,
+      isDomiciliary: appt.is_domiciliary,
+      visitAddress: appt.visit_address ?? null,
+    }),
+    []
+  );
+
+  const pushDiaryUndo = useCallback(
+    (kind: DiaryUndoState["kind"], appt: Appointment) => {
+      diaryUndoTokenRef.current += 1;
+      setDiaryUndo({
+        token: diaryUndoTokenRef.current,
+        appointmentId: appt.id,
+        kind,
+        previousStartsAt: appt.starts_at,
+        previousEndsAt: appt.ends_at,
+        previousLanePatch: buildAppointmentLanePatch(appt),
+        expiresAt: Date.now() + DIARY_UNDO_WINDOW_MS,
+      });
+    },
+    [buildAppointmentLanePatch]
+  );
+
   const applyLanePatch = useCallback(
     (
       appt: Appointment,
-      lanePatch:
-        | {
-            clinicianUserId?: number;
-            clinicianLabel?: string | null;
-            locationType?: AppointmentLocationType;
-            location?: string | null;
-            locationText?: string | null;
-            isDomiciliary?: boolean;
-            visitAddress?: string | null;
-          }
-        | null
-        | undefined
+      lanePatch: AppointmentLanePatch | null | undefined
     ) => {
       if (!lanePatch) return appt;
       const next = { ...appt };
@@ -1867,41 +1926,33 @@ export default function AppointmentsPage() {
       appointmentId: number,
       startsAt: Date,
       endsAt: Date,
-      lanePatch?: {
-        clinicianUserId?: number;
-        clinicianLabel?: string | null;
-        locationType?: AppointmentLocationType;
-        location?: string | null;
-        locationText?: string | null;
-        isDomiciliary?: boolean;
-        visitAddress?: string | null;
-      }
+      lanePatch?: AppointmentLanePatch
     ) => {
       const payload: Record<string, unknown> = {
         starts_at: startsAt.toISOString(),
         ends_at: endsAt.toISOString(),
       };
       if (lanePatch) {
-        if ("clinicianUserId" in lanePatch && lanePatch.clinicianUserId) {
-          payload.clinician_user_id = lanePatch.clinicianUserId;
+        if ("clinicianUserId" in lanePatch) {
+          payload.clinician_user_id = lanePatch.clinicianUserId ?? null;
         }
-        if ("clinicianLabel" in lanePatch && lanePatch.clinicianLabel) {
-          payload.clinician = lanePatch.clinicianLabel;
+        if ("clinicianLabel" in lanePatch) {
+          payload.clinician = lanePatch.clinicianLabel ?? null;
         }
-        if ("locationType" in lanePatch && lanePatch.locationType) {
-          payload.location_type = lanePatch.locationType;
+        if ("locationType" in lanePatch) {
+          payload.location_type = lanePatch.locationType ?? null;
         }
         if ("location" in lanePatch && lanePatch.location !== undefined) {
-          payload.location = lanePatch.location;
+          payload.location = lanePatch.location ?? null;
         }
-        if ("locationText" in lanePatch && lanePatch.locationText) {
-          payload.location_text = lanePatch.locationText;
+        if ("locationText" in lanePatch) {
+          payload.location_text = lanePatch.locationText ?? null;
         }
         if ("isDomiciliary" in lanePatch && lanePatch.isDomiciliary !== undefined) {
           payload.is_domiciliary = lanePatch.isDomiciliary;
         }
-        if ("visitAddress" in lanePatch && lanePatch.visitAddress) {
-          payload.visit_address = lanePatch.visitAddress;
+        if ("visitAddress" in lanePatch) {
+          payload.visit_address = lanePatch.visitAddress ?? null;
         }
       }
       const res = await apiFetch(`/api/appointments/${appointmentId}`, {
@@ -1929,6 +1980,36 @@ export default function AppointmentsPage() {
     },
     [buildConflictWarning, router]
   );
+
+  async function undoDiaryReschedule(action: DiaryUndoState) {
+    setError(null);
+    setNotice(null);
+    try {
+      setRescheduleSavingId(action.appointmentId);
+      const updated = await updateAppointmentTimes(
+        action.appointmentId,
+        new Date(action.previousStartsAt),
+        new Date(action.previousEndsAt),
+        action.previousLanePatch
+      );
+      if (!updated) return;
+      setAppointments((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setSelectedAppointmentId(updated.id);
+      setSelectedAppointment((prev) =>
+        prev && prev.id === updated.id ? updated : prev
+      );
+      setConflictWarning(null);
+      setDiaryUndo((current) => (current?.token === action.token ? null : current));
+      setNotice(action.kind === "move" ? "Move undone." : "Resize undone.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to undo appointment change");
+      await loadAppointments();
+    } finally {
+      setRescheduleSavingId(null);
+    }
+  }
 
   async function createEstimateForAppointment(appt: Appointment) {
     setError(null);
@@ -2906,6 +2987,7 @@ export default function AppointmentsPage() {
     resourceId?: string | number | null;
   }) {
     if (isRescheduleLocked) return;
+    const previousAppointment = event.resource;
     const snappedRange = snapRangeToIncrement(start, end, DIARY_TIME_STEP_MINUTES);
     const targetStart = snappedRange.start;
     const targetEnd = snappedRange.end;
@@ -3002,7 +3084,11 @@ export default function AppointmentsPage() {
           prev.map((item) => (item.id === updated.id ? updated : item))
         );
         setSelectedAppointmentId(updated.id);
-        setNotice("Appointment moved.");
+        setSelectedAppointment((prev) =>
+          prev && prev.id === updated.id ? updated : prev
+        );
+        setNotice(null);
+        pushDiaryUndo("move", previousAppointment);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to reschedule appointment";
@@ -3027,6 +3113,7 @@ export default function AppointmentsPage() {
     end: Date;
   }) {
     if (isRescheduleLocked) return;
+    const previousAppointment = event.resource;
     const snappedRange = snapRangeToIncrement(start, end, DIARY_TIME_STEP_MINUTES);
     const targetStart = snappedRange.start;
     const targetEnd = snappedRange.end;
@@ -3081,7 +3168,11 @@ export default function AppointmentsPage() {
           prev.map((item) => (item.id === updated.id ? updated : item))
         );
         setSelectedAppointmentId(updated.id);
-        setNotice("Appointment duration updated.");
+        setSelectedAppointment((prev) =>
+          prev && prev.id === updated.id ? updated : prev
+        );
+        setNotice(null);
+        pushDiaryUndo("resize", previousAppointment);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to resize appointment";
@@ -3396,6 +3487,37 @@ export default function AppointmentsPage() {
 
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
+        {diaryUndo && (
+          <div
+            className="notice"
+            data-testid="appointments-diary-undo-toast"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              background: "rgba(34, 197, 94, 0.12)",
+              borderColor: "rgba(34, 197, 94, 0.35)",
+              color: "var(--text)",
+            }}
+          >
+            <span>
+              {diaryUndo.kind === "move"
+                ? "Appointment moved."
+                : "Appointment duration updated."}{" "}
+              Undo is available for 10 seconds.
+            </span>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => void undoDiaryReschedule(diaryUndo)}
+              disabled={rescheduleSavingId === diaryUndo.appointmentId}
+              data-testid="appointments-diary-undo-button"
+            >
+              {rescheduleSavingId === diaryUndo.appointmentId ? "Undoing..." : "Undo"}
+            </button>
+          </div>
+        )}
         {showRecallPrompt && recallContext && (
           <div className="card" style={{ margin: 0 }}>
             <div className="stack">
