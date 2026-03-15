@@ -89,6 +89,7 @@ export default function PatientDocuments({
   const [downloadingDocumentTextId, setDownloadingDocumentTextId] = useState<number | null>(null);
   const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
   const [attachingDocumentPdfId, setAttachingDocumentPdfId] = useState<number | null>(null);
+  const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
 
   const loadMe = useCallback(async () => {
     try {
@@ -157,7 +158,9 @@ export default function PatientDocuments({
   }, [patientId, router]);
 
   async function downloadTemplate(template: DocumentTemplate) {
+    if (downloadingTemplateId !== null) return;
     setError(null);
+    setDownloadingTemplateId(template.id);
     try {
       const res = await apiFetch(`/api/document-templates/${template.id}/download`);
       if (res.status === 401) {
@@ -183,6 +186,8 @@ export default function PatientDocuments({
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download template");
+    } finally {
+      setDownloadingTemplateId(null);
     }
   }
 
@@ -579,6 +584,7 @@ export default function PatientDocuments({
                 key={template.id}
                 className="card"
                 style={{ margin: 0, display: "flex", justifyContent: "space-between", gap: 12 }}
+                data-testid={`patient-template-card-${template.id}`}
               >
                 <div>
                   <div style={{ fontWeight: 600 }}>{template.name}</div>
@@ -588,8 +594,10 @@ export default function PatientDocuments({
                   className="btn btn-secondary"
                   type="button"
                   onClick={() => downloadTemplate(template)}
+                  disabled={downloadingTemplateId !== null}
+                  data-testid={`patient-template-download-${template.id}`}
                 >
-                  Download
+                  {downloadingTemplateId === template.id ? "Downloading..." : "Download"}
                 </button>
               </div>
             ))}
