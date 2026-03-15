@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk20 completed on `stage163h-chunk20-patient-document-attach-proof` from `master@f3eca89` to harden the patient document `Save PDF to attachments` flow without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - patient document attachment-save flow in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - patient document attachment-save backend route in `backend/app/routers/patient_documents.py`
+    - existing focused proof patterns in `frontend/tests/patient-document-pdf.spec.ts`, `frontend/tests/patient-document-text.spec.ts`, and `frontend/tests/patient-attachments.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient documents UI already exposed a `Save PDF to attachments` action, so this was hardening rather than a new workflow
+    - the backend attach route already existed and returned attachment metadata for the saved PDF
+    - unlike the recently hardened patient document PDF/text download actions, the attachment-save action had no in-flight disabled state, no stable test hook, and no focused Playwright proof
+  - Exact slice implemented:
+    - added a local in-flight disabled state for patient document attachment-save actions
+    - changed the active button text to `Saving PDF...` while the attach request is in flight
+    - added stable test ids for patient document attachment-save buttons
+    - added focused Playwright coverage proving the button disables while saving and the success notice appears after the attach response resolves
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-attach-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-attach-pdf.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk19 completed on `stage163h-chunk19-patient-document-text-hardening` from `master@541f013` to harden patient document text downloads without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

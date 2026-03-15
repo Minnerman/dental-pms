@@ -88,6 +88,7 @@ export default function PatientDocuments({
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
   const [downloadingDocumentTextId, setDownloadingDocumentTextId] = useState<number | null>(null);
   const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
+  const [attachingDocumentPdfId, setAttachingDocumentPdfId] = useState<number | null>(null);
 
   const loadMe = useCallback(async () => {
     try {
@@ -332,8 +333,10 @@ export default function PatientDocuments({
   }
 
   async function attachDocumentPdf(doc: PatientDocument) {
+    if (attachingDocumentPdfId !== null) return;
     setError(null);
     setAttachNotice(null);
+    setAttachingDocumentPdfId(doc.id);
     try {
       const res = await apiFetch(`/api/patient-documents/${doc.id}/attach-pdf`, {
         method: "POST",
@@ -350,6 +353,8 @@ export default function PatientDocuments({
       setAttachNotice("PDF saved to attachments.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to attach PDF");
+    } finally {
+      setAttachingDocumentPdfId(null);
     }
   }
 
@@ -541,8 +546,12 @@ export default function PatientDocuments({
                         className="btn btn-secondary"
                         type="button"
                         onClick={() => attachDocumentPdf(doc)}
+                        disabled={attachingDocumentPdfId !== null}
+                        data-testid={`patient-document-attach-pdf-${doc.id}`}
                       >
-                        Save PDF to attachments
+                        {attachingDocumentPdfId === doc.id
+                          ? "Saving PDF..."
+                          : "Save PDF to attachments"}
                       </button>
                       {isSuperadmin && (
                         <button
