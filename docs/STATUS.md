@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk16 completed on `stage163h-chunk16-reports-month-pack-hardening` from `master@046bc98` to harden the financial reports month-pack download flow without broadening into reports redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - month-pack download flow in `frontend/app/(app)/reports/page.tsx`
+    - existing backend month-pack filename contract in `backend/app/routers/reports.py`
+    - existing download/filename proof patterns in `frontend/tests/billing-payment.spec.ts`, `frontend/tests/recalls-export.spec.ts`, and `frontend/tests/patient-attachments.spec.ts`
+  - Evidence for choosing this slice:
+    - the reports UI already exposed month-pack PDF/ZIP downloads, so this was hardening rather than a new workflow
+    - the backend already emitted deterministic `finance_pack_<year>_<month>.pdf|zip` filenames via `Content-Disposition`
+    - unlike stronger download flows elsewhere in the repo, the reports client still used naive header parsing and had no in-flight UX or focused download proof
+  - Exact slice implemented:
+    - added shared-style `Content-Disposition` filename parsing to the reports month-pack client download flow
+    - preserved deterministic `finance_pack_<year>_<month>.<ext>` fallback filenames when no usable header filename is present
+    - added in-flight disabled state and `Downloading PDF...` / `Downloading ZIP...` button text while month-pack downloads are active
+    - added stable test ids for the PDF and ZIP month-pack buttons
+    - added focused Playwright coverage proving both PDF and ZIP downloads honor the hardened header filename parsing and show the in-flight disabled state
+  - Files changed in this slice:
+    - `frontend/app/(app)/reports/page.tsx`
+    - `frontend/tests/reports-month-pack.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/reports-month-pack.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk15 completed on `stage163h-chunk15-runsheet-download-hardening` from `master@5c35297` to harden the existing visit run-sheet download flow without broadening into diary print/export redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
