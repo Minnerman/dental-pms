@@ -89,11 +89,15 @@ type Patient = {
 type Note = {
   id: number;
   body: string;
-  note_type: string;
+  note_type: "clinical" | "admin";
   created_at: string;
   created_by: Actor;
   deleted_at?: string | null;
 };
+
+function patientNoteTypeLabel(noteType: Note["note_type"]) {
+  return noteType === "admin" ? "Admin" : "Clinical";
+}
 
 type AppointmentSummary = {
   id: number;
@@ -841,6 +845,7 @@ export default function PatientDetailClient({
   );
   const [loading, setLoading] = useState(true);
   const [noteBody, setNoteBody] = useState("");
+  const [noteType, setNoteType] = useState<Note["note_type"]>("clinical");
   const [savingNote, setSavingNote] = useState(false);
   const [savingPatient, setSavingPatient] = useState(false);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
@@ -4360,7 +4365,7 @@ export default function PatientDetailClient({
     try {
       const res = await apiFetch(`/api/patients/${patientId}/notes`, {
         method: "POST",
-        body: JSON.stringify({ body: noteBody, note_type: "clinical" }),
+        body: JSON.stringify({ body: noteBody, note_type: noteType }),
       });
       if (res.status === 401) {
         clearToken();
@@ -4372,6 +4377,7 @@ export default function PatientDetailClient({
         throw new Error(msg || `Failed to add note (HTTP ${res.status})`);
       }
       setNoteBody("");
+      setNoteType("clinical");
       await loadNotes();
       await loadTimeline();
     } catch (err) {
@@ -8838,6 +8844,20 @@ export default function PatientDetailClient({
                   <div className="card">
                     <div className="stack">
                       <label className="label">Add a note</label>
+                      <div className="stack" style={{ gap: 8 }}>
+                        <label className="label">Note type</label>
+                        <select
+                          className="input"
+                          data-testid="patient-note-type-select"
+                          value={noteType}
+                          onChange={(e) =>
+                            setNoteType(e.target.value as Note["note_type"])
+                          }
+                        >
+                          <option value="clinical">Clinical</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
                       <textarea
                         className="input"
                         rows={3}
@@ -8859,7 +8879,7 @@ export default function PatientDetailClient({
                         <div className="card" key={note.id}>
                           <div className="row">
                             <div>
-                              <strong>{note.note_type}</strong>
+                              <strong>{patientNoteTypeLabel(note.note_type)}</strong>
                               <div style={{ color: "var(--muted)" }}>
                                 {formatDateTime(note.created_at)} • {note.created_by.email}
                               </div>
