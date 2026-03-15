@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk19 completed on `stage163h-chunk19-patient-document-text-hardening` from `master@541f013` to harden patient document text downloads without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - patient document text download flow in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - patient document download filename contract in `backend/app/routers/patient_documents.py`
+    - existing focused download proof patterns in `frontend/tests/patient-document-pdf.spec.ts`, `frontend/tests/patient-attachments.spec.ts`, `frontend/tests/appointments-runsheet.spec.ts`, `frontend/tests/reports-month-pack.spec.ts`, and `frontend/tests/patient-recall-letter.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient documents UI already exposed a `Download text` action for generated documents, so this was hardening rather than a new workflow
+    - the backend already emitted deterministic text filenames via `Content-Disposition`
+    - unlike the recently hardened download surfaces, the text download action had no in-flight disabled state, no stable test hook, and no focused Playwright proof
+  - Exact slice implemented:
+    - added a local in-flight disabled state for generated patient document text downloads
+    - changed the active button text to `Downloading text...` while the text download request is in flight
+    - added stable test ids for generated document text download buttons
+    - added focused Playwright coverage proving the text download button disables while downloading and the browser honors the backend-provided text filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-text.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-text.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk18 completed on `stage163h-chunk18-patient-recall-download-parity` from `master@67da2a1` to bring patient-page recall letter downloads into parity with the stronger recalls-page filename handling.
   - What was inspected before implementation:
     - `AGENTS.md`
