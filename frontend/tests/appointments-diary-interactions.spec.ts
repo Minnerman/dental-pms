@@ -465,7 +465,9 @@ test("appointment drawer note actions use appointment-scoped edit archive and re
   });
   await expect(detailPanel.getByText(updatedNote)).toBeVisible({ timeout: 15_000 });
   await expect(
-    detailPanel.getByTestId(`appointment-note-card-${createdNote.id}`).getByText("Admin")
+    detailPanel
+      .getByTestId(`appointment-note-card-${createdNote.id}`)
+      .getByText("Admin", { exact: true })
   ).toBeVisible({ timeout: 15_000 });
 
   const archiveResponsePromise = page.waitForResponse(
