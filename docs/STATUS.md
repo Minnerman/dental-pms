@@ -61,6 +61,25 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk9 completed on `stage163h-chunk9-note-type-editing` from `master@1d30372` to add note type editing inside the appointments drawer without broadening the existing note-action UI.
+  - Current note type gap confirmed from repo evidence: the appointments drawer already supported note create/list plus body edit/archive/restore, but inline note editing could not change `note_type` even though the appointment-scoped `PATCH` route already accepted `note_type`.
+  - Exact change made:
+    - active appointment-note cards now display their current note type as a badge
+    - the inline note edit form now includes a `Note type` select with `Clinical` and `Admin`
+    - saving note edits now submits both `body` and `note_type` through the existing appointment-scoped note update route
+  - Backend contract change:
+    - none
+    - `PATCH /appointments/{appointment_id}/notes/{note_id}` already supported `note_type`; this slice only wires the existing contract into the drawer UI
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts --grep "appointment detail notes stay scoped|calendar context-menu Add note keeps drawer state scoped and refreshes visible note state|appointment drawer note actions use appointment-scoped edit archive and restore routes"` -> `3 passed`
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-14: Stage 163H chunk8 completed on `stage163h-chunk8-note-actions-ui` from `master@80d9be6` to expose appointment-note edit/archive/restore controls in the appointments drawer and wire them to the appointment-scoped note item routes.
   - UI gap confirmed from repo evidence: the appointments drawer already supported appointment-note create/list, but had no edit/archive/restore controls to exercise the appointment-scoped item routes added in chunk6.
   - Exact UI controls added in `frontend/app/(app)/appointments/page.tsx`:
