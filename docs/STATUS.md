@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk23 completed on `stage163h-chunk23-patient-estimate-pdf-hardening` from `master@a27c647` to harden patient estimate PDF downloads without broadening into estimates redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - patient estimate PDF download flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - estimate PDF filename contract in `backend/app/routers/estimates.py`
+    - existing focused proof patterns in `frontend/tests/patient-document-pdf.spec.ts`, `frontend/tests/patient-document-text.spec.ts`, `frontend/tests/patient-template-download.spec.ts`, and `frontend/tests/templates-download.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient page already exposed a live estimate `Download PDF` action, so this was hardening rather than a new workflow
+    - the backend already emitted deterministic estimate PDF filenames via `Content-Disposition`
+    - unlike the recently hardened download surfaces, the estimate PDF action still used a local fallback filename, had no in-flight disabled state, and had no focused Playwright proof
+  - Exact slice implemented:
+    - added a local in-flight disabled state for patient estimate PDF downloads
+    - changed the active button text to `Downloading PDF...` while the estimate PDF request is in flight
+    - updated the estimate PDF download flow to honor the backend-provided filename with the existing header parser, preserving the local estimate filename as fallback only when needed
+    - added stable test ids for estimate view and estimate PDF download actions
+    - added focused Playwright coverage proving the estimate PDF button disables while downloading and the browser honors the backend-provided filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk22 completed on `stage163h-chunk22-templates-download-hardening` from `master@2f1e62a` to harden templates page downloads without broadening into templates-page redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

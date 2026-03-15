@@ -877,6 +877,7 @@ export default function PatientDetailClient({
   const [loadingEstimates, setLoadingEstimates] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [downloadingEstimatePdfId, setDownloadingEstimatePdfId] = useState<number | null>(null);
   const [creatingEstimate, setCreatingEstimate] = useState(false);
   const [estimateNotes, setEstimateNotes] = useState("");
   const [estimateValidUntil, setEstimateValidUntil] = useState("");
@@ -4839,7 +4840,9 @@ export default function PatientDetailClient({
   }
 
   async function downloadEstimatePdf(estimateId: number) {
+    if (downloadingEstimatePdfId !== null) return;
     setEstimateError(null);
+    setDownloadingEstimatePdfId(estimateId);
     try {
       const res = await apiFetch(`/api/estimates/${estimateId}/pdf`);
       if (res.status === 401) {
@@ -4854,14 +4857,17 @@ export default function PatientDetailClient({
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
+      const filename = getFilenameFromDisposition(res, buildEstimateFilename());
       link.href = url;
-      link.download = buildEstimateFilename();
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to download PDF");
+    } finally {
+      setDownloadingEstimatePdfId(null);
     }
   }
 
@@ -9671,6 +9677,7 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   onClick={() => loadEstimateDetail(estimate.id)}
+                                  data-testid={`estimate-view-${estimate.id}`}
                                 >
                                   View
                                 </button>
@@ -9730,9 +9737,14 @@ export default function PatientDetailClient({
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <button
                               className="btn btn-secondary"
+                              type="button"
                               onClick={() => downloadEstimatePdf(selectedEstimate.id)}
+                              disabled={downloadingEstimatePdfId !== null}
+                              data-testid={`estimate-download-pdf-${selectedEstimate.id}`}
                             >
-                              Download PDF
+                              {downloadingEstimatePdfId === selectedEstimate.id
+                                ? "Downloading PDF..."
+                                : "Download PDF"}
                             </button>
                             <button
                               className="btn btn-secondary"
