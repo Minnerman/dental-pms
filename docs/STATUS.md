@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Repo-guided recovery chose Outcome A on `stage163h-chunk11-clinical-tooth-badges` from `master@e6010cb` to complete the next clearly evidenced clinical-chart badge slice.
+  - What was inspected before choosing the slice:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - active repo TODO/FIXME markers in product code
+    - clinical chart badge rendering and existing badge tests in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`, `frontend/tests/clinical-chart.spec.ts`, `frontend/tests/clinical-view-mode.spec.ts`, and `frontend/tests/clinical-odontogram-overlays.spec.ts`
+    - tooth-state API contract/tests in `backend/app/routers/r4_charting.py` and `backend/tests/patients/test_r4_charting_api.py`
+  - Evidence for choosing this slice:
+    - the live clinical chart had an explicit TODO to add missing/extracted tooth badges in `getToothBadges(...)`
+    - the backend tooth-state contract already returns `missing` and `extracted` flags per tooth
+    - the odontogram already renders missing/extracted strike state and the selected-tooth panel already surfaces `Missing` / `Extracted`, so adding badges is a low-blast-radius UX completion rather than a product guess
+    - existing Playwright coverage already had a mocked tooth-state harness that could prove the badge behavior without new backend work
+  - Exact slice implemented:
+    - added `M` (`Missing tooth`) and `X` (`Extracted tooth`) badges to the existing clinical chart tooth badge strip
+    - kept planned/history badge behavior unchanged
+    - extended the mocked odontogram Playwright proof to verify both missing and extracted badges render from the existing tooth-state payload
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/clinical-odontogram-overlays.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/clinical-chart.spec.ts tests/clinical-view-mode.spec.ts tests/clinical-odontogram-overlays.spec.ts` -> pass
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Repo-guided recovery chose Outcome A on `stage163h-chunk10-patient-note-type-select` from `master@172e027` to complete the patient Notes tab note-type create flow.
   - What was inspected before choosing the slice:
     - `docs/STATUS.md`

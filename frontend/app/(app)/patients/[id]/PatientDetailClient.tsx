@@ -3913,7 +3913,13 @@ export default function PatientDetailClient({
     if (normalized && clinicalViewMode !== "planned" && historyTeeth.has(normalized)) {
       badges.push({ label: "H", title: "History" });
     }
-    // TODO: add missing/extracted/deciduous/gap-closed tooth badges once stored.
+    const toothState = (normalized ? toothStateByTooth.get(normalized) : undefined) ?? toothStateByTooth.get(tooth);
+    if (toothState?.missing) {
+      badges.push({ label: "M", title: "Missing tooth" });
+    }
+    if (toothState?.extracted) {
+      badges.push({ label: "X", title: "Extracted tooth" });
+    }
     return badges;
   }
 
