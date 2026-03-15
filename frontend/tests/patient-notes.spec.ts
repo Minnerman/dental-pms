@@ -46,7 +46,7 @@ test("patient notes tab allows selecting admin note type on create", async ({ pa
   const createRequest = await createRequestPromise;
   const createResponse = await createResponsePromise;
   expect(createResponse.ok()).toBeTruthy();
-  await createResponse.json();
+  const createdNote = (await createResponse.json()) as { id: number };
   expect(createRequest.postDataJSON()).toMatchObject({
     body: noteBody,
     note_type: "admin",
@@ -55,4 +55,11 @@ test("patient notes tab allows selecting admin note type on create", async ({ pa
   const noteCard = page.getByText(noteBody, { exact: true }).locator("xpath=..");
   await expect(noteCard).toBeVisible({ timeout: 15_000 });
   await expect(noteCard.getByText("Admin", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  await page.getByTestId(`patient-note-open-${createdNote.id}`).click();
+  await expect(page).toHaveURL(new RegExp(`/notes\\?note=${createdNote.id}\\b`), {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId("note-detail-type")).toHaveValue("admin");
+  await expect(page.getByTestId("note-detail-body")).toHaveValue(noteBody);
 });

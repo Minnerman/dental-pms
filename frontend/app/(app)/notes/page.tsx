@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import HeaderBar from "@/components/ui/HeaderBar";
 import Panel from "@/components/ui/Panel";
@@ -26,12 +26,20 @@ type Patient = { id: number; first_name: string; last_name: string; deleted_at?:
 
 export default function NotesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedNoteId = useMemo(() => {
+    const raw = searchParams?.get("note");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+  const requestedIncludeDeleted = searchParams?.get("include_deleted") === "1";
   const [notes, setNotes] = useState<Note[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState(requestedIncludeDeleted);
   const [query, setQuery] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
   const [editBody, setEditBody] = useState("");
@@ -106,10 +114,18 @@ export default function NotesPage() {
   }, [loadNotes, loadPatients]);
 
   useEffect(() => {
-    if (!selectedNoteId && notes.length > 0) {
-      setSelectedNoteId(notes[0].id);
+    if (requestedNoteId) {
+      const requested = notes.find((note) => note.id === requestedNoteId);
+      if (requested) {
+        if (selectedNoteId !== requestedNoteId) {
+          setSelectedNoteId(requestedNoteId);
+        }
+        return;
+      }
     }
-  }, [notes, selectedNoteId]);
+    if (selectedNoteId && notes.some((note) => note.id === selectedNoteId)) return;
+    setSelectedNoteId(notes[0]?.id ?? null);
+  }, [notes, requestedNoteId, selectedNoteId]);
 
   useEffect(() => {
     if (!selectedNoteId) return;
@@ -289,6 +305,7 @@ export default function NotesPage() {
                     className="input"
                     value={editType}
                     onChange={(e) => setEditType(e.target.value)}
+                    data-testid="note-detail-type"
                   >
                     <option value="clinical">Clinical</option>
                     <option value="admin">Admin</option>
@@ -301,6 +318,7 @@ export default function NotesPage() {
                     rows={8}
                     value={editBody}
                     onChange={(e) => setEditBody(e.target.value)}
+                    data-testid="note-detail-body"
                   />
                 </div>
                 <button className="btn btn-primary" onClick={saveNoteEdit} disabled={savingEdit}>
