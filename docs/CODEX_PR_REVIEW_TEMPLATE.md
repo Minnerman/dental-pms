@@ -89,6 +89,7 @@ Commands/workflow to use
 - git checkout master
 - git pull --ff-only
 - git rev-parse --short HEAD
+- docker compose exec -T backend pytest -q
 - ./ops/health.sh
 - ./ops/verify.sh
 
@@ -124,6 +125,7 @@ Reply in this exact structure:
 - New local master SHA:
 
 4. Verification
+- docker compose exec -T backend pytest -q:
 - ./ops/health.sh:
 - ./ops/verify.sh:
 - Deploy needed: Yes/No
