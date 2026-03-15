@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Stage 163H chunk14 completed on `stage163h-chunk14-patient-header-density` from `master@a0111fe` to tighten patient header visual density without broadening into patient-page redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - patient header implementation in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+  - Evidence for choosing this slice:
+    - the acceptance contract already locked the patient header to four direct child blocks with sticky behavior
+    - the Playwright parity harness already covered header block order, locked tabs, screenshots, and render timing
+    - the current header shell was functionally complete but still visually loose and vertically expanded compared with the stated dense-parity goal
+    - tightening the existing header blocks into a denser layout was the smallest coherent UX step that stayed away from deferred appointments work and settled notes decisions
+  - Exact slice implemented:
+    - kept the existing `patient-header-*` block order and behavior intact
+    - tightened the header into a denser grid shell with compact bordered panels for identifiers, alerts, and quick actions
+    - converted the patient provenance line into compact metadata pills for faster scanning
+    - reduced whitespace in the identifiers block while preserving the same fields and values
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-ui-parity-pack.spec.ts` -> `3 passed`
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Repo-guided recovery chose Outcome A on `stage163h-chunk13-patient-note-open-in-notes` from `master@db95639` to bridge the patient Notes tab to the centralized `/notes` editor without reopening inline edit/archive work.
   - What was inspected before choosing the slice:
     - `docs/STATUS.md`

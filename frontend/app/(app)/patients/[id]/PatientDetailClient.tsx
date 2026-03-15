@@ -4165,6 +4165,40 @@ export default function PatientDetailClient({
     alignItems: "center",
   } as const;
 
+  const patientHeaderGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 10,
+    alignItems: "stretch",
+  } as const;
+
+  const patientHeaderPanelStyle = {
+    display: "grid",
+    gap: 8,
+    padding: "10px 12px",
+    border: "1px solid var(--border)",
+    borderRadius: 14,
+    background: "var(--tab-active-bg)",
+    minWidth: 0,
+  } as const;
+
+  const patientHeaderMetricGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+    gap: 8,
+  } as const;
+
+  const patientHeaderMetaPillStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "4px 8px",
+    borderRadius: 999,
+    border: "1px solid var(--border)",
+    background: "var(--tab-active-bg)",
+    fontSize: 12,
+    lineHeight: 1.2,
+  } as const;
+
   async function copyAddress() {
     if (!patient) return;
     const address = buildAddress(patient);
@@ -4993,30 +5027,58 @@ export default function PatientDetailClient({
       ) : patient ? (
         <div className="stack">
           <div className="card" style={{ position: "sticky", top: 12, zIndex: 1 }}>
-            <div className="stack" style={{ gap: 12 }} data-testid="patient-header">
-              <div data-testid="patient-header-name" className="stack" style={{ gap: 6 }}>
+            <div style={patientHeaderGridStyle} data-testid="patient-header">
+              <div
+                data-testid="patient-header-name"
+                className="stack"
+                style={{
+                  gap: 8,
+                  gridColumn: "1 / -1",
+                  paddingBottom: 10,
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
                 <h2 style={{ margin: 0 }}>
                   {patient.first_name} {patient.last_name}
                 </h2>
-                <div style={{ color: "var(--muted)", display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <span>Patient #{patient.id}</span>
-                  <span>Category {categoryLabels[patient.patient_category]}</span>
-                  <span>Care {careSettingLabels[patient.care_setting]}</span>
-                  <span>Created by {patient.created_by.email}</span>
+                <div
+                  style={{
+                    color: "var(--muted)",
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={patientHeaderMetaPillStyle}>Patient #{patient.id}</span>
+                  <span style={patientHeaderMetaPillStyle}>
+                    Category {categoryLabels[patient.patient_category]}
+                  </span>
+                  <span style={patientHeaderMetaPillStyle}>
+                    Care {careSettingLabels[patient.care_setting]}
+                  </span>
+                  <span style={patientHeaderMetaPillStyle}>Created by {patient.created_by.email}</span>
                 </div>
               </div>
 
-              <div data-testid="patient-header-identifiers" className="stack" style={{ gap: 6 }}>
+              <div
+                data-testid="patient-header-identifiers"
+                className="stack"
+                style={patientHeaderPanelStyle}
+              >
                 <div className="label">Identifiers</div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                    gap: 10,
-                  }}
-                >
+                <div style={patientHeaderMetricGridStyle}>
                   {patientHeaderIdentifiers.map((item) => (
-                    <div key={item.label}>
+                    <div
+                      key={item.label}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 10,
+                        background: "var(--panel)",
+                        border: "1px solid var(--border)",
+                        minWidth: 0,
+                      }}
+                    >
                       <div className="label">{item.label}</div>
                       <div>{item.value || "—"}</div>
                     </div>
@@ -5024,7 +5086,11 @@ export default function PatientDetailClient({
                 </div>
               </div>
 
-              <div data-testid="patient-header-alerts" className="stack" style={{ gap: 8 }}>
+              <div
+                data-testid="patient-header-alerts"
+                className="stack"
+                style={patientHeaderPanelStyle}
+              >
                 <div className="label">Alerts and flags</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   {headerAlertFlags.length === 0 && <span className="badge">No alerts</span>}
@@ -5060,7 +5126,11 @@ export default function PatientDetailClient({
                 )}
               </div>
 
-              <div data-testid="patient-header-actions" className="stack" style={{ gap: 8 }}>
+              <div
+                data-testid="patient-header-actions"
+                className="stack"
+                style={patientHeaderPanelStyle}
+              >
                 <div className="label">Quick actions</div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   {phoneHref ? (
