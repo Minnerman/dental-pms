@@ -227,6 +227,11 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
             missing: false,
             extracted: true,
           },
+          "24": {
+            restorations: [],
+            missing: true,
+            extracted: false,
+          },
         },
       }),
     });
@@ -254,6 +259,8 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("tooth-restoration-LL1-denture")).toBeVisible();
   await expect(page.getByTestId("tooth-restoration-UL5-extraction")).toBeVisible();
   await expect(page.getByTestId("tooth-restoration-UL5-extracted")).toBeVisible();
+  await expect(page.getByTestId("tooth-badge-UL5")).toContainText("X");
+  await expect(page.getByTestId("tooth-badge-UL4")).toContainText("M");
   const crownTitle = await page
     .getByTestId("tooth-restoration-LL6-crown")
     .getAttribute("data-tooltip");
