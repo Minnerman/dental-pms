@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Repo-guided recovery chose Outcome A on `stage163h-chunk10-patient-note-type-select` from `master@172e027` to complete the patient Notes tab note-type create flow.
+  - What was inspected before choosing the slice:
+    - `docs/STATUS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `docs/RUNBOOK_IMPORT_PARITY.md`
+    - active repo TODO/FIXME markers (`frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`)
+    - backend/frontend note-type usage across models, schemas, routes, helpers, tests, and current note UIs
+  - Evidence for choosing this slice:
+    - backend patient-note create already accepted `note_type` via `POST /patients/{patient_id}/notes` in `backend/app/schemas/note.py` and `backend/app/routers/notes.py`
+    - the patient Notes tab UI in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx` already told users to `Write a clinical or admin note...`
+    - despite that copy, the add-note flow hard-coded `note_type: "clinical"` and exposed no selector, so the UI contract lagged behind the existing backend capability
+    - the dedicated `/notes` page already exposed a `clinical` / `admin` edit select, so reusing the same two-value choice in the patient Notes tab had low blast radius and no product-direction guesswork
+  - Exact slice implemented:
+    - added a `Note type` select with `Clinical` / `Admin` to the patient Notes tab create form
+    - patient-note create now submits the selected `note_type` instead of silently forcing `clinical`
+    - new notes in the patient Notes tab now display a capitalized type label for consistency with the selector
+    - added focused Playwright coverage in `frontend/tests/patient-notes.spec.ts` to prove the create request sends `note_type: "admin"` and the created note renders as `Admin`
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts` -> `1 passed`
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk9 completed on `stage163h-chunk9-note-type-editing` from `master@1d30372` to add note type editing inside the appointments drawer without broadening the existing note-action UI.
   - Current note type gap confirmed from repo evidence: the appointments drawer already supported note create/list plus body edit/archive/restore, but inline note editing could not change `note_type` even though the appointment-scoped `PATCH` route already accepted `note_type`.
   - Exact change made:
