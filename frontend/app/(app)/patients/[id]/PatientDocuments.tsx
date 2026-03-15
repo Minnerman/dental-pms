@@ -86,6 +86,7 @@ export default function PatientDocuments({
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
+  const [downloadingDocumentTextId, setDownloadingDocumentTextId] = useState<number | null>(null);
   const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
 
   const loadMe = useCallback(async () => {
@@ -265,7 +266,9 @@ export default function PatientDocuments({
   }
 
   async function downloadDocument(doc: PatientDocument) {
+    if (downloadingDocumentTextId !== null) return;
     setError(null);
+    setDownloadingDocumentTextId(doc.id);
     try {
       const res = await apiFetch(`/api/patient-documents/${doc.id}/download`);
       if (res.status === 401) {
@@ -290,6 +293,8 @@ export default function PatientDocuments({
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download document");
+    } finally {
+      setDownloadingDocumentTextId(null);
     }
   }
 
@@ -516,8 +521,12 @@ export default function PatientDocuments({
                         className="btn btn-secondary"
                         type="button"
                         onClick={() => downloadDocument(doc)}
+                        disabled={downloadingDocumentTextId !== null}
+                        data-testid={`patient-document-download-text-${doc.id}`}
                       >
-                        Download text
+                        {downloadingDocumentTextId === doc.id
+                          ? "Downloading text..."
+                          : "Download text"}
                       </button>
                       <button
                         className="btn btn-secondary"
