@@ -136,6 +136,10 @@ type AppointmentNote = {
   deleted_at?: string | null;
 };
 
+function noteTypeLabel(noteType: AppointmentNote["note_type"]) {
+  return noteType === "admin" ? "Admin" : "Clinical";
+}
+
 type PracticeHour = {
   day_of_week: number;
   start_time: string | null;
@@ -619,6 +623,7 @@ export default function AppointmentsPage() {
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [editingNoteBody, setEditingNoteBody] = useState("");
+  const [editingNoteType, setEditingNoteType] = useState<AppointmentNote["note_type"]>("clinical");
   const [savingNoteAction, setSavingNoteAction] = useState<{
     noteId: number;
     action: "edit" | "archive" | "restore";
@@ -1649,6 +1654,7 @@ export default function AppointmentsPage() {
     setShowArchivedNotes(false);
     setEditingNoteId(null);
     setEditingNoteBody("");
+    setEditingNoteType("clinical");
     setSavingNoteAction(null);
     setLoadingNotes(false);
   }
@@ -2253,6 +2259,7 @@ export default function AppointmentsPage() {
   function beginAppointmentNoteEdit(note: AppointmentNote) {
     setEditingNoteId(note.id);
     setEditingNoteBody(note.body);
+    setEditingNoteType(note.note_type);
     setError(null);
     setNotice(null);
   }
@@ -2268,6 +2275,7 @@ export default function AppointmentsPage() {
         method: "PATCH",
         body: JSON.stringify({
           body: editingNoteBody.trim(),
+          note_type: editingNoteType,
         }),
       });
       if (res.status === 401) {
@@ -2281,6 +2289,7 @@ export default function AppointmentsPage() {
       }
       setEditingNoteId(null);
       setEditingNoteBody("");
+      setEditingNoteType("clinical");
       await loadAppointmentNotes(appointmentId, { includeDeleted: showArchivedNotes });
       setNotice("Note updated.");
     } catch (err) {
@@ -2317,6 +2326,7 @@ export default function AppointmentsPage() {
       if (editingNoteId === note.id) {
         setEditingNoteId(null);
         setEditingNoteBody("");
+        setEditingNoteType("clinical");
       }
       await loadAppointmentNotes(appointmentId, { includeDeleted: showArchivedNotes });
       setNotice(
@@ -4683,6 +4693,7 @@ export default function AppointmentsPage() {
                                   </>
                                 )}
                               </div>
+                              <span className="badge">{noteTypeLabel(note.note_type)}</span>
                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                 {!note.deleted_at ? (
                                   <>
@@ -4726,6 +4737,22 @@ export default function AppointmentsPage() {
                             </div>
                             {editingNoteId === note.id && !note.deleted_at ? (
                               <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Note type</label>
+                                  <select
+                                    className="input"
+                                    data-testid={`appointment-note-edit-type-${note.id}`}
+                                    value={editingNoteType}
+                                    onChange={(event) =>
+                                      setEditingNoteType(
+                                        event.target.value as AppointmentNote["note_type"]
+                                      )
+                                    }
+                                  >
+                                    <option value="clinical">Clinical</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                </div>
                                 <label className="label">Edit note</label>
                                 <textarea
                                   className="input"
@@ -4757,6 +4784,7 @@ export default function AppointmentsPage() {
                                     onClick={() => {
                                       setEditingNoteId(null);
                                       setEditingNoteBody("");
+                                      setEditingNoteType("clinical");
                                     }}
                                   >
                                     Cancel

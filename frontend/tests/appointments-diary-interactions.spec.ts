@@ -410,6 +410,7 @@ test("appointment drawer note actions use appointment-scoped edit archive and re
     body: `Appointment note actions ${unique}`,
   });
   const updatedNote = `Appointment note updated ${unique}`;
+  const updatedType = "admin";
 
   await primePageAuth(page, request);
   await page.goto(`${baseUrl}/appointments?date=${date}`, {
@@ -433,9 +434,20 @@ test("appointment drawer note actions use appointment-scoped edit archive and re
 
   await detailPanel.locator('[data-testid^="appointment-note-edit-"]').first().click();
   await detailPanel
+    .locator('[data-testid^="appointment-note-edit-type-"]')
+    .first()
+    .selectOption(updatedType);
+  await detailPanel
     .locator('[data-testid^="appointment-note-edit-body-"]')
     .first()
     .fill(updatedNote);
+  const editRequestPromise = page.waitForRequest(
+    (request) =>
+      request.method() === "PATCH" &&
+      request.url().includes(
+        `/api/appointments/${appointment.id}/notes/${createdNote.id}`
+      )
+  );
   const editResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "PATCH" &&
@@ -444,9 +456,19 @@ test("appointment drawer note actions use appointment-scoped edit archive and re
       )
   );
   await detailPanel.getByRole("button", { name: "Save note" }).click();
+  const editRequest = await editRequestPromise;
   const editResponse = await editResponsePromise;
   expect(editResponse.ok()).toBeTruthy();
+  expect(editRequest.postDataJSON()).toMatchObject({
+    body: updatedNote,
+    note_type: updatedType,
+  });
   await expect(detailPanel.getByText(updatedNote)).toBeVisible({ timeout: 15_000 });
+  await expect(
+    detailPanel
+      .getByTestId(`appointment-note-card-${createdNote.id}`)
+      .getByText("Admin", { exact: true })
+  ).toBeVisible({ timeout: 15_000 });
 
   const archiveResponsePromise = page.waitForResponse(
     (response) =>
