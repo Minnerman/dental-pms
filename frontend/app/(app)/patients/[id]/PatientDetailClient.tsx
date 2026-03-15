@@ -8890,9 +8890,18 @@ export default function PatientDetailClient({
                                 {formatDateTime(note.created_at)} • {note.created_by.email}
                               </div>
                             </div>
-                            <Link className="btn btn-secondary" href={`/notes/${note.id}/audit`}>
-                              View audit
-                            </Link>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <Link
+                                className="btn btn-secondary"
+                                href={`/notes?note=${note.id}${note.deleted_at ? "&include_deleted=1" : ""}`}
+                                data-testid={`patient-note-open-${note.id}`}
+                              >
+                                Open in notes
+                              </Link>
+                              <Link className="btn btn-secondary" href={`/notes/${note.id}/audit`}>
+                                View audit
+                              </Link>
+                            </div>
                           </div>
                           <p style={{ marginBottom: 0 }}>{note.body}</p>
                         </div>

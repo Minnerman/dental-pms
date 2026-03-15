@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-15: Repo-guided recovery chose Outcome A on `stage163h-chunk13-patient-note-open-in-notes` from `master@db95639` to bridge the patient Notes tab to the centralized `/notes` editor without reopening inline edit/archive work.
+  - What was inspected before choosing the slice:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - active stop-point decisions fixing patient note edit/archive on `/notes`
+    - patient-note create/list UI in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - centralized note edit/archive UI in `frontend/app/(app)/notes/page.tsx`
+    - focused patient note coverage in `frontend/tests/patient-notes.spec.ts`
+  - Evidence for choosing this slice:
+    - patient note edit/archive is deliberately centralized on `/notes`
+    - the patient Notes tab already exposed note cards with `View audit`, but no path into the centralized `/notes` editor
+    - the `/notes` page already had working master-detail edit/archive behavior, so adding a note deep link was the smallest coherent UX bridge rather than a redesign
+  - Exact slice implemented:
+    - added `Open in notes` links to patient note cards
+    - notes page now honors `?note=<id>` and optional `include_deleted=1` to open the requested note directly
+    - added stable note-detail test hooks and focused Playwright coverage proving a patient-note create can jump straight into the centralized `/notes` editor with the correct note selected
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/app/(app)/notes/page.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts` -> pass
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-15: Stage 163H chunk12 started on `stage163h-chunk12-diary-undo` from `master@26e0d98` to add the remaining repo-backed one-step undo UX for diary move/resize.
   - What was inspected before implementation:
     - `docs/STATUS.md`
