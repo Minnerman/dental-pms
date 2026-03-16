@@ -5655,14 +5655,18 @@ export default function PatientDetailClient({
                                           className="btn btn-secondary"
                                           style={{ padding: "4px 8px", fontSize: 12 }}
                                           type="button"
+                                          data-testid={`finance-summary-receipt-${item.payment_id}`}
                                           onClick={() =>
-                                            downloadPdf(
-                                              `/api/payments/${item.payment_id}/receipt.pdf`,
-                                              `receipt-${item.invoice_number || item.payment_id}.pdf`
+                                            downloadReceipt(
+                                              item.payment_id!,
+                                              `receipt-${item.invoice_id || item.payment_id}-${item.payment_id}.pdf`
                                             )
                                           }
+                                          disabled={downloadingReceiptId === item.payment_id}
                                         >
-                                          Receipt PDF
+                                          {downloadingReceiptId === item.payment_id
+                                            ? "Downloading..."
+                                            : "Receipt PDF"}
                                         </button>
                                       )}
                                     </div>
