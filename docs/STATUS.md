@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk28 completed on `stage163h-chunk28-payment-row-receipt-parity` from `master@94678ae` to bring the selected-invoice payment-row receipt button into filename parity with the backend contract without broadening into billing redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - selected-invoice payment-row receipt button in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - receipt filename contract in `backend/app/routers/payments.py`
+    - existing receipt proof in `frontend/tests/billing-payment.spec.ts`
+    - recent receipt/invoice/document hardening specs for proof patterns
+  - Evidence for choosing this slice:
+    - the selected-invoice payments table already exposed a live `Receipt` button, so this was parity hardening rather than a new workflow
+    - the backend already emitted deterministic receipt filenames via `Content-Disposition`
+    - the row button still used a fallback built from `invoice_number`, which differed materially from the backend `receipt-{invoice_id}-{payment.id}.pdf` contract
+    - there was no focused Playwright proof for the per-payment row button
+  - Exact slice implemented:
+    - aligned the selected-invoice payment-row receipt fallback filename with the backend contract by using the invoice id instead of the invoice number
+    - added a stable test id for the selected-invoice payment-row receipt button
+    - extended focused Playwright coverage to prove the per-payment row button disables while downloading and the browser uses the backend-contract filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts` -> `3 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk27 completed on `stage163h-chunk27-finance-summary-invoice-hardening` from `master@b8fc828` to harden the patient home finance-summary invoice quick action without broadening into finance-summary redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

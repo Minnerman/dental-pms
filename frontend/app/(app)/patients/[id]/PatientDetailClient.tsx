@@ -10282,10 +10282,11 @@ export default function PatientDetailClient({
                                         <button
                                           className="btn btn-secondary"
                                           type="button"
+                                          data-testid={`invoice-payment-receipt-${payment.id}`}
                                           onClick={() =>
                                             downloadReceipt(
                                               payment.id,
-                                              `receipt-${selectedInvoice.invoice_number}-${payment.id}.pdf`
+                                              `receipt-${selectedInvoice.id}-${payment.id}.pdf`
                                             )
                                           }
                                           disabled={downloadingReceiptId === payment.id}
