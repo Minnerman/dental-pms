@@ -868,6 +868,7 @@ export default function PatientDetailClient({
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [invoiceDiscount, setInvoiceDiscount] = useState("");
   const [recordingPayment, setRecordingPayment] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
   const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("card");
@@ -4736,6 +4737,37 @@ export default function PatientDetailClient({
     if (!header) return fallback;
     const match = header.match(/filename="?([^\";]+)"?/i);
     return match?.[1] ?? fallback;
+  }
+
+  async function downloadInvoicePdf(invoiceId: number, fallbackFilename: string) {
+    if (downloadingInvoiceId !== null) return;
+    setInvoiceError(null);
+    setDownloadingInvoiceId(invoiceId);
+    try {
+      const res = await apiFetch(`/api/invoices/${invoiceId}/pdf`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = getFilenameFromDisposition(res, fallbackFilename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to download PDF");
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
   }
 
   async function downloadChartingExport() {
@@ -9999,14 +10031,19 @@ export default function PatientDetailClient({
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <button
                               className="btn btn-secondary"
+                              type="button"
+                              data-testid={`invoice-download-pdf-${selectedInvoice.id}`}
                               onClick={() =>
-                                downloadPdf(
-                                  `/api/invoices/${selectedInvoice.id}/pdf`,
+                                downloadInvoicePdf(
+                                  selectedInvoice.id,
                                   `${selectedInvoice.invoice_number}.pdf`
                                 )
                               }
+                              disabled={downloadingInvoiceId !== null}
                             >
-                              Download PDF
+                              {downloadingInvoiceId === selectedInvoice.id
+                                ? "Downloading PDF..."
+                                : "Download PDF"}
                             </button>
                             {latestReceiptPayment && (
                               <button
