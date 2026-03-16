@@ -4696,33 +4696,6 @@ export default function PatientDetailClient({
     }
   }
 
-  async function downloadPdf(path: string, filename: string) {
-    setInvoiceError(null);
-    try {
-      const res = await apiFetch(path);
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setInvoiceError(err instanceof Error ? err.message : "Failed to download PDF");
-    }
-  }
-
   function getFilenameFromDisposition(res: Response, fallback: string) {
     const header = res.headers.get("content-disposition");
     if (!header) return fallback;
@@ -5640,14 +5613,18 @@ export default function PatientDetailClient({
                                           className="btn btn-secondary"
                                           style={{ padding: "4px 8px", fontSize: 12 }}
                                           type="button"
+                                          data-testid={`finance-summary-invoice-${item.invoice_id}`}
                                           onClick={() =>
-                                            downloadPdf(
-                                              `/api/invoices/${item.invoice_id}/pdf`,
+                                            downloadInvoicePdf(
+                                              item.invoice_id!,
                                               `${item.invoice_number || `invoice-${item.invoice_id}`}.pdf`
                                             )
                                           }
+                                          disabled={downloadingInvoiceId !== null}
                                         >
-                                          Invoice PDF
+                                          {downloadingInvoiceId === item.invoice_id
+                                            ? "Downloading PDF..."
+                                            : "Invoice PDF"}
                                         </button>
                                       )}
                                       {item.kind === "payment" && item.payment_id && (

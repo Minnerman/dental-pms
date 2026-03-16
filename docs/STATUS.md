@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk27 completed on `stage163h-chunk27-finance-summary-invoice-hardening` from `master@b8fc828` to harden the patient home finance-summary invoice quick action without broadening into finance-summary redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - finance-summary invoice quick action in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - invoice PDF filename contract in `backend/app/routers/invoices.py`
+    - existing selected-invoice proof in `frontend/tests/patient-invoice-pdf.spec.ts`
+    - nearby finance-summary receipt proof in `frontend/tests/billing-payment.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient home finance-summary card already exposed a live invoice PDF quick action, so this was hardening rather than a new workflow
+    - the backend already emitted deterministic invoice PDF filenames via `Content-Disposition`
+    - the finance-summary invoice button still used the old generic `downloadPdf(...)` flow, with no in-flight disabled state and no focused proof
+    - the selected-invoice detail view had already been hardened, so the finance-summary card was the clearest remaining plain invoice download surface on the patient page
+  - Exact slice implemented:
+    - updated the finance-summary invoice quick action to reuse the header-aware invoice download helper
+    - added a stable test id for the finance-summary invoice button
+    - added disabled/loading state while a finance-summary invoice PDF is downloading
+    - extended focused Playwright coverage to prove the finance-summary invoice quick action disables while downloading and the browser uses the backend-provided filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-invoice-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-invoice-pdf.spec.ts` -> `2 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk26 completed on `stage163h-chunk26-finance-summary-receipt-parity` from `master@e8a1998` to bring the patient home finance-summary receipt quick action into filename parity with the backend contract, with one minimal backend sort-key fix required to keep that summary surface working once payments exist.
   - What was inspected before implementation:
     - `AGENTS.md`
