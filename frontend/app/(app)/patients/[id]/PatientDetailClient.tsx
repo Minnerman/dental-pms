@@ -4723,20 +4723,41 @@ export default function PatientDetailClient({
     }
   }
 
-  async function downloadReceipt(paymentId: number, filename: string) {
-    setDownloadingReceiptId(paymentId);
-    try {
-      await downloadPdf(`/api/payments/${paymentId}/receipt.pdf`, filename);
-    } finally {
-      setDownloadingReceiptId(null);
-    }
-  }
-
   function getFilenameFromDisposition(res: Response, fallback: string) {
     const header = res.headers.get("content-disposition");
     if (!header) return fallback;
     const match = header.match(/filename="?([^\";]+)"?/i);
     return match?.[1] ?? fallback;
+  }
+
+  async function downloadReceipt(paymentId: number, fallbackFilename: string) {
+    setInvoiceError(null);
+    setDownloadingReceiptId(paymentId);
+    try {
+      const res = await apiFetch(`/api/payments/${paymentId}/receipt.pdf`);
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = getFilenameFromDisposition(res, fallbackFilename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : "Failed to download PDF");
+    } finally {
+      setDownloadingReceiptId(null);
+    }
   }
 
   async function downloadInvoicePdf(invoiceId: number, fallbackFilename: string) {

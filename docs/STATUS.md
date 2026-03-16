@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk25 completed on `stage163h-chunk25-patient-receipt-filename-parity` from `master@16b3ad8` to bring the selected-invoice receipt download flow into filename parity with the backend contract without reopening broader billing work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - selected-invoice receipt download flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - receipt filename contract in `backend/app/routers/payments.py`
+    - existing focused billing proof in `frontend/tests/billing-payment.spec.ts`
+    - recent download-hardening proof patterns in `frontend/tests/patient-estimate-pdf.spec.ts`, `frontend/tests/patient-invoice-pdf.spec.ts`, and `frontend/tests/patient-document-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient page already exposed selected-invoice receipt download actions, so this was parity hardening rather than a new workflow
+    - the backend already emitted deterministic receipt filenames via `Content-Disposition`
+    - the selected-invoice receipt helper still ignored the backend header and built a fallback filename from `invoice_number`, which differed materially from the backend `receipt-{invoice_id}-{payment.id}.pdf` contract
+    - the existing Playwright proof only matched `/receipt-/`, so exact filename parity was not protected
+  - Exact slice implemented:
+    - updated the selected-invoice receipt download helper to honor the backend-provided filename while preserving the existing fallback only when needed
+    - kept the existing selected-invoice receipt in-flight UX intact
+    - tightened focused Playwright coverage to prove the latest receipt button disables while downloading and the browser uses the backend-contract filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk24 completed on `stage163h-chunk24-patient-invoice-pdf-hardening` from `master@c19f2a3` to harden patient invoice PDF downloads without broadening into invoice redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

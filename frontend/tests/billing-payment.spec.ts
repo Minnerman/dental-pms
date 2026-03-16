@@ -33,9 +33,18 @@ test("recording a payment updates status and enables receipt download", async ({
   await expect(recordButton).toBeEnabled();
 
   await page.getByTestId("payment-amount").fill("25.00");
+  const paymentResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/invoices/${invoice.id}/payments`)
+    );
+  });
   await recordButton.click();
 
   await expect(recordButton).toBeDisabled({ timeout: 10_000 });
+  const paymentResponse = await paymentResponsePromise;
+  expect(paymentResponse.ok()).toBeTruthy();
+  const payment = (await paymentResponse.json()) as { id: number };
 
   const paymentStatus = page.getByTestId("invoice-payment-status");
   await expect(paymentStatus).toHaveText("Paid", { timeout: 15_000 });
@@ -43,9 +52,44 @@ test("recording a payment updates status and enables receipt download", async ({
 
   const receiptButton = page.getByTestId("download-latest-receipt");
   await expect(receiptButton).toBeVisible({ timeout: 15_000 });
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    receiptButton.click(),
-  ]);
-  expect(download.suggestedFilename()).toMatch(/receipt-/);
+
+  const expectedFilename = `receipt-${invoice.id}-${payment.id}.pdf`;
+  const routePattern = new RegExp(`/api/payments/${payment.id}/receipt\\.pdf$`);
+
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    seenRequest();
+    await releaseResponsePromise;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${expectedFilename}"`,
+      },
+      body: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"),
+    });
+  });
+
+  const downloadPromise = page.waitForEvent("download");
+  await receiptButton.click();
+  await seenRequestPromise;
+
+  await expect(receiptButton).toBeDisabled();
+  await expect(receiptButton).toHaveText("Downloading...");
+
+  releaseResponse();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(expectedFilename);
+
+  await expect(receiptButton).toBeEnabled({ timeout: 15_000 });
+  await expect(receiptButton).toHaveText("Download receipt");
+  await page.unroute(routePattern);
 });
