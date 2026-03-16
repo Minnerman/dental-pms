@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk29 completed on `stage163h-chunk29-latest-receipt-fallback-parity` from `master@6544e10` to bring the selected-invoice latest-receipt button into full fallback filename parity with the backend contract without broadening into billing redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - selected-invoice latest-receipt button in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - receipt filename contract in `backend/app/routers/payments.py`
+    - existing focused receipt proof in `frontend/tests/billing-payment.spec.ts`
+    - recent receipt/invoice/document download-hardening proof patterns
+  - Evidence for choosing this slice:
+    - the selected-invoice latest-receipt button already existed, so this was parity hardening rather than a new workflow
+    - the backend already emitted deterministic receipt filenames via `Content-Disposition`
+    - this specific latest-receipt button still used a fallback built from `invoice_number`, which differed materially from the backend `receipt-{invoice_id}-{payment.id}.pdf` contract
+    - the existing latest-receipt proof only covered the header-provided filename path, not the fallback path when the header is absent
+  - Exact slice implemented:
+    - aligned the selected-invoice latest-receipt fallback filename with the backend contract by using the invoice id instead of the invoice number
+    - extended focused Playwright coverage to prove the latest-receipt button disables while downloading and falls back to the backend-contract filename when `Content-Disposition` is absent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts` -> `4 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk28 completed on `stage163h-chunk28-payment-row-receipt-parity` from `master@94678ae` to bring the selected-invoice payment-row receipt button into filename parity with the backend contract without broadening into billing redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

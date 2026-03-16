@@ -10055,7 +10055,7 @@ export default function PatientDetailClient({
                                 onClick={() =>
                                   downloadReceipt(
                                     latestReceiptPayment.id,
-                                    `receipt-${selectedInvoice.invoice_number}-${latestReceiptPayment.id}.pdf`
+                                    `receipt-${selectedInvoice.id}-${latestReceiptPayment.id}.pdf`
                                   )
                                 }
                                 disabled={downloadingReceiptId === latestReceiptPayment.id}
