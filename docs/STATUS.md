@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk32 completed on `stage163h-chunk32-patient-template-fallback-parity` from `master@d48560e` to bring patient-page template download fallback filenames into parity with the backend contract without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - patient-page template download flow in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - template filename contract in `backend/app/routers/document_templates.py`
+    - focused template coverage in `frontend/tests/patient-template-download.spec.ts`
+    - recent download hardening and fallback-parity proof patterns across attachments, templates, invoices, receipts, and documents
+  - Evidence for choosing this slice:
+    - patient-page template downloads are already a live patient-facing workflow
+    - the backend already emitted deterministic fallback-compatible filenames as `sanitize_filename(template.name)-kind.txt`
+    - the frontend still fell back to `${template.name}.txt` when `Content-Disposition` was absent, which differed materially from the backend contract
+    - the existing focused template proof only covered the header-driven filename path, not the fallback path
+  - Exact slice implemented:
+    - added a small frontend template filename sanitizer that mirrors the backend contract for document template downloads
+    - updated the patient-page template download fallback path to use `sanitize(name)-kind.txt` instead of the raw template name
+    - extended focused Playwright coverage to prove the patient-page template download button disables while downloading and falls back to the backend-contract filename when `Content-Disposition` is absent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-template-download.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-template-download.spec.ts` -> initial stale-bundle miss before rebuild; post-`./ops/verify.sh` rerun `2 passed` (authoritative)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk31 completed on `stage163h-chunk31-attachment-fallback-parity` from `master@faff813` to bring patient attachment download fallback filenames into parity with the backend sanitization contract without broadening into attachment workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
