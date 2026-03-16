@@ -59,6 +59,15 @@ function filenameFromHeader(header: string | null) {
   return match?.[1] ?? null;
 }
 
+function sanitizeTemplateFilename(value: string) {
+  const cleaned = value.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return cleaned || "template";
+}
+
+function buildTemplateDownloadFilename(template: DocumentTemplate) {
+  return `${sanitizeTemplateFilename(template.name)}-${template.kind}.txt`;
+}
+
 export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -279,7 +288,7 @@ export default function TemplatesPage() {
       const link = document.createElement("a");
       const filename =
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        `${template.name}.txt`;
+        buildTemplateDownloadFilename(template);
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
