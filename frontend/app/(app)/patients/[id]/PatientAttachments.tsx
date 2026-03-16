@@ -52,6 +52,7 @@ export default function PatientAttachments({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewingId, setPreviewingId] = useState<number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
 
@@ -161,6 +162,7 @@ export default function PatientAttachments({
 
   async function downloadAttachment(attachment: Attachment) {
     setError(null);
+    setDownloadingId(attachment.id);
     try {
       const res = await authFetch(`/api/attachments/${attachment.id}/download`);
       if (res.status === 401) {
@@ -186,6 +188,8 @@ export default function PatientAttachments({
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download attachment");
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -294,8 +298,9 @@ export default function PatientAttachments({
                     type="button"
                     onClick={() => downloadAttachment(attachment)}
                     data-testid={`attachment-download-${attachment.id}`}
+                    disabled={downloadingId === attachment.id}
                   >
-                    Download
+                    {downloadingId === attachment.id ? "Downloading..." : "Download"}
                   </button>
                   {isSuperadmin && (
                     <button

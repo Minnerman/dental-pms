@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk30 completed on `stage163h-chunk30-attachment-download-hardening` from `master@af07302` to harden patient attachment downloads without broadening into attachment workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - attachment download flow in `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - attachment download filename contract in `backend/app/routers/attachments.py`
+    - existing end-to-end attachment coverage in `frontend/tests/patient-attachments.spec.ts`
+    - recent document/template/invoice/receipt download-hardening proof patterns
+  - Evidence for choosing this slice:
+    - patient attachment download is already a live patient-facing workflow in the V1 documents/attachments area
+    - the backend already emitted deterministic sanitized filenames via `Content-Disposition`
+    - unlike the recently hardened download surfaces, the attachment download button still had no in-flight disabled/loading state and no focused proof of header-aware filename handling
+  - Exact slice implemented:
+    - added a local in-flight disabled state for patient attachment downloads
+    - changed the active attachment button text to `Downloading...` while the download request is in flight
+    - kept the existing header-aware filename handling intact
+    - extended focused Playwright coverage to prove the attachment download button disables while downloading and the browser honors the header-provided filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-attachments.spec.ts` -> `2 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk29 completed on `stage163h-chunk29-latest-receipt-fallback-parity` from `master@6544e10` to bring the selected-invoice latest-receipt button into full fallback filename parity with the backend contract without broadening into billing redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
