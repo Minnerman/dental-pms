@@ -79,6 +79,12 @@ def _encode_tx_cursor(performed_at: datetime, legacy_transaction_id: int) -> str
     return encoded
 
 
+def _naive_utc_sort_key(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _decode_tx_cursor(cursor: str) -> tuple[datetime, int]:
     try:
         raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
@@ -727,7 +733,7 @@ def get_patient_finance_summary(
     items: list[tuple[datetime, PatientFinanceItemOut]] = []
     for invoice in invoices:
         invoice_date = invoice.issue_date or invoice.created_at.date()
-        sort_key = (
+        sort_key = _naive_utc_sort_key(
             datetime.combine(invoice_date, datetime.min.time())
             if invoice.issue_date
             else invoice.created_at
@@ -751,7 +757,7 @@ def get_patient_finance_summary(
         invoice = payment.invoice
         items.append(
             (
-                payment.paid_at,
+                _naive_utc_sort_key(payment.paid_at),
                 PatientFinanceItemOut(
                     id=payment.id,
                     kind="payment",

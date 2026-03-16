@@ -61,6 +61,41 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk26 completed on `stage163h-chunk26-finance-summary-receipt-parity` from `master@e8a1998` to bring the patient home finance-summary receipt quick action into filename parity with the backend contract, with one minimal backend sort-key fix required to keep that summary surface working once payments exist.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - finance summary receipt quick action in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - receipt filename contract in `backend/app/routers/payments.py`
+    - existing focused billing proof in `frontend/tests/billing-payment.spec.ts`
+    - recent receipt/invoice/document download-hardening proof patterns in `frontend/tests/patient-invoice-pdf.spec.ts`, `frontend/tests/patient-estimate-pdf.spec.ts`, and `frontend/tests/patient-document-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient home finance-summary card already exposed a live receipt quick action, so this was parity hardening rather than a new workflow
+    - the backend already emitted deterministic receipt filenames via `Content-Disposition`
+    - the finance summary receipt button still used the plain download helper with a fallback built from `invoice_number`, which was materially different from the backend `receipt-{invoice_id}-{payment.id}.pdf` contract
+    - the finance summary item already included both `invoice_id` and `payment_id`, so the filename mismatch stayed frontend-local once the summary route was stable
+    - the finance summary route currently crashed when issued invoices and timezone-aware payments were mixed in the same sort, so one minimal backend fix was required to render the payment quick action reliably
+    - there was no focused Playwright proof for the finance summary receipt quick action
+  - Exact slice implemented:
+    - normalized finance summary sort keys in `backend/app/routers/patients.py` so mixed invoice/payment timestamps no longer crash the patient home finance-summary API
+    - updated the finance summary receipt quick action to reuse the header-aware receipt helper
+    - aligned the local fallback filename with the backend contract using the finance summary `invoice_id` and `payment_id`
+    - added a stable test id plus disabled/loading state for the finance summary receipt button
+    - extended focused Playwright coverage to prove the finance summary receipt quick action disables while downloading and the browser uses the backend-contract filename
+  - Files changed in this slice:
+    - `backend/app/routers/patients.py`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts` -> `2 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk25 completed on `stage163h-chunk25-patient-receipt-filename-parity` from `master@16b3ad8` to bring the selected-invoice receipt download flow into filename parity with the backend contract without reopening broader billing work.
   - What was inspected before implementation:
     - `AGENTS.md`
