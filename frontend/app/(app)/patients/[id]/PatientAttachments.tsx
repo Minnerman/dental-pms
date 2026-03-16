@@ -32,6 +32,11 @@ function filenameFromHeader(header: string | null) {
   return match?.[1] ?? null;
 }
 
+function sanitizeAttachmentFilename(value: string) {
+  const cleaned = value.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+|[._]+$/g, "");
+  return cleaned || "attachment";
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
@@ -179,7 +184,7 @@ export default function PatientAttachments({
       const link = document.createElement("a");
       const filename =
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        attachment.original_filename;
+        sanitizeAttachmentFilename(attachment.original_filename);
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
