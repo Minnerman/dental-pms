@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk31 completed on `stage163h-chunk31-attachment-fallback-parity` from `master@faff813` to bring patient attachment download fallback filenames into parity with the backend sanitization contract without broadening into attachment workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - attachment download fallback flow in `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - attachment filename sanitization contract in `backend/app/routers/attachments.py`
+    - focused attachment coverage in `frontend/tests/patient-attachments.spec.ts`
+    - recent document/template/invoice/receipt download hardening and fallback-proof patterns
+  - Evidence for choosing this slice:
+    - patient attachment download is already a live patient-facing V1 workflow
+    - the backend already sanitized attachment download filenames via `Content-Disposition`
+    - the frontend still fell back to `original_filename` when `Content-Disposition` was absent, which could differ materially from the backend sanitization contract
+    - the existing focused attachment proof only covered the header-driven filename path, not the fallback path
+  - Exact slice implemented:
+    - added a frontend attachment filename sanitizer that mirrors the backend attachment download contract
+    - updated the patient attachment download fallback path to use the sanitized filename instead of the raw original filename
+    - extended focused Playwright coverage to prove the attachment download button disables while downloading and falls back to the backend-contract sanitized filename when `Content-Disposition` is absent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-attachments.spec.ts` -> initial stale-bundle miss before rebuild; post-`./ops/verify.sh` rerun `3 passed` (authoritative)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk30 completed on `stage163h-chunk30-attachment-download-hardening` from `master@af07302` to harden patient attachment downloads without broadening into attachment workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
