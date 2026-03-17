@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 
@@ -99,6 +99,7 @@ export default function PatientDocuments({
   const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
   const [attachingDocumentPdfId, setAttachingDocumentPdfId] = useState<number | null>(null);
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
+  const savingDocumentRef = useRef(false);
 
   const loadMe = useCallback(async () => {
     try {
@@ -242,10 +243,14 @@ export default function PatientDocuments({
   }
 
   async function saveDocument() {
+    if (savingDocumentRef.current) {
+      return;
+    }
     if (!selectedTemplateId) {
       setError("Select a template to save.");
       return;
     }
+    savingDocumentRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -277,6 +282,7 @@ export default function PatientDocuments({
       setError(err instanceof Error ? err.message : "Failed to save document");
     } finally {
       setSaving(false);
+      savingDocumentRef.current = false;
     }
   }
 
@@ -447,6 +453,7 @@ export default function PatientDocuments({
                     setPreview(null);
                     setUnknownFields([]);
                   }}
+                  data-testid="patient-document-template-select"
                 >
                   <option value="">Select a template</option>
                   {templates.map((template) => (
@@ -462,6 +469,7 @@ export default function PatientDocuments({
                   className="input"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  data-testid="patient-document-title-input"
                 />
               </div>
             </div>
@@ -494,7 +502,13 @@ export default function PatientDocuments({
               <button className="btn btn-secondary" type="button" onClick={previewDocument}>
                 {previewing ? "Rendering..." : "Preview"}
               </button>
-              <button className="btn btn-primary" type="button" onClick={saveDocument}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={saveDocument}
+                disabled={saving}
+                data-testid="patient-document-save"
+              >
                 {saving ? "Saving..." : "Save document"}
               </button>
             </div>

@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-17: Stage 163H chunk35 completed on `stage163h-chunk35-patient-document-save-hardening` from `master@bac8f2b` to harden the patient document save flow without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - patient document generate/save flow in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - nearby patient-document proof specs in `frontend/tests/patient-document-text.spec.ts`, `frontend/tests/patient-document-pdf.spec.ts`, and `frontend/tests/patient-document-attach-pdf.spec.ts`
+    - recent template and attachment proof patterns
+  - Evidence for choosing this slice:
+    - the patient documents UI already exposed a live `Save document` action in the V1 generate-document workflow
+    - the button text changed to `Saving...`, but the save button itself was not disabled while saving and had no focused test proof
+    - repeated submit risk mattered on this surface because duplicate document creation is product-visible and the UAT flow explicitly depends on generating patient letters from templates
+  - Exact slice implemented:
+    - added an immediate frontend re-entry guard for the patient document save action so repeated clicks during the same in-flight save cannot submit twice
+    - disabled the `Save document` button while saving and exposed stable `data-testid` hooks for the focused save form proof
+    - added a focused Playwright spec that double-clicks the save button, proves the in-flight disabled/loading state, and confirms only one document is created
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-save.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk34 completed on `stage163h-chunk34-template-detail-proof` from `master@c32ec2b` to add focused proof for the templates page selected-template detail download button without broadening into templates-page redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
