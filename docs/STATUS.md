@@ -61,6 +61,38 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-17: Stage 163H chunk37 completed on `stage163h-chunk37-patient-document-fallback-parity` from `master@8d3c770` to bring patient document text/PDF fallback filenames into frontend parity with the backend contract when `Content-Disposition` is absent.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - patient document download fallbacks in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - patient context already available in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - backend filename contract in `backend/app/routers/patient_documents.py`
+    - focused proof in `frontend/tests/patient-document-text.spec.ts` and `frontend/tests/patient-document-pdf.spec.ts`
+    - nearby attachment/template download parity patterns
+  - Evidence for choosing this slice:
+    - the backend already defines patient document filenames as sanitized title + raw patient last name + current date suffix
+    - the frontend still fell back to raw `${doc.title}.txt` and `${doc.title}.pdf` when `Content-Disposition` was absent
+    - existing tests only proved the header-driven filename path, not the no-header fallback path
+  - Exact slice implemented:
+    - added a frontend fallback filename helper that mirrors the backend title sanitization and composes text/PDF filenames with patient last name plus a `YYYY-MM-DD` date suffix
+    - passed only the minimum extra patient data needed (`patient.last_name`) from `PatientDetailClient.tsx` into `PatientDocuments.tsx`
+    - extended the focused Playwright specs to prove both text and PDF fallback filenames when the backend header is absent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-document-text.spec.ts`
+    - `frontend/tests/patient-document-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-text.spec.ts tests/patient-document-pdf.spec.ts` -> initial stale-bundle miss before rebuild; post-verify rerun `4 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-17: Stage 163H chunk36 completed on `stage163h-chunk36-patient-document-preview-hardening` from `master@c79b276` to harden the patient document preview flow without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

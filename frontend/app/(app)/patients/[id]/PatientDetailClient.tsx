@@ -5829,7 +5829,11 @@ export default function PatientDetailClient({
                       <details className="card" style={{ margin: 0 }}>
                         <summary className="label">Documents</summary>
                         <div className="stack" style={{ marginTop: 12 }}>
-                          <PatientDocuments patientId={patientId} embedded />
+                          <PatientDocuments
+                            patientId={patientId}
+                            patientLastName={patient?.last_name ?? null}
+                            embedded
+                          />
                         </div>
                       </details>
                       <details className="card" style={{ margin: 0 }}>
@@ -8936,7 +8940,10 @@ export default function PatientDetailClient({
                 </div>
               ) : tab === "documents" ? (
                 <div className="stack">
-                  <PatientDocuments patientId={patientId} />
+                  <PatientDocuments
+                    patientId={patientId}
+                    patientLastName={patient?.last_name ?? null}
+                  />
                 </div>
               ) : tab === "attachments" ? (
                 <div className="stack">

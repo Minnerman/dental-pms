@@ -72,11 +72,28 @@ function buildTemplateDownloadFilename(template: DocumentTemplate) {
   return `${sanitizeTemplateFilename(template.name)}-${template.kind}.txt`;
 }
 
+function sanitizePatientDocumentFilename(value: string) {
+  const cleaned = value.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+|[._]+$/g, "");
+  return cleaned || "document";
+}
+
+function buildPatientDocumentDownloadFilename(
+  doc: PatientDocument,
+  patientLastName: string | null | undefined,
+  extension: "txt" | "pdf"
+) {
+  const safeTitle = sanitizePatientDocumentFilename(doc.title);
+  const dateSuffix = new Date().toISOString().slice(0, 10);
+  return `${safeTitle}_${patientLastName ?? ""}_${dateSuffix}.${extension}`;
+}
+
 export default function PatientDocuments({
   patientId,
+  patientLastName,
   embedded = false,
 }: {
   patientId: string;
+  patientLastName?: string | null;
   embedded?: boolean;
 }) {
   const router = useRouter();
@@ -311,7 +328,8 @@ export default function PatientDocuments({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const filename =
-        filenameFromHeader(res.headers.get("Content-Disposition")) || `${doc.title}.txt`;
+        filenameFromHeader(res.headers.get("Content-Disposition")) ||
+        buildPatientDocumentDownloadFilename(doc, patientLastName, "txt");
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -344,7 +362,8 @@ export default function PatientDocuments({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const filename =
-        filenameFromHeader(res.headers.get("Content-Disposition")) || `${doc.title}.pdf`;
+        filenameFromHeader(res.headers.get("Content-Disposition")) ||
+        buildPatientDocumentDownloadFilename(doc, patientLastName, "pdf");
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
