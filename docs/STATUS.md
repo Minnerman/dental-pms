@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-16: Stage 163H chunk34 completed on `stage163h-chunk34-template-detail-proof` from `master@c32ec2b` to add focused proof for the templates page selected-template detail download button without broadening into templates-page redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - selected-template detail download behavior in `frontend/app/(app)/templates/page.tsx`
+    - focused templates page coverage in `frontend/tests/templates-download.spec.ts`
+  - Evidence for choosing this slice:
+    - the templates page already exposed a separate selected-template detail `Download` button via `data-testid="template-detail-download"`
+    - that detail button reused the already-hardened download helper, so the remaining gap was focused proof rather than new behavior
+    - existing templates page proof only covered row-download behavior, not the selected-template detail button
+  - Exact slice implemented:
+    - extended focused Playwright coverage to select a template from the templates list, trigger the selected-template detail `Download` button, and prove the button disables while downloading
+    - proved the selected-template detail button honors the header-provided filename, confirming it reuses the hardened download path
+  - Files changed in this slice:
+    - `frontend/tests/templates-download.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/templates-download.spec.ts` -> `3 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-16: Stage 163H chunk33 completed on `stage163h-chunk33-templates-fallback-parity` from `master@55bae39` to bring templates page download fallback filenames into parity with the backend contract without broadening into templates-page redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
