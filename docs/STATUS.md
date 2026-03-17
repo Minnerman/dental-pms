@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-17: Stage 163H chunk36 completed on `stage163h-chunk36-patient-document-preview-hardening` from `master@c79b276` to harden the patient document preview flow without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - patient document preview flow in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - nearby patient-document proof specs in `frontend/tests/patient-document-save.spec.ts`, `frontend/tests/patient-document-text.spec.ts`, `frontend/tests/patient-document-pdf.spec.ts`, and `frontend/tests/patient-document-attach-pdf.spec.ts`
+    - recent attachment/template proof patterns for in-flight button states
+  - Evidence for choosing this slice:
+    - the patient documents UI already exposed a live `Preview` action in the generate-document workflow
+    - the button text changed to `Rendering...`, but the preview button itself was not disabled while rendering and had no immediate re-entry guard
+    - there was no focused Playwright proof that repeated preview clicks during the same in-flight request were blocked
+  - Exact slice implemented:
+    - added an immediate frontend re-entry guard for patient document preview requests so repeated clicks during the same in-flight render cannot submit twice
+    - disabled the `Preview` button while rendering and exposed a stable `data-testid` hook for focused proof
+    - added a focused Playwright spec that double-clicks the preview button, proves the in-flight disabled/loading state, and confirms only one preview request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-preview.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-preview.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-17: Stage 163H chunk35 completed on `stage163h-chunk35-patient-document-save-hardening` from `master@bac8f2b` to harden the patient document save flow without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

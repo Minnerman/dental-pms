@@ -99,6 +99,7 @@ export default function PatientDocuments({
   const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
   const [attachingDocumentPdfId, setAttachingDocumentPdfId] = useState<number | null>(null);
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
+  const previewingDocumentRef = useRef(false);
   const savingDocumentRef = useRef(false);
 
   const loadMe = useCallback(async () => {
@@ -202,10 +203,14 @@ export default function PatientDocuments({
   }
 
   async function previewDocument() {
+    if (previewingDocumentRef.current) {
+      return;
+    }
     if (!selectedTemplateId) {
       setError("Select a template to preview.");
       return;
     }
+    previewingDocumentRef.current = true;
     setPreviewing(true);
     setError(null);
     try {
@@ -239,6 +244,7 @@ export default function PatientDocuments({
       setError(err instanceof Error ? err.message : "Failed to preview document");
     } finally {
       setPreviewing(false);
+      previewingDocumentRef.current = false;
     }
   }
 
@@ -499,7 +505,13 @@ export default function PatientDocuments({
               </button>
             </div>
             <div className="row">
-              <button className="btn btn-secondary" type="button" onClick={previewDocument}>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={previewDocument}
+                disabled={previewing}
+                data-testid="patient-document-preview"
+              >
                 {previewing ? "Rendering..." : "Preview"}
               </button>
               <button
