@@ -100,7 +100,8 @@ test("patient document PDF download falls back to patient-aware filename without
     last_name: "PdfFallback",
   });
   const token = await ensureAuthReady(request);
-  const today = new Date().toISOString().slice(0, 10);
+  const serverDateHeader = "Wed, 18 Mar 2026 00:30:00 GMT";
+  const expectedDate = "2026-03-18";
 
   const templateResponse = await request.post(`${baseUrl}/api/document-templates`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -136,7 +137,7 @@ test("patient document PDF download falls back to patient-aware filename without
   });
   await expect(pdfButton).toBeVisible();
 
-  const expectedFilename = `Patient_PDF_Fallback_Proof_PdfFallback_${today}.pdf`;
+  const expectedFilename = `Patient_PDF_Fallback_Proof_PdfFallback_${expectedDate}.pdf`;
   const routePattern = new RegExp(`/api/patient-documents/${document.id}/download\\?format=pdf$`);
 
   let seenRequest!: () => void;
@@ -155,6 +156,7 @@ test("patient document PDF download falls back to patient-aware filename without
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
+        Date: serverDateHeader,
       },
       body: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"),
     });

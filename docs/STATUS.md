@@ -77,9 +77,9 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - the frontend still fell back to raw `${doc.title}.txt` and `${doc.title}.pdf` when `Content-Disposition` was absent
     - existing tests only proved the header-driven filename path, not the no-header fallback path
   - Exact slice implemented:
-    - added a frontend fallback filename helper that mirrors the backend title sanitization and composes text/PDF filenames with patient last name plus a `YYYY-MM-DD` date suffix
+    - added a frontend fallback filename helper that mirrors the backend title sanitization and composes text/PDF filenames with patient last name plus a `YYYY-MM-DD` date suffix derived from the response `Date` header when available, instead of the browser clock
     - passed only the minimum extra patient data needed (`patient.last_name`) from `PatientDetailClient.tsx` into `PatientDocuments.tsx`
-    - extended the focused Playwright specs to prove both text and PDF fallback filenames when the backend header is absent
+    - extended the focused Playwright specs to prove both text and PDF fallback filenames when `Content-Disposition` is absent and the response `Date` header drives the fallback date basis
   - Files changed in this slice:
     - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
     - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`

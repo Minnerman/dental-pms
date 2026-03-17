@@ -100,7 +100,8 @@ test("patient document text download falls back to patient-aware filename withou
     last_name: "TextFallback",
   });
   const token = await ensureAuthReady(request);
-  const today = new Date().toISOString().slice(0, 10);
+  const serverDateHeader = "Wed, 18 Mar 2026 00:30:00 GMT";
+  const expectedDate = "2026-03-18";
 
   const templateResponse = await request.post(`${baseUrl}/api/document-templates`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -136,7 +137,7 @@ test("patient document text download falls back to patient-aware filename withou
   });
   await expect(textButton).toBeVisible();
 
-  const expectedFilename = `Patient_Text_Fallback_Proof_TextFallback_${today}.txt`;
+  const expectedFilename = `Patient_Text_Fallback_Proof_TextFallback_${expectedDate}.txt`;
   const routePattern = new RegExp(`/api/patient-documents/${document.id}/download$`);
 
   let seenRequest!: () => void;
@@ -155,6 +156,7 @@ test("patient document text download falls back to patient-aware filename withou
       status: 200,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
+        Date: serverDateHeader,
       },
       body: "text fallback proof",
     });

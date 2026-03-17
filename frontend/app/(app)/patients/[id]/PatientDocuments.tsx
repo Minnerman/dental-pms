@@ -77,13 +77,21 @@ function sanitizePatientDocumentFilename(value: string) {
   return cleaned || "document";
 }
 
+function dateSuffixFromHeader(header: string | null) {
+  if (!header) return null;
+  const parsed = new Date(header);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
 function buildPatientDocumentDownloadFilename(
   doc: PatientDocument,
   patientLastName: string | null | undefined,
-  extension: "txt" | "pdf"
+  extension: "txt" | "pdf",
+  responseDateHeader: string | null
 ) {
   const safeTitle = sanitizePatientDocumentFilename(doc.title);
-  const dateSuffix = new Date().toISOString().slice(0, 10);
+  const dateSuffix = dateSuffixFromHeader(responseDateHeader) ?? new Date().toISOString().slice(0, 10);
   return `${safeTitle}_${patientLastName ?? ""}_${dateSuffix}.${extension}`;
 }
 
@@ -329,7 +337,7 @@ export default function PatientDocuments({
       const link = document.createElement("a");
       const filename =
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        buildPatientDocumentDownloadFilename(doc, patientLastName, "txt");
+        buildPatientDocumentDownloadFilename(doc, patientLastName, "txt", res.headers.get("Date"));
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -363,7 +371,7 @@ export default function PatientDocuments({
       const link = document.createElement("a");
       const filename =
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        buildPatientDocumentDownloadFilename(doc, patientLastName, "pdf");
+        buildPatientDocumentDownloadFilename(doc, patientLastName, "pdf", res.headers.get("Date"));
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
