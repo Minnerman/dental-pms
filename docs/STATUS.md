@@ -61,6 +61,65 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-18: Stage 163H chunk43 completed on `stage163h-chunk43-estimate-pdf-test-hardening` from `master@d417c5c` to harden the estimate PDF smoke proof without reopening the product slice from chunk42.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - failing smoke run `23264326361` / job `67650560752`
+    - focused proof in `frontend/tests/patient-estimate-pdf.spec.ts`
+    - estimate download/detail flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - repeated local estimate-spec runs on both PR `#377` and clean `master`
+  - Evidence for choosing this slice:
+    - after chunk42, the remaining CI failure signature was still limited to the Playwright click action on `estimate-download-pdf-*`, not the estimate download behavior after the request started
+    - the same run log still showed pointer interception from the surrounding `Phone` label subtree and the button detaching during Playwright click retries
+    - local repeat runs on both the blocked PR branch and clean `master` passed, which pointed to smoke-proof actionability rather than a new estimate product regression
+    - nearby focused proof already uses direct DOM button clicks when the test is asserting in-flight state rather than browser pointer mechanics
+  - Exact slice implemented:
+    - changed the estimate PDF smoke proof to trigger the existing download button via direct DOM `HTMLButtonElement.click()` instead of Playwright's pointer-driven click action
+    - kept the product code unchanged because the prior chunk42 UI stabilization remained the only justified product fix in this path
+  - Files changed in this slice:
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts --repeat-each=5` -> `5 passed`
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
+- 2026-03-18: Stage 163H chunk42 completed on `stage163h-chunk42-estimate-pdf-smoke-fix` from `master@1c724a2` to stabilize the patient estimate PDF download path that was flaking in `playwright-smoke` and blocking unrelated PRs.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - failing smoke spec `frontend/tests/patient-estimate-pdf.spec.ts`
+    - estimate download/detail flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - repeated local runs on both the failing PR branch and clean `master`
+  - Evidence for choosing this slice:
+    - `playwright-smoke` repeatedly failed on `tests/patient-estimate-pdf.spec.ts` with the estimate PDF button detaching during click retries
+    - the failure was blocking unrelated PRs, including `#377`
+    - the estimate detail flow had a concrete UI instability: `loadEstimates()` depended on `selectedEstimate`, so selecting an estimate changed the callback identity and retriggered the patient-page data-loading effect, causing avoidable estimate-pane re-renders during interaction
+  - Exact slice implemented:
+    - removed the unnecessary `selectedEstimate` dependency from the estimate-list loader
+    - kept the selected estimate synchronized via a functional state update instead of recreating the loader callback whenever the selected estimate changed
+    - left the focused estimate PDF Playwright spec unchanged and used it as the proof path for the stabilized UI
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts --repeat-each=5` -> `5 passed`
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-18: Stage 163H chunk41 completed on `stage163h-chunk41-document-attach-pdf-hardening` from `master@1c724a2` to harden the patient document “Save PDF to attachments” flow without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
