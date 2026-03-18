@@ -126,6 +126,7 @@ export default function PatientDocuments({
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
   const previewingDocumentRef = useRef(false);
   const savingDocumentRef = useRef(false);
+  const attachingDocumentPdfRef = useRef(false);
 
   const loadMe = useCallback(async () => {
     try {
@@ -386,7 +387,8 @@ export default function PatientDocuments({
   }
 
   async function attachDocumentPdf(doc: PatientDocument) {
-    if (attachingDocumentPdfId !== null) return;
+    if (attachingDocumentPdfRef.current) return;
+    attachingDocumentPdfRef.current = true;
     setError(null);
     setAttachNotice(null);
     setAttachingDocumentPdfId(doc.id);
@@ -407,6 +409,7 @@ export default function PatientDocuments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to attach PDF");
     } finally {
+      attachingDocumentPdfRef.current = false;
       setAttachingDocumentPdfId(null);
     }
   }

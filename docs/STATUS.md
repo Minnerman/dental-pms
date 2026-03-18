@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-18: Stage 163H chunk41 completed on `stage163h-chunk41-document-attach-pdf-hardening` from `master@1c724a2` to harden the patient document “Save PDF to attachments” flow without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - attach-PDF behavior in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - focused proof in `frontend/tests/patient-document-attach-pdf.spec.ts`
+    - recent patient-document save/preview and attachment hardening patterns
+  - Evidence for choosing this slice:
+    - V1 and clinician UAT still depend on generating a patient document PDF and saving it into attachments
+    - the attach-PDF button already showed `Saving PDF...`, but unlike the recently hardened actions it still had no immediate re-entry guard before the disabled state applied on re-render
+    - the existing focused Playwright proof covered in-flight text and success notice, but not duplicate-submit protection
+  - Exact slice implemented:
+    - added an immediate ref-based frontend re-entry guard for `attach-pdf` so repeated clicks during the same in-flight POST cannot submit twice
+    - kept the existing in-flight disabled state and success notice
+    - extended focused Playwright proof to double-click the attach-PDF button, verify the `Saving PDF...` state, and confirm only one POST request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-attach-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-attach-pdf.spec.ts` -> `1 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-18: Stage 163H chunk40 completed on `stage163h-chunk40-attachment-delete-hardening` from `master@bb34100` to harden the patient attachment delete flow without broadening into attachment workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

@@ -35,20 +35,20 @@ test("patient document Save PDF to attachments shows in-flight state and success
     },
   });
   expect(documentResponse.ok()).toBeTruthy();
-  const document = (await documentResponse.json()) as { id: number };
+  const patientDocument = (await documentResponse.json()) as { id: number };
 
   await primePageAuth(page, request);
   await page.goto(`${baseUrl}/patients/${patientId}/documents`, {
     waitUntil: "domcontentloaded",
   });
 
-  const attachButton = page.getByTestId(`patient-document-attach-pdf-${document.id}`);
-  await expect(page.getByTestId(`patient-document-card-${document.id}`)).toBeVisible({
+  const attachButton = page.getByTestId(`patient-document-attach-pdf-${patientDocument.id}`);
+  await expect(page.getByTestId(`patient-document-card-${patientDocument.id}`)).toBeVisible({
     timeout: 15_000,
   });
   await expect(attachButton).toBeVisible();
 
-  const routePattern = new RegExp(`/api/patient-documents/${document.id}/attach-pdf$`);
+  const routePattern = new RegExp(`/api/patient-documents/${patientDocument.id}/attach-pdf$`);
 
   let seenRequest!: () => void;
   const seenRequestPromise = new Promise<void>((resolve) => {
@@ -58,9 +58,13 @@ test("patient document Save PDF to attachments shows in-flight state and success
   const releaseResponsePromise = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let requestCount = 0;
 
   await page.route(routePattern, async (route) => {
-    seenRequest();
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
     await releaseResponsePromise;
     await route.fulfill({
       status: 200,
@@ -77,11 +81,20 @@ test("patient document Save PDF to attachments shows in-flight state and success
     });
   });
 
-  await attachButton.click();
+  await page.evaluate((id) => {
+    const button = document.querySelector(`[data-testid="patient-document-attach-pdf-${id}"]`);
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Attach PDF button not found");
+    }
+    button.click();
+    button.click();
+  }, patientDocument.id);
   await seenRequestPromise;
 
   await expect(attachButton).toBeDisabled();
   await expect(attachButton).toHaveText("Saving PDF...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
 
   releaseResponse();
 
