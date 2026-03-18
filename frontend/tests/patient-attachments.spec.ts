@@ -479,3 +479,107 @@ test("patient attachment preview shows in-flight state and guards repeat submit"
   await expect(previewButton).toHaveText("Preview");
   await page.unroute(routePattern);
 });
+
+test("patient attachment delete shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Docs",
+    last_name: `Attach Delete ${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/attachments`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  const uploadInput = page
+    .getByTestId("attachment-upload")
+    .locator('input[type="file"]');
+  const fixturePath = path.resolve(__dirname, "fixtures", "sample.pdf");
+  await uploadInput.setInputFiles(fixturePath);
+
+  const token = await ensureAuthReady(request);
+  let attachmentId: number | null = null;
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${getBaseUrl()}/api/patients/${patientId}/attachments`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.ok()) {
+          return null;
+        }
+        const items = (await response.json()) as {
+          id: number;
+          original_filename: string;
+        }[];
+        const match = items.find((item) => item.original_filename === "sample.pdf");
+        attachmentId = match?.id ?? null;
+        return attachmentId;
+      },
+      { timeout: 20_000 }
+    )
+    .not.toBeNull();
+  if (attachmentId === null) {
+    throw new Error("Attachment id not available after upload");
+  }
+
+  const row = page.getByTestId(`attachment-card-${attachmentId}`);
+  const deleteButton = page.getByTestId(`attachment-delete-${attachmentId}`);
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(deleteButton).toBeVisible();
+
+  await page.evaluate(() => {
+    window.confirm = () => true;
+  });
+
+  let requestCount = 0;
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  const routePattern = new RegExp(`/api/attachments/${attachmentId}$`);
+
+  await page.route(routePattern, async (route, routedRequest) => {
+    if (routedRequest.method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
+    await releaseResponsePromise;
+    await route.fulfill({
+      status: 204,
+      body: "",
+    });
+  });
+
+  await page.evaluate((id) => {
+    const button = document.querySelector(`[data-testid="attachment-delete-${id}"]`);
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Delete button not found");
+    }
+    button.click();
+    button.click();
+  }, attachmentId);
+  await seenRequestPromise;
+
+  await expect(deleteButton).toBeDisabled();
+  await expect(deleteButton).toHaveText("Deleting...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  await expect(row).toHaveCount(0);
+  await page.unroute(routePattern);
+});
