@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-18: Stage 163H chunk38 completed on `stage163h-chunk38-attachment-preview-hardening` from `master@4f9d38e` to harden the patient attachment preview flow without broadening into attachment workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - attachment preview flow in `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - focused proof in `frontend/tests/patient-attachments.spec.ts`
+    - recent patient-document save/preview hardening patterns in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`, `frontend/tests/patient-document-save.spec.ts`, and `frontend/tests/patient-document-preview.spec.ts`
+  - Evidence for choosing this slice:
+    - the attachments UI already exposed a live `Preview` action with visible `Opening...` state
+    - unlike the recently hardened patient-document save/preview flows, attachment preview still had no immediate re-entry guard before the button disabled on re-render
+    - there was no focused Playwright proof that repeated preview clicks during the same in-flight request were blocked
+  - Exact slice implemented:
+    - added an immediate ref-based frontend re-entry guard for attachment preview requests so repeated clicks during the same in-flight fetch cannot submit twice
+    - kept the existing `Opening...` disabled state and added focused Playwright proof that double-clicking the preview button still sends only one preview request
+    - verified the preview button returns to its normal enabled state after the guarded request completes
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-attachments.spec.ts` -> `4 passed`
+    - `./ops/health.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> `308 passed, 2 skipped`
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-17: Stage 163H chunk37 completed on `stage163h-chunk37-patient-document-fallback-parity` from `master@8d3c770` to bring patient document text/PDF fallback filenames into frontend parity with the backend contract when `Content-Disposition` is absent.
   - What was inspected before implementation:
     - `AGENTS.md`

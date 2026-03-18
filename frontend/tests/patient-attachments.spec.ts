@@ -263,3 +263,119 @@ test("patient attachment download falls back to backend-sanitized filename witho
   await expect(downloadButton).toHaveText("Download");
   await page.unroute(routePattern);
 });
+
+test("patient attachment preview shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Docs",
+    last_name: `Attach Preview ${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/attachments`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  const uploadInput = page
+    .getByTestId("attachment-upload")
+    .locator('input[type="file"]');
+  const fixturePath = path.resolve(__dirname, "fixtures", "sample.pdf");
+  await uploadInput.setInputFiles(fixturePath);
+
+  const token = await ensureAuthReady(request);
+  let attachmentId: number | null = null;
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${getBaseUrl()}/api/patients/${patientId}/attachments`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.ok()) {
+          return null;
+        }
+        const items = (await response.json()) as {
+          id: number;
+          original_filename: string;
+        }[];
+        const match = items.find((item) => item.original_filename === "sample.pdf");
+        attachmentId = match?.id ?? null;
+        return attachmentId;
+      },
+      { timeout: 20_000 }
+    )
+    .not.toBeNull();
+  if (attachmentId === null) {
+    throw new Error("Attachment id not available after upload");
+  }
+
+  const previewButton = page.getByTestId(`attachment-preview-${attachmentId}`);
+  await expect(previewButton).toBeVisible({ timeout: 15_000 });
+
+  await page.evaluate(() => {
+    const state = window as typeof window & { __previewOpenCount?: number };
+    state.__previewOpenCount = 0;
+    window.open = () => {
+      state.__previewOpenCount = (state.__previewOpenCount ?? 0) + 1;
+      return null;
+    };
+  });
+
+  let requestCount = 0;
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  const routePattern = new RegExp(`/api/attachments/${attachmentId}/preview$`);
+
+  await page.route(routePattern, async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
+    await releaseResponsePromise;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+      },
+      body: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"),
+    });
+  });
+
+  await page.evaluate((id) => {
+    const button = document.querySelector(`[data-testid="attachment-preview-${id}"]`);
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Preview button not found");
+    }
+    button.click();
+    button.click();
+  }, attachmentId);
+  await seenRequestPromise;
+
+  await expect(previewButton).toBeDisabled();
+  await expect(previewButton).toHaveText("Opening...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          () => (window as typeof window & { __previewOpenCount?: number }).__previewOpenCount ?? 0
+        ),
+      { timeout: 15_000 }
+    )
+    .toBe(1);
+  await expect(previewButton).toBeEnabled({ timeout: 15_000 });
+  await expect(previewButton).toHaveText("Preview");
+  await page.unroute(routePattern);
+});

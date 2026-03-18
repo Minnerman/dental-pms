@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken, getToken } from "@/lib/auth";
 
@@ -60,6 +60,7 @@ export default function PatientAttachments({
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const previewingAttachmentRef = useRef(false);
 
   const authFetch = useCallback((path: string, init: RequestInit = {}) => {
     const token = getToken();
@@ -141,6 +142,10 @@ export default function PatientAttachments({
   }
 
   async function previewAttachment(attachment: Attachment) {
+    if (previewingAttachmentRef.current) {
+      return;
+    }
+    previewingAttachmentRef.current = true;
     setPreviewingId(attachment.id);
     setError(null);
     try {
@@ -161,6 +166,7 @@ export default function PatientAttachments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to preview attachment");
     } finally {
+      previewingAttachmentRef.current = false;
       setPreviewingId(null);
     }
   }
