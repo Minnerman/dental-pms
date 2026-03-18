@@ -1680,16 +1680,16 @@ export default function PatientDetailClient({
       }
       const data = (await res.json()) as Estimate[];
       setEstimates(data);
-      if (selectedEstimate) {
-        const next = data.find((estimate) => estimate.id === selectedEstimate.id) || null;
-        setSelectedEstimate(next);
-      }
+      setSelectedEstimate((current) => {
+        if (!current) return current;
+        return data.find((estimate) => estimate.id === current.id) || null;
+      });
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to load estimates");
     } finally {
       setLoadingEstimates(false);
     }
-  }, [patientId, router, selectedEstimate]);
+  }, [patientId, router]);
 
   async function loadEstimateDetail(estimateId: number) {
     setEstimateError(null);
