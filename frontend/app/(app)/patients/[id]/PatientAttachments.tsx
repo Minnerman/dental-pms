@@ -60,6 +60,7 @@ export default function PatientAttachments({
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const uploadingAttachmentRef = useRef(false);
   const previewingAttachmentRef = useRef(false);
 
   const authFetch = useCallback((path: string, init: RequestInit = {}) => {
@@ -108,6 +109,10 @@ export default function PatientAttachments({
   }, [router]);
 
   async function uploadAttachment(file: File) {
+    if (uploadingAttachmentRef.current) {
+      return;
+    }
+    uploadingAttachmentRef.current = true;
     setUploading(true);
     setError(null);
     try {
@@ -131,6 +136,7 @@ export default function PatientAttachments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload attachment");
     } finally {
+      uploadingAttachmentRef.current = false;
       setUploading(false);
     }
   }

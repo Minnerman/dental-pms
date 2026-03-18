@@ -79,6 +79,106 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
   await expect(row).toHaveCount(0);
 });
 
+test("patient attachment upload shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Docs",
+    last_name: `Attach Upload ${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/attachments`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  const uploadLabel = page.getByTestId("attachment-upload");
+  const uploadInput = uploadLabel.locator('input[type="file"]');
+  await expect(uploadLabel).toContainText("Upload document");
+
+  let requestCount = 0;
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  const routePattern = new RegExp(`/api/patients/${patientId}/attachments$`);
+
+  await page.route(routePattern, async (route, request) => {
+    if (request.method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
+    await releaseResponsePromise;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: 99_002,
+        patient_id: patientId,
+        original_filename: "upload-proof.pdf",
+        content_type: "application/pdf",
+        byte_size: 34,
+        created_at: "2026-03-18T12:34:56Z",
+        created_by: {
+          id: 1,
+          email: "admin@example.com",
+          role: "superadmin",
+        },
+      }),
+    });
+  });
+
+  await page.evaluate(() => {
+    const input = document.querySelector(
+      '[data-testid="attachment-upload"] input[type="file"]'
+    );
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Upload input not found");
+    }
+    const pdfBytes = new Uint8Array([
+      0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0x25, 0x45, 0x4f, 0x46,
+    ]);
+    const file = new File([pdfBytes], "upload-proof.pdf", {
+      type: "application/pdf",
+    });
+    const triggerUpload = () => {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      Object.defineProperty(input, "files", {
+        configurable: true,
+        value: transfer.files,
+      });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    triggerUpload();
+    triggerUpload();
+  });
+  await seenRequestPromise;
+
+  await expect(uploadLabel).toContainText("Uploading...");
+  await expect(uploadInput).toBeDisabled();
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  await expect(page.getByTestId("attachment-card-99002")).toBeVisible({ timeout: 15_000 });
+  await expect(uploadLabel).toContainText("Upload document");
+  await expect(uploadInput).toBeEnabled({ timeout: 15_000 });
+  await page.unroute(routePattern);
+});
+
 test("patient attachment download shows in-flight state and honors header filename", async ({
   page,
   request,
