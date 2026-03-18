@@ -58,10 +58,12 @@ export default function PatientAttachments({
   const [uploading, setUploading] = useState(false);
   const [previewingId, setPreviewingId] = useState<number | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const uploadingAttachmentRef = useRef(false);
   const previewingAttachmentRef = useRef(false);
+  const deletingAttachmentRef = useRef<number | null>(null);
 
   const authFetch = useCallback((path: string, init: RequestInit = {}) => {
     const token = getToken();
@@ -211,8 +213,13 @@ export default function PatientAttachments({
   }
 
   async function deleteAttachment(attachment: Attachment) {
+    if (deletingAttachmentRef.current === attachment.id) {
+      return;
+    }
     if (!confirm(`Delete "${attachment.original_filename}"?`)) return;
     setError(null);
+    deletingAttachmentRef.current = attachment.id;
+    setDeletingId(attachment.id);
     try {
       const res = await authFetch(`/api/attachments/${attachment.id}`, { method: "DELETE" });
       if (res.status === 401) {
@@ -231,6 +238,11 @@ export default function PatientAttachments({
       setAttachments((prev) => prev.filter((item) => item.id !== attachment.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete attachment");
+    } finally {
+      if (deletingAttachmentRef.current === attachment.id) {
+        deletingAttachmentRef.current = null;
+      }
+      setDeletingId((current) => (current === attachment.id ? null : current));
     }
   }
 
@@ -325,8 +337,9 @@ export default function PatientAttachments({
                       type="button"
                       onClick={() => deleteAttachment(attachment)}
                       data-testid={`attachment-delete-${attachment.id}`}
+                      disabled={deletingId === attachment.id}
                     >
-                      Delete
+                      {deletingId === attachment.id ? "Deleting..." : "Delete"}
                     </button>
                   )}
                 </div>
