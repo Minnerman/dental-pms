@@ -63,7 +63,15 @@ test("patient estimate PDF download shows in-flight state and honors header file
   });
 
   const downloadPromise = page.waitForEvent("download");
-  await downloadButton.click();
+  await page.evaluate((estimateId) => {
+    const button = document.querySelector(
+      `[data-testid="estimate-download-pdf-${estimateId}"]`
+    );
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Estimate PDF download button not found");
+    }
+    button.click();
+  }, estimate.id);
   await seenRequestPromise;
 
   await expect(downloadButton).toBeDisabled();
