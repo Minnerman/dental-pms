@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk56 completed on `stage163h-chunk56-patient-save-hardening` from `master@2d6cd02` to harden patient detail saves against duplicate submit without broadening into patient-form redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - patient save behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused notes/payment/document hardening proofs for the existing immediate-guard pattern
+    - patient-route coverage in `frontend/tests/patient-notes.spec.ts` and nearby patient Playwright helpers
+  - Evidence for choosing this slice:
+    - V1 still depends on the patient detail page being reliably editable in day-to-day use
+    - the patient `Save changes` action still relied only on `savingPatient` after React re-render and had no immediate duplicate-submit guard
+    - there was no focused proof that repeated clicks on the patient save action during the same in-flight PATCH were blocked
+  - Exact slice implemented:
+    - added an immediate patient-save guard that locks by patient id before the async PATCH begins and synchronously disables the submitter button when present
+    - kept the existing patient PATCH payload and visible `Saving...` state unchanged
+    - added a focused Playwright proof that opens the patient details panel, double-clicks `Save changes`, verifies the immediate disabled state, and confirms only one patient PATCH is sent and persisted
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk55 completed on `stage163h-chunk55-patient-note-submit-hardening` from `master@65ffae5` to harden patient note creation against duplicate submit without broadening into notes redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

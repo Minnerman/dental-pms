@@ -100,6 +100,7 @@ const downloadingInvoiceIds = new Set<number>();
 const downloadingEstimatePdfIds = new Set<number>();
 const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
+const savingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
@@ -4271,6 +4272,11 @@ export default function PatientDetailClient({
   async function savePatient(e: React.FormEvent) {
     e.preventDefault();
     if (!patient) return;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    const button = submitter instanceof HTMLButtonElement ? submitter : null;
+    if (savingPatient || savingPatientIds.has(patientId) || button?.disabled) return;
+    savingPatientIds.add(patientId);
+    if (button) button.disabled = true;
     setSavingPatient(true);
     setError(null);
     try {
@@ -4327,6 +4333,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update patient");
     } finally {
+      savingPatientIds.delete(patientId);
       setSavingPatient(false);
     }
   }
@@ -6333,6 +6340,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Notes</label>
                     <textarea
+                      data-testid="patient-notes-field"
                       className="input"
                       rows={4}
                       value={patient.notes ?? ""}
@@ -6343,7 +6351,11 @@ export default function PatientDetailClient({
                   </div>
 
                   <div className="row">
-                    <button className="btn btn-primary" disabled={savingPatient}>
+                    <button
+                      className="btn btn-primary"
+                      data-testid="patient-save-changes"
+                      disabled={savingPatient}
+                    >
                       {savingPatient ? "Saving..." : "Save changes"}
                     </button>
                     {patient.deleted_at ? (
