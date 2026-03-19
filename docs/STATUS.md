@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk52 completed on `stage163h-chunk52-payment-submit-hardening` from `master@2290ab0` to harden patient payment recording against duplicate submit without broadening into billing redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - payment recording behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused proof in `frontend/tests/billing-payment.spec.ts`
+    - nearby receipt/invoice/estimate hardening patterns in adjacent patient financial surfaces
+  - Evidence for choosing this slice:
+    - V1 explicitly requires preventing accidental duplicate payments through UI state/guards
+    - the patient financial surface still exposed a live `Record payment` action that only relied on `recordingPayment` after React re-render and had no immediate duplicate-submit guard
+    - the focused billing proof covered the successful payment-to-receipt path, but not protection against repeated clicks during the same in-flight payment request
+  - Exact slice implemented:
+    - added an immediate payment-submit guard that synchronously disables the clicked `Record payment` button before the async POST begins and backs it with an in-module invoice-id lock
+    - kept the existing `Recording...` state and the rest of the payment/receipt workflow unchanged
+    - extended focused Playwright proof to double-click the payment button, verify the immediate disabled state, and confirm only one payment POST is sent before the receipt flow continues
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk51 completed on `stage163h-chunk51-estimate-pdf-download-hardening` from `master@201929b` to harden patient estimate PDF downloads against duplicate submit without broadening into estimates redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

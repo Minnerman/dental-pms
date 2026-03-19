@@ -98,6 +98,7 @@ type Note = {
 const downloadingReceiptIds = new Set<number>();
 const downloadingInvoiceIds = new Set<number>();
 const downloadingEstimatePdfIds = new Set<number>();
+const recordingPaymentInvoiceIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
@@ -4654,14 +4655,24 @@ export default function PatientDetailClient({
     }
   }
 
-  async function addPayment() {
+  async function addPayment(button?: HTMLButtonElement | null) {
     if (!selectedInvoice) return;
-    if (recordingPayment) return;
+    if (
+      !button ||
+      paymentLocked ||
+      recordingPayment ||
+      recordingPaymentInvoiceIds.has(selectedInvoice.id) ||
+      button.disabled
+    ) {
+      return;
+    }
     const amountPence = toPence(paymentAmount);
     if (amountPence === null || amountPence <= 0) {
       setInvoiceError("Payment amount must be a number.");
       return;
     }
+    recordingPaymentInvoiceIds.add(selectedInvoice.id);
+    button.disabled = true;
     setRecordingPayment(true);
     setInvoiceError(null);
     try {
@@ -4696,6 +4707,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to add payment");
     } finally {
+      recordingPaymentInvoiceIds.delete(selectedInvoice.id);
       setRecordingPayment(false);
     }
   }
@@ -10415,7 +10427,7 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-primary"
                               type="button"
-                              onClick={addPayment}
+                              onClick={(event) => addPayment(event.currentTarget)}
                               disabled={
                                 recordingPayment || paymentLocked
                               }
