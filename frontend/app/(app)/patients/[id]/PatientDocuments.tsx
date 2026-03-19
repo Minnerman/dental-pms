@@ -61,6 +61,7 @@ const downloadingPatientDocumentTextIds = new Set<number>();
 const downloadingPatientDocumentPdfIds = new Set<number>();
 const attachingPatientDocumentPdfIds = new Set<number>();
 const deletingPatientDocumentIds = new Set<number>();
+const downloadingTemplateIds = new Set<number>();
 
 function filenameFromHeader(header: string | null) {
   if (!header) return null;
@@ -199,8 +200,10 @@ export default function PatientDocuments({
     }
   }, [patientId, router]);
 
-  async function downloadTemplate(template: DocumentTemplate) {
-    if (downloadingTemplateId !== null) return;
+  async function downloadTemplate(template: DocumentTemplate, button?: HTMLButtonElement | null) {
+    if (!button || downloadingTemplateIds.has(template.id) || button.disabled) return;
+    downloadingTemplateIds.add(template.id);
+    button.disabled = true;
     setError(null);
     setDownloadingTemplateId(template.id);
     try {
@@ -229,6 +232,10 @@ export default function PatientDocuments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download template");
     } finally {
+      downloadingTemplateIds.delete(template.id);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setDownloadingTemplateId(null);
     }
   }
@@ -699,7 +706,7 @@ export default function PatientDocuments({
                 <button
                   className="btn btn-secondary"
                   type="button"
-                  onClick={() => downloadTemplate(template)}
+                  onClick={(event) => void downloadTemplate(template, event.currentTarget)}
                   disabled={downloadingTemplateId !== null}
                   data-testid={`patient-template-download-${template.id}`}
                 >
