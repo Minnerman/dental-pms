@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk45 completed on `stage163h-chunk45-document-pdf-download-hardening` from `master@8644414` to harden the patient document PDF download flow without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - PDF download behavior in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - focused proof in `frontend/tests/patient-document-pdf.spec.ts`
+    - recent document/attachment action-hardening patterns in adjacent patient surfaces
+  - Evidence for choosing this slice:
+    - clinician UAT explicitly depends on creating a patient document from template and downloading the PDF
+    - unlike save, preview, attach-PDF, and document delete, the PDF download action still relied on disabled state after re-render and had no immediate duplicate-submit guard
+    - the focused PDF spec proved in-flight state and filename handling, but not protection against repeated clicks during the same in-flight request
+  - Exact slice implemented:
+    - added an immediate PDF-download guard that synchronously disables the clicked button before the async download request begins and backs it with an in-module in-flight document-id lock
+    - kept the existing `Downloading PDF...` state and filename behavior
+    - extended focused Playwright proof to double-click the PDF button, verify the in-flight disabled state, and confirm only one download request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-pdf.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk44 completed on `stage163h-chunk44-document-delete-hardening` from `master@ce63fd2` to harden the patient document delete flow without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
