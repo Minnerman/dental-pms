@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk51 completed on `stage163h-chunk51-estimate-pdf-download-hardening` from `master@201929b` to harden patient estimate PDF downloads against duplicate submit without broadening into estimates redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - estimate PDF download behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused proof in `frontend/tests/patient-estimate-pdf.spec.ts`
+    - nearby receipt/invoice/document hardening patterns in adjacent patient surfaces
+  - Evidence for choosing this slice:
+    - the patient treatment/financial surface still exposed a live estimate PDF action
+    - unlike the recently hardened receipt and invoice download helpers, the estimate PDF helper still relied on `downloadingEstimatePdfId !== null` after React re-render and had no immediate duplicate-submit guard
+    - the focused estimate PDF proof covered in-flight state and filename behavior, but not protection against repeated clicks during the same in-flight request
+  - Exact slice implemented:
+    - added an immediate estimate-PDF guard that synchronously disables the clicked button before the async request begins and backs it with an in-module estimate-id lock
+    - kept the existing `Downloading PDF...` state and filename behavior
+    - extended focused Playwright proof to double-click the estimate PDF button, verify the immediate disabled state, and confirm only one estimate PDF request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk50 completed on `stage163h-chunk50-invoice-pdf-download-hardening` from `master@55de8c7` to harden patient invoice PDF downloads against duplicate submit without broadening into billing redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
