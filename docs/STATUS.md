@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk44 completed on `stage163h-chunk44-document-delete-hardening` from `master@ce63fd2` to harden the patient document delete flow without broadening into patient documents redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - delete behavior in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - delete route in `backend/app/routers/patient_documents.py`
+    - focused proof patterns in `frontend/tests/patient-attachments.spec.ts`
+  - Evidence for choosing this slice:
+    - V1 and clinician UAT still depend on generated patient documents being manageable end-to-end, including delete
+    - unlike save, preview, download, and attach-PDF, the patient document delete action still had no immediate duplicate-submit guard or in-flight button state
+    - there was no focused Playwright proof that repeated delete clicks during the same in-flight request were blocked
+  - Exact slice implemented:
+    - added an immediate delete guard that synchronously disables the clicked button before the async DELETE begins and backs it with an in-module in-flight document-id lock
+    - surfaced `Deleting...` on the active row while the delete is in flight
+    - added focused Playwright proof that double-clicking the delete button still sends only one DELETE request and removes the row after the guarded request completes
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-delete.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-delete.spec.ts` -> pass
+    - `./ops/verify.sh` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-18: Stage 163H chunk43 completed on `stage163h-chunk43-estimate-pdf-test-hardening` from `master@d417c5c` to harden the estimate PDF smoke proof without reopening the product slice from chunk42.
   - What was inspected before implementation:
     - `AGENTS.md`

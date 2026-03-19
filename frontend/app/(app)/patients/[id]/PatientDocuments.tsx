@@ -58,6 +58,7 @@ const kindLabels: Record<DocumentTemplateKind, string> = {
 };
 
 const attachingPatientDocumentPdfIds = new Set<number>();
+const deletingPatientDocumentIds = new Set<number>();
 
 function filenameFromHeader(header: string | null) {
   if (!header) return null;
@@ -125,6 +126,7 @@ export default function PatientDocuments({
   const [downloadingDocumentTextId, setDownloadingDocumentTextId] = useState<number | null>(null);
   const [downloadingDocumentPdfId, setDownloadingDocumentPdfId] = useState<number | null>(null);
   const [attachingDocumentPdfId, setAttachingDocumentPdfId] = useState<number | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
   const previewingDocumentRef = useRef(false);
   const savingDocumentRef = useRef(false);
@@ -421,9 +423,13 @@ export default function PatientDocuments({
     }
   }
 
-  async function deleteDocument(doc: PatientDocument) {
+  async function deleteDocument(doc: PatientDocument, button?: HTMLButtonElement | null) {
+    if (!button || deletingPatientDocumentIds.has(doc.id) || button.disabled) return;
     if (!confirm(`Delete "${doc.title}"?`)) return;
+    deletingPatientDocumentIds.add(doc.id);
+    button.disabled = true;
     setError(null);
+    setDeletingDocumentId(doc.id);
     try {
       const res = await apiFetch(`/api/patient-documents/${doc.id}`, { method: "DELETE" });
       if (res.status === 401) {
@@ -442,6 +448,12 @@ export default function PatientDocuments({
       setDocuments((prev) => prev.filter((item) => item.id !== doc.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete document");
+    } finally {
+      deletingPatientDocumentIds.delete(doc.id);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
+      setDeletingDocumentId((current) => (current === doc.id ? null : current));
     }
   }
 
@@ -636,9 +648,11 @@ export default function PatientDocuments({
                         <button
                           className="btn btn-secondary"
                           type="button"
-                          onClick={() => deleteDocument(doc)}
+                          onClick={(event) => void deleteDocument(doc, event.currentTarget)}
+                          data-testid={`patient-document-delete-${doc.id}`}
+                          disabled={deletingDocumentId === doc.id}
                         >
-                          Delete
+                          {deletingDocumentId === doc.id ? "Deleting..." : "Delete"}
                         </button>
                       )}
                     </div>
