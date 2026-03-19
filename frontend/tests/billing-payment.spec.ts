@@ -33,18 +33,55 @@ test("recording a payment updates status and enables receipt download", async ({
   await expect(recordButton).toBeEnabled();
 
   await page.getByTestId("payment-amount").fill("25.00");
+  let paymentRequestCount = 0;
+  const paymentRoutePattern = new RegExp(`/api/invoices/${invoice.id}/payments$`);
+  let seenPaymentRequest!: () => void;
+  const seenPaymentRequestPromise = new Promise<void>((resolve) => {
+    seenPaymentRequest = resolve;
+  });
+  let releasePaymentRequest!: () => void;
+  const releasePaymentRequestPromise = new Promise<void>((resolve) => {
+    releasePaymentRequest = resolve;
+  });
+  await page.route(paymentRoutePattern, async (route) => {
+    paymentRequestCount += 1;
+    if (paymentRequestCount === 1) {
+      seenPaymentRequest();
+      await releasePaymentRequestPromise;
+    }
+    await route.continue();
+  });
   const paymentResponsePromise = page.waitForResponse((response) => {
     return (
       response.request().method() === "POST" &&
       response.url().endsWith(`/api/invoices/${invoice.id}/payments`)
     );
   });
-  await recordButton.click();
+  const paymentClickState = await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="record-payment"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Record payment button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenPaymentRequestPromise;
 
+  expect(paymentClickState.beforeDisabled).toBe(false);
+  expect(paymentClickState.afterFirstDisabled).toBe(true);
+  expect(paymentClickState.afterSecondDisabled).toBe(true);
   await expect(recordButton).toBeDisabled({ timeout: 10_000 });
+  await expect(recordButton).toHaveText("Recording...");
+  await page.waitForTimeout(250);
+  expect(paymentRequestCount).toBe(1);
+  releasePaymentRequest();
   const paymentResponse = await paymentResponsePromise;
   expect(paymentResponse.ok()).toBeTruthy();
   const payment = (await paymentResponse.json()) as { id: number };
+  await page.unroute(paymentRoutePattern);
 
   const paymentStatus = page.getByTestId("invoice-payment-status");
   await expect(paymentStatus).toHaveText("Paid", { timeout: 15_000 });
