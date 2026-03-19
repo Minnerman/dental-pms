@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk54 completed on `stage163h-chunk54-templates-page-download-hardening` from `master@45ba97b` to harden templates-page downloads against duplicate submit without broadening into template workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - templates-page download behavior in `frontend/app/(app)/templates/page.tsx`
+    - focused proof in `frontend/tests/templates-download.spec.ts`
+    - nearby patient document, patient-page template, attachment, receipt, invoice, estimate, and recall-letter download hardening patterns
+  - Evidence for choosing this slice:
+    - the templates admin surface still exposed a live `Download` action using only `downloadingTemplateId` after React re-render
+    - that left a same-tick duplicate-click gap unlike the recently hardened patient-page template, document, attachment, and billing-related download helpers
+    - the focused templates-page proof covered in-flight state and filename behavior, but not protection against repeated clicks during the same in-flight request
+  - Exact slice implemented:
+    - added an immediate templates-page download guard that synchronously disables the clicked button before the async request begins and backs it with an in-module template-id lock
+    - kept the existing `Downloading...` state and filename behavior unchanged for both row and detail download entry points
+    - extended focused Playwright proof to double-click the templates-page download button, verify the immediate disabled state, and confirm only one template download request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/templates/page.tsx`
+    - `frontend/tests/templates-download.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/templates-download.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk53 completed on `stage163h-chunk53-recall-letter-download-hardening` from `master@7f7d019` to harden patient recall-letter downloads against duplicate submit without broadening into recalls redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

@@ -44,9 +44,13 @@ test("templates page download shows in-flight state and honors header filename",
   const releaseResponsePromise = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let requestCount = 0;
 
   await page.route(routePattern, async (route) => {
-    seenRequest();
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
     await releaseResponsePromise;
     await route.fulfill({
       status: 200,
@@ -59,11 +63,25 @@ test("templates page download shows in-flight state and honors header filename",
   });
 
   const downloadPromise = page.waitForEvent("download");
-  await downloadButton.click();
+  const clickState = await downloadButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Template download button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
   await seenRequestPromise;
 
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
   await expect(downloadButton).toBeDisabled();
   await expect(downloadButton).toHaveText("Downloading...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
 
   releaseResponse();
   const download = await downloadPromise;
