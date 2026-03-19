@@ -243,6 +243,94 @@ test("appointment creation uses latest clinician and location selections", async
   expect((payload.location_text as string | undefined) ?? "").toBe("");
 });
 
+test("appointments booking shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const lastName = `Repeat ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: lastName,
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-03-20");
+  await clickNewAppointment(page);
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+
+  await selectBookingPatient(page, patientId, lastName);
+  await page.getByTestId("booking-start").fill("2026-03-20T09:00");
+  await page.getByTestId("booking-end").fill("2026-03-20T09:30");
+  await page.getByTestId("booking-location-room").fill("Room 5");
+
+  const submitButton = page.getByTestId("booking-submit");
+  await expect(submitButton).toBeEnabled();
+
+  let requestCount = 0;
+  const bookingRoutePattern = /\/api\/appointments$/;
+  let seenCreateRequest!: () => void;
+  const seenCreateRequestPromise = new Promise<void>((resolve) => {
+    seenCreateRequest = resolve;
+  });
+  let releaseCreateRequest!: () => void;
+  const releaseCreateRequestPromise = new Promise<void>((resolve) => {
+    releaseCreateRequest = resolve;
+  });
+
+  await page.route(bookingRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCreateRequest();
+      await releaseCreateRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes("/api/appointments")
+  );
+
+  const clickState = await submitButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Create appointment button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCreateRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(submitButton).toBeDisabled();
+  await expect(submitButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCreateRequest();
+
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  expect(createResponse.request().postDataJSON()).toMatchObject({
+    patient_id: Number(patientId),
+    location: "Room 5",
+    location_type: "clinic",
+  });
+  await page.unroute(bookingRoutePattern);
+
+  await expect(page.getByTestId("booking-modal")).toBeHidden({ timeout: 15_000 });
+  await expect(page.getByText("Appointment created.")).toBeVisible({ timeout: 15_000 });
+});
+
 test("booking conflict check debounces and surfaces latest conflicts", async ({
   page,
   request,

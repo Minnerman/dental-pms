@@ -297,6 +297,8 @@ const daySheetStatusLabels: Record<AppointmentStatus, string> = {
 
 const DIARY_TIME_STEP_MINUTES = 10;
 const DIARY_UNDO_WINDOW_MS = 10_000;
+const appointmentsBookingSubmitLocks = new Set<string>();
+const APPOINTMENTS_BOOKING_SUBMIT_LOCK = "appointments-booking-submit";
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2192,6 +2194,8 @@ export default function AppointmentsPage() {
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    const button = submitter instanceof HTMLButtonElement ? submitter : null;
     if (bookingValidationError) return;
     const startDate = new Date(startsAt);
     const endDate = new Date(endsAt);
@@ -2209,6 +2213,15 @@ export default function AppointmentsPage() {
         return;
       }
     }
+    if (
+      saving ||
+      appointmentsBookingSubmitLocks.has(APPOINTMENTS_BOOKING_SUBMIT_LOCK) ||
+      button?.disabled
+    ) {
+      return;
+    }
+    appointmentsBookingSubmitLocks.add(APPOINTMENTS_BOOKING_SUBMIT_LOCK);
+    if (button) button.disabled = true;
     setSaving(true);
     setError(null);
     setBookingSubmitError(null);
@@ -2283,6 +2296,7 @@ export default function AppointmentsPage() {
         err instanceof Error ? err.message : "Failed to create appointment"
       );
     } finally {
+      appointmentsBookingSubmitLocks.delete(APPOINTMENTS_BOOKING_SUBMIT_LOCK);
       setSaving(false);
     }
   }
