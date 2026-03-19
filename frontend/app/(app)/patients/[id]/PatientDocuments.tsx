@@ -57,6 +57,7 @@ const kindLabels: Record<DocumentTemplateKind, string> = {
   prescription: "Prescription",
 };
 
+const downloadingPatientDocumentPdfIds = new Set<number>();
 const attachingPatientDocumentPdfIds = new Set<number>();
 const deletingPatientDocumentIds = new Set<number>();
 
@@ -355,8 +356,10 @@ export default function PatientDocuments({
     }
   }
 
-  async function downloadDocumentPdf(doc: PatientDocument) {
-    if (downloadingDocumentPdfId !== null) return;
+  async function downloadDocumentPdf(doc: PatientDocument, button?: HTMLButtonElement | null) {
+    if (!button || downloadingPatientDocumentPdfIds.has(doc.id) || button.disabled) return;
+    downloadingPatientDocumentPdfIds.add(doc.id);
+    button.disabled = true;
     setError(null);
     setDownloadingDocumentPdfId(doc.id);
     try {
@@ -385,6 +388,10 @@ export default function PatientDocuments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download PDF");
     } finally {
+      downloadingPatientDocumentPdfIds.delete(doc.id);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setDownloadingDocumentPdfId(null);
     }
   }
@@ -625,7 +632,9 @@ export default function PatientDocuments({
                       <button
                         className="btn btn-secondary"
                         type="button"
-                        onClick={() => downloadDocumentPdf(doc)}
+                        onClick={(event) =>
+                          void downloadDocumentPdf(doc, event.currentTarget)
+                        }
                         disabled={downloadingDocumentPdfId !== null}
                         data-testid={`patient-document-download-pdf-${doc.id}`}
                       >
