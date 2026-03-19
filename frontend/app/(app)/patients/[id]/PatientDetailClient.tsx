@@ -101,6 +101,7 @@ const downloadingEstimatePdfIds = new Set<number>();
 const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
 const savingPatientIds = new Set<string>();
+const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
@@ -5046,6 +5047,11 @@ export default function PatientDetailClient({
       setError("Visit address is required for domiciliary visits.");
       return;
     }
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    const button = submitter instanceof HTMLButtonElement ? submitter : null;
+    if (bookingSaving || bookingPatientIds.has(patientId) || button?.disabled) return;
+    bookingPatientIds.add(patientId);
+    if (button) button.disabled = true;
     setBookingSaving(true);
     setError(null);
     try {
@@ -5083,10 +5089,11 @@ export default function PatientDetailClient({
       router.push(`/appointments?date=${bookingDate}&appointment=${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create appointment");
-  } finally {
-    setBookingSaving(false);
+    } finally {
+      bookingPatientIds.delete(patientId);
+      setBookingSaving(false);
+    }
   }
-}
 
   if (!isValidPatientId) {
     return <div className="notice">Invalid patient ID.</div>;
@@ -10685,6 +10692,7 @@ export default function PatientDetailClient({
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">Date</label>
                       <input
+                        data-testid="patient-booking-date"
                         className="input"
                         type="date"
                         value={bookingDate}
@@ -10695,6 +10703,7 @@ export default function PatientDetailClient({
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">Start time</label>
                       <input
+                        data-testid="patient-booking-time"
                         className="input"
                         type="time"
                         value={bookingTime}
@@ -10746,6 +10755,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Location / room</label>
                     <input
+                      data-testid="patient-booking-location"
                       className="input"
                       value={bookingLocation}
                       onChange={(e) => setBookingLocation(e.target.value)}
@@ -10786,7 +10796,11 @@ export default function PatientDetailClient({
                     />
                     Mark recall as booked
                   </label>
-                  <button className="btn btn-primary" disabled={bookingSaving}>
+                  <button
+                    className="btn btn-primary"
+                    data-testid="patient-booking-submit"
+                    disabled={bookingSaving}
+                  >
                     {bookingSaving ? "Saving..." : "Create appointment"}
                   </button>
                 </form>
