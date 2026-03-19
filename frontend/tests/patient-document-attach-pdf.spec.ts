@@ -81,16 +81,22 @@ test("patient document Save PDF to attachments shows in-flight state and success
     });
   });
 
-  await page.evaluate((id) => {
+  const clickState = await page.evaluate((id) => {
     const button = document.querySelector(`[data-testid="patient-document-attach-pdf-${id}"]`);
     if (!(button instanceof HTMLButtonElement)) {
       throw new Error("Attach PDF button not found");
     }
+    const beforeDisabled = button.disabled;
     button.click();
+    const afterFirstDisabled = button.disabled;
     button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
   }, patientDocument.id);
   await seenRequestPromise;
 
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
   await expect(attachButton).toBeDisabled();
   await expect(attachButton).toHaveText("Saving PDF...");
   await page.waitForTimeout(250);

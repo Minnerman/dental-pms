@@ -137,7 +137,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - the attach-PDF button already showed `Saving PDF...`, but unlike the recently hardened actions it still had no immediate re-entry guard before the disabled state applied on re-render
     - the existing focused Playwright proof covered in-flight text and success notice, but not duplicate-submit protection
   - Exact slice implemented:
-    - added an immediate ref-based frontend re-entry guard for `attach-pdf` so repeated clicks during the same in-flight POST cannot submit twice
+    - added an immediate attach-PDF guard that synchronously disables the clicked button before the async POST begins and backs it with an in-module in-flight document-id lock
     - kept the existing in-flight disabled state and success notice
     - extended focused Playwright proof to double-click the attach-PDF button, verify the `Saving PDF...` state, and confirm only one POST request is sent
   - Files changed in this slice:
