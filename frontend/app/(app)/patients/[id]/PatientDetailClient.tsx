@@ -97,6 +97,7 @@ type Note = {
 
 const downloadingReceiptIds = new Set<number>();
 const downloadingInvoiceIds = new Set<number>();
+const downloadingEstimatePdfIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
@@ -4891,8 +4892,20 @@ export default function PatientDetailClient({
     return `Estimate_${safeName}_${date}.pdf`;
   }
 
-  async function downloadEstimatePdf(estimateId: number) {
-    if (downloadingEstimatePdfId !== null) return;
+  async function downloadEstimatePdf(
+    estimateId: number,
+    button?: HTMLButtonElement | null
+  ) {
+    if (
+      !button ||
+      downloadingEstimatePdfId !== null ||
+      downloadingEstimatePdfIds.has(estimateId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    downloadingEstimatePdfIds.add(estimateId);
+    button.disabled = true;
     setEstimateError(null);
     setDownloadingEstimatePdfId(estimateId);
     try {
@@ -4919,6 +4932,10 @@ export default function PatientDetailClient({
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to download PDF");
     } finally {
+      downloadingEstimatePdfIds.delete(estimateId);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setDownloadingEstimatePdfId(null);
     }
   }
@@ -9807,7 +9824,9 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary"
                               type="button"
-                              onClick={() => downloadEstimatePdf(selectedEstimate.id)}
+                              onClick={(event) =>
+                                downloadEstimatePdf(selectedEstimate.id, event.currentTarget)
+                              }
                               disabled={downloadingEstimatePdfId !== null}
                               data-testid={`estimate-download-pdf-${selectedEstimate.id}`}
                             >
