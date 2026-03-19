@@ -45,6 +45,8 @@ function formatBytes(bytes: number) {
   return `${mb.toFixed(1)} MB`;
 }
 
+const downloadingAttachmentIds = new Set<number>();
+
 export default function PatientAttachments({
   patientId,
   embedded = false,
@@ -179,7 +181,15 @@ export default function PatientAttachments({
     }
   }
 
-  async function downloadAttachment(attachment: Attachment) {
+  async function downloadAttachment(
+    attachment: Attachment,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || downloadingAttachmentIds.has(attachment.id) || button.disabled) {
+      return;
+    }
+    downloadingAttachmentIds.add(attachment.id);
+    button.disabled = true;
     setError(null);
     setDownloadingId(attachment.id);
     try {
@@ -208,6 +218,10 @@ export default function PatientAttachments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download attachment");
     } finally {
+      downloadingAttachmentIds.delete(attachment.id);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setDownloadingId(null);
     }
   }
@@ -325,7 +339,9 @@ export default function PatientAttachments({
                   <button
                     className="btn btn-secondary"
                     type="button"
-                    onClick={() => downloadAttachment(attachment)}
+                    onClick={(event) =>
+                      void downloadAttachment(attachment, event.currentTarget)
+                    }
                     data-testid={`attachment-download-${attachment.id}`}
                     disabled={downloadingId === attachment.id}
                   >
