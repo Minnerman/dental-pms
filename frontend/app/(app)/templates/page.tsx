@@ -68,6 +68,8 @@ function buildTemplateDownloadFilename(template: DocumentTemplate) {
   return `${sanitizeTemplateFilename(template.name)}-${template.kind}.txt`;
 }
 
+const downloadingTemplateIds = new Set<number>();
+
 export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -268,8 +270,13 @@ export default function TemplatesPage() {
     }
   }
 
-  async function downloadTemplate(template: DocumentTemplate) {
-    if (downloadingTemplateId !== null) return;
+  async function downloadTemplate(
+    template: DocumentTemplate,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || downloadingTemplateIds.has(template.id) || button.disabled) return;
+    downloadingTemplateIds.add(template.id);
+    button.disabled = true;
     setError(null);
     setDownloadingTemplateId(template.id);
     try {
@@ -298,6 +305,7 @@ export default function TemplatesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download template");
     } finally {
+      downloadingTemplateIds.delete(template.id);
       setDownloadingTemplateId(null);
     }
   }
@@ -364,7 +372,7 @@ export default function TemplatesPage() {
                         <button
                           className="btn btn-secondary"
                           type="button"
-                          onClick={() => downloadTemplate(template)}
+                          onClick={(event) => void downloadTemplate(template, event.currentTarget)}
                           disabled={downloadingTemplateId !== null}
                           data-testid={`template-download-${template.id}`}
                         >
@@ -549,7 +557,9 @@ export default function TemplatesPage() {
                 <button
                   className="btn btn-secondary"
                   type="button"
-                  onClick={() => selected && downloadTemplate(selected)}
+                  onClick={(event) =>
+                    selected && void downloadTemplate(selected, event.currentTarget)
+                  }
                   disabled={downloadingTemplateId !== null}
                   data-testid="template-detail-download"
                 >
