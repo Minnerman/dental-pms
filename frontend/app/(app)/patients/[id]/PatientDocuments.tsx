@@ -57,6 +57,8 @@ const kindLabels: Record<DocumentTemplateKind, string> = {
   prescription: "Prescription",
 };
 
+const attachingPatientDocumentPdfIds = new Set<number>();
+
 function filenameFromHeader(header: string | null) {
   if (!header) return null;
   const match = /filename="([^"]+)"/.exec(header);
@@ -385,8 +387,12 @@ export default function PatientDocuments({
     }
   }
 
-  async function attachDocumentPdf(doc: PatientDocument) {
-    if (attachingDocumentPdfId !== null) return;
+  async function attachDocumentPdf(doc: PatientDocument, button?: HTMLButtonElement | null) {
+    if (!button || attachingPatientDocumentPdfIds.has(doc.id) || button.disabled) {
+      return;
+    }
+    attachingPatientDocumentPdfIds.add(doc.id);
+    button.disabled = true;
     setError(null);
     setAttachNotice(null);
     setAttachingDocumentPdfId(doc.id);
@@ -407,6 +413,10 @@ export default function PatientDocuments({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to attach PDF");
     } finally {
+      attachingPatientDocumentPdfIds.delete(doc.id);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setAttachingDocumentPdfId(null);
     }
   }
@@ -612,7 +622,9 @@ export default function PatientDocuments({
                       <button
                         className="btn btn-secondary"
                         type="button"
-                        onClick={() => attachDocumentPdf(doc)}
+                        onClick={(event) =>
+                          void attachDocumentPdf(doc, event.currentTarget)
+                        }
                         disabled={attachingDocumentPdfId !== null}
                         data-testid={`patient-document-attach-pdf-${doc.id}`}
                       >
