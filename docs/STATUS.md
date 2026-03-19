@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk49 completed on `stage163h-chunk49-receipt-download-hardening` from `master@ca38070` to harden the patient receipt download flow without broadening into billing redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - receipt download behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused proof in `frontend/tests/billing-payment.spec.ts`
+    - nearby invoice/estimate/document/attachment hardening patterns
+  - Evidence for choosing this slice:
+    - V1 explicitly depends on reliable receipt downloads with in-flight states
+    - unlike the recently hardened document/template/attachment download actions, the receipt helper still had no immediate duplicate-submit guard before the async request started
+    - the focused billing receipt proof covered in-flight state and filename behavior, but not protection against repeated clicks during the same in-flight request
+  - Exact slice implemented:
+    - added an immediate receipt-download guard that synchronously disables the clicked button before the async request begins and backs it with an in-module in-flight payment-id lock
+    - applied the guarded helper to the latest-receipt, finance-summary receipt, and payment-row receipt buttons
+    - extended focused Playwright proof to double-click the latest receipt button, verify the in-flight disabled state, and confirm only one download request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk48 completed on `stage163h-chunk48-template-download-hardening` from `master@ec1113c` to harden the patient-page template download flow without broadening into template workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

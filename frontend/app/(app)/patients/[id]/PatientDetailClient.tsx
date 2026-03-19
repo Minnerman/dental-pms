@@ -95,6 +95,8 @@ type Note = {
   deleted_at?: string | null;
 };
 
+const downloadingReceiptIds = new Set<number>();
+
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
 }
@@ -4703,7 +4705,14 @@ export default function PatientDetailClient({
     return match?.[1] ?? fallback;
   }
 
-  async function downloadReceipt(paymentId: number, fallbackFilename: string) {
+  async function downloadReceipt(
+    paymentId: number,
+    fallbackFilename: string,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || downloadingReceiptIds.has(paymentId) || button.disabled) return;
+    downloadingReceiptIds.add(paymentId);
+    button.disabled = true;
     setInvoiceError(null);
     setDownloadingReceiptId(paymentId);
     try {
@@ -4729,6 +4738,10 @@ export default function PatientDetailClient({
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to download PDF");
     } finally {
+      downloadingReceiptIds.delete(paymentId);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setDownloadingReceiptId(null);
     }
   }
@@ -5633,10 +5646,11 @@ export default function PatientDetailClient({
                                           style={{ padding: "4px 8px", fontSize: 12 }}
                                           type="button"
                                           data-testid={`finance-summary-receipt-${item.payment_id}`}
-                                          onClick={() =>
+                                          onClick={(event) =>
                                             downloadReceipt(
                                               item.payment_id!,
-                                              `receipt-${item.invoice_id || item.payment_id}-${item.payment_id}.pdf`
+                                              `receipt-${item.invoice_id || item.payment_id}-${item.payment_id}.pdf`,
+                                              event.currentTarget
                                             )
                                           }
                                           disabled={downloadingReceiptId === item.payment_id}
@@ -10055,17 +10069,18 @@ export default function PatientDetailClient({
                                 : "Download PDF"}
                             </button>
                             {latestReceiptPayment && (
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                data-testid="download-latest-receipt"
-                                onClick={() =>
-                                  downloadReceipt(
-                                    latestReceiptPayment.id,
-                                    `receipt-${selectedInvoice.id}-${latestReceiptPayment.id}.pdf`
-                                  )
-                                }
-                                disabled={downloadingReceiptId === latestReceiptPayment.id}
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  data-testid="download-latest-receipt"
+                                  onClick={(event) =>
+                                    downloadReceipt(
+                                      latestReceiptPayment.id,
+                                      `receipt-${selectedInvoice.id}-${latestReceiptPayment.id}.pdf`,
+                                      event.currentTarget
+                                    )
+                                  }
+                                  disabled={downloadingReceiptId === latestReceiptPayment.id}
                               >
                                 {downloadingReceiptId === latestReceiptPayment.id
                                   ? "Downloading..."
@@ -10290,10 +10305,11 @@ export default function PatientDetailClient({
                                           className="btn btn-secondary"
                                           type="button"
                                           data-testid={`invoice-payment-receipt-${payment.id}`}
-                                          onClick={() =>
+                                          onClick={(event) =>
                                             downloadReceipt(
                                               payment.id,
-                                              `receipt-${selectedInvoice.id}-${payment.id}.pdf`
+                                              `receipt-${selectedInvoice.id}-${payment.id}.pdf`,
+                                              event.currentTarget
                                             )
                                           }
                                           disabled={downloadingReceiptId === payment.id}
