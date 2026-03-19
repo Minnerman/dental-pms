@@ -96,6 +96,7 @@ type Note = {
 };
 
 const downloadingReceiptIds = new Set<number>();
+const downloadingInvoiceIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
@@ -4746,8 +4747,16 @@ export default function PatientDetailClient({
     }
   }
 
-  async function downloadInvoicePdf(invoiceId: number, fallbackFilename: string) {
-    if (downloadingInvoiceId !== null) return;
+  async function downloadInvoicePdf(
+    invoiceId: number,
+    fallbackFilename: string,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || downloadingInvoiceId !== null || downloadingInvoiceIds.has(invoiceId) || button.disabled) {
+      return;
+    }
+    downloadingInvoiceIds.add(invoiceId);
+    button.disabled = true;
     setInvoiceError(null);
     setDownloadingInvoiceId(invoiceId);
     try {
@@ -4773,6 +4782,10 @@ export default function PatientDetailClient({
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to download PDF");
     } finally {
+      downloadingInvoiceIds.delete(invoiceId);
+      if (button?.isConnected) {
+        button.disabled = false;
+      }
       setDownloadingInvoiceId(null);
     }
   }
@@ -5627,10 +5640,11 @@ export default function PatientDetailClient({
                                           style={{ padding: "4px 8px", fontSize: 12 }}
                                           type="button"
                                           data-testid={`finance-summary-invoice-${item.invoice_id}`}
-                                          onClick={() =>
+                                          onClick={(event) =>
                                             downloadInvoicePdf(
                                               item.invoice_id!,
-                                              `${item.invoice_number || `invoice-${item.invoice_id}`}.pdf`
+                                              `${item.invoice_number || `invoice-${item.invoice_id}`}.pdf`,
+                                              event.currentTarget
                                             )
                                           }
                                           disabled={downloadingInvoiceId !== null}
@@ -10056,10 +10070,11 @@ export default function PatientDetailClient({
                               className="btn btn-secondary"
                               type="button"
                               data-testid={`invoice-download-pdf-${selectedInvoice.id}`}
-                              onClick={() =>
+                              onClick={(event) =>
                                 downloadInvoicePdf(
                                   selectedInvoice.id,
-                                  `${selectedInvoice.invoice_number}.pdf`
+                                  `${selectedInvoice.invoice_number}.pdf`,
+                                  event.currentTarget
                                 )
                               }
                               disabled={downloadingInvoiceId !== null}
