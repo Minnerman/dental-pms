@@ -99,6 +99,7 @@ const downloadingReceiptIds = new Set<number>();
 const downloadingInvoiceIds = new Set<number>();
 const downloadingEstimatePdfIds = new Set<number>();
 const downloadingRecallLetterIds = new Set<number>();
+const savingPatientNoteIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
@@ -4416,8 +4417,13 @@ export default function PatientDetailClient({
     }
   }
 
-  async function addNote() {
+  async function addNote(button?: HTMLButtonElement | null) {
     if (!noteBody.trim()) return;
+    if (!button || savingNote || savingPatientNoteIds.has(patientId) || button.disabled) {
+      return;
+    }
+    savingPatientNoteIds.add(patientId);
+    button.disabled = true;
     setSavingNote(true);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/notes`, {
@@ -4440,6 +4446,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add note");
     } finally {
+      savingPatientNoteIds.delete(patientId);
       setSavingNote(false);
     }
   }
@@ -9055,7 +9062,12 @@ export default function PatientDetailClient({
                         onChange={(e) => setNoteBody(e.target.value)}
                         placeholder="Write a clinical or admin note..."
                       />
-                      <button className="btn btn-primary" onClick={addNote} disabled={savingNote}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={(event) => void addNote(event.currentTarget)}
+                        disabled={savingNote}
+                        data-testid="patient-note-add"
+                      >
                         {savingNote ? "Saving..." : "Add note"}
                       </button>
                     </div>

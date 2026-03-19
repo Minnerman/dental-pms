@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk55 completed on `stage163h-chunk55-patient-note-submit-hardening` from `master@65ffae5` to harden patient note creation against duplicate submit without broadening into notes redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - patient-note creation behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused proof in `frontend/tests/patient-notes.spec.ts`
+    - nearby payment, recall-letter, and document/template hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - V1 explicitly depends on reliable notes entry on the patient detail page
+    - the patient notes surface still exposed a live `Add note` action that only relied on `savingNote` after React re-render and had no immediate duplicate-submit guard
+    - the focused notes proof covered admin-note type creation and detail parity, but not protection against repeated clicks during the same in-flight note POST
+  - Exact slice implemented:
+    - added an immediate patient-note submit guard that synchronously disables the clicked `Add note` button before the async POST begins and backs it with an in-module patient-id lock
+    - kept the existing `Saving...` state and note-create workflow unchanged
+    - extended focused Playwright proof to double-click the note button, verify the immediate disabled state, and confirm only one note POST is sent before the note and detail checks continue
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk54 completed on `stage163h-chunk54-templates-page-download-hardening` from `master@45ba97b` to harden templates-page downloads against duplicate submit without broadening into template workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
