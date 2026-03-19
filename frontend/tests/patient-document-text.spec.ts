@@ -36,21 +36,21 @@ test("patient document text download shows in-flight state and honors header fil
     },
   });
   expect(documentResponse.ok()).toBeTruthy();
-  const document = (await documentResponse.json()) as { id: number };
+  const patientDocument = (await documentResponse.json()) as { id: number };
 
   await primePageAuth(page, request);
   await page.goto(`${baseUrl}/patients/${patientId}/documents`, {
     waitUntil: "domcontentloaded",
   });
 
-  const textButton = page.getByTestId(`patient-document-download-text-${document.id}`);
-  await expect(page.getByTestId(`patient-document-card-${document.id}`)).toBeVisible({
+  const textButton = page.getByTestId(`patient-document-download-text-${patientDocument.id}`);
+  await expect(page.getByTestId(`patient-document-card-${patientDocument.id}`)).toBeVisible({
     timeout: 15_000,
   });
   await expect(textButton).toBeVisible();
 
   const expectedFilename = `Patient_Text_Hardening_TextHardening_${today}.txt`;
-  const routePattern = new RegExp(`/api/patient-documents/${document.id}/download$`);
+  const routePattern = new RegExp(`/api/patient-documents/${patientDocument.id}/download$`);
 
   let seenRequest!: () => void;
   const seenRequestPromise = new Promise<void>((resolve) => {
@@ -60,9 +60,13 @@ test("patient document text download shows in-flight state and honors header fil
   const releaseResponsePromise = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let requestCount = 0;
 
   await page.route(routePattern, async (route) => {
-    seenRequest();
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
     await releaseResponsePromise;
     await route.fulfill({
       status: 200,
@@ -75,11 +79,26 @@ test("patient document text download shows in-flight state and honors header fil
   });
 
   const downloadPromise = page.waitForEvent("download");
-  await textButton.click();
+  const clickState = await page.evaluate((id) => {
+    const button = document.querySelector(`[data-testid="patient-document-download-text-${id}"]`);
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Text button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  }, patientDocument.id);
   await seenRequestPromise;
 
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
   await expect(textButton).toBeDisabled();
   await expect(textButton).toHaveText("Downloading text...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
 
   releaseResponse();
   const download = await downloadPromise;
@@ -124,21 +143,21 @@ test("patient document text download falls back to patient-aware filename withou
     },
   });
   expect(documentResponse.ok()).toBeTruthy();
-  const document = (await documentResponse.json()) as { id: number };
+  const patientDocument = (await documentResponse.json()) as { id: number };
 
   await primePageAuth(page, request);
   await page.goto(`${baseUrl}/patients/${patientId}/documents`, {
     waitUntil: "domcontentloaded",
   });
 
-  const textButton = page.getByTestId(`patient-document-download-text-${document.id}`);
-  await expect(page.getByTestId(`patient-document-card-${document.id}`)).toBeVisible({
+  const textButton = page.getByTestId(`patient-document-download-text-${patientDocument.id}`);
+  await expect(page.getByTestId(`patient-document-card-${patientDocument.id}`)).toBeVisible({
     timeout: 15_000,
   });
   await expect(textButton).toBeVisible();
 
   const expectedFilename = `Patient_Text_Fallback_Proof_TextFallback_${expectedDate}.txt`;
-  const routePattern = new RegExp(`/api/patient-documents/${document.id}/download$`);
+  const routePattern = new RegExp(`/api/patient-documents/${patientDocument.id}/download$`);
 
   let seenRequest!: () => void;
   const seenRequestPromise = new Promise<void>((resolve) => {
