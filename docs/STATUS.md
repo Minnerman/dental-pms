@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk47 completed on `stage163h-chunk47-attachment-download-hardening` from `master@5c258f1` to harden the patient attachment download flow without broadening into attachment workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - attachment download behavior in `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - focused proof in `frontend/tests/patient-attachments.spec.ts`
+    - recent document/attachment action-hardening patterns in adjacent patient surfaces
+  - Evidence for choosing this slice:
+    - V1 still depends on reliable patient attachments handling, including download
+    - unlike upload, preview, and delete, the attachment download action still relied on disabled state after re-render and had no immediate duplicate-submit guard
+    - the focused attachment download proof covered in-flight state and filename handling, but not protection against repeated clicks during the same in-flight request
+  - Exact slice implemented:
+    - added an immediate attachment-download guard that synchronously disables the clicked button before the async download request begins and backs it with an in-module in-flight attachment-id lock
+    - kept the existing `Downloading...` state and filename behavior
+    - extended focused Playwright proof to double-click the attachment download button, verify the in-flight disabled state, and confirm only one download request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-attachments.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk46 completed on `stage163h-chunk46-document-text-download-hardening` from `master@f9d648c` to harden the patient document text download flow without broadening into patient documents redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
