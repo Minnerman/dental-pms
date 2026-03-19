@@ -30,27 +30,63 @@ test("patient notes tab allows selecting admin note type on create", async ({ pa
 
   await page.getByTestId("patient-note-type-select").selectOption("admin");
   await page.getByPlaceholder("Write a clinical or admin note...").fill(noteBody);
+  const addNoteButton = page.getByTestId("patient-note-add");
+  await expect(addNoteButton).toBeEnabled();
 
-  const createRequestPromise = page.waitForRequest(
-    (request) =>
-      request.method() === "POST" && request.url().includes(`/api/patients/${patientId}/notes`)
-  );
+  let requestCount = 0;
+  const noteRoutePattern = new RegExp(`/api/patients/${patientId}/notes$`);
+  let seenCreateRequest!: () => void;
+  const seenCreateRequestPromise = new Promise<void>((resolve) => {
+    seenCreateRequest = resolve;
+  });
+  let releaseCreateRequest!: () => void;
+  const releaseCreateRequestPromise = new Promise<void>((resolve) => {
+    releaseCreateRequest = resolve;
+  });
+  await page.route(noteRoutePattern, async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCreateRequest();
+      await releaseCreateRequestPromise;
+    }
+    await route.continue();
+  });
   const createResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
       response.url().includes(`/api/patients/${patientId}/notes`)
   );
 
-  await page.getByRole("button", { name: "Add note" }).click();
+  const clickState = await addNoteButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Add note button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCreateRequestPromise;
 
-  const createRequest = await createRequestPromise;
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(addNoteButton).toBeDisabled();
+  await expect(addNoteButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCreateRequest();
+
   const createResponse = await createResponsePromise;
   expect(createResponse.ok()).toBeTruthy();
   const createdNote = (await createResponse.json()) as { id: number };
-  expect(createRequest.postDataJSON()).toMatchObject({
+  expect(createResponse.request().postDataJSON()).toMatchObject({
     body: noteBody,
     note_type: "admin",
   });
+  await page.unroute(noteRoutePattern);
 
   const noteCard = page.getByText(noteBody, { exact: true }).locator("xpath=..");
   await expect(noteCard).toBeVisible({ timeout: 15_000 });
