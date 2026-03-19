@@ -67,9 +67,13 @@ test("patient recall letter download honors header filename on the patient page"
   const releaseResponsePromise = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let requestCount = 0;
 
   await page.route(routePattern, async (route) => {
-    seenRequest();
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+    }
     await releaseResponsePromise;
     await route.fulfill({
       status: 200,
@@ -82,11 +86,25 @@ test("patient recall letter download honors header filename on the patient page"
   });
 
   const downloadPromise = page.waitForEvent("download");
-  await generateButton.click();
+  const clickState = await generateButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Generate letter button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
   await seenRequestPromise;
 
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
   await expect(generateButton).toBeDisabled();
   await expect(generateButton).toHaveText("Generating...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
 
   releaseResponse();
   const download = await downloadPromise;

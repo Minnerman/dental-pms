@@ -98,6 +98,7 @@ type Note = {
 const downloadingReceiptIds = new Set<number>();
 const downloadingInvoiceIds = new Set<number>();
 const downloadingEstimatePdfIds = new Set<number>();
+const downloadingRecallLetterIds = new Set<number>();
 const recordingPaymentInvoiceIds = new Set<number>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
@@ -2865,7 +2866,15 @@ export default function PatientDetailClient({
     return `Recall_${safeName}_${date}.pdf`;
   }
 
-  async function downloadRecallLetter(recall: PatientRecallItem) {
+  async function downloadRecallLetter(
+    recall: PatientRecallItem,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || downloadingRecallLetterIds.has(recall.id) || button.disabled) {
+      return;
+    }
+    downloadingRecallLetterIds.add(recall.id);
+    button.disabled = true;
     setRecallsError(null);
     setRecallDownloadId(recall.id);
     try {
@@ -2895,6 +2904,7 @@ export default function PatientDetailClient({
         err instanceof Error ? err.message : "Failed to download recall letter"
       );
     } finally {
+      downloadingRecallLetterIds.delete(recall.id);
       setRecallDownloadId(null);
     }
   }
@@ -9514,7 +9524,9 @@ export default function PatientDetailClient({
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => void downloadRecallLetter(recall)}
+                                        onClick={(event) =>
+                                          void downloadRecallLetter(recall, event.currentTarget)
+                                        }
                                         disabled={recallDownloadId === recall.id}
                                       >
                                         {recallDownloadId === recall.id
@@ -9648,7 +9660,9 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
-                                  onClick={() => void downloadRecallLetter(recall)}
+                                  onClick={(event) =>
+                                    void downloadRecallLetter(recall, event.currentTarget)
+                                  }
                                   disabled={recallDownloadId === recall.id}
                                 >
                                   {recallDownloadId === recall.id
