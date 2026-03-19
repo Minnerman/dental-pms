@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-19: Stage 163H chunk53 completed on `stage163h-chunk53-recall-letter-download-hardening` from `master@7f7d019` to harden patient recall-letter downloads against duplicate submit without broadening into recalls redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - recall-letter download behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused proof in `frontend/tests/patient-recall-letter.spec.ts`
+    - nearby patient document, template, attachment, receipt, invoice, and estimate download hardening patterns
+  - Evidence for choosing this slice:
+    - the patient recalls surface still exposed a live `Generate letter` action using only `recallDownloadId` after React re-render
+    - that left a same-tick duplicate-click gap unlike the recently hardened document, template, attachment, invoice, estimate, and receipt download helpers
+    - the focused recall-letter proof covered in-flight state and backend filename behavior, but not protection against repeated clicks during the same in-flight request
+  - Exact slice implemented:
+    - added an immediate recall-letter download guard that synchronously disables the clicked button before the async request begins and backs it with an in-module recall-id lock
+    - kept the existing `Generating...` state and filename behavior unchanged
+    - extended focused Playwright proof to double-click the recall-letter button, verify the immediate disabled state, and confirm only one recall-letter request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-recall-letter.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-recall-letter.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk52 completed on `stage163h-chunk52-payment-submit-hardening` from `master@2290ab0` to harden patient payment recording against duplicate submit without broadening into billing redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
