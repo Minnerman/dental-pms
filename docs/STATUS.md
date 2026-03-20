@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk59 completed on `stage163h-chunk59-appointment-edit-save-hardening` from `master@82f7009` to harden appointments-page edit saves against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments-page edit handlers in `frontend/app/(app)/appointments/page.tsx`
+    - existing edit coverage in `frontend/tests/appointments-booking.spec.ts`
+    - nearby appointments booking hardening and patient save hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - V1 still depends on reliable appointment editing from the main appointments page
+    - the main `Save changes` edit form still relied only on `savingDetail` after React re-render and had no immediate duplicate-submit guard
+    - the existing edit proof checked metadata changes after a successful save, but not protection against repeated clicks during the same in-flight PATCH
+  - Exact slice implemented:
+    - added an immediate appointments-page edit-save guard that locks by appointment id before the async PATCH begins and synchronously disables the submitter button when present
+    - kept the existing edit payload, conflict handling, note-add-after-edit behavior, and success notice unchanged
+    - added a focused Playwright proof that opens appointment edit mode, double-clicks `Save changes`, verifies the immediate disabled state, and confirms only one appointment PATCH is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-booking.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-19: Stage 163H chunk58 completed on `stage163h-chunk58-appointments-booking-submit-hardening` from `master@f5e287d` to harden appointments-page booking submission against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
