@@ -556,7 +556,7 @@ test("calendar context-menu Add note keeps drawer state scoped and refreshes vis
   await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
 
-test("appointment drawer note actions use appointment-scoped edit archive and restore routes", async ({
+test("appointment drawer note actions use appointment-scoped edit save archive and restore routes", async ({
   page,
   request,
 }) => {
@@ -609,13 +609,39 @@ test("appointment drawer note actions use appointment-scoped edit archive and re
     .locator('[data-testid^="appointment-note-edit-body-"]')
     .first()
     .fill(updatedNote);
-  const editRequestPromise = page.waitForRequest(
-    (request) =>
-      request.method() === "PATCH" &&
-      request.url().includes(
-        `/api/appointments/${appointment.id}/notes/${createdNote.id}`
-      )
+  const saveNoteButton = detailPanel.getByTestId(`appointment-note-save-${createdNote.id}`);
+  await expect(saveNoteButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(
+    `/api/appointments/${appointment.id}/notes/${createdNote.id}$`
   );
+  let seenEditRequest!: () => void;
+  const seenEditRequestPromise = new Promise<void>((resolve) => {
+    seenEditRequest = resolve;
+  });
+  let releaseEditRequest!: () => void;
+  const releaseEditRequestPromise = new Promise<void>((resolve) => {
+    releaseEditRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      expect(route.request().postDataJSON()).toMatchObject({
+        body: updatedNote,
+        note_type: updatedType,
+      });
+      seenEditRequest();
+      await releaseEditRequestPromise;
+    }
+    await route.continue();
+  });
+
   const editResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "PATCH" &&
@@ -623,14 +649,31 @@ test("appointment drawer note actions use appointment-scoped edit archive and re
         `/api/appointments/${appointment.id}/notes/${createdNote.id}`
       )
   );
-  await detailPanel.getByRole("button", { name: "Save note" }).click();
-  const editRequest = await editRequestPromise;
+
+  const clickState = await saveNoteButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Save note button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenEditRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveNoteButton).toBeDisabled();
+  await expect(saveNoteButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseEditRequest();
+
   const editResponse = await editResponsePromise;
   expect(editResponse.ok()).toBeTruthy();
-  expect(editRequest.postDataJSON()).toMatchObject({
-    body: updatedNote,
-    note_type: updatedType,
-  });
   await expect(detailPanel.getByText(updatedNote)).toBeVisible({ timeout: 15_000 });
   await expect(
     detailPanel
