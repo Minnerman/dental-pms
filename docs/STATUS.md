@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk62 completed on `stage163h-chunk62-runsheet-download-hardening` from `master@4767d8b` to harden appointments-page run-sheet downloads against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments-page run-sheet download helper in `frontend/app/(app)/appointments/page.tsx`
+    - existing run-sheet proof in `frontend/tests/appointments-runsheet.spec.ts`
+    - nearby appointments-page booking/edit/detail/note hardening patterns for the existing immediate duplicate-submit guard
+  - Evidence for choosing this slice:
+    - the appointments-page `Download run sheet` action still relied only on `downloadingRunSheet` after React re-render and had no immediate duplicate-submit guard
+    - the focused run-sheet proof already covered in-flight state and filename behavior, but not protection against repeated clicks during the same in-flight PDF request
+    - this stayed narrow, user-visible, and within the active appointments surface without reopening broader appointments redesign work
+  - Exact slice implemented:
+    - added an immediate run-sheet download guard that locks the action before the async PDF request begins and synchronously disables the clicked button when present
+    - kept the existing filename fallback, visit filter requirement, and visible `Downloading run sheet...` state unchanged
+    - extended the focused Playwright proof to double-click the run-sheet button, verify the immediate disabled state, and confirm only one PDF request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-runsheet.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-runsheet.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk61 completed on `stage163h-chunk61-appointment-note-submit-hardening` from `master@ea8df15` to harden appointments-page quick-note submits against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

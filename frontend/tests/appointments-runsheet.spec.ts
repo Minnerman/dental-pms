@@ -21,7 +21,7 @@ async function switchToDayView(page: Page) {
   await fallback.click();
 }
 
-test("visit run sheet download uses a deterministic filename fallback and in-flight state", async ({
+test("visit run sheet download uses a deterministic filename fallback and guards repeat submit", async ({
   page,
   request,
 }) => {
@@ -49,8 +49,10 @@ test("visit run sheet download uses a deterministic filename fallback and in-fli
   const releaseResponsePromise = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  let requestCount = 0;
 
   await page.route(routePattern, async (route) => {
+    requestCount += 1;
     seenRequest();
     await releaseResponsePromise;
     await route.fulfill({
@@ -64,11 +66,25 @@ test("visit run sheet download uses a deterministic filename fallback and in-fli
   });
 
   const downloadPromise = page.waitForEvent("download");
-  await runSheetButton.click();
+  const clickState = await runSheetButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Run sheet button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
   await seenRequestPromise;
 
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
   await expect(runSheetButton).toBeDisabled();
   await expect(runSheetButton).toHaveText("Downloading run sheet...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
 
   releaseResponse();
   const download = await downloadPromise;
