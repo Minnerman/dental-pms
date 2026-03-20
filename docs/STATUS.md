@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk61 completed on `stage163h-chunk61-appointment-note-submit-hardening` from `master@ea8df15` to harden appointments-page quick-note submits against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments-page quick-note submit path in `frontend/app/(app)/appointments/page.tsx`
+    - existing appointment note/detail interactions in `frontend/tests/appointments-diary-interactions.spec.ts`
+    - nearby appointments-page booking/edit/detail hardening patterns for the existing immediate duplicate-submit guard
+  - Evidence for choosing this slice:
+    - the appointment detail panel still exposed a live `Add note` action that relied only on `saving` after React re-render and had no immediate duplicate-submit guard
+    - the nearby diary-interactions proof covered note visibility and scoped drawer behavior, but not protection against repeated clicks during the same in-flight note POST
+    - this kept the change narrower than broader appointments work and stayed within the existing day-sheet/detail-panel surface
+  - Exact slice implemented:
+    - added an immediate appointments-page note-submit guard that locks by appointment id before the async note POST begins and synchronously disables the submitter button when present
+    - added a stable detail-panel note-submit test id without changing the visible note workflow
+    - added a focused Playwright proof that opens the appointment detail panel, double-clicks `Add note`, verifies the immediate disabled state, and confirms only one note POST is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk60 completed on `stage163h-chunk60-appointment-detail-save-hardening` from `master@7c30205` to harden appointments-page detail saves against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

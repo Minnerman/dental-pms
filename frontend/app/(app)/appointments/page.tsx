@@ -301,6 +301,7 @@ const appointmentsBookingSubmitLocks = new Set<string>();
 const APPOINTMENTS_BOOKING_SUBMIT_LOCK = "appointments-booking-submit";
 const appointmentsEditSaveLocks = new Set<number>();
 const appointmentsDetailSaveLocks = new Set<number>();
+const appointmentsNoteSubmitLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2515,10 +2516,18 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function addAppointmentNote(e: React.FormEvent) {
+  async function addAppointmentNote(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selectedAppointment || !noteBody.trim()) return;
+    const submitter =
+      e.nativeEvent instanceof SubmitEvent ? e.nativeEvent.submitter : null;
+    const button = submitter instanceof HTMLButtonElement ? submitter : null;
     const appointmentId = selectedAppointment.id;
+    if (saving || appointmentsNoteSubmitLocks.has(appointmentId) || button?.disabled) {
+      return;
+    }
+    appointmentsNoteSubmitLocks.add(appointmentId);
+    if (button) button.disabled = true;
     setSaving(true);
     setError(null);
     try {
@@ -2544,6 +2553,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add note");
     } finally {
+      appointmentsNoteSubmitLocks.delete(appointmentId);
       setSaving(false);
     }
   }
@@ -4831,7 +4841,11 @@ export default function AppointmentsPage() {
                       onChange={(e) => setNoteBody(e.target.value)}
                       placeholder="Add a brief clinical note"
                     />
-                    <button className="btn btn-primary" disabled={saving}>
+                    <button
+                      className="btn btn-primary"
+                      data-testid="appointment-detail-add-note"
+                      disabled={saving}
+                    >
                       {saving ? "Saving..." : "Add note"}
                     </button>
                   </form>
