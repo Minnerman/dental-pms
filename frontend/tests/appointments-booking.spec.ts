@@ -752,3 +752,106 @@ test("appointment edit save shows in-flight state and guards repeat submit", asy
   await expect(page.getByText("Appointment updated.")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Type: Review")).toBeVisible({ timeout: 15_000 });
 });
+
+test("appointment detail save shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const lastName = `Detail ${unique}`;
+  const visitAddress = `123 Stage 163H Detail Road ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Repeat",
+    last_name: lastName,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    clinician_user_id: null,
+    starts_at: "2026-01-15T14:00:00.000Z",
+    ends_at: "2026-01-15T14:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 3",
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const row = page.locator("tbody tr", { hasText: new RegExp(lastName, "i") }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
+  await page.keyboard.press("Enter");
+
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+
+  const detailForm = detailPanel.locator("form").first();
+  await detailForm.locator("select").selectOption("visit");
+  const visitAddressInput = detailForm.locator("textarea");
+  await expect(visitAddressInput).toBeVisible({ timeout: 15_000 });
+  await visitAddressInput.fill(visitAddress);
+
+  const saveButton = detailPanel.getByTestId("appointment-detail-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/appointments/${appointment.id}$`);
+  let seenPatchRequest!: () => void;
+  const seenPatchRequestPromise = new Promise<void>((resolve) => {
+    seenPatchRequest = resolve;
+  });
+  let releasePatchRequest!: () => void;
+  const releasePatchRequestPromise = new Promise<void>((resolve) => {
+    releasePatchRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenPatchRequest();
+      await releasePatchRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const updateResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/appointments/${appointment.id}`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Save details button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenPatchRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releasePatchRequest();
+
+  const updateResponse = await updateResponsePromise;
+  expect(updateResponse.ok()).toBeTruthy();
+  expect(updateResponse.request().postDataJSON()).toMatchObject({
+    location_type: "visit",
+    location_text: visitAddress,
+  });
+  await page.unroute(routePattern);
+
+  await expect(page.getByText("Appointment updated.")).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel).toContainText("Location type: visit");
+  await expect(detailPanel).toContainText(visitAddress);
+});

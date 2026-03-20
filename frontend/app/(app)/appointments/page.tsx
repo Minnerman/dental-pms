@@ -300,6 +300,7 @@ const DIARY_UNDO_WINDOW_MS = 10_000;
 const appointmentsBookingSubmitLocks = new Set<string>();
 const APPOINTMENTS_BOOKING_SUBMIT_LOCK = "appointments-booking-submit";
 const appointmentsEditSaveLocks = new Set<number>();
+const appointmentsDetailSaveLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2547,17 +2548,33 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function saveAppointmentDetails(e: React.FormEvent) {
+  async function saveAppointmentDetails(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selectedAppointment) return;
+    const submitter =
+      e.nativeEvent instanceof SubmitEvent
+        ? e.nativeEvent.submitter
+        : null;
+    const button =
+      submitter instanceof HTMLButtonElement ? submitter : null;
+    const appointmentId = selectedAppointment.id;
     if (detailLocationType === "visit" && !detailLocationText.trim()) {
       setError("Visit address is required for domiciliary visits.");
       return;
     }
+    if (
+      savingDetail ||
+      appointmentsDetailSaveLocks.has(appointmentId) ||
+      button?.disabled
+    ) {
+      return;
+    }
+    appointmentsDetailSaveLocks.add(appointmentId);
+    if (button) button.disabled = true;
     setSavingDetail(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/appointments/${selectedAppointment.id}`, {
+      const res = await apiFetch(`/api/appointments/${appointmentId}`, {
         method: "PATCH",
         body: JSON.stringify({
           location_type: detailLocationType,
@@ -2582,6 +2599,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update appointment");
     } finally {
+      appointmentsDetailSaveLocks.delete(appointmentId);
       setSavingDetail(false);
     }
   }
@@ -4795,7 +4813,11 @@ export default function AppointmentsPage() {
                         />
                       </div>
                     )}
-                    <button className="btn btn-secondary" disabled={savingDetail}>
+                    <button
+                      className="btn btn-secondary"
+                      data-testid="appointment-detail-save"
+                      disabled={savingDetail}
+                    >
                       {savingDetail ? "Saving..." : "Save details"}
                     </button>
                   </form>
