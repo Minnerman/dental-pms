@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk64 completed on `stage163h-chunk64-appointment-note-edit-save-hardening` from `master@6b65bc8` to harden appointment drawer note edit saves against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointment drawer note edit-save path in `frontend/app/(app)/appointments/page.tsx`
+    - existing appointment note action proof in `frontend/tests/appointments-diary-interactions.spec.ts`
+    - nearby appointments-page add-note, status, detail-save, and edit-save hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the appointment drawer `Save note` action still relied on `savingNoteAction` after React re-render and had no immediate duplicate-submit guard
+    - appointment note editing is a live user-visible notes workflow inside the main appointments surface and remains narrower than broader appointments redesign work
+    - the existing note-actions proof already covered appointment-scoped edit/archive/restore routes, but not protection against repeated clicks during the same in-flight note edit `PATCH`
+  - Exact slice implemented:
+    - added an immediate appointment note edit-save guard that locks by note id before the async edit `PATCH` begins and synchronously disables the clicked `Save note` button when present
+    - kept the existing note body/type payload, refresh behavior, and archive/restore workflow unchanged
+    - extended the focused Playwright proof to double-click `Save note`, verify the immediate disabled state, and confirm only one note edit request is sent before the existing archive/restore route assertions
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk63 completed on `stage163h-chunk63-appointment-status-action-hardening` from `master@035bb92` to harden appointments-page status actions against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

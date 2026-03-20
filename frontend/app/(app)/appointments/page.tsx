@@ -305,6 +305,7 @@ const appointmentsEditSaveLocks = new Set<number>();
 const appointmentsDetailSaveLocks = new Set<number>();
 const appointmentsNoteSubmitLocks = new Set<number>();
 const appointmentsStatusActionLocks = new Set<number>();
+const appointmentsNoteEditLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2411,9 +2412,21 @@ export default function AppointmentsPage() {
     setNotice(null);
   }
 
-  async function saveAppointmentNoteEdit(note: AppointmentNote) {
+  async function saveAppointmentNoteEdit(
+    note: AppointmentNote,
+    button?: HTMLButtonElement | null
+  ) {
     if (!selectedAppointment || !editingNoteBody.trim()) return;
     const appointmentId = selectedAppointment.id;
+    if (
+      appointmentsNoteEditLocks.has(note.id) ||
+      button?.disabled ||
+      (savingNoteAction?.noteId === note.id && savingNoteAction.action === "edit")
+    ) {
+      return;
+    }
+    appointmentsNoteEditLocks.add(note.id);
+    if (button) button.disabled = true;
     setSavingNoteAction({ noteId: note.id, action: "edit" });
     setError(null);
     setNotice(null);
@@ -2442,6 +2455,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update note");
     } finally {
+      appointmentsNoteEditLocks.delete(note.id);
       setSavingNoteAction(null);
     }
   }
@@ -5058,7 +5072,9 @@ export default function AppointmentsPage() {
                                     type="button"
                                     className="btn btn-primary"
                                     data-testid={`appointment-note-save-${note.id}`}
-                                    onClick={() => void saveAppointmentNoteEdit(note)}
+                                    onClick={(event) =>
+                                      void saveAppointmentNoteEdit(note, event.currentTarget)
+                                    }
                                     disabled={
                                       !editingNoteBody.trim() || Boolean(savingNoteAction)
                                     }
