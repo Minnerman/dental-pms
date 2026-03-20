@@ -147,7 +147,63 @@ test("diary drag/drop + resize parity: move and resize support one-step undo", a
     path: path.join(stage158cDir, "drag_move.png"),
     fullPage: true,
   });
-  await page.getByTestId("appointments-diary-undo-button").click();
+  const undoButton = page.getByTestId("appointments-diary-undo-button");
+  await expect(undoButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/appointments/${movable.id}$`);
+  let seenUndoRequest!: () => void;
+  const seenUndoRequestPromise = new Promise<void>((resolve) => {
+    seenUndoRequest = resolve;
+  });
+  let releaseUndoRequest!: () => void;
+  const releaseUndoRequestPromise = new Promise<void>((resolve) => {
+    releaseUndoRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenUndoRequest();
+      await releaseUndoRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const undoResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/appointments/${movable.id}`)
+  );
+
+  const clickState = await undoButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Undo button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenUndoRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(undoButton).toBeDisabled();
+  await expect(undoButton).toHaveText("Undoing...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseUndoRequest();
+
+  const undoResponse = await undoResponsePromise;
+  expect(undoResponse.ok()).toBeTruthy();
   await expect(page.getByTestId("appointments-diary-undo-toast")).toHaveCount(0);
   await expect
     .poll(async () => (await getAppointmentById(request, movable.id)).location ?? "", {
