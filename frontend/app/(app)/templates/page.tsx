@@ -69,6 +69,7 @@ function buildTemplateDownloadFilename(template: DocumentTemplate) {
 }
 
 const downloadingTemplateIds = new Set<number>();
+const templateCreateLocks = new Set<string>();
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -158,11 +159,15 @@ export default function TemplatesPage() {
     setEditActive(template.is_active);
   }
 
-  async function createTemplate() {
+  async function createTemplate(button?: HTMLButtonElement | null) {
     if (!newName.trim() || !newContent.trim()) {
       setError("Name and content are required.");
       return;
     }
+    const createLockKey = "create";
+    if (saving || templateCreateLocks.has(createLockKey) || button?.disabled) return;
+    templateCreateLocks.add(createLockKey);
+    if (button) button.disabled = true;
     setSaving(true);
     setError(null);
     try {
@@ -195,6 +200,7 @@ export default function TemplatesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create template");
     } finally {
+      templateCreateLocks.delete(createLockKey);
       setSaving(false);
     }
   }
@@ -409,6 +415,7 @@ export default function TemplatesPage() {
                         className="input"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
+                        data-testid="template-create-name"
                       />
                     </div>
                     <div className="stack" style={{ gap: 8 }}>
@@ -430,6 +437,7 @@ export default function TemplatesPage() {
                       rows={8}
                       value={newContent}
                       onChange={(e) => setNewContent(e.target.value)}
+                      data-testid="template-create-content"
                     />
                   </div>
                   <div className="row" style={{ alignItems: "flex-end" }}>
@@ -465,7 +473,12 @@ export default function TemplatesPage() {
                     />
                     <span>Active</span>
                   </label>
-                  <button className="btn btn-primary" disabled={saving} onClick={createTemplate}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={saving}
+                    onClick={(event) => void createTemplate(event.currentTarget)}
+                    data-testid="template-create-submit"
+                  >
                     {saving ? "Saving..." : "Create template"}
                   </button>
                 </>

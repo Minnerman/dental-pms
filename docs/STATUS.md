@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk69 completed on `stage163h-chunk69-template-create-submit-hardening` from `master@37aafe9` to harden templates-page create submit against duplicate submit without broadening into template workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the templates-page create flow in `frontend/app/(app)/templates/page.tsx`
+    - the existing templates-page proof surface in `frontend/tests/templates-download.spec.ts`
+    - nearby patient and appointments save hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the templates-page `Create template` action still relied on `saving` after React re-render and had no immediate duplicate-submit guard
+    - document templates remain a live V1 admin workflow, so the gap stayed user-visible and product-relevant
+    - the existing templates-page auth/navigation harness made it possible to add a focused create-submit proof without broadening into template edit/delete redesign
+  - Exact slice implemented:
+    - added an immediate templates-page create guard that locks before the async request begins and synchronously disables the clicked button
+    - added stable test ids for the create form inputs and submit button
+    - added a focused Playwright proof that double-clicks `Create template`, verifies the immediate disabled state, and confirms only one template create request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/templates/page.tsx`
+    - `frontend/tests/templates-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/templates-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk68 completed on `stage163h-chunk68-appointment-paste-hardening` from `master@c0c350b` to harden appointments-page cut/copy paste against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
