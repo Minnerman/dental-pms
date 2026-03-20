@@ -306,6 +306,7 @@ const appointmentsDetailSaveLocks = new Set<number>();
 const appointmentsNoteSubmitLocks = new Set<number>();
 const appointmentsStatusActionLocks = new Set<number>();
 const appointmentsNoteEditLocks = new Set<number>();
+const appointmentsNoteArchiveLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2460,11 +2461,24 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function toggleAppointmentNoteArchive(note: AppointmentNote) {
+  async function toggleAppointmentNoteArchive(
+    note: AppointmentNote,
+    button?: HTMLButtonElement | null
+  ) {
     if (!selectedAppointment) return;
     const action = note.deleted_at ? "restore" : "archive";
     if (!confirm(`${note.deleted_at ? "Restore" : "Archive"} this note?`)) return;
     const appointmentId = selectedAppointment.id;
+    if (
+      appointmentsNoteArchiveLocks.has(note.id) ||
+      button?.disabled ||
+      (savingNoteAction?.noteId === note.id &&
+        (savingNoteAction.action === "archive" || savingNoteAction.action === "restore"))
+    ) {
+      return;
+    }
+    appointmentsNoteArchiveLocks.add(note.id);
+    if (button) button.disabled = true;
     setSavingNoteAction({ noteId: note.id, action });
     setError(null);
     setNotice(null);
@@ -2500,6 +2514,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} note`);
     } finally {
+      appointmentsNoteArchiveLocks.delete(note.id);
       setSavingNoteAction(null);
     }
   }
@@ -5014,7 +5029,9 @@ export default function AppointmentsPage() {
                                       type="button"
                                       className="btn btn-secondary"
                                       data-testid={`appointment-note-archive-${note.id}`}
-                                      onClick={() => void toggleAppointmentNoteArchive(note)}
+                                      onClick={(event) =>
+                                        void toggleAppointmentNoteArchive(note, event.currentTarget)
+                                      }
                                       disabled={Boolean(savingNoteAction)}
                                     >
                                       {savingNoteAction?.noteId === note.id &&
@@ -5028,7 +5045,9 @@ export default function AppointmentsPage() {
                                     type="button"
                                     className="btn btn-secondary"
                                     data-testid={`appointment-note-restore-${note.id}`}
-                                    onClick={() => void toggleAppointmentNoteArchive(note)}
+                                    onClick={(event) =>
+                                      void toggleAppointmentNoteArchive(note, event.currentTarget)
+                                    }
                                     disabled={Boolean(savingNoteAction)}
                                   >
                                     {savingNoteAction?.noteId === note.id &&

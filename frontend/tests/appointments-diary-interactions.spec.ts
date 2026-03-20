@@ -556,7 +556,7 @@ test("calendar context-menu Add note keeps drawer state scoped and refreshes vis
   await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
 
-test("appointment drawer note actions use appointment-scoped edit save archive and restore routes", async ({
+test("appointment drawer note actions use appointment-scoped edit save archive restore routes and guard repeat archive submit", async ({
   page,
   request,
 }) => {
@@ -681,6 +681,38 @@ test("appointment drawer note actions use appointment-scoped edit save archive a
       .getByText("Admin", { exact: true })
   ).toBeVisible({ timeout: 15_000 });
 
+  const archiveButton = detailPanel.getByTestId(`appointment-note-archive-${createdNote.id}`);
+  await expect(archiveButton).toBeEnabled();
+  await page.evaluate(() => {
+    window.confirm = () => true;
+  });
+
+  let archiveRequestCount = 0;
+  const archiveRoutePattern = new RegExp(
+    `/api/appointments/${appointment.id}/notes/${createdNote.id}/archive$`
+  );
+  let seenArchiveRequest!: () => void;
+  const seenArchiveRequestPromise = new Promise<void>((resolve) => {
+    seenArchiveRequest = resolve;
+  });
+  let releaseArchiveRequest!: () => void;
+  const releaseArchiveRequestPromise = new Promise<void>((resolve) => {
+    releaseArchiveRequest = resolve;
+  });
+
+  await page.route(archiveRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    archiveRequestCount += 1;
+    if (archiveRequestCount === 1) {
+      seenArchiveRequest();
+      await releaseArchiveRequestPromise;
+    }
+    await route.continue();
+  });
+
   const archiveResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -688,8 +720,28 @@ test("appointment drawer note actions use appointment-scoped edit save archive a
         `/api/appointments/${appointment.id}/notes/${createdNote.id}/archive`
       )
   );
-  page.once("dialog", (dialog) => dialog.accept());
-  await detailPanel.locator('[data-testid^="appointment-note-archive-"]').first().click();
+  const archiveClickState = await archiveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Archive note button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenArchiveRequestPromise;
+
+  expect(archiveClickState.beforeDisabled).toBe(false);
+  expect(archiveClickState.afterFirstDisabled).toBe(true);
+  expect(archiveClickState.afterSecondDisabled).toBe(true);
+  await expect(archiveButton).toBeDisabled();
+  await expect(archiveButton).toHaveText("Archiving...");
+  await page.waitForTimeout(250);
+  expect(archiveRequestCount).toBe(1);
+
+  releaseArchiveRequest();
+
   const archiveResponse = await archiveResponsePromise;
   expect(archiveResponse.ok()).toBeTruthy();
   await expect(detailPanel.getByText("No notes yet.")).toBeVisible({ timeout: 15_000 });
@@ -710,7 +762,6 @@ test("appointment drawer note actions use appointment-scoped edit save archive a
         `/api/appointments/${appointment.id}/notes/${createdNote.id}/restore`
       )
   );
-  page.once("dialog", (dialog) => dialog.accept());
   await detailPanel.locator('[data-testid^="appointment-note-restore-"]').first().click();
   const restoreResponse = await restoreResponsePromise;
   expect(restoreResponse.ok()).toBeTruthy();
