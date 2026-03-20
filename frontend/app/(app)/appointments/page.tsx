@@ -299,6 +299,8 @@ const DIARY_TIME_STEP_MINUTES = 10;
 const DIARY_UNDO_WINDOW_MS = 10_000;
 const appointmentsBookingSubmitLocks = new Set<string>();
 const APPOINTMENTS_BOOKING_SUBMIT_LOCK = "appointments-booking-submit";
+const appointmentsRunSheetDownloadLocks = new Set<string>();
+const APPOINTMENTS_RUN_SHEET_DOWNLOAD_LOCK = "appointments-run-sheet-download";
 const appointmentsEditSaveLocks = new Set<number>();
 const appointmentsDetailSaveLocks = new Set<number>();
 const appointmentsNoteSubmitLocks = new Set<number>();
@@ -2062,8 +2064,17 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function downloadRunSheet() {
-    if (!range || downloadingRunSheet) return;
+  async function downloadRunSheet(button?: HTMLButtonElement | null) {
+    if (
+      !range ||
+      downloadingRunSheet ||
+      appointmentsRunSheetDownloadLocks.has(APPOINTMENTS_RUN_SHEET_DOWNLOAD_LOCK) ||
+      button?.disabled
+    ) {
+      return;
+    }
+    appointmentsRunSheetDownloadLocks.add(APPOINTMENTS_RUN_SHEET_DOWNLOAD_LOCK);
+    if (button) button.disabled = true;
     setError(null);
     setDownloadingRunSheet(true);
     try {
@@ -2099,6 +2110,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download run sheet");
     } finally {
+      appointmentsRunSheetDownloadLocks.delete(APPOINTMENTS_RUN_SHEET_DOWNLOAD_LOCK);
       setDownloadingRunSheet(false);
     }
   }
@@ -3548,7 +3560,7 @@ export default function AppointmentsPage() {
               ["day", "week", "agenda"].includes(range.view) && (
                 <button
                   className="btn btn-secondary"
-                  onClick={downloadRunSheet}
+                  onClick={(event) => downloadRunSheet(event.currentTarget)}
                   disabled={downloadingRunSheet}
                   data-testid="appointments-download-run-sheet"
                 >
