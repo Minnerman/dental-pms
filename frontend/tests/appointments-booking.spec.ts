@@ -57,6 +57,21 @@ async function createConflictAppointment(
   expect(response.ok()).toBeTruthy();
 }
 
+async function createRecall(request: any, patientId: string, notes: string, dueDate: string) {
+  const token = await ensureAuthReady(request);
+  const baseURL = getBaseUrl();
+  const response = await request.post(`${baseURL}/api/patients/${patientId}/recalls`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      kind: "exam",
+      due_date: dueDate,
+      notes,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
 async function selectBookingPatient(page: any, patientId: string, searchTerm: string) {
   const search = page.getByTestId("booking-patient-search");
   const select = page.getByTestId("booking-patient-select");
@@ -329,6 +344,117 @@ test("appointments booking shows in-flight state and guards repeat submit", asyn
 
   await expect(page.getByTestId("booking-modal")).toBeHidden({ timeout: 15_000 });
   await expect(page.getByText("Appointment created.")).toBeVisible({ timeout: 15_000 });
+});
+
+test("booking-linked recall prompt shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const lastName = `Recall ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: lastName,
+  });
+  const recallNotes = `Recall prompt ${unique}`;
+  const recall = (await createRecall(
+    request,
+    patientId,
+    recallNotes,
+    "2026-03-20"
+  )) as { id: number };
+
+  await openAppointments(
+    page,
+    request,
+    `/appointments?date=2026-03-20&book=1&patientId=${patientId}&recallId=${recall.id}`
+  );
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+
+  await selectBookingPatient(page, patientId, lastName);
+  await page.getByTestId("booking-start").fill("2026-03-20T10:00");
+  await page.getByTestId("booking-end").fill("2026-03-20T10:30");
+  await page.getByTestId("booking-location-room").fill("Room 6");
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/api/appointments")
+  );
+  await page.getByTestId("booking-submit").click();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  const createdAppointment = (await createResponse.json()) as { id: number };
+
+  const prompt = page.getByTestId("appointments-recall-prompt");
+  await expect(prompt).toBeVisible({ timeout: 15_000 });
+  await expect(prompt).toContainText("Mark recall completed?");
+
+  const completeButton = page.getByTestId("appointments-recall-complete-button");
+  await expect(completeButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/patients/${patientId}/recalls/${recall.id}$`);
+  let seenRecallRequest!: () => void;
+  const seenRecallRequestPromise = new Promise<void>((resolve) => {
+    seenRecallRequest = resolve;
+  });
+  let releaseRecallRequest!: () => void;
+  const releaseRecallRequestPromise = new Promise<void>((resolve) => {
+    releaseRecallRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRecallRequest();
+      await releaseRecallRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const recallResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/patients/${patientId}/recalls/${recall.id}`)
+  );
+
+  const clickState = await completeButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Mark completed button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRecallRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(completeButton).toBeDisabled();
+  await expect(completeButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseRecallRequest();
+
+  const recallResponse = await recallResponsePromise;
+  expect(recallResponse.ok()).toBeTruthy();
+  expect(recallResponse.request().postDataJSON()).toMatchObject({
+    status: "completed",
+    outcome: "attended",
+    linked_appointment_id: createdAppointment.id,
+  });
+  await page.unroute(routePattern);
+
+  await expect(page.getByTestId("appointments-recall-prompt")).toHaveCount(0);
 });
 
 test("booking conflict check debounces and surfaces latest conflicts", async ({

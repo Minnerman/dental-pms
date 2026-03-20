@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk67 completed on `stage163h-chunk67-appointment-recall-prompt-hardening` from `master@dd7b083` to harden the appointments-page recall-complete prompt against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the booking-linked recall prompt flow in `frontend/app/(app)/appointments/page.tsx`
+    - the existing booking-flow proof surface in `frontend/tests/appointments-booking.spec.ts`
+    - nearby appointments-page submit/download hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the appointments-page `Mark completed` recall prompt still relied on `recallPromptSaving` after React re-render and had no immediate duplicate-submit guard
+    - the prompt is a live user-visible continuation of booking flow, so the gap remained product-visible and V1-relevant
+    - `frontend/tests/appointments-booking.spec.ts` already covered the booking path closely enough to add a focused repeat-click proof without introducing a broad new harness
+  - Exact slice implemented:
+    - added an immediate recall-prompt guard that locks by recall id before the async recall `PATCH` begins and synchronously disables the clicked `Mark completed` button when present
+    - added stable test ids for the recall prompt and its primary actions without changing the visible booking/recall workflow
+    - extended the focused booking spec to create a linked recall, book the appointment, double-click `Mark completed`, verify the immediate disabled state, and confirm only one recall update request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-booking.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk66 completed on `stage163h-chunk66-diary-undo-hardening` from `master@aef6f49` to harden appointments-page undo actions against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
