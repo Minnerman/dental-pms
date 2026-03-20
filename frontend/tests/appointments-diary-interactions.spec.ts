@@ -291,6 +291,109 @@ test("diary polish parity: shortcuts and context status action persist", async (
   });
 });
 
+test("diary cut/copy paste guards repeat paste submit", async ({ page, request }) => {
+  test.setTimeout(150_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `PASTE${unique}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    clinician_user_id: null,
+    starts_at: `${date}T12:00:00.000Z`,
+    ends_at: `${date}T12:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-PASTE-${unique}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.setViewportSize({ width: 1400, height: 1200 });
+  await page.goto(`${baseUrl}/appointments?date=${date}&view=day`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-calendar").click();
+  await switchToDayView(page);
+  const timeContent = page.locator(".rbc-time-content");
+  await expect(timeContent).toBeVisible({ timeout: 15_000 });
+  const timeContentBox = await timeContent.boundingBox();
+  expect(timeContentBox).not.toBeNull();
+  await timeContent.click({
+    position: {
+      x: 350,
+      y: Math.min(500, timeContentBox!.height - 40),
+    },
+  });
+  const bookingModal = page.getByTestId("booking-modal");
+  await expect(bookingModal).toBeVisible({ timeout: 15_000 });
+  await bookingModal.getByRole("button", { name: "Close" }).click();
+  await expect(bookingModal).toBeHidden({ timeout: 15_000 });
+
+  const eventCard = page.getByTestId(`appointment-event-${appointment.id}`);
+  await expect(eventCard).toBeVisible({ timeout: 20_000 });
+  await eventCard.click({ button: "right" });
+  await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
+  await page.getByTestId("appointments-context-copy").click();
+  await expect(page.getByText("Copied appointment. Select a slot to paste.")).toBeVisible();
+
+  await page.evaluate(() => {
+    window.confirm = () => true;
+  });
+
+  let requestCount = 0;
+  const routePattern = /\/api\/appointments$/;
+  let seenPasteRequest!: () => void;
+  const seenPasteRequestPromise = new Promise<void>((resolve) => {
+    seenPasteRequest = resolve;
+  });
+  let releasePasteRequest!: () => void;
+  const releasePasteRequestPromise = new Promise<void>((resolve) => {
+    releasePasteRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenPasteRequest();
+      await releasePasteRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const pasteResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/api/appointments")
+  );
+
+  const modKey = process.platform === "darwin" ? "Meta" : "Control";
+  await page.getByRole("heading", { name: "Appointments" }).click();
+  await page.keyboard.press(`${modKey}+v`);
+  await page.keyboard.press(`${modKey}+v`);
+  await seenPasteRequestPromise;
+
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releasePasteRequest();
+
+  const pasteResponse = await pasteResponsePromise;
+  expect(pasteResponse.ok()).toBeTruthy();
+  expect(pasteResponse.request().postDataJSON()).toMatchObject({
+    patient_id: Number(patientId),
+    location: `S163H-PASTE-${unique}`,
+    location_type: "clinic",
+    status: "booked",
+  });
+  await page.unroute(routePattern);
+});
+
 test("appointment detail notes stay scoped to the selected appointment and refresh row state", async ({
   page,
   request,

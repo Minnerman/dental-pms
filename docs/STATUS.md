@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk68 completed on `stage163h-chunk68-appointment-paste-hardening` from `master@c0c350b` to harden appointments-page cut/copy paste against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the appointments-page paste flow in `frontend/app/(app)/appointments/page.tsx`
+    - the existing diary interaction proof surface in `frontend/tests/appointments-diary-interactions.spec.ts`
+    - nearby appointments-page submit/download hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the appointments-page `pasteAppointment(...)` helper still relied on async completion and had no immediate duplicate-submit guard
+    - cut/copy/paste remains explicitly covered in day-sheet UAT/smoke expectations, so the gap stayed user-visible and V1-relevant
+    - `frontend/tests/appointments-diary-interactions.spec.ts` already had the right context-menu and keyboard harness to add a focused repeat-paste proof without broadening into redesign work
+  - Exact slice implemented:
+    - added an immediate appointments-page paste guard that locks by clipboard mode and appointment id before the async paste begins
+    - kept the existing copy/cut notice text, confirm flow, and resulting appointment payload unchanged
+    - extended the focused diary interactions spec to copy an appointment, trigger paste twice via keyboard shortcut, and confirm only one create request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts --grep "diary cut/copy paste guards repeat paste submit"` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk67 completed on `stage163h-chunk67-appointment-recall-prompt-hardening` from `master@dd7b083` to harden the appointments-page recall-complete prompt against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

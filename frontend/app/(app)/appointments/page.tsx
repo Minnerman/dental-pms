@@ -309,6 +309,7 @@ const appointmentsNoteEditLocks = new Set<number>();
 const appointmentsNoteArchiveLocks = new Set<number>();
 const appointmentsDiaryUndoLocks = new Set<number>();
 const appointmentsRecallPromptLocks = new Set<string>();
+const appointmentsPasteLocks = new Set<string>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2829,6 +2830,8 @@ export default function AppointmentsPage() {
     async (targetStart: Date) => {
       if (!clipboard) return;
       const appt = clipboard.appointment;
+      const pasteLockKey = `${clipboard.mode}:${appt.id}`;
+      if (appointmentsPasteLocks.has(pasteLockKey)) return;
       const originalStart = new Date(appt.starts_at);
       const originalEnd = new Date(appt.ends_at);
       const durationMs = originalEnd.getTime() - originalStart.getTime();
@@ -2841,6 +2844,7 @@ export default function AppointmentsPage() {
       if (!window.confirm(`${actionLabel} this appointment to the selected slot?`)) {
         return;
       }
+      appointmentsPasteLocks.add(pasteLockKey);
       try {
         if (clipboard.mode === "cut") {
           const updated = await updateAppointmentTimes(appt.id, targetStart, targetEnd);
@@ -2883,6 +2887,8 @@ export default function AppointmentsPage() {
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to paste appointment");
         await loadAppointments();
+      } finally {
+        appointmentsPasteLocks.delete(pasteLockKey);
       }
     },
     [clipboard, loadAppointments, router, schedule, updateAppointmentTimes]
