@@ -299,6 +299,7 @@ const DIARY_TIME_STEP_MINUTES = 10;
 const DIARY_UNDO_WINDOW_MS = 10_000;
 const appointmentsBookingSubmitLocks = new Set<string>();
 const APPOINTMENTS_BOOKING_SUBMIT_LOCK = "appointments-booking-submit";
+const appointmentsEditSaveLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2620,6 +2621,9 @@ export default function AppointmentsPage() {
   async function saveAppointmentEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedAppointment) return;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    const button = submitter instanceof HTMLButtonElement ? submitter : null;
+    const appointmentId = selectedAppointment.id;
     const start = new Date(editStartsAt);
     const end = new Date(editEndsAt);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -2634,10 +2638,15 @@ export default function AppointmentsPage() {
       setError("Cancel reason is required for cancelled/no-show.");
       return;
     }
+    if (savingDetail || appointmentsEditSaveLocks.has(appointmentId) || button?.disabled) {
+      return;
+    }
+    appointmentsEditSaveLocks.add(appointmentId);
+    if (button) button.disabled = true;
     setSavingDetail(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/appointments/${selectedAppointment.id}`, {
+      const res = await apiFetch(`/api/appointments/${appointmentId}`, {
         method: "PATCH",
         body: JSON.stringify({
           starts_at: start.toISOString(),
@@ -2707,6 +2716,7 @@ export default function AppointmentsPage() {
       setError(err instanceof Error ? err.message : "Failed to update appointment");
       await loadAppointments();
     } finally {
+      appointmentsEditSaveLocks.delete(appointmentId);
       setSavingDetail(false);
     }
   }
@@ -4509,6 +4519,7 @@ export default function AppointmentsPage() {
                   <div className="row">
                     <button
                       className="btn btn-primary"
+                      data-testid="appointment-edit-save"
                       disabled={savingDetail || Boolean(editConflictWarning)}
                     >
                       {savingDetail ? "Saving..." : "Save changes"}
