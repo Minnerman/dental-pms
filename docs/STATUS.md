@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk70 completed on `stage163h-chunk70-template-edit-save-hardening` from `master@6747930` to harden templates-page edit saves against duplicate submit without broadening into template workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the templates-page edit-save flow in `frontend/app/(app)/templates/page.tsx`
+    - the existing templates-page save proof surface in `frontend/tests/templates-save.spec.ts`
+    - nearby patient, appointments, and templates create hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the templates-page `Save changes` action still relied on `saving` after React re-render and had no immediate duplicate-submit guard
+    - template editing remains a live V1 admin workflow, and it was the smallest remaining action in the same already-active templates surface
+    - `frontend/tests/templates-save.spec.ts` already had the correct auth/navigation harness to add a focused edit-save proof without broadening into template delete redesign
+  - Exact slice implemented:
+    - added an immediate templates-page edit-save guard that locks by template id before the async `PATCH` begins and synchronously disables the clicked button
+    - added stable test ids for the edit form inputs and submit button
+    - extended the focused Playwright proof to double-click `Save changes`, verify the immediate disabled state, and confirm only one template update request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/templates/page.tsx`
+    - `frontend/tests/templates-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/templates-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk69 completed on `stage163h-chunk69-template-create-submit-hardening` from `master@37aafe9` to harden templates-page create submit against duplicate submit without broadening into template workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

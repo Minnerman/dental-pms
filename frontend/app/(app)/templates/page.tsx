@@ -70,6 +70,7 @@ function buildTemplateDownloadFilename(template: DocumentTemplate) {
 
 const downloadingTemplateIds = new Set<number>();
 const templateCreateLocks = new Set<string>();
+const templateEditLocks = new Set<number>();
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -205,12 +206,16 @@ export default function TemplatesPage() {
     }
   }
 
-  async function updateTemplate() {
+  async function updateTemplate(button?: HTMLButtonElement | null) {
     if (!selected) return;
     if (!editName.trim() || !editContent.trim()) {
       setError("Name and content are required.");
       return;
     }
+    const editLockKey = selected.id;
+    if (saving || templateEditLocks.has(editLockKey) || button?.disabled) return;
+    templateEditLocks.add(editLockKey);
+    if (button) button.disabled = true;
     setSaving(true);
     setError(null);
     try {
@@ -240,6 +245,7 @@ export default function TemplatesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update template");
     } finally {
+      templateEditLocks.delete(editLockKey);
       setSaving(false);
     }
   }
@@ -507,6 +513,7 @@ export default function TemplatesPage() {
                     className="input"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
+                    data-testid="template-edit-name"
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
@@ -528,6 +535,7 @@ export default function TemplatesPage() {
                   rows={12}
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
+                  data-testid="template-edit-content"
                 />
               </div>
               <div className="row" style={{ alignItems: "flex-end" }}>
@@ -564,7 +572,12 @@ export default function TemplatesPage() {
                 <span>Active</span>
               </label>
               <div className="row">
-                <button className="btn btn-primary" disabled={saving} onClick={updateTemplate}>
+                <button
+                  className="btn btn-primary"
+                  disabled={saving}
+                  onClick={(event) => void updateTemplate(event.currentTarget)}
+                  data-testid="template-edit-submit"
+                >
                   {saving ? "Saving..." : "Save changes"}
                 </button>
                 <button
