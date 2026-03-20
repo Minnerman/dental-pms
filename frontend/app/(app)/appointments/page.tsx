@@ -308,6 +308,7 @@ const appointmentsStatusActionLocks = new Set<number>();
 const appointmentsNoteEditLocks = new Set<number>();
 const appointmentsNoteArchiveLocks = new Set<number>();
 const appointmentsDiaryUndoLocks = new Set<number>();
+const appointmentsRecallPromptLocks = new Set<string>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2341,13 +2342,23 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function confirmRecallCompletion() {
-    if (!recallContext) return;
+  async function confirmRecallCompletion(button?: HTMLButtonElement | null) {
+    if (
+      !recallContext ||
+      recallPromptSaving ||
+      appointmentsRecallPromptLocks.has(recallContext.recallId) ||
+      button?.disabled
+    ) {
+      return;
+    }
+    const { patientId: recallPatientId, recallId } = recallContext;
+    appointmentsRecallPromptLocks.add(recallId);
+    if (button) button.disabled = true;
     setRecallPromptSaving(true);
     setError(null);
     try {
       const res = await apiFetch(
-        `/api/patients/${recallContext.patientId}/recalls/${recallContext.recallId}`,
+        `/api/patients/${recallPatientId}/recalls/${recallId}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -2372,6 +2383,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update recall");
     } finally {
+      appointmentsRecallPromptLocks.delete(recallId);
       setRecallPromptSaving(false);
     }
   }
@@ -3669,7 +3681,7 @@ export default function AppointmentsPage() {
         )}
         {showRecallPrompt && recallContext && (
           <div className="card" style={{ margin: 0 }}>
-            <div className="stack">
+            <div className="stack" data-testid="appointments-recall-prompt">
               <div className="row">
                 <div>
                   <strong>Mark recall completed?</strong>
@@ -3682,8 +3694,9 @@ export default function AppointmentsPage() {
                 <button
                   className="btn btn-primary"
                   type="button"
-                  onClick={confirmRecallCompletion}
+                  onClick={(event) => void confirmRecallCompletion(event.currentTarget)}
                   disabled={recallPromptSaving}
+                  data-testid="appointments-recall-complete-button"
                 >
                   {recallPromptSaving ? "Saving..." : "Mark completed"}
                 </button>
@@ -3692,6 +3705,7 @@ export default function AppointmentsPage() {
                   type="button"
                   onClick={() => setShowRecallPrompt(false)}
                   disabled={recallPromptSaving}
+                  data-testid="appointments-recall-not-now"
                 >
                   Not now
                 </button>
