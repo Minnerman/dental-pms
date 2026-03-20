@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk63 completed on `stage163h-chunk63-appointment-status-action-hardening` from `master@035bb92` to harden appointments-page status actions against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments-page status update helper and status action entry points in `frontend/app/(app)/appointments/page.tsx`
+    - existing context-menu status coverage in `frontend/tests/appointments-diary-interactions.spec.ts`
+    - nearby appointments-page booking/edit/detail/note hardening patterns for the existing immediate duplicate-submit guard
+  - Evidence for choosing this slice:
+    - the shared appointments-page status update helper still relied on a bare async `PATCH` with no immediate duplicate-submit guard
+    - context-menu and detail-panel status actions both depended on that helper, so the gap remained user-visible in day-to-day appointment flow
+    - the existing context-menu status proof checked persistence after one click, but not protection against repeated clicks during the same in-flight status update
+  - Exact slice implemented:
+    - added an immediate appointments-page status-action guard that locks by appointment id before the async status `PATCH` begins and synchronously disables the clicked status button when present
+    - wired context-menu, detail-panel, and cancel-confirm entry points through the same immediate button-disable path without changing visible status workflows
+    - extended the focused Playwright proof to double-click `Mark arrived`, verify the immediate disabled state, and confirm only one status update request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk62 completed on `stage163h-chunk62-runsheet-download-hardening` from `master@4767d8b` to harden appointments-page run-sheet downloads against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

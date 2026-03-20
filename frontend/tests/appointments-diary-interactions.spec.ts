@@ -178,7 +178,64 @@ test("diary polish parity: shortcuts and context status action persist", async (
   await expect(eventCard).toBeVisible({ timeout: 20_000 });
   await eventCard.click({ button: "right" });
   await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
-  await page.getByTestId("appointments-context-arrived").click();
+  const arrivedButton = page.getByTestId("appointments-context-arrived");
+  await expect(arrivedButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/appointments/${appointment.id}$`);
+  let seenStatusRequest!: () => void;
+  const seenStatusRequestPromise = new Promise<void>((resolve) => {
+    seenStatusRequest = resolve;
+  });
+  let releaseStatusRequest!: () => void;
+  const releaseStatusRequestPromise = new Promise<void>((resolve) => {
+    releaseStatusRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      expect(route.request().postDataJSON()).toMatchObject({
+        status: "arrived",
+      });
+      seenStatusRequest();
+      await releaseStatusRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const statusResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/appointments/${appointment.id}`)
+  );
+
+  const clickState = await arrivedButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Context status button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenStatusRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseStatusRequest();
+
+  const statusResponse = await statusResponsePromise;
+  expect(statusResponse.ok()).toBeTruthy();
   await expect
     .poll(async () => (await getAppointmentById(request, appointment.id)).status, {
       timeout: 20_000,

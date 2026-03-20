@@ -304,6 +304,7 @@ const APPOINTMENTS_RUN_SHEET_DOWNLOAD_LOCK = "appointments-run-sheet-download";
 const appointmentsEditSaveLocks = new Set<number>();
 const appointmentsDetailSaveLocks = new Set<number>();
 const appointmentsNoteSubmitLocks = new Set<number>();
+const appointmentsStatusActionLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -1922,8 +1923,14 @@ export default function AppointmentsPage() {
   async function updateAppointmentStatus(
     appointmentId: number,
     status: AppointmentStatus,
-    cancelReasonText?: string
+    cancelReasonText?: string,
+    button?: HTMLButtonElement | null
   ) {
+    if (appointmentsStatusActionLocks.has(appointmentId) || button?.disabled) {
+      return;
+    }
+    appointmentsStatusActionLocks.add(appointmentId);
+    if (button) button.disabled = true;
     setError(null);
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}`, {
@@ -1948,6 +1955,8 @@ export default function AppointmentsPage() {
       setNotice(`Status updated to ${statusLabels[status]}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update appointment");
+    } finally {
+      appointmentsStatusActionLocks.delete(appointmentId);
     }
   }
 
@@ -4017,8 +4026,13 @@ export default function AppointmentsPage() {
             <button
               className="btn btn-secondary"
               data-testid="appointments-context-arrived"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "arrived");
+              onClick={(event) => {
+                void updateAppointmentStatus(
+                  contextMenu.appointment.id,
+                  "arrived",
+                  undefined,
+                  event.currentTarget
+                );
                 setContextMenu(null);
               }}
             >
@@ -4027,8 +4041,13 @@ export default function AppointmentsPage() {
             <button
               className="btn btn-secondary"
               data-testid="appointments-context-in-progress"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "in_progress");
+              onClick={(event) => {
+                void updateAppointmentStatus(
+                  contextMenu.appointment.id,
+                  "in_progress",
+                  undefined,
+                  event.currentTarget
+                );
                 setContextMenu(null);
               }}
             >
@@ -4037,8 +4056,13 @@ export default function AppointmentsPage() {
             <button
               className="btn btn-secondary"
               data-testid="appointments-context-completed"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "completed");
+              onClick={(event) => {
+                void updateAppointmentStatus(
+                  contextMenu.appointment.id,
+                  "completed",
+                  undefined,
+                  event.currentTarget
+                );
                 setContextMenu(null);
               }}
             >
@@ -4047,8 +4071,13 @@ export default function AppointmentsPage() {
             <button
               className="btn btn-secondary"
               data-testid="appointments-context-no-show"
-              onClick={() => {
-                void updateAppointmentStatus(contextMenu.appointment.id, "no_show");
+              onClick={(event) => {
+                void updateAppointmentStatus(
+                  contextMenu.appointment.id,
+                  "no_show",
+                  undefined,
+                  event.currentTarget
+                );
                 setContextMenu(null);
               }}
             >
@@ -4763,33 +4792,66 @@ export default function AppointmentsPage() {
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         className="btn btn-secondary"
-                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "arrived")}
+                        onClick={(event) =>
+                          updateAppointmentStatus(
+                            selectedAppointment.id,
+                            "arrived",
+                            undefined,
+                            event.currentTarget
+                          )
+                        }
                       >
                         Arrived
                       </button>
                       <button
                         className="btn btn-secondary"
-                        onClick={() =>
-                          updateAppointmentStatus(selectedAppointment.id, "in_progress")
+                        onClick={(event) =>
+                          updateAppointmentStatus(
+                            selectedAppointment.id,
+                            "in_progress",
+                            undefined,
+                            event.currentTarget
+                          )
                         }
                       >
                         In progress
                       </button>
                       <button
                         className="btn btn-secondary"
-                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "completed")}
+                        onClick={(event) =>
+                          updateAppointmentStatus(
+                            selectedAppointment.id,
+                            "completed",
+                            undefined,
+                            event.currentTarget
+                          )
+                        }
                       >
                         Completed
                       </button>
                       <button
                         className="btn btn-secondary"
-                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "cancelled")}
+                        onClick={(event) =>
+                          updateAppointmentStatus(
+                            selectedAppointment.id,
+                            "cancelled",
+                            undefined,
+                            event.currentTarget
+                          )
+                        }
                       >
                         Cancel
                       </button>
                       <button
                         className="btn btn-secondary"
-                        onClick={() => updateAppointmentStatus(selectedAppointment.id, "no_show")}
+                        onClick={(event) =>
+                          updateAppointmentStatus(
+                            selectedAppointment.id,
+                            "no_show",
+                            undefined,
+                            event.currentTarget
+                          )
+                        }
                       >
                         No show
                       </button>
@@ -5065,6 +5127,14 @@ export default function AppointmentsPage() {
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
+                  const submitter =
+                    event.nativeEvent instanceof SubmitEvent
+                      ? event.nativeEvent.submitter
+                      : null;
+                  const button =
+                    submitter instanceof HTMLButtonElement
+                      ? submitter
+                      : null;
                   if (!cancelReason.trim()) {
                     setError("Cancellation reason is required.");
                     return;
@@ -5072,7 +5142,8 @@ export default function AppointmentsPage() {
                   void updateAppointmentStatus(
                     cancelTarget.id,
                     "cancelled",
-                    cancelReason
+                    cancelReason,
+                    button
                   );
                   setShowCancelModal(false);
                   setCancelTarget(null);
