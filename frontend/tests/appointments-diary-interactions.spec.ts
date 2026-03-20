@@ -317,6 +317,117 @@ test("appointment detail notes stay scoped to the selected appointment and refre
   await expect(secondRow.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
 
+test("appointment detail Add note shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `NOTE${unique}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    starts_at: `${date}T11:00:00.000Z`,
+    ends_at: `${date}T11:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-NOTE-${unique}`,
+  });
+  const newNote = `Appointment repeat-submit note ${unique}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/appointments?date=${date}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-day-sheet").click();
+
+  const row = page
+    .locator(".day-sheet-table tbody tr")
+    .filter({ hasText: `NOTE${unique}` })
+    .first();
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  await row.click();
+  await expect(row).toHaveClass(/row-highlight/);
+  await page.keyboard.press("Enter");
+
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel).toContainText(`NOTE${unique}`);
+
+  const quickNote = detailPanel.getByPlaceholder("Add a brief clinical note");
+  await quickNote.fill(newNote);
+
+  const addNoteButton = detailPanel.getByTestId("appointment-detail-add-note");
+  await expect(addNoteButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/appointments/${appointment.id}/notes$`);
+  let seenCreateRequest!: () => void;
+  const seenCreateRequestPromise = new Promise<void>((resolve) => {
+    seenCreateRequest = resolve;
+  });
+  let releaseCreateRequest!: () => void;
+  const releaseCreateRequestPromise = new Promise<void>((resolve) => {
+    releaseCreateRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCreateRequest();
+      await releaseCreateRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/appointments/${appointment.id}/notes`)
+  );
+
+  const clickState = await addNoteButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Add note button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCreateRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(addNoteButton).toBeDisabled();
+  await expect(addNoteButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCreateRequest();
+
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  expect(createResponse.request().postDataJSON()).toMatchObject({
+    body: newNote,
+    note_type: "clinical",
+  });
+  await page.unroute(routePattern);
+
+  await expect(detailPanel.getByText(newNote)).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("appointment-detail-close").click();
+  await expect(row.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
+});
+
 test("calendar context-menu Add note keeps drawer state scoped and refreshes visible note state", async ({
   page,
   request,
