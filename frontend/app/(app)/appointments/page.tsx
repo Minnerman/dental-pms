@@ -307,6 +307,7 @@ const appointmentsNoteSubmitLocks = new Set<number>();
 const appointmentsStatusActionLocks = new Set<number>();
 const appointmentsNoteEditLocks = new Set<number>();
 const appointmentsNoteArchiveLocks = new Set<number>();
+const appointmentsDiaryUndoLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -2022,7 +2023,19 @@ export default function AppointmentsPage() {
     [buildConflictWarning, router]
   );
 
-  async function undoDiaryReschedule(action: DiaryUndoState) {
+  async function undoDiaryReschedule(
+    action: DiaryUndoState,
+    button?: HTMLButtonElement | null
+  ) {
+    if (
+      rescheduleSavingId === action.appointmentId ||
+      appointmentsDiaryUndoLocks.has(action.token) ||
+      button?.disabled
+    ) {
+      return;
+    }
+    appointmentsDiaryUndoLocks.add(action.token);
+    if (button) button.disabled = true;
     setError(null);
     setNotice(null);
     try {
@@ -2048,6 +2061,7 @@ export default function AppointmentsPage() {
       setError(err instanceof Error ? err.message : "Failed to undo appointment change");
       await loadAppointments();
     } finally {
+      appointmentsDiaryUndoLocks.delete(action.token);
       setRescheduleSavingId(null);
     }
   }
@@ -3645,7 +3659,7 @@ export default function AppointmentsPage() {
             <button
               className="btn btn-secondary"
               type="button"
-              onClick={() => void undoDiaryReschedule(diaryUndo)}
+              onClick={(event) => void undoDiaryReschedule(diaryUndo, event.currentTarget)}
               disabled={rescheduleSavingId === diaryUndo.appointmentId}
               data-testid="appointments-diary-undo-button"
             >

@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-20: Stage 163H chunk66 completed on `stage163h-chunk66-diary-undo-hardening` from `master@aef6f49` to harden appointments-page undo actions against duplicate submit without broadening into appointments redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments-page diary undo helper and undo toast in `frontend/app/(app)/appointments/page.tsx`
+    - existing drag/resize + undo proof in `frontend/tests/appointments-diary-drag-resize.spec.ts`
+    - nearby appointments-page booking/detail/note/status hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the appointments-page `Undo` action still relied on `rescheduleSavingId` after React re-render and had no immediate duplicate-submit guard
+    - one-step undo is already an exposed appointments workflow with a dedicated proof, so the gap remained user-visible and narrowly testable
+    - the existing drag/resize parity spec covered successful undo behavior, but not protection against repeated clicks during the same in-flight undo `PATCH`
+  - Exact slice implemented:
+    - added an immediate diary undo guard that locks by undo token before the async reschedule `PATCH` begins and synchronously disables the clicked `Undo` button when present
+    - kept the existing move/resize undo behavior, notice text, and optimistic calendar flow unchanged
+    - extended the focused drag/resize proof to double-click `Undo`, verify the immediate disabled state, and confirm only one undo request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-drag-resize.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-drag-resize.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk65 completed on `stage163h-chunk65-appointment-note-archive-hardening` from `master@9a97cad` to harden appointment drawer note archive/restore actions against duplicate submit without broadening into appointments redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
