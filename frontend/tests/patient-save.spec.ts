@@ -317,3 +317,104 @@ test("patient ledger save shows in-flight state and guards repeat submit", async
     )
   ).toBeTruthy();
 });
+
+test("patient recall save shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `RECALL${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const dueDate = "2026-12-31";
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+  await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
+
+  await page.getByTestId("patient-recall-due-date").fill(dueDate);
+  await page.getByTestId("patient-recall-status").selectOption("booked");
+
+  const saveButton = page.getByTestId("patient-recall-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const recallRoutePattern = new RegExp(`/api/patients/${patientId}/recall$`);
+  let seenRecallRequest!: () => void;
+  const seenRecallRequestPromise = new Promise<void>((resolve) => {
+    seenRecallRequest = resolve;
+  });
+  let releaseRecallRequest!: () => void;
+  const releaseRecallRequestPromise = new Promise<void>((resolve) => {
+    releaseRecallRequest = resolve;
+  });
+  await page.route(recallRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRecallRequest();
+      await releaseRecallRequestPromise;
+    }
+    await route.continue();
+  });
+  const recallResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/recall`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Save recall button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRecallRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseRecallRequest();
+
+  const recallResponse = await recallResponsePromise;
+  expect(recallResponse.ok()).toBeTruthy();
+  expect(recallResponse.request().postDataJSON()).toMatchObject({
+    interval_months: 6,
+    due_date: dueDate,
+    status: "booked",
+  });
+  await page.unroute(recallRoutePattern);
+
+  await expect(saveButton).toHaveText("Save recall", { timeout: 15_000 });
+  await expect(saveButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const savedPatient = (await verifyResponse.json()) as {
+    recall_interval_months: number | null;
+    recall_due_date: string | null;
+    recall_status: string | null;
+  };
+  expect(savedPatient.recall_interval_months).toBe(6);
+  expect(savedPatient.recall_due_date?.slice(0, 10)).toBe(dueDate);
+  expect(savedPatient.recall_status).toBe("booked");
+});
