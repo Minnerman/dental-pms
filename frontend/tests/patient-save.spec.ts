@@ -531,3 +531,125 @@ test("patient recall entry add shows in-flight state and guards repeat submit", 
     )
   ).toBeTruthy();
 });
+
+test("patient recall communication save shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `RECALLCOMM${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const recallNotes = `Recall seed ${unique}`;
+  const commNotes = `Recall communication proof ${unique}`;
+
+  const createRecallResponse = await request.post(`${baseUrl}/api/patients/${patientId}/recalls`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      kind: "exam",
+      due_date: "2026-11-30",
+      notes: recallNotes,
+    },
+  });
+  expect(createRecallResponse.ok()).toBeTruthy();
+  const createdRecall = (await createRecallResponse.json()) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  await page.getByTestId("patient-tab-Schemes").click();
+  await expect(page.getByTestId("patient-tab-Schemes")).toHaveAttribute("aria-selected", "true");
+
+  const openButton = page.getByRole("button", { name: "Log contact" }).first();
+  await expect(openButton).toBeVisible();
+  await openButton.click();
+
+  await expect(page.getByRole("heading", { name: "Log recall communication" })).toBeVisible();
+  await page.getByTestId("patient-recall-comm-channel").selectOption("phone");
+  await page.getByTestId("patient-recall-comm-notes").fill(commNotes);
+
+  const saveButton = page.getByTestId("patient-recall-comm-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const commRoutePattern = new RegExp(`/api/patients/${patientId}/recalls/${createdRecall.id}/communications$`);
+  let seenCommRequest!: () => void;
+  const seenCommRequestPromise = new Promise<void>((resolve) => {
+    seenCommRequest = resolve;
+  });
+  let releaseCommRequest!: () => void;
+  const releaseCommRequestPromise = new Promise<void>((resolve) => {
+    releaseCommRequest = resolve;
+  });
+  await page.route(commRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCommRequest();
+      await releaseCommRequestPromise;
+    }
+    await route.continue();
+  });
+  const commResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/recalls/${createdRecall.id}/communications`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Recall communication save button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCommRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCommRequest();
+
+  const commResponse = await commResponsePromise;
+  expect(commResponse.ok()).toBeTruthy();
+  expect(commResponse.request().postDataJSON()).toMatchObject({
+    channel: "phone",
+    notes: commNotes,
+  });
+  await page.unroute(commRoutePattern);
+
+  await expect(page.getByRole("heading", { name: "Log recall communication" })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+
+  const verifyResponse = await request.get(
+    `${baseUrl}/api/patients/${patientId}/recalls/${createdRecall.id}/communications?limit=10`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  expect(verifyResponse.ok()).toBeTruthy();
+  const communications = (await verifyResponse.json()) as Array<{
+    channel: string;
+    notes: string | null;
+  }>;
+  expect(
+    communications.some((entry) => entry.channel === "phone" && entry.notes === commNotes)
+  ).toBeTruthy();
+});

@@ -105,6 +105,7 @@ const savingTreatmentPlanPatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
 const savingRecallPatientIds = new Set<string>();
 const savingRecallEntryPatientIds = new Set<string>();
+const savingRecallCommunicationIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
@@ -1539,13 +1540,24 @@ export default function PatientDetailClient({
     setShowRecallCommModal(true);
   }
 
-  async function saveRecallCommunication() {
-    if (!recallCommRecallId) return;
+  async function saveRecallCommunication(button?: HTMLButtonElement | null) {
+    if (
+      !recallCommRecallId ||
+      !button ||
+      recallCommSaving ||
+      savingRecallCommunicationIds.has(recallCommRecallId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    const recallId = recallCommRecallId;
+    savingRecallCommunicationIds.add(recallId);
+    button.disabled = true;
     setRecallCommSaving(true);
     setRecallCommError(null);
     try {
       const res = await apiFetch(
-        `/api/patients/${patientId}/recalls/${recallCommRecallId}/communications`,
+        `/api/patients/${patientId}/recalls/${recallId}/communications`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1566,12 +1578,13 @@ export default function PatientDetailClient({
       }
       setShowRecallCommModal(false);
       setRecallCommNotes("");
-      await loadRecallCommunications(recallCommRecallId);
+      await loadRecallCommunications(recallId);
     } catch (err) {
       setRecallCommError(
         err instanceof Error ? err.message : "Failed to log communication"
       );
     } finally {
+      savingRecallCommunicationIds.delete(recallId);
       setRecallCommSaving(false);
     }
   }
@@ -10821,6 +10834,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Channel</label>
                     <select
+                      data-testid="patient-recall-comm-channel"
                       className="input"
                       value={recallCommChannel}
                       onChange={(e) =>
@@ -10837,6 +10851,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Notes</label>
                     <textarea
+                      data-testid="patient-recall-comm-notes"
                       className="input"
                       rows={3}
                       value={recallCommNotes}
@@ -10848,7 +10863,8 @@ export default function PatientDetailClient({
                 <button
                   className="btn btn-primary"
                   type="button"
-                  onClick={saveRecallCommunication}
+                  data-testid="patient-recall-comm-save"
+                  onClick={(event) => void saveRecallCommunication(event.currentTarget)}
                   disabled={recallCommSaving || !recallCommRecallId}
                 >
                   {recallCommSaving ? "Saving..." : "Save log"}

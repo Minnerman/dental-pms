@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk85 completed on `stage163h-chunk85-recall-comm-hardening` from `master@df703d2` to harden patient recall communication logging against duplicate submit without broadening into recall workflow redesign or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby recall/patient hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the recall communication modal submit path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing patient-page proof surface in `frontend/tests/patient-save.spec.ts`
+  - Evidence for choosing this slice:
+    - the `Save log` action in the recall communication modal still posted without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on recall communication logging, even though adjacent patient recall summary, recall entry, ledger, and archive actions were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live recall communication action
+  - Exact slice implemented:
+    - added an immediate recall communication submit guard keyed by recall id before the async `POST` begins and synchronously disabled the clicked save button
+    - added stable test ids for the recall communication channel field, notes textarea, and primary save button in the modal
+    - extended the focused Playwright proof to seed a recall item, open `Log contact`, double-click `Save log`, verify the immediate disabled state, and confirm only one communication request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts --grep "patient recall communication save shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk84 completed on `stage163h-chunk84-treatment-plan-status-hardening` from `master@5580adc` to harden treatment-plan status actions against duplicate submit without broadening into recall, booking, or invoice workflow work.
   - What was inspected before implementation:
     - `AGENTS.md`
