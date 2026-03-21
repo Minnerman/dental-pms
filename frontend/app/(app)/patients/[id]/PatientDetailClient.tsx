@@ -107,6 +107,7 @@ const savingRecallPatientIds = new Set<string>();
 const savingRecallEntryPatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
+const savingChartNotePatientIds = new Set<string>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
@@ -2514,8 +2515,18 @@ export default function PatientDetailClient({
     [patientId, router]
   );
 
-  async function submitChartNote() {
+  async function submitChartNote(button?: HTMLButtonElement | null) {
     if (!selectedTooth || !chartNoteBody.trim()) return;
+    if (
+      !button ||
+      savingToothNote ||
+      savingChartNotePatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    savingChartNotePatientIds.add(patientId);
+    button.disabled = true;
     setSavingToothNote(true);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
@@ -2543,6 +2554,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save note");
     } finally {
+      savingChartNotePatientIds.delete(patientId);
       setSavingToothNote(false);
     }
   }
@@ -8613,6 +8625,7 @@ export default function PatientDetailClient({
                                     <label className="label">Surface (optional)</label>
                                     <input
                                       className="input"
+                                      data-testid="patient-chart-note-surface"
                                       value={chartNoteSurface}
                                       onChange={(e) => setChartNoteSurface(e.target.value)}
                                       placeholder="O / M / D / B / L"
@@ -8623,6 +8636,7 @@ export default function PatientDetailClient({
                                   <label className="label">Note</label>
                                   <textarea
                                     className="input"
+                                    data-testid="patient-chart-note-body"
                                     rows={3}
                                     value={chartNoteBody}
                                     onChange={(e) => {
@@ -8635,7 +8649,8 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-primary"
                                   type="button"
-                                  onClick={submitChartNote}
+                                  data-testid="patient-chart-note-add"
+                                  onClick={(event) => void submitChartNote(event.currentTarget)}
                                   disabled={savingToothNote || !chartNoteBody.trim()}
                                 >
                                   {savingToothNote ? "Saving..." : "Add note"}
