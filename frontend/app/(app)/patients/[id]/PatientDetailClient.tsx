@@ -109,6 +109,7 @@ const savingRecallCommunicationIds = new Set<number>();
 const savingRecallActionIds = new Set<number>();
 const savingEstimatePatientIds = new Set<string>();
 const savingEstimateStatusIds = new Set<number>();
+const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
@@ -881,6 +882,7 @@ export default function PatientDetailClient({
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [issuingInvoiceId, setIssuingInvoiceId] = useState<number | null>(null);
   const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
   const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
   const [lineDescription, setLineDescription] = useState("");
@@ -4806,11 +4808,22 @@ export default function PatientDetailClient({
     }
   }
 
-  async function issueInvoice() {
-    if (!selectedInvoice) return;
+  async function issueInvoice(button?: HTMLButtonElement | null) {
+    if (
+      !selectedInvoice ||
+      !button ||
+      issuingInvoiceIds.has(selectedInvoice.id) ||
+      button.disabled
+    ) {
+      return;
+    }
+    const invoiceId = selectedInvoice.id;
+    issuingInvoiceIds.add(invoiceId);
+    button.disabled = true;
+    setIssuingInvoiceId(invoiceId);
     setInvoiceError(null);
     try {
-      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/issue`, { method: "POST" });
+      const res = await apiFetch(`/api/invoices/${invoiceId}/issue`, { method: "POST" });
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
@@ -4825,6 +4838,9 @@ export default function PatientDetailClient({
       await loadInvoices();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to issue invoice");
+    } finally {
+      issuingInvoiceIds.delete(invoiceId);
+      setIssuingInvoiceId((current) => (current === invoiceId ? null : current));
     }
   }
 
@@ -10496,8 +10512,16 @@ export default function PatientDetailClient({
                               </button>
                             )}
                             {selectedInvoice.status === "draft" && (
-                              <button className="btn btn-primary" onClick={issueInvoice}>
-                                Issue invoice
+                              <button
+                                className="btn btn-primary"
+                                type="button"
+                                data-testid={`invoice-issue-${selectedInvoice.id}`}
+                                onClick={(event) => void issueInvoice(event.currentTarget)}
+                                disabled={issuingInvoiceId === selectedInvoice.id}
+                              >
+                                {issuingInvoiceId === selectedInvoice.id
+                                  ? "Issuing..."
+                                  : "Issue invoice"}
                               </button>
                             )}
                             {selectedInvoice.status !== "void" && (

@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk89 completed on `stage163h-chunk89-invoice-issue-hardening` from `master@55006ce` to harden patient invoice issuing against duplicate submit without broadening into invoice creation, invoice line editing, or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby patient financial hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the invoice issue action path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing invoice proof surface in `frontend/tests/patient-invoice-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the draft-invoice `Issue invoice` action still posted without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on invoice issuing, even though adjacent invoice PDF, receipt, payment, estimate create, and estimate status flows were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live invoice action
+  - Exact slice implemented:
+    - added an immediate invoice-issue guard keyed by invoice id before the async `POST` begins and synchronously disabled the clicked action
+    - added a stable test id for the draft-invoice issue button and surfaced `Issuing...` while the issue request is in flight
+    - extended the focused Playwright proof to seed a draft invoice, double-click `Issue invoice`, verify the immediate disabled state, and confirm only one issue request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-invoice-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-invoice-pdf.spec.ts --grep "patient invoice issue shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk88 completed on `stage163h-chunk88-estimate-status-hardening` from `master@76cdcc1` to harden patient estimate status actions against duplicate submit without broadening into invoice editing, estimate line-item work, or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`
