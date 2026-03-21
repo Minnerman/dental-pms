@@ -108,6 +108,7 @@ const savingRecallEntryPatientIds = new Set<string>();
 const savingRecallCommunicationIds = new Set<number>();
 const savingRecallActionIds = new Set<number>();
 const savingEstimatePatientIds = new Set<string>();
+const savingEstimateStatusIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
@@ -903,6 +904,10 @@ export default function PatientDetailClient({
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
   const [downloadingEstimatePdfId, setDownloadingEstimatePdfId] = useState<number | null>(null);
   const [creatingEstimate, setCreatingEstimate] = useState(false);
+  const [estimateStatusAction, setEstimateStatusAction] = useState<{
+    estimateId: number;
+    status: EstimateStatus;
+  } | null>(null);
   const [estimateNotes, setEstimateNotes] = useState("");
   const [estimateValidUntil, setEstimateValidUntil] = useState("");
   const [estimateItemTreatmentId, setEstimateItemTreatmentId] = useState("");
@@ -1879,11 +1884,25 @@ export default function PatientDetailClient({
     }
   }
 
-  async function updateEstimateStatus(nextStatus: EstimateStatus) {
-    if (!selectedEstimate) return;
+  async function updateEstimateStatus(
+    nextStatus: EstimateStatus,
+    button?: HTMLButtonElement | null
+  ) {
+    if (
+      !selectedEstimate ||
+      !button ||
+      savingEstimateStatusIds.has(selectedEstimate.id) ||
+      button.disabled
+    ) {
+      return;
+    }
+    const estimateId = selectedEstimate.id;
+    savingEstimateStatusIds.add(estimateId);
+    button.disabled = true;
+    setEstimateStatusAction({ estimateId, status: nextStatus });
     setEstimateError(null);
     try {
-      const res = await apiFetch(`/api/estimates/${selectedEstimate.id}`, {
+      const res = await apiFetch(`/api/estimates/${estimateId}`, {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus }),
       });
@@ -1901,6 +1920,11 @@ export default function PatientDetailClient({
       await loadEstimates();
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to update estimate");
+    } finally {
+      savingEstimateStatusIds.delete(estimateId);
+      setEstimateStatusAction((current) =>
+        current?.estimateId === estimateId ? null : current
+      );
     }
   }
 
@@ -10162,21 +10186,45 @@ export default function PatientDetailClient({
                             </button>
                             <button
                               className="btn btn-secondary"
-                              onClick={() => updateEstimateStatus("ISSUED")}
+                              type="button"
+                              data-testid={`estimate-status-${selectedEstimate.id}-issued`}
+                              onClick={(event) =>
+                                void updateEstimateStatus("ISSUED", event.currentTarget)
+                              }
+                              disabled={estimateStatusAction?.estimateId === selectedEstimate.id}
                             >
-                              Mark issued
+                              {estimateStatusAction?.estimateId === selectedEstimate.id &&
+                              estimateStatusAction.status === "ISSUED"
+                                ? "Updating..."
+                                : "Mark issued"}
                             </button>
                             <button
                               className="btn btn-secondary"
-                              onClick={() => updateEstimateStatus("ACCEPTED")}
+                              type="button"
+                              data-testid={`estimate-status-${selectedEstimate.id}-accepted`}
+                              onClick={(event) =>
+                                void updateEstimateStatus("ACCEPTED", event.currentTarget)
+                              }
+                              disabled={estimateStatusAction?.estimateId === selectedEstimate.id}
                             >
-                              Mark accepted
+                              {estimateStatusAction?.estimateId === selectedEstimate.id &&
+                              estimateStatusAction.status === "ACCEPTED"
+                                ? "Updating..."
+                                : "Mark accepted"}
                             </button>
                             <button
                               className="btn btn-secondary"
-                              onClick={() => updateEstimateStatus("DECLINED")}
+                              type="button"
+                              data-testid={`estimate-status-${selectedEstimate.id}-declined`}
+                              onClick={(event) =>
+                                void updateEstimateStatus("DECLINED", event.currentTarget)
+                              }
+                              disabled={estimateStatusAction?.estimateId === selectedEstimate.id}
                             >
-                              Mark declined
+                              {estimateStatusAction?.estimateId === selectedEstimate.id &&
+                              estimateStatusAction.status === "DECLINED"
+                                ? "Updating..."
+                                : "Mark declined"}
                             </button>
                           </div>
                         </div>
