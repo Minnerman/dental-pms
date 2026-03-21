@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk71 completed on `stage163h-chunk71-template-delete-hardening` from `master@d913a78` to harden templates-page deletes against duplicate submit without broadening into template workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the templates-page delete flow in `frontend/app/(app)/templates/page.tsx`
+    - nearby delete hardening proof patterns in `frontend/tests/patient-document-delete.spec.ts`
+    - nearby templates create/edit/download hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the templates-page `Delete` action still relied on `saving` after React re-render and had no immediate duplicate-submit guard
+    - delete was the smallest remaining live action in the already-active templates surface after create, edit, and download were hardened
+    - the delete flow already had a narrow confirm + row-removal shape, so a focused proof could be added without broadening into unrelated admin workflows
+  - Exact slice implemented:
+    - added an immediate templates-page delete guard that locks by template id before the async `DELETE` begins and synchronously disables the clicked button
+    - added a stable test id for each row delete button and an in-flight `Deleting...` state
+    - added a focused Playwright proof that confirms the delete, double-clicks `Delete`, verifies the immediate disabled state, and confirms only one template delete request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/templates/page.tsx`
+    - `frontend/tests/templates-delete.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/templates-delete.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-20: Stage 163H chunk70 completed on `stage163h-chunk70-template-edit-save-hardening` from `master@6747930` to harden templates-page edit saves against duplicate submit without broadening into template workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

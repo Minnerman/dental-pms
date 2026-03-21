@@ -71,12 +71,14 @@ function buildTemplateDownloadFilename(template: DocumentTemplate) {
 const downloadingTemplateIds = new Set<number>();
 const templateCreateLocks = new Set<string>();
 const templateEditLocks = new Set<number>();
+const templateDeleteLocks = new Set<number>();
 
 export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<number | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | DocumentTemplateKind>("all");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -250,9 +252,17 @@ export default function TemplatesPage() {
     }
   }
 
-  async function deleteTemplate(template: DocumentTemplate) {
+  async function deleteTemplate(
+    template: DocumentTemplate,
+    button?: HTMLButtonElement | null
+  ) {
+    const deleteLockKey = template.id;
+    if (saving || templateDeleteLocks.has(deleteLockKey) || button?.disabled) return;
     if (!confirm(`Delete "${template.name}"?`)) return;
+    templateDeleteLocks.add(deleteLockKey);
+    if (button) button.disabled = true;
     setSaving(true);
+    setDeletingTemplateId(template.id);
     setError(null);
     try {
       const res = await apiFetch(`/api/document-templates/${template.id}`, {
@@ -278,6 +288,8 @@ export default function TemplatesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete template");
     } finally {
+      templateDeleteLocks.delete(deleteLockKey);
+      setDeletingTemplateId(null);
       setSaving(false);
     }
   }
@@ -394,9 +406,11 @@ export default function TemplatesPage() {
                           <button
                             className="btn btn-secondary"
                             type="button"
-                            onClick={() => deleteTemplate(template)}
+                            onClick={(event) => void deleteTemplate(template, event.currentTarget)}
+                            disabled={deletingTemplateId !== null}
+                            data-testid={`template-delete-${template.id}`}
                           >
-                            Delete
+                            {deletingTemplateId === template.id ? "Deleting..." : "Delete"}
                           </button>
                         )}
                       </div>
