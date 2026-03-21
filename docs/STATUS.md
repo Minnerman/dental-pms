@@ -61,6 +61,31 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk74 completed on `stage163h-chunk74-docs-reconciliation` from `master@6c554f4` to reconcile continuity docs with the merged notes master-detail baseline, without changing product code or any R4 files.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the merged notes detail save route in `frontend/app/(app)/notes/page.tsx`
+    - the merged patient-to-notes proof surface in `frontend/tests/patient-notes.spec.ts`
+  - Exact doc drift corrected:
+    - `docs/V1_FINISH_LINE.md` now reflects that basic notes reliability includes the live notes detail edit/save surface, not only initial note entry
+    - `docs/UAT_CHECKLIST.md` receptionist flow now matches merged master by covering add -> open in notes detail -> edit/save -> audit verification
+    - `docs/SMOKE_TESTS.md` now includes the live `/notes` route and a manual notes detail save smoke check
+  - Files changed in this slice:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/SMOKE_TESTS.md`
+  - Validation on this stop-point:
+    - `git diff --check` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> not run; docs-only changes did not affect application/runtime behavior
+  - R4 untouched: no R4 files were read or changed beyond the standing policy reference in existing docs.
 - 2026-03-21: Stage 163H chunk72 completed on `stage163h-chunk72-patient-clinical-note-submit-hardening` from `master@d3da07d` to harden patient clinical-note submit against duplicate submit without broadening into charting or treatment-plan redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

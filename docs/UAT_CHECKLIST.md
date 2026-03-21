@@ -28,9 +28,9 @@ Use this checklist for a focused go-live acceptance pass with representative use
 - Action: Use day sheet cut/copy/paste actions for an appointment.
 - Expected result: Appointment is moved/copied correctly and resulting schedule is accurate.
 
-7) Add patient note + verify audit display
-- Action: Add a note on a patient record and open note audit view/details.
-- Expected result: Note saves successfully; created/updated audit information is visible.
+7) Add/edit patient note + verify detail and audit display
+- Action: Add a note on a patient record, open it in the notes detail view, edit/save it, and open note audit view/details.
+- Expected result: Note saves and updates successfully; note detail reflects the latest body/type; created/updated audit information is visible.
 
 8) Recall worklist + filters
 - Action: Open Recalls page and apply filter changes.

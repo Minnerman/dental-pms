@@ -15,6 +15,7 @@ Run these checks after patient UX changes or infra updates.
 - curl -fsS http://localhost:3100/patients/5/clinical >/dev/null
 - curl -fsS http://localhost:3100/patients/5/documents >/dev/null
 - curl -fsS http://localhost:3100/patients/5/attachments >/dev/null
+- curl -fsS http://localhost:3100/notes >/dev/null
 
 ## Not found checks (expect HTTP 404)
 - curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:3100/patients/99999999
@@ -27,6 +28,7 @@ Run these checks after patient UX changes or infra updates.
 - Documents tab shows an empty-state CTA when no documents exist.
 - Attachments tab shows an empty-state CTA when no attachments exist.
 - Clinical tab shows empty-state guidance for notes/procedures when empty.
+- Notes page opens the selected note in the detail pane and saves edits with visible in-flight state.
 
 ## Stage 31 appointments workflow acceptance checks
 - Booking can be initiated from patient page, appointments page, and deep link (`/appointments?book=1`, optional `patientId=`).
