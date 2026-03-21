@@ -102,6 +102,7 @@ const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
 const savingClinicalNotePatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
+const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
 
@@ -858,6 +859,7 @@ export default function PatientDetailClient({
   const [noteType, setNoteType] = useState<Note["note_type"]>("clinical");
   const [savingNote, setSavingNote] = useState(false);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [patientArchiveAction, setPatientArchiveAction] = useState<"archive" | "restore" | null>(null);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -5010,28 +5012,26 @@ export default function PatientDetailClient({
         )
       : null;
 
-  async function archivePatient() {
-    if (!confirm("Archive this patient?")) return;
-    try {
-      const res = await apiFetch(`/api/patients/${patientId}/archive`, { method: "POST" });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to archive patient (HTTP ${res.status})`);
-      }
-      void loadPatient();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive patient");
+  async function updatePatientArchiveState(
+    action: "archive" | "restore",
+    button?: HTMLButtonElement | null
+  ) {
+    if (
+      !button ||
+      savingPatient ||
+      patientArchiveAction !== null ||
+      archivingPatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
     }
-  }
-
-  async function restorePatient() {
+    if (action === "archive" && !confirm("Archive this patient?")) return;
+    archivingPatientIds.add(patientId);
+    button.disabled = true;
+    setError(null);
+    setPatientArchiveAction(action);
     try {
-      const res = await apiFetch(`/api/patients/${patientId}/restore`, { method: "POST" });
+      const res = await apiFetch(`/api/patients/${patientId}/${action}`, { method: "POST" });
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
@@ -5039,11 +5039,14 @@ export default function PatientDetailClient({
       }
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || `Failed to restore patient (HTTP ${res.status})`);
+        throw new Error(msg || `Failed to ${action} patient (HTTP ${res.status})`);
       }
-      void loadPatient();
+      await loadPatient();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to restore patient");
+      setError(err instanceof Error ? err.message : `Failed to ${action} patient`);
+    } finally {
+      archivingPatientIds.delete(patientId);
+      setPatientArchiveAction(null);
     }
   }
 
@@ -6377,15 +6380,26 @@ export default function PatientDetailClient({
                     >
                       {savingPatient ? "Saving..." : "Save changes"}
                     </button>
-                    {patient.deleted_at ? (
-                      <button className="btn btn-secondary" type="button" onClick={restorePatient}>
-                        Restore patient
-                      </button>
-                    ) : (
-                      <button className="btn btn-secondary" type="button" onClick={archivePatient}>
-                        Archive patient
-                      </button>
-                    )}
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={(event) =>
+                        void updatePatientArchiveState(
+                          patient.deleted_at ? "restore" : "archive",
+                          event.currentTarget
+                        )
+                      }
+                      disabled={savingPatient || patientArchiveAction !== null}
+                      data-testid="patient-archive-toggle"
+                    >
+                      {patientArchiveAction === "archive"
+                        ? "Archiving..."
+                        : patientArchiveAction === "restore"
+                          ? "Restoring..."
+                          : patient.deleted_at
+                            ? "Restore patient"
+                            : "Archive patient"}
+                    </button>
                   </div>
                   </form>
                 </div>

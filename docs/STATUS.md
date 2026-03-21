@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk76 completed on `stage163h-chunk76-patient-archive-hardening` from `master@590340b` to harden patient-page archive/restore against duplicate submit without broadening into patient workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the patient archive/restore action in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing patient personal-save proof surface in `frontend/tests/patient-save.spec.ts`
+    - nearby patient and notes hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the patient-page archive/restore action still posted without an immediate duplicate-submit guard
+    - patient soft-delete/restore is already part of the merged patient surface advertised as working on current master
+    - `frontend/tests/patient-save.spec.ts` already had the correct patient-page harness, so a focused repeat-click archive proof could be added without opening a broader new test area
+  - Exact slice implemented:
+    - added an immediate patient archive/restore guard keyed by patient id before the async `POST` begins and synchronously disabled the clicked button
+    - added a stable test id and in-flight text for the patient archive/restore button
+    - extended the focused Playwright proof to double-click `Archive patient`, verify the immediate disabled state, and confirm only one patient archive request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk75 completed on `stage163h-chunk75-note-detail-archive-hardening` from `master@9e84d4a` to harden notes-page detail archive/restore against duplicate submit without broadening into notes workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

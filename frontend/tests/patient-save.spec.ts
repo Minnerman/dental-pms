@@ -106,3 +106,95 @@ test("patient personal save shows in-flight state and guards repeat submit", asy
   const savedPatient = (await verifyResponse.json()) as { notes: string | null };
   expect(savedPatient.notes).toBe(updatedNotes);
 });
+
+test("patient archive shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `ARCHIVE${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  await page.getByTestId("patient-tab-Personal").click();
+  await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
+  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-notes-field")).toBeVisible();
+
+  const archiveButton = page.getByTestId("patient-archive-toggle");
+  await expect(archiveButton).toBeVisible();
+  await expect(archiveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const archiveRoutePattern = new RegExp(`/api/patients/${patientId}/archive$`);
+  let seenArchiveRequest!: () => void;
+  const seenArchiveRequestPromise = new Promise<void>((resolve) => {
+    seenArchiveRequest = resolve;
+  });
+  let releaseArchiveRequest!: () => void;
+  const releaseArchiveRequestPromise = new Promise<void>((resolve) => {
+    releaseArchiveRequest = resolve;
+  });
+  await page.route(archiveRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenArchiveRequest();
+      await releaseArchiveRequestPromise;
+    }
+    await route.continue();
+  });
+  const archiveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/archive`)
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+
+  const clickState = await archiveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Archive patient button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenArchiveRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(archiveButton).toBeDisabled();
+  await expect(archiveButton).toHaveText("Archiving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseArchiveRequest();
+
+  const archiveResponse = await archiveResponsePromise;
+  expect(archiveResponse.ok()).toBeTruthy();
+  await page.unroute(archiveRoutePattern);
+
+  await expect(archiveButton).toHaveText("Restore patient", { timeout: 15_000 });
+  await expect(archiveButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}?include_deleted=1`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const archivedPatient = (await verifyResponse.json()) as { deleted_at: string | null };
+  expect(archivedPatient.deleted_at).toBeTruthy();
+});
