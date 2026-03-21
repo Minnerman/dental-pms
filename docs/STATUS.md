@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk86 completed on `stage163h-chunk86-recall-complete-hardening` from `master@b92acde` to harden patient recall completion actions against duplicate submit without broadening into recall-save flake work or wider recall workflow changes.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby recall/patient hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the recall completion action path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing patient-page proof surface in `frontend/tests/patient-save.spec.ts`
+  - Evidence for choosing this slice:
+    - the recall row completion actions still posted without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on `Mark completed`, even though adjacent recall summary, recall entry, recall communication, ledger, and archive actions were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live recall completion action
+  - Exact slice implemented:
+    - added an immediate recall completion guard keyed by recall id before the async `PATCH` begins and synchronously disabled the clicked completion button
+    - passed the clicked button through all three completion actions (`Mark completed`, `Complete +6m`, `Complete +12m`) so the same-tick guard applies consistently across the recall completion surface
+    - extended the focused Playwright proof to seed a recall item, double-click `Mark completed`, verify the immediate disabled state, and confirm only one completion request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts --grep "patient recall mark completed shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk85 completed on `stage163h-chunk85-recall-comm-hardening` from `master@df703d2` to harden patient recall communication logging against duplicate submit without broadening into recall workflow redesign or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`
