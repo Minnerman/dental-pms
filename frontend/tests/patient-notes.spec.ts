@@ -194,6 +194,121 @@ test("patient clinical note entry shows in-flight state and guards repeat submit
   await expect(addNoteButton).toHaveText("Add note");
 });
 
+test("patient treatment plan add shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `PLAN${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const planCode = "PLAN";
+  const planDescription = `Planned treatment ${unique}`;
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+
+  await page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ }).click();
+  await expect(page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ })).toHaveClass(
+    /active/
+  );
+
+  const openButton = page.getByTestId("patient-treatment-plan-open");
+  await expect(openButton).toBeVisible();
+  await openButton.click();
+
+  await expect(page.getByRole("heading", { name: "Add treatment plan item" })).toBeVisible();
+  await page.getByTestId("patient-treatment-plan-code").fill(planCode);
+  await page.getByTestId("patient-treatment-plan-description").fill(planDescription);
+
+  const addItemButton = page.getByTestId("patient-treatment-plan-add");
+  await expect(addItemButton).toBeEnabled();
+
+  let requestCount = 0;
+  const planRoutePattern = new RegExp(`/api/patients/${patientId}/treatment-plan$`);
+  let seenCreateRequest!: () => void;
+  const seenCreateRequestPromise = new Promise<void>((resolve) => {
+    seenCreateRequest = resolve;
+  });
+  let releaseCreateRequest!: () => void;
+  const releaseCreateRequestPromise = new Promise<void>((resolve) => {
+    releaseCreateRequest = resolve;
+  });
+  await page.route(planRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCreateRequest();
+      await releaseCreateRequestPromise;
+    }
+    await route.continue();
+  });
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/treatment-plan`)
+  );
+
+  const clickState = await addItemButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Add item button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCreateRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(addItemButton).toBeDisabled();
+  await expect(addItemButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCreateRequest();
+
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  expect(createResponse.request().postDataJSON()).toMatchObject({
+    procedure_code: planCode,
+    description: planDescription,
+  });
+  await page.unroute(planRoutePattern);
+
+  await expect(page.getByRole("heading", { name: "Add treatment plan item" })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  await expect(page.getByText(planDescription, { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  const verifyResponse = await request.get(
+    `${baseUrl}/api/patients/${patientId}/clinical/summary?limit=200`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  expect(verifyResponse.ok()).toBeTruthy();
+  const clinicalSummary = (await verifyResponse.json()) as {
+    treatment_plan_items?: Array<{ procedure_code?: string | null; description?: string | null }>;
+  };
+  expect(
+    (clinicalSummary.treatment_plan_items ?? []).some(
+      (item) => item.procedure_code === planCode && item.description === planDescription
+    )
+  ).toBeTruthy();
+});
+
 test("notes detail save shows in-flight state and guards repeat submit", async ({
   page,
   request,

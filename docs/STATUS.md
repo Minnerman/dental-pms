@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk79 completed on `stage163h-chunk79-treatment-plan-submit-hardening` from `master@25c7a19` to harden patient clinical treatment-plan item creation against duplicate submit without broadening into charting or recall workflow changes.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby patient-page submit hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the treatment-plan item create path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing patient clinical proof surface in `frontend/tests/patient-notes.spec.ts`
+  - Evidence for choosing this slice:
+    - the treatment-plan modal `Add item` action still relied on `planSaving` after React re-render and had no immediate duplicate-submit guard
+    - there was no focused Playwright proof covering repeated submit on the clinical treatment-plan item create path
+    - this stayed smaller than broader chart/procedure work and remained adjacent to the recently merged patient archive/ledger/recall submit hardening
+  - Exact slice implemented:
+    - added an immediate treatment-plan submit guard keyed by patient id before the async `POST` begins and synchronously disabled the clicked button
+    - added stable test ids for the treatment-plan modal opener, inputs, and primary add button
+    - extended the focused Playwright proof to enter the clinical treatment-plan flow, double-click `Add item`, verify the immediate disabled state, and confirm only one treatment-plan create request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk78 completed on `stage163h-chunk78-patient-recall-submit-hardening` from `master@244e3f9` to harden the patient summary recall save action against duplicate submit without broadening into recall workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

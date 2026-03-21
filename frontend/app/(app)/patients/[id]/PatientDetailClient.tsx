@@ -101,6 +101,7 @@ const downloadingEstimatePdfIds = new Set<number>();
 const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
 const savingClinicalNotePatientIds = new Set<string>();
+const savingTreatmentPlanPatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
 const savingRecallPatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
@@ -2665,8 +2666,13 @@ export default function PatientDetailClient({
     }
   }
 
-  async function submitTreatmentPlanItem() {
+  async function submitTreatmentPlanItem(button?: HTMLButtonElement | null) {
     if (!planCode.trim() || !planDescription.trim()) return;
+    if (!button || planSaving || savingTreatmentPlanPatientIds.has(patientId) || button.disabled) {
+      return;
+    }
+    savingTreatmentPlanPatientIds.add(patientId);
+    button.disabled = true;
     setPlanSaving(true);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/treatment-plan`, {
@@ -2698,6 +2704,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save treatment plan item");
     } finally {
+      savingTreatmentPlanPatientIds.delete(patientId);
       setPlanSaving(false);
     }
   }
@@ -8856,6 +8863,7 @@ export default function PatientDetailClient({
                           <button
                             className="btn btn-primary"
                             type="button"
+                            data-testid="patient-treatment-plan-open"
                             onClick={() => setShowPlanModal(true)}
                           >
                             Add item
@@ -10609,6 +10617,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Procedure code</label>
                     <input
+                      data-testid="patient-treatment-plan-code"
                       className="input"
                       list="procedure-codes"
                       value={planCode}
@@ -10633,6 +10642,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Description</label>
                     <textarea
+                      data-testid="patient-treatment-plan-description"
                       className="input"
                       rows={3}
                       value={planDescription}
@@ -10651,7 +10661,8 @@ export default function PatientDetailClient({
                   <button
                     className="btn btn-primary"
                     type="button"
-                    onClick={submitTreatmentPlanItem}
+                    data-testid="patient-treatment-plan-add"
+                    onClick={(event) => void submitTreatmentPlanItem(event.currentTarget)}
                     disabled={planSaving || !planCode.trim() || !planDescription.trim()}
                   >
                     {planSaving ? "Saving..." : "Add item"}
