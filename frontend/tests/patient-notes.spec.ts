@@ -194,6 +194,113 @@ test("patient clinical note entry shows in-flight state and guards repeat submit
   await expect(addNoteButton).toHaveText("Add note");
 });
 
+test("patient chart tooth note add shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `CHARTNOTE${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const noteBody = `Chart tooth note ${unique}`;
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+  await expect(page.getByTestId("patient-tab-Medical")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Add tooth note", { exact: true })).toBeVisible();
+
+  await page.getByTestId("tooth-button-UR6").click();
+  await page.getByTestId("patient-chart-note-surface").fill("O");
+  await page.getByTestId("patient-chart-note-body").fill(noteBody);
+
+  const addNoteButton = page.getByTestId("patient-chart-note-add");
+  await expect(addNoteButton).toBeEnabled();
+
+  let requestCount = 0;
+  const noteRoutePattern = new RegExp(`/api/patients/${patientId}/tooth-notes$`);
+  let seenCreateRequest!: () => void;
+  const seenCreateRequestPromise = new Promise<void>((resolve) => {
+    seenCreateRequest = resolve;
+  });
+  let releaseCreateRequest!: () => void;
+  const releaseCreateRequestPromise = new Promise<void>((resolve) => {
+    releaseCreateRequest = resolve;
+  });
+  await page.route(noteRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCreateRequest();
+      await releaseCreateRequestPromise;
+    }
+    await route.continue();
+  });
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/tooth-notes`)
+  );
+
+  const clickState = await addNoteButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Chart Add note button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCreateRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(addNoteButton).toBeDisabled();
+  await expect(addNoteButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCreateRequest();
+
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  expect(createResponse.request().postDataJSON()).toMatchObject({
+    tooth: "UR6",
+    surface: "O",
+    note: noteBody,
+  });
+  await page.unroute(noteRoutePattern);
+
+  await expect(page.getByText("Note saved.", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("patient-chart-note-body")).toHaveValue("");
+  await expect(addNoteButton).toHaveText("Add note");
+
+  const verifyResponse = await request.get(
+    `${baseUrl}/api/patients/${patientId}/tooth-history?tooth=UR6`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  expect(verifyResponse.ok()).toBeTruthy();
+  const toothHistory = (await verifyResponse.json()) as {
+    notes?: Array<{ tooth?: string | null; surface?: string | null; note?: string | null }>;
+  };
+  expect(
+    (toothHistory.notes ?? []).some(
+      (entry) => entry.tooth === "UR6" && entry.surface === "O" && entry.note === noteBody
+    )
+  ).toBeTruthy();
+});
+
 test("patient treatment plan add shows in-flight state and guards repeat submit", async ({
   page,
   request,
