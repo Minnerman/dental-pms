@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk87 completed on `stage163h-chunk87-estimate-create-hardening` from `master@8674e58` to harden patient estimate creation against duplicate submit without broadening into invoice editing or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby patient billing/reliability hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the estimate create path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing estimate proof surface in `frontend/tests/patient-estimate-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the patient-page `Create estimate` action still posted without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on estimate creation, even though adjacent payments and estimate PDF flows were already covered
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live estimate action
+  - Exact slice implemented:
+    - added an immediate estimate-create guard keyed by patient id before the async `POST` begins and synchronously disabled the clicked button
+    - added stable test ids for the estimate valid-until field, notes field, and primary create button
+    - extended the focused Playwright proof to fill the estimate form, double-click `Create estimate`, verify the immediate disabled state, and confirm only one estimate request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts --grep "patient estimate create shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk86 completed on `stage163h-chunk86-recall-complete-hardening` from `master@b92acde` to harden patient recall completion actions against duplicate submit without broadening into recall-save flake work or wider recall workflow changes.
   - What was inspected before implementation:
     - `AGENTS.md`

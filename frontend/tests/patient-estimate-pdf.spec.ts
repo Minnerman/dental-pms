@@ -98,3 +98,105 @@ test("patient estimate PDF download shows in-flight state and honors header file
   await expect(downloadButton).toHaveText("Download PDF");
   await page.unroute(routePattern);
 });
+
+test("patient estimate create shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Estimate",
+    last_name: `CreateHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const notes = `Estimate create proof ${unique}`;
+  const validUntil = "2026-12-31";
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.getByTestId("patient-tab-Treatment").click();
+
+  await page.getByTestId("patient-estimate-valid-until").fill(validUntil);
+  await page.getByTestId("patient-estimate-notes").fill(notes);
+
+  const createButton = page.getByTestId("patient-estimate-create");
+  await expect(createButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/patients/${patientId}/estimates$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const estimateResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/estimates`)
+  );
+
+  const clickState = await createButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Create estimate button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(createButton).toBeDisabled();
+  await expect(createButton).toHaveText("Creating...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const estimateResponse = await estimateResponsePromise;
+  expect(estimateResponse.ok()).toBeTruthy();
+  expect(estimateResponse.request().postDataJSON()).toMatchObject({
+    notes,
+    valid_until: validUntil,
+  });
+  await page.unroute(routePattern);
+
+  await expect(createButton).toHaveText("Create estimate", { timeout: 15_000 });
+  await expect(createButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}/estimates`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const estimates = (await verifyResponse.json()) as Array<{
+    notes: string | null;
+    valid_until: string | null;
+  }>;
+  expect(
+    estimates.some(
+      (estimate) =>
+        estimate.notes === notes && estimate.valid_until?.slice(0, 10) === validUntil
+    )
+  ).toBeTruthy();
+});
