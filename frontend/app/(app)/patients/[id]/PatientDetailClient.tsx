@@ -109,6 +109,7 @@ const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
 const savingProcedurePatientIds = new Set<string>();
+const savingTreatmentPlanStatusIds = new Set<number>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
@@ -1014,6 +1015,10 @@ export default function PatientDetailClient({
   const [planDescription, setPlanDescription] = useState("");
   const [planFee, setPlanFee] = useState("");
   const [planSaving, setPlanSaving] = useState(false);
+  const [treatmentPlanStatusAction, setTreatmentPlanStatusAction] = useState<{
+    itemId: number;
+    status: TreatmentPlanStatus;
+  } | null>(null);
   const [bpeScores, setBpeScores] = useState<string[]>(Array(6).fill(""));
   const [bpeRecordedAt, setBpeRecordedAt] = useState<string | null>(null);
   const [bpeSaving, setBpeSaving] = useState(false);
@@ -2741,7 +2746,17 @@ export default function PatientDetailClient({
     }
   }
 
-  async function updateTreatmentPlanStatus(item: TreatmentPlanItem, status: TreatmentPlanStatus) {
+  async function updateTreatmentPlanStatus(
+    item: TreatmentPlanItem,
+    status: TreatmentPlanStatus,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || savingTreatmentPlanStatusIds.has(item.id) || button.disabled) {
+      return;
+    }
+    savingTreatmentPlanStatusIds.add(item.id);
+    button.disabled = true;
+    setTreatmentPlanStatusAction({ itemId: item.id, status });
     try {
       const res = await apiFetch(`/api/treatment-plan/${item.id}`, {
         method: "PATCH",
@@ -2780,6 +2795,11 @@ export default function PatientDetailClient({
     } catch (err) {
       setClinicalError(
         err instanceof Error ? err.message : "Failed to update treatment plan"
+      );
+    } finally {
+      savingTreatmentPlanStatusIds.delete(item.id);
+      setTreatmentPlanStatusAction((current) =>
+        current?.itemId === item.id ? null : current
       );
     }
   }
@@ -8952,6 +8972,7 @@ export default function PatientDetailClient({
                               const isFinal = ["completed", "declined", "cancelled"].includes(
                                 item.status
                               );
+                              const rowActionPending = treatmentPlanStatusAction?.itemId === item.id;
                               return (
                                 <tr key={item.id}>
                                   <td>
@@ -8996,34 +9017,74 @@ export default function PatientDetailClient({
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => updateTreatmentPlanStatus(item, "accepted")}
-                                        disabled={isFinal || item.status !== "proposed"}
+                                        data-testid={`patient-treatment-plan-status-${item.id}-accepted`}
+                                        onClick={(event) =>
+                                          void updateTreatmentPlanStatus(
+                                            item,
+                                            "accepted",
+                                            event.currentTarget
+                                          )
+                                        }
+                                        disabled={rowActionPending || isFinal || item.status !== "proposed"}
                                       >
-                                        Accept
+                                        {rowActionPending &&
+                                        treatmentPlanStatusAction?.status === "accepted"
+                                          ? "Saving..."
+                                          : "Accept"}
                                       </button>
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => updateTreatmentPlanStatus(item, "declined")}
-                                        disabled={isFinal || item.status !== "proposed"}
+                                        data-testid={`patient-treatment-plan-status-${item.id}-declined`}
+                                        onClick={(event) =>
+                                          void updateTreatmentPlanStatus(
+                                            item,
+                                            "declined",
+                                            event.currentTarget
+                                          )
+                                        }
+                                        disabled={rowActionPending || isFinal || item.status !== "proposed"}
                                       >
-                                        Decline
+                                        {rowActionPending &&
+                                        treatmentPlanStatusAction?.status === "declined"
+                                          ? "Saving..."
+                                          : "Decline"}
                                       </button>
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => updateTreatmentPlanStatus(item, "completed")}
-                                        disabled={isFinal || item.status === "declined"}
+                                        data-testid={`patient-treatment-plan-status-${item.id}-completed`}
+                                        onClick={(event) =>
+                                          void updateTreatmentPlanStatus(
+                                            item,
+                                            "completed",
+                                            event.currentTarget
+                                          )
+                                        }
+                                        disabled={rowActionPending || isFinal || item.status === "declined"}
                                       >
-                                        Complete
+                                        {rowActionPending &&
+                                        treatmentPlanStatusAction?.status === "completed"
+                                          ? "Saving..."
+                                          : "Complete"}
                                       </button>
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => updateTreatmentPlanStatus(item, "cancelled")}
-                                        disabled={isFinal}
+                                        data-testid={`patient-treatment-plan-status-${item.id}-cancelled`}
+                                        onClick={(event) =>
+                                          void updateTreatmentPlanStatus(
+                                            item,
+                                            "cancelled",
+                                            event.currentTarget
+                                          )
+                                        }
+                                        disabled={rowActionPending || isFinal}
                                       >
-                                        Cancel
+                                        {rowActionPending &&
+                                        treatmentPlanStatusAction?.status === "cancelled"
+                                          ? "Saving..."
+                                          : "Cancel"}
                                       </button>
                                     </div>
                                   </td>
