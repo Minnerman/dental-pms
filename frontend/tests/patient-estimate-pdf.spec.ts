@@ -200,3 +200,104 @@ test("patient estimate create shows in-flight state and guards repeat submit", a
     )
   ).toBeTruthy();
 });
+
+test("patient estimate status save shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Estimate",
+    last_name: `StatusHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+
+  const createResponse = await request.post(`${baseUrl}/api/patients/${patientId}/estimates`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      notes: `Estimate status proof ${unique}`,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const estimate = (await createResponse.json()) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.getByTestId("patient-tab-Treatment").click();
+
+  const viewButton = page.getByTestId(`estimate-view-${estimate.id}`);
+  await expect(viewButton).toBeVisible({ timeout: 15_000 });
+  await viewButton.click();
+
+  const issuedButton = page.getByTestId(`estimate-status-${estimate.id}-issued`);
+  await expect(issuedButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/estimates/${estimate.id}$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const statusResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/estimates/${estimate.id}`)
+  );
+
+  const clickState = await issuedButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Estimate status button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(issuedButton).toBeDisabled();
+  await expect(issuedButton).toHaveText("Updating...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const statusResponse = await statusResponsePromise;
+  expect(statusResponse.ok()).toBeTruthy();
+  expect(statusResponse.request().postDataJSON()).toMatchObject({
+    status: "ISSUED",
+  });
+  await page.unroute(routePattern);
+
+  await expect(issuedButton).toHaveText("Mark issued", { timeout: 15_000 });
+  await expect(issuedButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/estimates/${estimate.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedEstimate = (await verifyResponse.json()) as { status: string };
+  expect(updatedEstimate.status).toBe("ISSUED");
+});
