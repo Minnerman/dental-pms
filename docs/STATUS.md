@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk75 completed on `stage163h-chunk75-note-detail-archive-hardening` from `master@9e84d4a` to harden notes-page detail archive/restore against duplicate submit without broadening into notes workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the notes detail archive/restore flow in `frontend/app/(app)/notes/page.tsx`
+    - the existing patient-to-notes proof surface in `frontend/tests/patient-notes.spec.ts`
+    - nearby archive hardening patterns in `frontend/tests/appointments-diary-interactions.spec.ts`
+  - Evidence for choosing this slice:
+    - the notes-page `toggleArchive()` path still posted without an immediate duplicate-submit guard
+    - notes archive/restore is part of the live master-detail notes surface already advertised as working on current master
+    - `frontend/tests/patient-notes.spec.ts` already opened notes in `/notes?note=<id>`, so a focused repeat-click archive proof could be added without inventing a broader new harness
+  - Exact slice implemented:
+    - added an immediate notes-page detail archive/restore guard keyed by note id before the async `POST` begins and synchronously disabled the clicked button
+    - added a stable test id and in-flight text for the note-detail archive/restore action
+    - extended the focused Playwright proof to double-click `Archive`, verify the immediate disabled state, and confirm only one note archive request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/notes/page.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk73 completed on `stage163h-chunk73-note-detail-save-hardening` from `master@6c554f4` to harden notes-page detail saves against duplicate submit without broadening into notes workflow redesign.
 - 2026-03-21: Stage 163H chunk74 completed on `stage163h-chunk74-docs-reconciliation` from `master@6c554f4` to reconcile continuity docs with the merged notes master-detail baseline, without changing product code or any R4 files.
   - What was inspected before implementation:
