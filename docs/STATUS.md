@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk83 completed on `stage163h-chunk83-chart-procedure-submit-hardening` from `master@ed9cd3f` to harden chart-side quick procedure entry against duplicate submit without broadening into treatment-plan or recall follow-up work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby patient clinical submit hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the chart-side quick procedure submit path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing clinical-page proof surface in `frontend/tests/patient-notes.spec.ts`
+  - Evidence for choosing this slice:
+    - the chart-side `Add procedure` action still relied on `savingProcedure` after React re-render and had no immediate duplicate-submit guard
+    - there was no focused Playwright proof for repeated submit on the chart quick-procedure form, even though adjacent chart tooth-note, treatment-plan, and BPE flows were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live chart procedure action
+  - Exact slice implemented:
+    - added an immediate chart quick-procedure submit guard keyed by patient id before the async `POST` begins and synchronously disabled the clicked button
+    - added stable test ids for the chart procedure code, description, fee, and primary add button
+    - extended the focused Playwright proof to select a tooth, double-click `Add procedure`, verify the immediate disabled state, and confirm only one procedure request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts --grep "patient chart procedure add shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk82 completed on `stage163h-chunk82-chart-tooth-note-hardening` from `master@ae0c85a` to harden chart-side tooth note entry against duplicate submit without broadening into quick-procedure or wider chart workflow changes.
   - What was inspected before implementation:
     - `AGENTS.md`

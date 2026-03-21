@@ -108,6 +108,7 @@ const savingRecallEntryPatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
+const savingProcedurePatientIds = new Set<string>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
@@ -2559,8 +2560,18 @@ export default function PatientDetailClient({
     }
   }
 
-  async function submitProcedure() {
+  async function submitProcedure(button?: HTMLButtonElement | null) {
     if (!selectedTooth || !procedureCode || !procedureDescription.trim()) return;
+    if (
+      !button ||
+      savingProcedure ||
+      savingProcedurePatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    savingProcedurePatientIds.add(patientId);
+    button.disabled = true;
     setSavingProcedure(true);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/procedures`, {
@@ -2591,6 +2602,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save procedure");
     } finally {
+      savingProcedurePatientIds.delete(patientId);
       setSavingProcedure(false);
     }
   }
@@ -8664,6 +8676,7 @@ export default function PatientDetailClient({
                                   <label className="label">Procedure code</label>
                                   <select
                                     className="input"
+                                    data-testid="patient-chart-procedure-code"
                                     value={procedureCode}
                                     onChange={(e) => {
                                       const code = e.target.value;
@@ -8686,6 +8699,7 @@ export default function PatientDetailClient({
                                   <label className="label">Description</label>
                                   <input
                                     className="input"
+                                    data-testid="patient-chart-procedure-description"
                                     value={procedureDescription}
                                     onChange={(e) => setProcedureDescription(e.target.value)}
                                     placeholder="Procedure description"
@@ -8695,6 +8709,7 @@ export default function PatientDetailClient({
                                   <label className="label">Fee (optional)</label>
                                   <input
                                     className="input"
+                                    data-testid="patient-chart-procedure-fee"
                                     value={procedureFee}
                                     onChange={(e) => setProcedureFee(e.target.value)}
                                     placeholder="0.00"
@@ -8703,7 +8718,8 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
-                                  onClick={submitProcedure}
+                                  data-testid="patient-chart-procedure-add"
+                                  onClick={(event) => void submitProcedure(event.currentTarget)}
                                   disabled={
                                     savingProcedure ||
                                     !procedureCode ||
