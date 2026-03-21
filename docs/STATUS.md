@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk72 completed on `stage163h-chunk72-patient-clinical-note-submit-hardening` from `master@d3da07d` to harden patient clinical-note submit against duplicate submit without broadening into charting or treatment-plan redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the patient clinical-note submit flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing patient notes proof surface in `frontend/tests/patient-notes.spec.ts`
+    - nearby patient-page submit hardening patterns for immediate duplicate-submit guards
+  - Evidence for choosing this slice:
+    - the clinical-page `submitClinicalNote()` path still relied on `savingClinicalNote` after React re-render and had no immediate duplicate-submit guard
+    - clinical notes are explicitly in the V1 finish line and remain a live patient workflow
+    - `frontend/tests/patient-notes.spec.ts` already had the correct patient auth/navigation harness and repeat-click assertion pattern, so a focused proof could be added without broadening into R4 or charting redesign work
+  - Exact slice implemented:
+    - added an immediate patient clinical-note submit guard keyed by patient id before the async `POST` begins and synchronously disabled the clicked button
+    - added stable test ids for the clinical-note tooth field, body field, and submit button
+    - extended the focused Playwright proof to double-click `Add note`, verify the immediate disabled state, and confirm only one tooth-note request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk71 completed on `stage163h-chunk71-template-delete-hardening` from `master@d913a78` to harden templates-page deletes against duplicate submit without broadening into template workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`
