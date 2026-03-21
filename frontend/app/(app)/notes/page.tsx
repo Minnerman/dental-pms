@@ -25,6 +25,7 @@ type Note = {
 type Patient = { id: number; first_name: string; last_name: string; deleted_at?: string | null };
 
 const noteDetailSaveLocks = new Set<number>();
+const noteArchiveLocks = new Set<number>();
 
 export default function NotesPage() {
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function NotesPage() {
   const [editBody, setEditBody] = useState("");
   const [editType, setEditType] = useState("clinical");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [archiveAction, setArchiveAction] = useState<{ noteId: number; action: "archive" | "restore" } | null>(null);
 
   const patientMap = useMemo(() => {
     return new Map(patients.map((p) => [p.id, p]));
@@ -137,11 +139,25 @@ export default function NotesPage() {
     setEditType(selected.note_type);
   }, [selectedNoteId, notes]);
 
-  async function toggleArchive(note: Note) {
+  const selectedNote = selectedNoteId ? notes.find((note) => note.id === selectedNoteId) ?? null : null;
+
+  async function toggleArchive(note: Note, button?: HTMLButtonElement | null) {
     const action = note.deleted_at ? "restore" : "archive";
+    if (
+      !button ||
+      savingEdit ||
+      archiveAction?.noteId === note.id ||
+      noteArchiveLocks.has(note.id) ||
+      button.disabled
+    ) {
+      return;
+    }
     if (!confirm(`${note.deleted_at ? "Restore" : "Archive"} this note?`)) return;
+    noteArchiveLocks.add(note.id);
+    button.disabled = true;
     setError(null);
     setNotice(null);
+    setArchiveAction({ noteId: note.id, action });
     try {
       const res = await apiFetch(`/api/notes/${note.id}/${action}`, { method: "POST" });
       if (res.status === 401) {
@@ -157,6 +173,9 @@ export default function NotesPage() {
       await loadNotes();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} note`);
+    } finally {
+      noteArchiveLocks.delete(note.id);
+      setArchiveAction((current) => (current?.noteId === note.id ? null : current));
     }
   }
 
@@ -284,7 +303,7 @@ export default function NotesPage() {
             )}
           </div>
           <div className="card" style={{ margin: 0 }}>
-            {selectedNoteId ? (
+            {selectedNote ? (
               <div className="stack">
                 <div className="row">
                   <div>
@@ -296,20 +315,23 @@ export default function NotesPage() {
                   <div style={{ display: "flex", gap: 8 }}>
                     <Link
                       className="btn btn-secondary"
-                      href={`/notes/${selectedNoteId}/audit`}
+                      href={`/notes/${selectedNote.id}/audit`}
                     >
                       View audit
                     </Link>
                     <button
                       className="btn btn-secondary"
-                      onClick={() => {
-                        const note = notes.find((item) => item.id === selectedNoteId);
-                        if (note) void toggleArchive(note);
-                      }}
+                      onClick={(event) => void toggleArchive(selectedNote, event.currentTarget)}
+                      disabled={savingEdit || archiveAction?.noteId === selectedNote.id}
+                      data-testid="note-detail-archive"
                     >
-                      {notes.find((item) => item.id === selectedNoteId)?.deleted_at
-                        ? "Restore"
-                        : "Archive"}
+                      {archiveAction?.noteId === selectedNote.id
+                        ? archiveAction.action === "restore"
+                          ? "Restoring..."
+                          : "Archiving..."
+                        : selectedNote.deleted_at
+                          ? "Restore"
+                          : "Archive"}
                     </button>
                   </div>
                 </div>

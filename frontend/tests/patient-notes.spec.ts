@@ -299,3 +299,105 @@ test("notes detail save shows in-flight state and guards repeat submit", async (
   await expect(page.getByTestId("note-detail-body")).toHaveValue(editedBody);
   await expect(saveButton).toHaveText("Save changes");
 });
+
+test("notes detail archive shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `NOTEARCH${unique}`,
+  });
+  const noteBody = `Patient note archive seed ${unique}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+
+  await page.getByTestId("patient-tab-Notes").click();
+  await expect(page.getByTestId("patient-tab-Notes")).toHaveAttribute("aria-selected", "true");
+
+  await page.getByTestId("patient-note-type-select").selectOption("admin");
+  await page.getByPlaceholder("Write a clinical or admin note...").fill(noteBody);
+  const addNoteButton = page.getByTestId("patient-note-add");
+  await expect(addNoteButton).toBeEnabled();
+  await addNoteButton.click();
+
+  const noteCard = page.getByText(noteBody, { exact: true }).locator("xpath=..");
+  await expect(noteCard).toBeVisible({ timeout: 15_000 });
+  await expect(noteCard.getByText("Admin", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  const openButton = noteCard.locator('[data-testid^="patient-note-open-"]');
+  await openButton.click();
+  await expect(page).toHaveURL(/\/notes\?note=\d+\b/, { timeout: 15_000 });
+
+  const noteIdMatch = page.url().match(/note=(\d+)/);
+  expect(noteIdMatch).toBeTruthy();
+  const noteId = Number(noteIdMatch?.[1]);
+
+  const showArchivedToggle = page.getByLabel("Show archived");
+  await showArchivedToggle.check();
+  await expect(showArchivedToggle).toBeChecked();
+
+  const archiveButton = page.getByTestId("note-detail-archive");
+  await expect(archiveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const archiveRoutePattern = new RegExp(`/api/notes/${noteId}/archive$`);
+  let seenArchiveRequest!: () => void;
+  const seenArchiveRequestPromise = new Promise<void>((resolve) => {
+    seenArchiveRequest = resolve;
+  });
+  let releaseArchiveRequest!: () => void;
+  const releaseArchiveRequestPromise = new Promise<void>((resolve) => {
+    releaseArchiveRequest = resolve;
+  });
+  await page.route(archiveRoutePattern, async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenArchiveRequest();
+      await releaseArchiveRequestPromise;
+    }
+    await route.continue();
+  });
+  const archiveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/notes/${noteId}/archive`)
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+
+  const clickState = await archiveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Archive button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenArchiveRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(archiveButton).toBeDisabled();
+  await expect(archiveButton).toHaveText("Archiving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseArchiveRequest();
+
+  const archiveResponse = await archiveResponsePromise;
+  expect(archiveResponse.ok()).toBeTruthy();
+  await page.unroute(archiveRoutePattern);
+
+  await expect(page.getByText("Note archived.", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(archiveButton).toHaveText("Restore");
+  await expect(archiveButton).toBeEnabled({ timeout: 15_000 });
+});
