@@ -419,6 +419,125 @@ test("patient chart procedure add shows in-flight state and guards repeat submit
   ).toBeTruthy();
 });
 
+test("patient treatment plan accept shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `PLANSTATUS${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const description = `Treatment plan accept ${unique}`;
+
+  const createResponse = await request.post(`${baseUrl}/api/patients/${patientId}/treatment-plan`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      tooth: "UR6",
+      procedure_code: "PLANA",
+      description,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const createdItem = (await createResponse.json()) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+
+  const treatmentTab = page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ });
+  await treatmentTab.click();
+  await expect(treatmentTab).toHaveClass(/active/);
+
+  const acceptButton = page.getByTestId(
+    `patient-treatment-plan-status-${createdItem.id}-accepted`
+  );
+  await expect(acceptButton).toBeEnabled();
+
+  let requestCount = 0;
+  const statusRoutePattern = new RegExp(`/api/treatment-plan/${createdItem.id}$`);
+  let seenStatusRequest!: () => void;
+  const seenStatusRequestPromise = new Promise<void>((resolve) => {
+    seenStatusRequest = resolve;
+  });
+  let releaseStatusRequest!: () => void;
+  const releaseStatusRequestPromise = new Promise<void>((resolve) => {
+    releaseStatusRequest = resolve;
+  });
+  await page.route(statusRoutePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenStatusRequest();
+      await releaseStatusRequestPromise;
+    }
+    await route.continue();
+  });
+  const statusResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/treatment-plan/${createdItem.id}`)
+  );
+
+  const clickState = await acceptButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Treatment plan Accept button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenStatusRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(acceptButton).toBeDisabled();
+  await expect(acceptButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseStatusRequest();
+
+  const statusResponse = await statusResponsePromise;
+  expect(statusResponse.ok()).toBeTruthy();
+  expect(statusResponse.request().postDataJSON()).toMatchObject({
+    status: "accepted",
+  });
+  await page.unroute(statusRoutePattern);
+
+  const verifyResponse = await request.get(
+    `${baseUrl}/api/patients/${patientId}/clinical/summary?limit=200`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  expect(verifyResponse.ok()).toBeTruthy();
+  const clinicalSummary = (await verifyResponse.json()) as {
+    treatment_plan_items?: Array<{
+      id?: number;
+      description?: string | null;
+      status?: string | null;
+    }>;
+  };
+  expect(
+    (clinicalSummary.treatment_plan_items ?? []).some(
+      (item) =>
+        item.id === createdItem.id &&
+        item.description === description &&
+        item.status === "accepted"
+    )
+  ).toBeTruthy();
+});
+
 test("patient treatment plan add shows in-flight state and guards repeat submit", async ({
   page,
   request,
