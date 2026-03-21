@@ -653,3 +653,116 @@ test("patient recall communication save shows in-flight state and guards repeat 
     communications.some((entry) => entry.channel === "phone" && entry.notes === commNotes)
   ).toBeTruthy();
 });
+
+test("patient recall mark completed shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `RECALLDONE${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const recallNotes = `Recall completion seed ${unique}`;
+
+  const createRecallResponse = await request.post(`${baseUrl}/api/patients/${patientId}/recalls`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      kind: "exam",
+      due_date: "2026-11-30",
+      notes: recallNotes,
+    },
+  });
+  expect(createRecallResponse.ok()).toBeTruthy();
+  const createdRecall = (await createRecallResponse.json()) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  await page.getByTestId("patient-tab-Schemes").click();
+  await expect(page.getByTestId("patient-tab-Schemes")).toHaveAttribute("aria-selected", "true");
+
+  const completeButton = page.getByRole("button", { name: "Mark completed" }).first();
+  await expect(completeButton).toBeVisible();
+  await expect(completeButton).toBeEnabled();
+
+  let requestCount = 0;
+  const completeRoutePattern = new RegExp(`/api/patients/${patientId}/recalls/${createdRecall.id}$`);
+  let seenCompleteRequest!: () => void;
+  const seenCompleteRequestPromise = new Promise<void>((resolve) => {
+    seenCompleteRequest = resolve;
+  });
+  let releaseCompleteRequest!: () => void;
+  const releaseCompleteRequestPromise = new Promise<void>((resolve) => {
+    releaseCompleteRequest = resolve;
+  });
+  await page.route(completeRoutePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCompleteRequest();
+      await releaseCompleteRequestPromise;
+    }
+    await route.continue();
+  });
+  const completeResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/patients/${patientId}/recalls/${createdRecall.id}`)
+  );
+
+  const clickState = await completeButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Mark completed button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCompleteRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  const updatingButton = page.getByRole("button", { name: "Updating..." }).first();
+  await expect(updatingButton).toBeDisabled();
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCompleteRequest();
+
+  const completeResponse = await completeResponsePromise;
+  expect(completeResponse.ok()).toBeTruthy();
+  expect(completeResponse.request().postDataJSON()).toMatchObject({
+    status: "completed",
+    outcome: "attended",
+  });
+  await page.unroute(completeRoutePattern);
+
+  const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}/recalls`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const savedRecalls = (await verifyResponse.json()) as Array<{
+    id: number;
+    status: string | null;
+    completed_at: string | null;
+  }>;
+  expect(
+    savedRecalls.some(
+      (item) =>
+        item.id === createdRecall.id &&
+        item.status === "completed" &&
+        Boolean(item.completed_at)
+    )
+  ).toBeTruthy();
+});

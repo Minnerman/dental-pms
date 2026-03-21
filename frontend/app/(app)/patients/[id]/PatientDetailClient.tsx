@@ -106,6 +106,7 @@ const savingPatientIds = new Set<string>();
 const savingRecallPatientIds = new Set<string>();
 const savingRecallEntryPatientIds = new Set<string>();
 const savingRecallCommunicationIds = new Set<number>();
+const savingRecallActionIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
@@ -2929,11 +2930,26 @@ export default function PatientDetailClient({
     return true;
   }
 
-  async function markRecallCompleted(recall: PatientRecallItem, nextMonths?: number) {
-    setRecallActionId(recall.id);
+  async function markRecallCompleted(
+    recall: PatientRecallItem,
+    nextMonths?: number,
+    button?: HTMLButtonElement | null
+  ) {
+    if (
+      !button ||
+      recallActionId === recall.id ||
+      savingRecallActionIds.has(recall.id) ||
+      button.disabled
+    ) {
+      return;
+    }
+    const recallId = recall.id;
+    savingRecallActionIds.add(recallId);
+    button.disabled = true;
+    setRecallActionId(recallId);
     setRecallsError(null);
     try {
-      const res = await apiFetch(`/api/patients/${patientId}/recalls/${recall.id}`, {
+      const res = await apiFetch(`/api/patients/${patientId}/recalls/${recallId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2958,7 +2974,8 @@ export default function PatientDetailClient({
     } catch (err) {
       setRecallsError(err instanceof Error ? err.message : "Failed to update recall");
     } finally {
-      setRecallActionId(null);
+      savingRecallActionIds.delete(recallId);
+      setRecallActionId((current) => (current === recallId ? null : current));
     }
   }
 
@@ -9783,7 +9800,13 @@ export default function PatientDetailClient({
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => void markRecallCompleted(recall)}
+                                        onClick={(event) =>
+                                          void markRecallCompleted(
+                                            recall,
+                                            undefined,
+                                            event.currentTarget
+                                          )
+                                        }
                                         disabled={isFinal || recallActionId === recall.id}
                                       >
                                         {recallActionId === recall.id
@@ -9793,7 +9816,13 @@ export default function PatientDetailClient({
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => void markRecallCompleted(recall, 6)}
+                                        onClick={(event) =>
+                                          void markRecallCompleted(
+                                            recall,
+                                            6,
+                                            event.currentTarget
+                                          )
+                                        }
                                         disabled={isFinal || recallActionId === recall.id}
                                       >
                                         Complete +6m
@@ -9801,7 +9830,13 @@ export default function PatientDetailClient({
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => void markRecallCompleted(recall, 12)}
+                                        onClick={(event) =>
+                                          void markRecallCompleted(
+                                            recall,
+                                            12,
+                                            event.currentTarget
+                                          )
+                                        }
                                         disabled={isFinal || recallActionId === recall.id}
                                       >
                                         Complete +12m
@@ -9919,7 +9954,13 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
-                                  onClick={() => void markRecallCompleted(recall)}
+                                  onClick={(event) =>
+                                    void markRecallCompleted(
+                                      recall,
+                                      undefined,
+                                      event.currentTarget
+                                    )
+                                  }
                                   disabled={isFinal || recallActionId === recall.id}
                                 >
                                   {recallActionId === recall.id
@@ -9929,7 +9970,13 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
-                                  onClick={() => void markRecallCompleted(recall, 6)}
+                                  onClick={(event) =>
+                                    void markRecallCompleted(
+                                      recall,
+                                      6,
+                                      event.currentTarget
+                                    )
+                                  }
                                   disabled={isFinal || recallActionId === recall.id}
                                 >
                                   Complete +6m
@@ -9937,7 +9984,13 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
-                                  onClick={() => void markRecallCompleted(recall, 12)}
+                                  onClick={(event) =>
+                                    void markRecallCompleted(
+                                      recall,
+                                      12,
+                                      event.currentTarget
+                                    )
+                                  }
                                   disabled={isFinal || recallActionId === recall.id}
                                 >
                                   Complete +12m
