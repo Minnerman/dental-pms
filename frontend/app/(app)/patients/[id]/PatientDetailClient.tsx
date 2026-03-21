@@ -106,6 +106,7 @@ const savingPatientIds = new Set<string>();
 const savingRecallPatientIds = new Set<string>();
 const savingRecallEntryPatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
+const savingBpePatientIds = new Set<string>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
@@ -2592,7 +2593,12 @@ export default function PatientDetailClient({
     setShowPlanModal(true);
   }
 
-  async function submitBpe() {
+  async function submitBpe(button?: HTMLButtonElement | null) {
+    if (!button || bpeSaving || savingBpePatientIds.has(patientId) || button.disabled) {
+      return;
+    }
+    savingBpePatientIds.add(patientId);
+    button.disabled = true;
     setBpeSaving(true);
     setBpeNotice(null);
     try {
@@ -2620,6 +2626,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save BPE");
     } finally {
+      savingBpePatientIds.delete(patientId);
       setBpeSaving(false);
     }
   }
@@ -8555,6 +8562,7 @@ export default function PatientDetailClient({
                                   <div className="stack" style={{ gap: 6 }} key={label}>
                                     <label className="label">{label}</label>
                                     <input
+                                      data-testid={`patient-bpe-score-${label}`}
                                       className="input"
                                       value={bpeScores[index] ?? ""}
                                       onChange={(e) => {
@@ -8575,7 +8583,8 @@ export default function PatientDetailClient({
                                 <button
                                   className="btn btn-secondary"
                                   type="button"
-                                  onClick={submitBpe}
+                                  data-testid="patient-bpe-save"
+                                  onClick={(event) => void submitBpe(event.currentTarget)}
                                   disabled={bpeSaving}
                                 >
                                   {bpeSaving ? "Saving..." : "Save BPE"}

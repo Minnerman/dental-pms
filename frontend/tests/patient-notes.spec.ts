@@ -309,6 +309,109 @@ test("patient treatment plan add shows in-flight state and guards repeat submit"
   ).toBeTruthy();
 });
 
+test("patient BPE save shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `BPE${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const scores = ["0", "1", "2", "3", "*", "4"];
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+  await expect(page.getByTestId("patient-tab-Medical")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Save BPE" })).toBeVisible();
+
+  const sextants = ["UR", "UA", "UL", "LL", "LA", "LR"] as const;
+  for (const [index, sextant] of sextants.entries()) {
+    await page.getByTestId(`patient-bpe-score-${sextant}`).fill(scores[index]);
+  }
+
+  const saveButton = page.getByTestId("patient-bpe-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const bpeRoutePattern = new RegExp(`/api/patients/${patientId}/clinical/bpe$`);
+  let seenSaveRequest!: () => void;
+  const seenSaveRequestPromise = new Promise<void>((resolve) => {
+    seenSaveRequest = resolve;
+  });
+  let releaseSaveRequest!: () => void;
+  const releaseSaveRequestPromise = new Promise<void>((resolve) => {
+    releaseSaveRequest = resolve;
+  });
+  await page.route(bpeRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenSaveRequest();
+      await releaseSaveRequestPromise;
+    }
+    await route.continue();
+  });
+  const saveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/clinical/bpe`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Save BPE button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenSaveRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseSaveRequest();
+
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok()).toBeTruthy();
+  expect(saveResponse.request().postDataJSON()).toMatchObject({
+    scores,
+  });
+  await page.unroute(bpeRoutePattern);
+
+  await expect(page.getByText("BPE saved.", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(saveButton).toHaveText("Save BPE", { timeout: 15_000 });
+
+  const verifyResponse = await request.get(
+    `${baseUrl}/api/patients/${patientId}/clinical/summary`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  expect(verifyResponse.ok()).toBeTruthy();
+  const clinicalSummary = (await verifyResponse.json()) as {
+    bpe_scores?: string[] | null;
+    bpe_recorded_at?: string | null;
+  };
+  expect(clinicalSummary.bpe_scores).toEqual(scores);
+  expect(clinicalSummary.bpe_recorded_at).toBeTruthy();
+});
+
 test("notes detail save shows in-flight state and guards repeat submit", async ({
   page,
   request,
