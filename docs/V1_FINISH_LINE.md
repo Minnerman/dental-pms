@@ -21,7 +21,7 @@ Run a full working day using Dental PMS for:
 
 ### Patients
 - Patient detail page is usable and responsive
-- Notes entry is reliable (basic notes; no advanced templates required for V1)
+- Notes entry and notes detail editing are reliable (basic notes; no advanced templates required for V1)
 - Documents/attachments:
   - upload with in-flight state
   - list updates immediately
