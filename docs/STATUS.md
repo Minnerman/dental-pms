@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-21: Stage 163H chunk77 completed on `stage163h-chunk77-patient-ledger-submit-hardening` from `master@09702ed` to harden the patient-page ledger modal save against duplicate submit without broadening into finance workflow redesign.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - the patient ledger modal submit path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing patient-page proof surface in `frontend/tests/patient-save.spec.ts`
+    - nearby patient save/archive hardening patterns already merged on the same page
+  - Evidence for choosing this slice:
+    - the patient-page ledger modal `Save entry` action still posted without an immediate duplicate-submit guard
+    - patient ledger quick payment/adjustment entry is already part of the merged patient surface advertised as working on current master
+    - `frontend/tests/patient-save.spec.ts` already had the correct patient-page harness, so a focused repeat-click ledger proof could be added without inventing a broader finance test area
+  - Exact slice implemented:
+    - added an immediate ledger modal submit guard keyed by patient id before the async `POST` begins and synchronously disabled the clicked button
+    - added a stable test id for the patient ledger save button
+    - extended the focused Playwright proof to open the summary-card `Add payment` modal, double-click `Save entry`, verify the immediate disabled state, and confirm only one patient payment request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-21: Stage 163H chunk76 completed on `stage163h-chunk76-patient-archive-hardening` from `master@590340b` to harden patient-page archive/restore against duplicate submit without broadening into patient workflow redesign.
   - What was inspected before implementation:
     - `AGENTS.md`

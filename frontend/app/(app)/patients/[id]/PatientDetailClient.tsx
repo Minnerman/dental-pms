@@ -102,6 +102,7 @@ const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
 const savingClinicalNotePatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
+const savingLedgerEntryPatientIds = new Set<string>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
@@ -4384,13 +4385,18 @@ export default function PatientDetailClient({
     }
   }
 
-  async function submitLedgerEntry() {
+  async function submitLedgerEntry(button?: HTMLButtonElement | null) {
     if (!patient) return;
     const parsed = Number(ledgerAmount);
     if (Number.isNaN(parsed) || parsed <= 0) {
       setLedgerError("Amount must be greater than 0.");
       return;
     }
+    if (!button || ledgerSaving || savingLedgerEntryPatientIds.has(patientId) || button.disabled) {
+      return;
+    }
+    savingLedgerEntryPatientIds.add(patientId);
+    button.disabled = true;
     setLedgerSaving(true);
     setLedgerError(null);
     try {
@@ -4435,6 +4441,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setLedgerError(err instanceof Error ? err.message : "Failed to save entry");
     } finally {
+      savingLedgerEntryPatientIds.delete(patientId);
       setLedgerSaving(false);
     }
   }
@@ -10905,7 +10912,8 @@ export default function PatientDetailClient({
                   <button
                     className="btn btn-primary"
                     type="button"
-                    onClick={submitLedgerEntry}
+                    data-testid="patient-ledger-save"
+                    onClick={(event) => void submitLedgerEntry(event.currentTarget)}
                     disabled={ledgerSaving}
                   >
                     {ledgerSaving ? "Saving..." : "Save entry"}
