@@ -107,6 +107,7 @@ const savingRecallPatientIds = new Set<string>();
 const savingRecallEntryPatientIds = new Set<string>();
 const savingRecallCommunicationIds = new Set<number>();
 const savingRecallActionIds = new Set<number>();
+const savingEstimatePatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
 const savingChartNotePatientIds = new Set<string>();
@@ -1751,8 +1752,17 @@ export default function PatientDetailClient({
     }
   }
 
-  async function createEstimate() {
-    if (creatingEstimate) return;
+  async function createEstimate(button?: HTMLButtonElement | null) {
+    if (
+      !button ||
+      creatingEstimate ||
+      savingEstimatePatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    savingEstimatePatientIds.add(patientId);
+    button.disabled = true;
     setCreatingEstimate(true);
     setEstimateError(null);
     try {
@@ -1780,6 +1790,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to create estimate");
     } finally {
+      savingEstimatePatientIds.delete(patientId);
       setCreatingEstimate(false);
     }
   }
@@ -10094,6 +10105,7 @@ export default function PatientDetailClient({
                         <div className="stack" style={{ gap: 8 }}>
                           <label className="label">Valid until</label>
                           <input
+                            data-testid="patient-estimate-valid-until"
                             className="input"
                             type="date"
                             value={estimateValidUntil}
@@ -10103,6 +10115,7 @@ export default function PatientDetailClient({
                         <div className="stack" style={{ gap: 8 }}>
                           <label className="label">Notes</label>
                           <input
+                            data-testid="patient-estimate-notes"
                             className="input"
                             value={estimateNotes}
                             onChange={(e) => setEstimateNotes(e.target.value)}
@@ -10113,7 +10126,8 @@ export default function PatientDetailClient({
                       <button
                         className="btn btn-primary"
                         type="button"
-                        onClick={createEstimate}
+                        data-testid="patient-estimate-create"
+                        onClick={(event) => void createEstimate(event.currentTarget)}
                         disabled={creatingEstimate}
                       >
                         {creatingEstimate ? "Creating..." : "Create estimate"}
