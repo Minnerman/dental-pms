@@ -104,6 +104,7 @@ const savingClinicalNotePatientIds = new Set<string>();
 const savingTreatmentPlanPatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
 const savingRecallPatientIds = new Set<string>();
+const savingRecallEntryPatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
@@ -2789,11 +2790,21 @@ export default function PatientDetailClient({
     setShowRecallForm(true);
   }
 
-  async function saveRecallEntry() {
+  async function saveRecallEntry(button?: HTMLButtonElement | null) {
     if (!recallEntryDueDate) {
       setRecallsError("Select a due date.");
       return;
     }
+    if (
+      !button ||
+      recallEntrySaving ||
+      savingRecallEntryPatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    savingRecallEntryPatientIds.add(patientId);
+    button.disabled = true;
     setRecallEntrySaving(true);
     setRecallsError(null);
     try {
@@ -2825,6 +2836,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setRecallsError(err instanceof Error ? err.message : "Failed to save recall");
     } finally {
+      savingRecallEntryPatientIds.delete(patientId);
       setRecallEntrySaving(false);
     }
   }
@@ -9462,6 +9474,7 @@ export default function PatientDetailClient({
                       <button
                         className="btn btn-primary"
                         type="button"
+                        data-testid="patient-recall-entry-open"
                         onClick={() => {
                           if (showRecallForm) {
                             resetRecallForm();
@@ -9511,6 +9524,7 @@ export default function PatientDetailClient({
                             <input
                               className="input"
                               type="date"
+                              data-testid="patient-recall-entry-due-date"
                               value={recallEntryDueDate}
                               onChange={(e) => setRecallEntryDueDate(e.target.value)}
                             />
@@ -9549,8 +9563,9 @@ export default function PatientDetailClient({
                           <button
                             className="btn btn-primary"
                             type="button"
+                            data-testid="patient-recall-entry-save"
                             disabled={recallEntrySaving || !recallEntryDueDate}
-                            onClick={saveRecallEntry}
+                            onClick={(event) => void saveRecallEntry(event.currentTarget)}
                           >
                             {recallEntrySaving
                               ? "Saving..."

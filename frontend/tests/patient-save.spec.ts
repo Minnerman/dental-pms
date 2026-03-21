@@ -418,3 +418,116 @@ test("patient recall save shows in-flight state and guards repeat submit", async
   expect(savedPatient.recall_due_date?.slice(0, 10)).toBe(dueDate);
   expect(savedPatient.recall_status).toBe("booked");
 });
+
+test("patient recall entry add shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `RECALLENTRY${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const dueDate = "2026-11-30";
+  const notes = `Recall entry proof ${unique}`;
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  await page.getByTestId("patient-tab-Schemes").click();
+  await expect(page.getByTestId("patient-tab-Schemes")).toHaveAttribute("aria-selected", "true");
+
+  const openButton = page.getByTestId("patient-recall-entry-open");
+  await expect(openButton).toBeVisible();
+  await openButton.click();
+
+  await expect(page.getByRole("heading", { name: "Add recall" })).toBeVisible();
+  await page.getByTestId("patient-recall-entry-due-date").fill(dueDate);
+  await page.getByPlaceholder("Optional notes for this recall").fill(notes);
+
+  const saveButton = page.getByTestId("patient-recall-entry-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const recallEntryRoutePattern = new RegExp(`/api/patients/${patientId}/recalls$`);
+  let seenRecallEntryRequest!: () => void;
+  const seenRecallEntryRequestPromise = new Promise<void>((resolve) => {
+    seenRecallEntryRequest = resolve;
+  });
+  let releaseRecallEntryRequest!: () => void;
+  const releaseRecallEntryRequestPromise = new Promise<void>((resolve) => {
+    releaseRecallEntryRequest = resolve;
+  });
+  await page.route(recallEntryRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRecallEntryRequest();
+      await releaseRecallEntryRequestPromise;
+    }
+    await route.continue();
+  });
+  const recallEntryResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/recalls`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Add recall button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRecallEntryRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseRecallEntryRequest();
+
+  const recallEntryResponse = await recallEntryResponsePromise;
+  expect(recallEntryResponse.ok()).toBeTruthy();
+  expect(recallEntryResponse.request().postDataJSON()).toMatchObject({
+    kind: "exam",
+    due_date: dueDate,
+    notes,
+  });
+  await page.unroute(recallEntryRoutePattern);
+
+  await expect(openButton).toHaveText("Add recall", { timeout: 15_000 });
+
+  const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}/recalls`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const savedRecalls = (await verifyResponse.json()) as Array<{
+    kind: string;
+    due_date: string | null;
+    notes: string | null;
+  }>;
+  expect(
+    savedRecalls.some(
+      (item) =>
+        item.kind === "exam" &&
+        item.due_date?.slice(0, 10) === dueDate &&
+        item.notes === notes
+    )
+  ).toBeTruthy();
+});
