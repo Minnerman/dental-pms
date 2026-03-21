@@ -198,3 +198,122 @@ test("patient archive shows in-flight state and guards repeat submit", async ({
   const archivedPatient = (await verifyResponse.json()) as { deleted_at: string | null };
   expect(archivedPatient.deleted_at).toBeTruthy();
 });
+
+test("patient ledger save shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `LEDGER${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const reference = `LEDGER-${unique}`;
+  const note = `Patient ledger proof ${unique}`;
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+  await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
+
+  const addPaymentButton = page.getByRole("button", { name: "Add payment" }).first();
+  await expect(addPaymentButton).toBeVisible();
+  await addPaymentButton.click();
+
+  await expect(page.getByRole("heading", { name: "Add payment" })).toBeVisible();
+  await page.getByPlaceholder("0.00").fill("25.00");
+  await page.getByPlaceholder("Optional reference").fill(reference);
+  await page.getByPlaceholder("Optional note").fill(note);
+
+  const saveButton = page.getByTestId("patient-ledger-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const ledgerRoutePattern = new RegExp(`/api/patients/${patientId}/payments$`);
+  let seenLedgerRequest!: () => void;
+  const seenLedgerRequestPromise = new Promise<void>((resolve) => {
+    seenLedgerRequest = resolve;
+  });
+  let releaseLedgerRequest!: () => void;
+  const releaseLedgerRequestPromise = new Promise<void>((resolve) => {
+    releaseLedgerRequest = resolve;
+  });
+  await page.route(ledgerRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenLedgerRequest();
+      await releaseLedgerRequestPromise;
+    }
+    await route.continue();
+  });
+  const ledgerResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/payments`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Save entry button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenLedgerRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseLedgerRequest();
+
+  const ledgerResponse = await ledgerResponsePromise;
+  expect(ledgerResponse.ok()).toBeTruthy();
+  expect(ledgerResponse.request().postDataJSON()).toMatchObject({
+    amount_pence: 2500,
+    method: "card",
+    reference,
+    note,
+  });
+  await page.unroute(ledgerRoutePattern);
+
+  await expect(page.getByRole("heading", { name: "Add payment" })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+
+  const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}/ledger?limit=200`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const ledgerEntries = (await verifyResponse.json()) as Array<{
+    entry_type: string;
+    amount_pence: number;
+    reference: string | null;
+    note: string | null;
+    method?: string | null;
+  }>;
+  expect(
+    ledgerEntries.some(
+      (entry) =>
+        entry.entry_type === "payment" &&
+        entry.amount_pence === -2500 &&
+        entry.reference === reference &&
+        entry.note === note &&
+        entry.method === "card"
+    )
+  ).toBeTruthy();
+});
