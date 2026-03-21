@@ -102,6 +102,7 @@ const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
 const savingClinicalNotePatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
+const savingRecallPatientIds = new Set<string>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
@@ -921,6 +922,9 @@ export default function PatientDetailClient({
   const [recallDueDate, setRecallDueDate] = useState("");
   const [recallStatus, setRecallStatus] = useState<RecallStatus>("due");
   const [recallSaving, setRecallSaving] = useState(false);
+  const [recallAction, setRecallAction] = useState<"save" | "contacted" | "not_required" | null>(
+    null
+  );
   const [recallError, setRecallError] = useState<string | null>(null);
   const [handledBookParam, setHandledBookParam] = useState(false);
   const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
@@ -4358,9 +4362,18 @@ export default function PatientDetailClient({
     interval_months?: number | null;
     due_date?: string | null;
     status?: RecallStatus | null;
-  }) {
+  },
+  action: "save" | "contacted" | "not_required" = "save",
+  button?: HTMLButtonElement | null
+  ) {
     if (!patient) return;
+    if (!button || recallSaving || savingRecallPatientIds.has(patientId) || button.disabled) {
+      return;
+    }
+    savingRecallPatientIds.add(patientId);
+    button.disabled = true;
     setRecallSaving(true);
+    setRecallAction(action);
     setRecallError(null);
     try {
       const res = await apiFetch(`/api/patients/${patient.id}/recall`, {
@@ -4381,6 +4394,8 @@ export default function PatientDetailClient({
     } catch (err) {
       setRecallError(err instanceof Error ? err.message : "Failed to update recall");
     } finally {
+      savingRecallPatientIds.delete(patientId);
+      setRecallAction(null);
       setRecallSaving(false);
     }
   }
@@ -5566,6 +5581,7 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Interval (months)</label>
                               <input
+                                data-testid="patient-recall-interval"
                                 className="input"
                                 value={recallInterval}
                                 onChange={(e) => setRecallInterval(e.target.value)}
@@ -5574,6 +5590,7 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Due date</label>
                               <input
+                                data-testid="patient-recall-due-date"
                                 className="input"
                                 type="date"
                                 value={recallDueDate}
@@ -5583,6 +5600,7 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Status</label>
                               <select
+                                data-testid="patient-recall-status"
                                 className="input"
                                 value={recallStatus}
                                 onChange={(e) =>
@@ -5600,30 +5618,41 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-primary"
                               type="button"
+                              data-testid="patient-recall-save"
                               disabled={recallSaving}
-                              onClick={() => {
+                              onClick={(event) => {
                                 const parsed = Number(recallInterval);
                                 const interval = Number.isNaN(parsed) ? null : parsed;
                                 void updateRecall({
                                   interval_months: interval,
                                   due_date: recallDueDate || null,
                                   status: recallStatus || null,
-                                });
+                                }, "save", event.currentTarget);
                               }}
                             >
-                              {recallSaving ? "Saving..." : "Save recall"}
+                              {recallSaving && recallAction === "save" ? "Saving..." : "Save recall"}
                             </button>
                             <button
                               className="btn btn-secondary"
                               type="button"
-                              onClick={() => void updateRecall({ status: "contacted" })}
+                              disabled={recallSaving}
+                              onClick={(event) =>
+                                void updateRecall({ status: "contacted" }, "contacted", event.currentTarget)
+                              }
                             >
                               Mark contacted
                             </button>
                             <button
                               className="btn btn-secondary"
                               type="button"
-                              onClick={() => void updateRecall({ status: "not_required" })}
+                              disabled={recallSaving}
+                              onClick={(event) =>
+                                void updateRecall(
+                                  { status: "not_required" },
+                                  "not_required",
+                                  event.currentTarget
+                                )
+                              }
                             >
                               Not required
                             </button>
