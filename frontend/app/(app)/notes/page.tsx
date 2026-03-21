@@ -24,6 +24,8 @@ type Note = {
 
 type Patient = { id: number; first_name: string; last_name: string; deleted_at?: string | null };
 
+const noteDetailSaveLocks = new Set<number>();
+
 export default function NotesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -158,12 +160,23 @@ export default function NotesPage() {
     }
   }
 
-  async function saveNoteEdit() {
-    if (!selectedNoteId) return;
+  async function saveNoteEdit(button?: HTMLButtonElement | null) {
+    const noteId = selectedNoteId;
+    if (
+      !noteId ||
+      !button ||
+      savingEdit ||
+      noteDetailSaveLocks.has(noteId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    noteDetailSaveLocks.add(noteId);
+    button.disabled = true;
     setSavingEdit(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/notes/${selectedNoteId}`, {
+      const res = await apiFetch(`/api/notes/${noteId}`, {
         method: "PATCH",
         body: JSON.stringify({
           body: editBody.trim(),
@@ -184,6 +197,7 @@ export default function NotesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update note");
     } finally {
+      noteDetailSaveLocks.delete(noteId);
       setSavingEdit(false);
     }
   }
@@ -321,7 +335,12 @@ export default function NotesPage() {
                     data-testid="note-detail-body"
                   />
                 </div>
-                <button className="btn btn-primary" onClick={saveNoteEdit} disabled={savingEdit}>
+                <button
+                  className="btn btn-primary"
+                  onClick={(event) => void saveNoteEdit(event.currentTarget)}
+                  disabled={savingEdit}
+                  data-testid="note-detail-save"
+                >
                   {savingEdit ? "Saving..." : "Save changes"}
                 </button>
               </div>
