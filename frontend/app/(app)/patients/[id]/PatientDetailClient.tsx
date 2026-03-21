@@ -100,6 +100,7 @@ const downloadingInvoiceIds = new Set<number>();
 const downloadingEstimatePdfIds = new Set<number>();
 const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
+const savingClinicalNotePatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
@@ -2614,8 +2615,18 @@ export default function PatientDetailClient({
     }
   }
 
-  async function submitClinicalNote() {
+  async function submitClinicalNote(button?: HTMLButtonElement | null) {
     if (!notesTooth.trim() || !notesBody.trim()) return;
+    if (
+      !button ||
+      savingClinicalNote ||
+      savingClinicalNotePatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    savingClinicalNotePatientIds.add(patientId);
+    button.disabled = true;
     setSavingClinicalNote(true);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
@@ -2642,6 +2653,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save clinical note");
     } finally {
+      savingClinicalNotePatientIds.delete(patientId);
       setSavingClinicalNote(false);
     }
   }
@@ -8927,6 +8939,7 @@ export default function PatientDetailClient({
                               <label className="label">Tooth</label>
                               <select
                                 className="input"
+                                data-testid="patient-clinical-note-tooth"
                                 value={notesTooth}
                                 onChange={(e) => setNotesTooth(e.target.value)}
                               >
@@ -8952,6 +8965,7 @@ export default function PatientDetailClient({
                             <label className="label">Note</label>
                             <textarea
                               className="input"
+                              data-testid="patient-clinical-note-body"
                               rows={3}
                               value={notesBody}
                               onChange={(e) => {
@@ -8964,7 +8978,8 @@ export default function PatientDetailClient({
                           <button
                             className="btn btn-primary"
                             type="button"
-                            onClick={submitClinicalNote}
+                            data-testid="patient-clinical-note-add"
+                            onClick={(event) => void submitClinicalNote(event.currentTarget)}
                             disabled={savingClinicalNote || !notesTooth || !notesBody.trim()}
                           >
                             {savingClinicalNote ? "Saving..." : "Add note"}
