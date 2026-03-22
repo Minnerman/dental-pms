@@ -5211,12 +5211,8 @@ export default function PatientDetailClient({
     }
   }
 
-  function buildEstimateFilename() {
-    const date = new Date().toISOString().slice(0, 10);
-    if (!patient) return `Estimate_${patientId}_${date}.pdf`;
-    const rawName = `${patient.first_name}_${patient.last_name}`;
-    const safeName = rawName.replace(/[^a-zA-Z0-9-_]+/g, "_");
-    return `Estimate_${safeName}_${date}.pdf`;
+  function buildEstimateFilename(estimateId: number) {
+    return `estimate-${estimateId}.pdf`;
   }
 
   async function downloadEstimatePdf(
@@ -5249,7 +5245,7 @@ export default function PatientDetailClient({
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const filename = getFilenameFromDisposition(res, buildEstimateFilename());
+      const filename = getFilenameFromDisposition(res, buildEstimateFilename(estimateId));
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
