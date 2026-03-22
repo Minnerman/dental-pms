@@ -109,6 +109,7 @@ const savingRecallCommunicationIds = new Set<number>();
 const savingRecallActionIds = new Set<number>();
 const savingEstimatePatientIds = new Set<string>();
 const savingEstimateStatusIds = new Set<number>();
+const savingInvoicePatientIds = new Set<string>();
 const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
@@ -4632,8 +4633,17 @@ export default function PatientDetailClient({
     }
   }
 
-  async function createInvoice() {
-    if (creatingInvoice) return;
+  async function createInvoice(button?: HTMLButtonElement | null) {
+    if (
+      !button ||
+      creatingInvoice ||
+      savingInvoicePatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    savingInvoicePatientIds.add(patientId);
+    button.disabled = true;
     setCreatingInvoice(true);
     setInvoiceError(null);
     const discountPence = toPence(newInvoiceDiscount || "0");
@@ -4671,6 +4681,7 @@ export default function PatientDetailClient({
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to create invoice");
     } finally {
+      savingInvoicePatientIds.delete(patientId);
       setCreatingInvoice(false);
     }
   }
@@ -10438,6 +10449,7 @@ export default function PatientDetailClient({
                       <div className="stack" style={{ gap: 8 }}>
                         <label className="label">Notes</label>
                         <textarea
+                          data-testid="patient-invoice-notes"
                           className="input"
                           rows={3}
                           value={newInvoiceNotes}
@@ -10448,13 +10460,20 @@ export default function PatientDetailClient({
                       <div className="stack" style={{ gap: 8 }}>
                         <label className="label">Discount (£)</label>
                         <input
+                          data-testid="patient-invoice-discount"
                           className="input"
                           value={newInvoiceDiscount}
                           onChange={(e) => setNewInvoiceDiscount(e.target.value)}
                           placeholder="0.00"
                         />
                       </div>
-                      <button className="btn btn-primary" type="button" onClick={createInvoice}>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        data-testid="patient-invoice-create"
+                        onClick={(event) => void createInvoice(event.currentTarget)}
+                        disabled={creatingInvoice}
+                      >
                         {creatingInvoice ? "Creating..." : "New invoice"}
                       </button>
                     </div>
