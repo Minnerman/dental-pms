@@ -75,6 +75,8 @@ const contactChannelLabels: Record<RecallContactChannel, string> = {
   other: "Other",
 };
 
+const recallsExportLocks = new Set<string>();
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   const parsed = new Date(value);
@@ -364,7 +366,12 @@ export default function RecallsPage() {
     }
   }
 
-  async function exportCsv() {
+  async function exportCsv(button?: HTMLButtonElement | null) {
+    if (!button || exporting || recallsExportLocks.has("csv") || button.disabled) {
+      return;
+    }
+    recallsExportLocks.add("csv");
+    button.disabled = true;
     setExporting(true);
     setError(null);
     setExportCountError(null);
@@ -407,6 +414,7 @@ export default function RecallsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to export CSV");
     } finally {
+      recallsExportLocks.delete("csv");
       setExporting(false);
     }
   }
@@ -874,7 +882,7 @@ export default function RecallsPage() {
             <button
               className="btn btn-secondary"
               type="button"
-              onClick={() => void exportCsv()}
+              onClick={(event) => void exportCsv(event.currentTarget)}
               disabled={!exportReady || exporting || downloadingZip}
               data-testid="recalls-export-csv"
             >
