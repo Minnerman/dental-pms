@@ -113,6 +113,7 @@ const savingInvoicePatientIds = new Set<string>();
 const savingInvoiceMetaIds = new Set<number>();
 const voidingInvoiceIds = new Set<number>();
 const addingInvoiceLineIds = new Set<number>();
+const updatingInvoiceLineIds = new Set<number>();
 const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
@@ -889,6 +890,7 @@ export default function PatientDetailClient({
   const [savingInvoiceMetaId, setSavingInvoiceMetaId] = useState<number | null>(null);
   const [voidingInvoiceId, setVoidingInvoiceId] = useState<number | null>(null);
   const [addingInvoiceLineId, setAddingInvoiceLineId] = useState<number | null>(null);
+  const [updatingInvoiceLineId, setUpdatingInvoiceLineId] = useState<number | null>(null);
   const [issuingInvoiceId, setIssuingInvoiceId] = useState<number | null>(null);
   const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
   const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
@@ -4793,8 +4795,10 @@ export default function PatientDetailClient({
     }
   }
 
-  async function updateInvoiceLine(lineId: number) {
-    if (!selectedInvoice) return;
+  async function updateInvoiceLine(lineId: number, button?: HTMLButtonElement | null) {
+    if (!selectedInvoice || !button || updatingInvoiceLineIds.has(lineId) || button.disabled) {
+      return;
+    }
     const draft = lineDrafts[lineId];
     if (!draft) return;
     const quantity = Number(draft.quantity);
@@ -4803,6 +4807,9 @@ export default function PatientDetailClient({
       setInvoiceError("Enter a description, quantity, and unit price.");
       return;
     }
+    updatingInvoiceLineIds.add(lineId);
+    button.disabled = true;
+    setUpdatingInvoiceLineId(lineId);
     setInvoiceError(null);
     try {
       const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/lines/${lineId}`, {
@@ -4826,6 +4833,9 @@ export default function PatientDetailClient({
       await loadInvoices();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to update line");
+    } finally {
+      updatingInvoiceLineIds.delete(lineId);
+      setUpdatingInvoiceLineId((current) => (current === lineId ? null : current));
     }
   }
 
@@ -10678,7 +10688,7 @@ export default function PatientDetailClient({
                                 </thead>
                                 <tbody>
                                   {selectedInvoice.lines.map((line) => (
-                                    <tr key={line.id}>
+                                    <tr key={line.id} data-testid={`invoice-line-row-${line.id}`}>
                                       <td>
                                         <input
                                           className="input"
@@ -10692,7 +10702,10 @@ export default function PatientDetailClient({
                                               },
                                             }))
                                           }
-                                          disabled={selectedInvoice.status !== "draft"}
+                                          disabled={
+                                            selectedInvoice.status !== "draft" ||
+                                            updatingInvoiceLineId === line.id
+                                          }
                                         />
                                       </td>
                                       <td>
@@ -10708,7 +10721,10 @@ export default function PatientDetailClient({
                                               },
                                             }))
                                           }
-                                          disabled={selectedInvoice.status !== "draft"}
+                                          disabled={
+                                            selectedInvoice.status !== "draft" ||
+                                            updatingInvoiceLineId === line.id
+                                          }
                                         />
                                       </td>
                                       <td>
@@ -10724,7 +10740,10 @@ export default function PatientDetailClient({
                                               },
                                             }))
                                           }
-                                          disabled={selectedInvoice.status !== "draft"}
+                                          disabled={
+                                            selectedInvoice.status !== "draft" ||
+                                            updatingInvoiceLineId === line.id
+                                          }
                                         />
                                       </td>
                                       <td>{formatPence(line.line_total_pence)}</td>
@@ -10732,14 +10751,26 @@ export default function PatientDetailClient({
                                         <div className="table-actions">
                                           <button
                                             className="btn btn-secondary"
-                                            disabled={selectedInvoice.status !== "draft"}
-                                            onClick={() => updateInvoiceLine(line.id)}
+                                            type="button"
+                                            data-testid={`invoice-line-update-${line.id}`}
+                                            disabled={
+                                              selectedInvoice.status !== "draft" ||
+                                              updatingInvoiceLineId === line.id
+                                            }
+                                            onClick={(event) =>
+                                              void updateInvoiceLine(line.id, event.currentTarget)
+                                            }
                                           >
-                                            Update
+                                            {updatingInvoiceLineId === line.id ? "Updating..." : "Update"}
                                           </button>
                                           <button
                                             className="btn btn-secondary"
-                                            disabled={selectedInvoice.status !== "draft"}
+                                            type="button"
+                                            data-testid={`invoice-line-remove-${line.id}`}
+                                            disabled={
+                                              selectedInvoice.status !== "draft" ||
+                                              updatingInvoiceLineId === line.id
+                                            }
                                             onClick={() => deleteInvoiceLine(line.id)}
                                           >
                                             Remove
