@@ -3,11 +3,19 @@ import { expect, test } from "@playwright/test";
 import { createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
+const chartingEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
+
 test("patient charting export shows in-flight state and guards repeat submit", async ({
   page,
   request,
 }) => {
   const baseUrl = getBaseUrl();
+  test.skip(!chartingEnabled, "charting viewer disabled");
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
   const patientId = await createPatient(request, {
     first_name: "Charting",
     last_name: "ExportGuard",
