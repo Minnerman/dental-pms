@@ -5229,7 +5229,9 @@ export default function PatientDetailClient({
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const stamp = new Date().toISOString().slice(0, 10);
-      const fallbackName = `charting_review_pack_${patientId}_${stamp}.zip`;
+      const fallbackName = `charting_${
+        chartingLegacyPatientCodeRef.current ?? patientId
+      }_${stamp}.zip`;
       const filename = getFilenameFromDisposition(res, fallbackName);
       const link = document.createElement("a");
       link.href = url;
