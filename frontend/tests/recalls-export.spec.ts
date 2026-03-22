@@ -166,7 +166,7 @@ test("recalls export CSV shows in-flight state and guards repeat submit", async 
   await page.unroute(routePattern);
 });
 
-test("recalls export ZIP shows in-flight state and guards repeat submit", async ({
+test("recalls export ZIP stays in-flight across remount and guards repeat submit", async ({
   page,
   request,
 }) => {
@@ -230,7 +230,16 @@ test("recalls export ZIP shows in-flight state and guards repeat submit", async 
 
   await expect(exportButton).toBeDisabled();
   await expect(exportButton).toHaveText("Preparing...");
-  await exportButton.evaluate((button) => {
+
+  await page.getByRole("link", { name: "Notes" }).click();
+  await expect(page).toHaveURL(/\/notes/, { timeout: 15_000 });
+  await page.getByRole("link", { name: "Recalls" }).click();
+  await expect(page).toHaveURL(/\/recalls/, { timeout: 15_000 });
+
+  const remountedExportButton = page.getByTestId("recalls-export-zip");
+  await expect(remountedExportButton).toBeDisabled({ timeout: 15_000 });
+  await expect(remountedExportButton).toHaveText("Preparing...");
+  await remountedExportButton.evaluate((button) => {
     if (!(button instanceof HTMLButtonElement)) {
       throw new Error("Recall export ZIP button not found");
     }
@@ -243,7 +252,7 @@ test("recalls export ZIP shows in-flight state and guards repeat submit", async 
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("recall-letters-proof.zip");
 
-  await expect(exportButton).toBeEnabled({ timeout: 15_000 });
-  await expect(exportButton).toHaveText("Download letters (ZIP)");
+  await expect(remountedExportButton).toBeEnabled({ timeout: 15_000 });
+  await expect(remountedExportButton).toHaveText("Download letters (ZIP)");
   await page.unroute(routePattern);
 });

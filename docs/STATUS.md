@@ -90,6 +90,9 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/recalls-export.spec.ts --grep "recalls export ZIP shows in-flight state and guards repeat submit"` -> pass
     - `./ops/health.sh` -> pass
     - `git diff --check` -> pass
+  - Follow-up before merge:
+    - confirmed the PR branch could desynchronise the Recalls ZIP button after a route remount because the module-scope ZIP lock survived while component-local `downloadingZip` state reset
+    - aligned the visible ZIP disabled/loading state to a remount-safe external lock snapshot and extended `frontend/tests/recalls-export.spec.ts` to navigate away from Recalls and back while the ZIP export was in flight, verifying the button stayed disabled with `Preparing...` text and only one ZIP request was sent
   - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk106 completed on `stage163h-chunk106-recalls-export-hardening` from `master@369e8c6` to harden the Recalls page `Export CSV` action against duplicate submit without broadening into the adjacent ZIP export, charting follow-ups, or unrelated patient/document work.
   - What was inspected before implementation:
