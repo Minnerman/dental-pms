@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk102 completed on `stage163h-chunk102-review-pack-link-parity` from `master@f69ed0e` to tighten parity around the patient charting review-pack links without broadening into new charting workflows, appointments work, or the older recall-save proof follow-up.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - charting review-pack and share-link helpers in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - current charting proof coverage in `frontend/tests/charting-export.spec.ts`, `frontend/tests/charting-parity.spec.ts`, and `frontend/tests/charting-viewer.spec.ts`
+  - Evidence for choosing this slice:
+    - the UI now promises that review-pack links exclude notes text search by default, but there was still no focused proof for the copied patient-notes review-pack link path
+    - existing charting parity covered per-section `Copy filter link` behavior, but not the review-pack link copy buttons generated after `Generate review pack`
+    - adjacent live submit paths on the charting surface were already hardened, making this the smallest remaining contract-tightening gap nearby
+  - Exact slice implemented:
+    - added a stable test id for each generated review-pack copy button without changing the visible charting UI
+    - extended the focused charting export spec to generate a review pack after opting into notes text search, copy the patient-notes review-pack link, and verify the copied URL preserves date filters while excluding `charting_notes_q` and `charting_notes_q_inc`
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/charting-export.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/charting-export.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk101 completed on `stage163h-chunk101-charting-review-pack-hardening` from `master@d41f0bd` to harden the patient charting `Generate review pack` action against duplicate submit without broadening into charting share-link redesign, appointments work, or the older recall-save proof follow-up.
   - What was inspected before implementation:
     - `AGENTS.md`

@@ -2333,6 +2333,13 @@ export default function PatientDetailClient({
     return links;
   }
 
+  function buildReviewPackCopyTestId(label: string) {
+    return `charting-review-pack-copy-${label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")}`;
+  }
+
   const postChartingAudit = useCallback(
     async (action: "viewer_opened" | "share_link_copied", section?: string) => {
       if (!chartingViewerEnabled) return;
@@ -6838,6 +6845,7 @@ export default function PatientDetailClient({
                                     <button
                                       className="btn btn-secondary"
                                       type="button"
+                                      data-testid={buildReviewPackCopyTestId(label)}
                                       onClick={async () => {
                                         if (navigator?.clipboard?.writeText) {
                                           await navigator.clipboard.writeText(link);
