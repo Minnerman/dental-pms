@@ -690,8 +690,11 @@ export default function RecallsPage() {
     setShowContactModal(true);
   }
 
-  async function saveContact() {
-    if (!contactTarget) return;
+  async function saveContact(button?: HTMLButtonElement | null) {
+    if (!contactTarget || !button || contactSaving || button.disabled || otherDetailRequired) {
+      return;
+    }
+    button.disabled = true;
     setContactSaving(true);
     setContactError(null);
     try {
@@ -1388,7 +1391,8 @@ export default function RecallsPage() {
             <button
               className="btn btn-primary"
               type="button"
-              onClick={saveContact}
+              data-testid="recalls-contact-save"
+              onClick={(event) => void saveContact(event.currentTarget)}
               disabled={contactSaving || !contactTarget || otherDetailRequired}
             >
               {contactSaving ? "Saving..." : "Save log"}
