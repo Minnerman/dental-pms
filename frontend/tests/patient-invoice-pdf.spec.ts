@@ -495,6 +495,117 @@ test("patient invoice void shows in-flight state and guards repeat submit", asyn
   expect(updatedInvoice.status).toBe("void");
 });
 
+test("patient invoice line add shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Invoice",
+    last_name: `LineHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const invoice = (await createInvoice(request, patientId, {
+    notes: `Invoice line proof ${unique}`,
+  })) as { id: number; invoice_number: string };
+  const description = `Invoice line ${unique}`;
+  const quantity = "2";
+  const unitPrice = "12.50";
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("patient-tab-Financial").click();
+
+  const invoiceRow = page.locator("tr", { hasText: invoice.invoice_number });
+  await expect(invoiceRow).toBeVisible({ timeout: 15_000 });
+  await invoiceRow.getByRole("button", { name: "View" }).click();
+
+  await page.getByTestId("patient-invoice-line-description").fill(description);
+  await page.getByTestId("patient-invoice-line-quantity").fill(quantity);
+  await page.getByTestId("patient-invoice-line-unit-price").fill(unitPrice);
+
+  const addButton = page.getByTestId("patient-invoice-line-add");
+  await expect(addButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/invoices/${invoice.id}/lines$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const addResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/invoices/${invoice.id}/lines`)
+  );
+
+  const clickState = await addButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Add invoice line button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(addButton).toBeDisabled();
+  await expect(addButton).toHaveText("Adding...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const addResponse = await addResponsePromise;
+  expect(addResponse.ok()).toBeTruthy();
+  expect(addResponse.request().postDataJSON()).toMatchObject({
+    description,
+    quantity: 2,
+    unit_price_pence: 1250,
+  });
+  await page.unroute(routePattern);
+
+  await expect(addButton).toHaveText("Add line", { timeout: 15_000 });
+  await expect(addButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/invoices/${invoice.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedInvoice = (await verifyResponse.json()) as {
+    lines: Array<{ description: string; quantity: number; unit_price_pence: number }>;
+  };
+  expect(
+    updatedInvoice.lines.some(
+      (line) =>
+        line.description === description &&
+        line.quantity === 2 &&
+        line.unit_price_pence === 1250
+    )
+  ).toBeTruthy();
+});
+
 test("patient home finance summary invoice PDF shows in-flight state and honors header filename", async ({
   page,
   request,
