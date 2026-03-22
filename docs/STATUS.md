@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk95 completed on `stage163h-chunk95-invoice-line-remove-hardening` from `master@8b16179` to harden patient invoice line-item removal against duplicate submit without broadening into estimate item work, invoice workflow redesign, or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby invoice hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the invoice line-remove path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing invoice proof surface in `frontend/tests/patient-invoice-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the selected-invoice `Remove` action still sent a live delete request without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on invoice line-item removal, even though adjacent invoice issue, invoice create, invoice metadata save, invoice void, invoice line add, invoice line update, invoice PDF, receipt, payment, estimate create, and estimate status flows were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live invoice action
+  - Exact slice implemented:
+    - added an immediate invoice-line delete guard keyed by line id after confirmation and synchronously disabled the clicked row action button before the async `DELETE` continues
+    - extended the selected-invoice row disabled state to cover line removal, and surfaced `Removing...` while the line-delete request is in flight
+    - extended the focused Playwright proof to seed a draft invoice line, confirm the remove dialog, double-click `Remove`, verify the immediate disabled state, and confirm only one invoice-line delete request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-invoice-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-invoice-pdf.spec.ts --grep "patient invoice line remove shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk94 completed on `stage163h-chunk94-invoice-line-update-hardening` from `master@b5441cd` to harden patient invoice line-item updates against duplicate submit without broadening into invoice line removal, estimate item work, or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`
