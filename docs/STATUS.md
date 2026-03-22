@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk98 completed on `stage163h-chunk98-estimate-pdf-fallback-parity` from `master@54ddd87` to bring the patient estimate PDF fallback filename into parity with the backend contract without broadening into estimate workflow redesign or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - patient estimate PDF download flow in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - estimate PDF filename contract in `backend/app/routers/estimates.py`
+    - existing estimate PDF proof surface in `frontend/tests/patient-estimate-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the selected-estimate PDF action was already hardened for duplicate clicks, but its no-header fallback filename still diverged materially from the backend `estimate-{id}.pdf` contract
+    - the current estimate PDF spec only proved the header-driven filename path, not the fallback path when `Content-Disposition` is absent
+    - adjacent receipts, patient documents, templates, and attachments already had explicit fallback-parity follow-ups, so this remained the smallest nearby contract-tightening gap on the estimate surface
+  - Exact slice implemented:
+    - aligned the selected-estimate PDF fallback filename with the backend contract by using `estimate-{id}.pdf`
+    - kept the existing immediate download guard and `Downloading PDF...` in-flight state unchanged
+    - extended the focused Playwright proof to verify the no-header fallback filename path when the response omits `Content-Disposition`
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts --grep "patient estimate PDF download falls back to backend-contract filename without header"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk97 completed on `stage163h-chunk97-estimate-item-remove-hardening` from `master@08f8396` to harden patient estimate line-item removal against duplicate submit without broadening into estimate status redesign, invoice workflow work, or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`
