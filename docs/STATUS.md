@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk97 completed on `stage163h-chunk97-estimate-item-remove-hardening` from `master@08f8396` to harden patient estimate line-item removal against duplicate submit without broadening into estimate status redesign, invoice workflow work, or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby estimate and invoice hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the estimate line-item remove path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing estimate proof surface in `frontend/tests/patient-estimate-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the selected-estimate `Remove` action still sent a live delete request without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on estimate line-item removal, even though adjacent estimate create, estimate item add, estimate status, invoice issue/create/save/void/line add/line update/line remove, and payment flows were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live estimate action
+  - Exact slice implemented:
+    - added an immediate estimate-item delete guard keyed by item id before the async `DELETE` begins and synchronously disabled the clicked remove button
+    - surfaced stable selected-estimate row/remove button test ids together with `Removing...` while the item-delete request is in flight
+    - extended the focused Playwright proof to seed an estimate item, double-click `Remove`, verify the immediate disabled state, and confirm only one estimate-item delete request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-estimate-pdf.spec.ts --grep "patient estimate item remove shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk96 completed on `stage163h-chunk96-estimate-item-add-hardening` from `master@21022b3` to harden patient estimate line-item creation against duplicate submit without broadening into estimate item removal, invoice workflow work, or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`

@@ -110,6 +110,7 @@ const savingRecallActionIds = new Set<number>();
 const savingEstimatePatientIds = new Set<string>();
 const savingEstimateStatusIds = new Set<number>();
 const addingEstimateItemIds = new Set<number>();
+const deletingEstimateItemIds = new Set<number>();
 const savingInvoicePatientIds = new Set<string>();
 const savingInvoiceMetaIds = new Set<number>();
 const voidingInvoiceIds = new Set<number>();
@@ -925,6 +926,7 @@ export default function PatientDetailClient({
   const [addingEstimateItemEstimateId, setAddingEstimateItemEstimateId] = useState<number | null>(
     null
   );
+  const [deletingEstimateItemId, setDeletingEstimateItemId] = useState<number | null>(null);
   const [estimateNotes, setEstimateNotes] = useState("");
   const [estimateValidUntil, setEstimateValidUntil] = useState("");
   const [estimateItemTreatmentId, setEstimateItemTreatmentId] = useState("");
@@ -1888,8 +1890,13 @@ export default function PatientDetailClient({
     }
   }
 
-  async function deleteEstimateItem(itemId: number) {
-    if (!selectedEstimate) return;
+  async function deleteEstimateItem(itemId: number, button?: HTMLButtonElement | null) {
+    if (!selectedEstimate || !button || deletingEstimateItemIds.has(itemId) || button.disabled) {
+      return;
+    }
+    deletingEstimateItemIds.add(itemId);
+    button.disabled = true;
+    setDeletingEstimateItemId(itemId);
     setEstimateError(null);
     try {
       const res = await apiFetch(`/api/estimates/${selectedEstimate.id}/items/${itemId}`, {
@@ -1908,6 +1915,9 @@ export default function PatientDetailClient({
       await loadEstimates();
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to delete estimate item");
+    } finally {
+      deletingEstimateItemIds.delete(itemId);
+      setDeletingEstimateItemId((current) => (current === itemId ? null : current));
     }
   }
 
@@ -10470,7 +10480,7 @@ export default function PatientDetailClient({
                             </thead>
                             <tbody>
                               {selectedEstimate.items.map((item) => (
-                                <tr key={item.id}>
+                                <tr key={item.id} data-testid={`estimate-item-row-${item.id}`}>
                                   <td>{item.description}</td>
                                   <td>{item.qty}</td>
                                   <td>
@@ -10484,9 +10494,13 @@ export default function PatientDetailClient({
                                     <button
                                       className="btn btn-secondary"
                                       type="button"
-                                      onClick={() => deleteEstimateItem(item.id)}
+                                      data-testid={`estimate-item-remove-${item.id}`}
+                                      disabled={deletingEstimateItemId === item.id}
+                                      onClick={(event) =>
+                                        void deleteEstimateItem(item.id, event.currentTarget)
+                                      }
                                     >
-                                      Remove
+                                      {deletingEstimateItemId === item.id ? "Removing..." : "Remove"}
                                     </button>
                                   </td>
                                 </tr>
