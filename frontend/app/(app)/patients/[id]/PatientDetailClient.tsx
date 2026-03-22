@@ -112,6 +112,7 @@ const savingEstimateStatusIds = new Set<number>();
 const savingInvoicePatientIds = new Set<string>();
 const savingInvoiceMetaIds = new Set<number>();
 const voidingInvoiceIds = new Set<number>();
+const addingInvoiceLineIds = new Set<number>();
 const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
@@ -887,6 +888,7 @@ export default function PatientDetailClient({
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [savingInvoiceMetaId, setSavingInvoiceMetaId] = useState<number | null>(null);
   const [voidingInvoiceId, setVoidingInvoiceId] = useState<number | null>(null);
+  const [addingInvoiceLineId, setAddingInvoiceLineId] = useState<number | null>(null);
   const [issuingInvoiceId, setIssuingInvoiceId] = useState<number | null>(null);
   const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
   const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
@@ -4740,17 +4742,28 @@ export default function PatientDetailClient({
     }
   }
 
-  async function addInvoiceLine() {
-    if (!selectedInvoice) return;
+  async function addInvoiceLine(button?: HTMLButtonElement | null) {
+    if (
+      !selectedInvoice ||
+      !button ||
+      addingInvoiceLineIds.has(selectedInvoice.id) ||
+      button.disabled
+    ) {
+      return;
+    }
+    const invoiceId = selectedInvoice.id;
     const quantity = Number(lineQuantity);
     const unitPence = toPence(lineUnitPrice);
     if (!lineDescription.trim() || Number.isNaN(quantity) || quantity < 1 || unitPence === null) {
       setInvoiceError("Enter a description, quantity, and unit price.");
       return;
     }
+    addingInvoiceLineIds.add(invoiceId);
+    button.disabled = true;
+    setAddingInvoiceLineId(invoiceId);
     setInvoiceError(null);
     try {
-      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/lines`, {
+      const res = await apiFetch(`/api/invoices/${invoiceId}/lines`, {
         method: "POST",
         body: JSON.stringify({
           description: lineDescription.trim(),
@@ -4770,10 +4783,13 @@ export default function PatientDetailClient({
       setLineDescription("");
       setLineQuantity("1");
       setLineUnitPrice("");
-      await loadInvoiceDetail(selectedInvoice.id);
+      await loadInvoiceDetail(invoiceId);
       await loadInvoices();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to add line");
+    } finally {
+      addingInvoiceLineIds.delete(invoiceId);
+      setAddingInvoiceLineId((current) => (current === invoiceId ? null : current));
     }
   }
 
@@ -10740,6 +10756,7 @@ export default function PatientDetailClient({
                               <div className="stack" style={{ gap: 8 }}>
                                 <label className="label">Description</label>
                                 <input
+                                  data-testid="patient-invoice-line-description"
                                   className="input"
                                   value={lineDescription}
                                   onChange={(e) => setLineDescription(e.target.value)}
@@ -10749,6 +10766,7 @@ export default function PatientDetailClient({
                               <div className="stack" style={{ gap: 8 }}>
                                 <label className="label">Qty</label>
                                 <input
+                                  data-testid="patient-invoice-line-quantity"
                                   className="input"
                                   value={lineQuantity}
                                   onChange={(e) => setLineQuantity(e.target.value)}
@@ -10758,6 +10776,7 @@ export default function PatientDetailClient({
                               <div className="stack" style={{ gap: 8 }}>
                                 <label className="label">Unit price (£)</label>
                                 <input
+                                  data-testid="patient-invoice-line-unit-price"
                                   className="input"
                                   value={lineUnitPrice}
                                   onChange={(e) => setLineUnitPrice(e.target.value)}
@@ -10768,10 +10787,14 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-primary"
                               type="button"
-                              onClick={addInvoiceLine}
-                              disabled={selectedInvoice.status !== "draft"}
+                              data-testid="patient-invoice-line-add"
+                              onClick={(event) => void addInvoiceLine(event.currentTarget)}
+                              disabled={
+                                selectedInvoice.status !== "draft" ||
+                                addingInvoiceLineId === selectedInvoice.id
+                              }
                             >
-                              Add line
+                              {addingInvoiceLineId === selectedInvoice.id ? "Adding..." : "Add line"}
                             </button>
                           </div>
                         </div>

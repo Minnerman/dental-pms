@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk93 completed on `stage163h-chunk93-invoice-line-add-hardening` from `master@2544af9` to harden patient invoice line-item creation against duplicate submit without broadening into invoice line editing/removal, estimate item work, or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - nearby invoice hardening already merged in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the invoice line-add path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the existing invoice proof surface in `frontend/tests/patient-invoice-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - the selected-invoice `Add line` action still posted without an immediate duplicate-submit guard
+    - there was no focused patient-page Playwright proof for repeated submit on invoice line-item creation, even though adjacent invoice issue, invoice create, invoice metadata save, invoice void, invoice PDF, receipt, payment, estimate create, and estimate status flows were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live invoice action
+  - Exact slice implemented:
+    - added an immediate invoice-line guard keyed by invoice id before the async `POST` begins and synchronously disabled the clicked add-line button
+    - added stable test ids for the selected-invoice line-description, quantity, unit-price inputs, and the primary add-line button, and surfaced `Adding...` while the line-create request is in flight
+    - extended the focused Playwright proof to seed a draft invoice, fill the line-item form, double-click `Add line`, verify the immediate disabled state, and confirm only one invoice-line create request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-invoice-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-invoice-pdf.spec.ts --grep "patient invoice line add shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk92 completed on `stage163h-chunk92-invoice-void-hardening` from `master@f9aa2c1` to harden patient invoice voiding against duplicate submit without broadening into invoice line editing, invoice item creation, or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`
