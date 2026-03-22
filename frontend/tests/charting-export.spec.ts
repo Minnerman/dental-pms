@@ -1,9 +1,23 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
+import { installClipboardCapture, readClipboardCapture } from "./helpers/clipboard";
 
 const chartingEnabled = process.env.NEXT_PUBLIC_FEATURE_CHARTING_VIEWER === "1";
+
+function getNotesPanel(page: Page) {
+  return page
+    .locator("section.panel")
+    .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
+}
+
+function getPanelInput(panel: Locator, label: string) {
+  return panel
+    .locator("label", { hasText: label })
+    .locator("xpath=..")
+    .locator("input");
+}
 
 test("patient charting export shows in-flight state and guards repeat submit", async ({
   page,
@@ -191,5 +205,80 @@ test("patient charting review pack shows in-flight state and guards repeat submi
   ).toBe(4);
   await expect(reviewPackButton).toBeEnabled({ timeout: 15_000 });
   await expect(reviewPackButton).toHaveText("Generate review pack");
+  await page.unroute(routePattern);
+});
+
+test("patient charting review pack notes link excludes text search by default", async ({
+  page,
+  request,
+}) => {
+  const baseUrl = getBaseUrl();
+  test.skip(!chartingEnabled, "charting viewer disabled");
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const patientId = await createPatient(request, {
+    first_name: "Charting",
+    last_name: "ReviewPackLinks",
+  });
+
+  await primePageAuth(page, request);
+  await installClipboardCapture(page, "reviewPackNotesLink");
+  await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/charting`));
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 15_000 });
+
+  const notesPanel = getNotesPanel(page);
+  await expect(notesPanel).toBeVisible({ timeout: 15_000 });
+
+  const fromInput = getPanelInput(notesPanel, "From");
+  const toInput = getPanelInput(notesPanel, "To");
+  await expect(fromInput).toBeVisible({ timeout: 15_000 });
+  await expect(toInput).toBeVisible({ timeout: 15_000 });
+  await fromInput.fill("2024-07-02");
+  await toInput.fill("2024-07-03");
+  await notesPanel.getByPlaceholder("Find text...").fill("note 1");
+  await notesPanel.getByLabel("Include text search in link").check();
+
+  const expectedFilename = `charting-review-pack-links-${patientId}.zip`;
+  const routePattern = new RegExp(`/api/patients/${patientId}/charting/export\\?`);
+  await page.route(routePattern, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${expectedFilename}"`,
+      },
+      body: Buffer.from("PK\x03\x04charting-review-pack-links"),
+    });
+  });
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTestId("charting-review-pack-generate").click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(expectedFilename);
+
+  await expect(page.getByText("Review pack ready. Share links exclude text search by default."))
+    .toBeVisible({ timeout: 15_000 });
+
+  const copyNotesLinkButton = page.getByTestId("charting-review-pack-copy-patient-notes");
+  await expect(copyNotesLinkButton).toBeVisible({ timeout: 15_000 });
+  await copyNotesLinkButton.focus();
+  await page.keyboard.press("Enter");
+  const copied = await readClipboardCapture(page, "reviewPackNotesLink");
+  expect(copied).not.toBeNull();
+  if (copied) {
+    expect(copied).toContain(`/patients/${patientId}/charting?`);
+    expect(copied).toContain("charting_notes_from=2024-07-02");
+    expect(copied).toContain("charting_notes_to=2024-07-03");
+    expect(copied).toContain("v=1");
+    expect(copied).not.toContain("charting_notes_q=");
+    expect(copied).not.toContain("charting_notes_q_inc=1");
+  }
   await page.unroute(routePattern);
 });

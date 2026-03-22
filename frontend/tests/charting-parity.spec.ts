@@ -701,7 +701,6 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
   await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 30_000 });
   const notesPanelAfter = getNotesPanel(page);
   await expect(notesPanelAfter).toBeVisible();
-  await notesPanelAfter.scrollIntoViewIfNeeded();
   await expect(getPanelInput(notesPanelAfter, "From")).toHaveValue("2024-07-02");
   await expect(getPanelInput(notesPanelAfter, "To")).toHaveValue("2024-07-03");
   await expect(getPanelSelect(notesPanelAfter, "Category")).toHaveValue("1");
