@@ -606,6 +606,121 @@ test("patient invoice line add shows in-flight state and guards repeat submit", 
   ).toBeTruthy();
 });
 
+test("patient invoice line update shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Invoice",
+    last_name: `LineUpdateHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const invoice = (await createInvoice(request, patientId, {
+    notes: `Invoice line update proof ${unique}`,
+  })) as { id: number; invoice_number: string };
+  const line = (await addInvoiceLine(request, invoice.id, {
+    description: `Invoice line update original ${unique}`,
+    quantity: 1,
+    unit_price_pence: 990,
+  })) as { id: number };
+  const updatedDescription = `Invoice line update revised ${unique}`;
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("patient-tab-Financial").click();
+
+  const invoiceRow = page.locator("tr", { hasText: invoice.invoice_number });
+  await expect(invoiceRow).toBeVisible({ timeout: 15_000 });
+  await invoiceRow.getByRole("button", { name: "View" }).click();
+
+  const lineRow = page.getByTestId(`invoice-line-row-${line.id}`);
+  await expect(lineRow).toBeVisible({ timeout: 15_000 });
+  await lineRow.locator("input").nth(0).fill(updatedDescription);
+  await lineRow.locator("input").nth(1).fill("3");
+  await lineRow.locator("input").nth(2).fill("14.50");
+
+  const updateButton = page.getByTestId(`invoice-line-update-${line.id}`);
+  await expect(updateButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/invoices/${invoice.id}/lines/${line.id}$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const updateResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().endsWith(`/api/invoices/${invoice.id}/lines/${line.id}`)
+  );
+
+  const clickState = await updateButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Update invoice line button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(updateButton).toBeDisabled();
+  await expect(updateButton).toHaveText("Updating...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const updateResponse = await updateResponsePromise;
+  expect(updateResponse.ok()).toBeTruthy();
+  expect(updateResponse.request().postDataJSON()).toMatchObject({
+    description: updatedDescription,
+    quantity: 3,
+    unit_price_pence: 1450,
+  });
+  await page.unroute(routePattern);
+
+  await expect(updateButton).toHaveText("Update", { timeout: 15_000 });
+  await expect(updateButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/invoices/${invoice.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedInvoice = (await verifyResponse.json()) as {
+    lines: Array<{ id: number; description: string; quantity: number; unit_price_pence: number }>;
+  };
+  const persistedLine = updatedInvoice.lines.find((item) => item.id === line.id);
+  expect(persistedLine).toMatchObject({
+    id: line.id,
+    description: updatedDescription,
+    quantity: 3,
+    unit_price_pence: 1450,
+  });
+});
+
 test("patient home finance summary invoice PDF shows in-flight state and honors header filename", async ({
   page,
   request,
