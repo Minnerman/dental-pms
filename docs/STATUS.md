@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk103 completed on `stage163h-chunk103-charting-export-fallback-parity` from `master@a2bf025` to align the patient charting export ZIP fallback filename with the backend contract without broadening into review-pack fallback work, appointments work, or the older recall-save proof follow-up.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - charting export/review-pack filename handling in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - backend charting export filename contract in `backend/app/routers/r4_charting.py`
+    - existing focused charting proof coverage in `frontend/tests/charting-export.spec.ts` and `frontend/tests/charting-parity.spec.ts`
+  - Evidence for choosing this slice:
+    - the backend charting export endpoint emits `charting_{patient_code}_{YYYY-MM-DD}.zip`, but the frontend no-header export fallback still used the local patient id
+    - current charting export coverage only proved header-driven filenames and did not cover the no-`Content-Disposition` fallback path
+    - adjacent charting export/review-pack actions were already hardened, making this the smallest remaining contract-tightening gap nearby
+  - Exact slice implemented:
+    - aligned the charting export ZIP fallback filename to prefer the loaded legacy patient code and fall back to the local patient id only when no mapping is available
+    - added a focused Playwright proof that injects charting meta with a legacy patient code, omits `Content-Disposition`, and verifies the downloaded fallback filename matches the backend contract
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/charting-export.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/charting-export.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk102 completed on `stage163h-chunk102-review-pack-link-parity` from `master@f69ed0e` to tighten parity around the patient charting review-pack links without broadening into new charting workflows, appointments work, or the older recall-save proof follow-up.
   - What was inspected before implementation:
     - `AGENTS.md`

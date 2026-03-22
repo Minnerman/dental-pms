@@ -1076,6 +1076,7 @@ export default function PatientDetailClient({
   );
   const [chartingConfigLoaded, setChartingConfigLoaded] = useState(false);
   const [chartingMeta, setChartingMeta] = useState<ChartingMeta | null>(null);
+  const chartingLegacyPatientCodeRef = useRef<number | null>(null);
   const [perioProbes, setPerioProbes] = useState<R4PerioProbe[]>([]);
   const [perioProbeTotal, setPerioProbeTotal] = useState(0);
   const [perioProbeHasMore, setPerioProbeHasMore] = useState(false);
@@ -2494,7 +2495,10 @@ export default function PatientDetailClient({
       setToothSurfacesOffset(
         (surfacesPayload.offset ?? 0) + (surfacesPayload.items?.length ?? 0)
       );
-      setChartingMeta(metaData as ChartingMeta);
+      const chartingMetaPayload = metaData as ChartingMeta;
+      chartingLegacyPatientCodeRef.current =
+        chartingMetaPayload.legacy_patient_code ?? null;
+      setChartingMeta(chartingMetaPayload);
       setChartingLoaded(true);
     } catch (err) {
       if (requestId !== chartingRequestId.current) {
@@ -3200,6 +3204,7 @@ export default function PatientDetailClient({
     setToothSurfacesHasMore(false);
     setToothSurfacesOffset(0);
     setChartingMeta(null);
+    chartingLegacyPatientCodeRef.current = null;
     setChartingError(null);
     setChartingFiltersReady(false);
     setChartingUrlApplied(false);
@@ -5166,7 +5171,9 @@ export default function PatientDetailClient({
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const stamp = new Date().toISOString().slice(0, 10);
-      const fallbackName = `charting_${patientId}_${stamp}.zip`;
+      const fallbackName = `charting_${
+        chartingLegacyPatientCodeRef.current ?? patientId
+      }_${stamp}.zip`;
       const filename = getFilenameFromDisposition(res, fallbackName);
       const link = document.createElement("a");
       link.href = url;
