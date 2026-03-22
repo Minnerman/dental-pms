@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
@@ -76,6 +76,25 @@ const contactChannelLabels: Record<RecallContactChannel, string> = {
 };
 
 const recallsExportLocks = new Set<string>();
+let recallsZipExportLocked = false;
+const recallsZipExportListeners = new Set<() => void>();
+
+function subscribeRecallsZipExportLock(listener: () => void) {
+  recallsZipExportListeners.add(listener);
+  return () => recallsZipExportListeners.delete(listener);
+}
+
+function getRecallsZipExportLockSnapshot() {
+  return recallsZipExportLocked;
+}
+
+function setRecallsZipExportLocked(locked: boolean) {
+  if (recallsZipExportLocked === locked) return;
+  recallsZipExportLocked = locked;
+  for (const listener of recallsZipExportListeners) {
+    listener();
+  }
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -134,7 +153,11 @@ export default function RecallsPage() {
   const [actionId, setActionId] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [downloadingZip, setDownloadingZip] = useState(false);
+  const downloadingZip = useSyncExternalStore(
+    subscribeRecallsZipExportLock,
+    getRecallsZipExportLockSnapshot,
+    getRecallsZipExportLockSnapshot
+  );
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactTarget, setContactTarget] = useState<RecallRow | null>(null);
   const [contactMethodInput, setContactMethodInput] =
@@ -419,8 +442,12 @@ export default function RecallsPage() {
     }
   }
 
-  async function downloadLettersZip() {
-    setDownloadingZip(true);
+  async function downloadLettersZip(button?: HTMLButtonElement | null) {
+    if (!button || downloadingZip || getRecallsZipExportLockSnapshot() || button.disabled) {
+      return;
+    }
+    setRecallsZipExportLocked(true);
+    button.disabled = true;
     setError(null);
     setExportCountError(null);
     try {
@@ -462,7 +489,7 @@ export default function RecallsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download letters ZIP");
     } finally {
-      setDownloadingZip(false);
+      setRecallsZipExportLocked(false);
     }
   }
 
@@ -897,16 +924,16 @@ export default function RecallsPage() {
             <button
               className="btn btn-secondary"
               type="button"
-              onClick={() => void downloadLettersZip()}
+              onClick={(event) => void downloadLettersZip(event.currentTarget)}
               disabled={!exportReady || downloadingZip || exporting}
               data-testid="recalls-export-zip"
             >
-              {exportCountLoading
+              {downloadingZip
                 ? "Preparing..."
-                : exportCountError
+                : exportCountLoading
+                  ? "Preparing..."
+                  : exportCountError
                   ? "Export unavailable"
-                  : downloadingZip
-                    ? "Preparing..."
                     : "Download letters (ZIP)"}
             </button>
             <span style={{ color: "var(--muted)", fontSize: 12 }}>
