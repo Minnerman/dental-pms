@@ -114,6 +114,7 @@ const savingInvoiceMetaIds = new Set<number>();
 const voidingInvoiceIds = new Set<number>();
 const addingInvoiceLineIds = new Set<number>();
 const updatingInvoiceLineIds = new Set<number>();
+const deletingInvoiceLineIds = new Set<number>();
 const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
@@ -891,6 +892,7 @@ export default function PatientDetailClient({
   const [voidingInvoiceId, setVoidingInvoiceId] = useState<number | null>(null);
   const [addingInvoiceLineId, setAddingInvoiceLineId] = useState<number | null>(null);
   const [updatingInvoiceLineId, setUpdatingInvoiceLineId] = useState<number | null>(null);
+  const [deletingInvoiceLineId, setDeletingInvoiceLineId] = useState<number | null>(null);
   const [issuingInvoiceId, setIssuingInvoiceId] = useState<number | null>(null);
   const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
   const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
@@ -4839,9 +4841,14 @@ export default function PatientDetailClient({
     }
   }
 
-  async function deleteInvoiceLine(lineId: number) {
-    if (!selectedInvoice) return;
+  async function deleteInvoiceLine(lineId: number, button?: HTMLButtonElement | null) {
+    if (!selectedInvoice || !button || deletingInvoiceLineIds.has(lineId) || button.disabled) {
+      return;
+    }
     if (!confirm("Remove this line item?")) return;
+    deletingInvoiceLineIds.add(lineId);
+    button.disabled = true;
+    setDeletingInvoiceLineId(lineId);
     setInvoiceError(null);
     try {
       const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/lines/${lineId}`, {
@@ -4860,6 +4867,9 @@ export default function PatientDetailClient({
       await loadInvoices();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to delete line");
+    } finally {
+      deletingInvoiceLineIds.delete(lineId);
+      setDeletingInvoiceLineId((current) => (current === lineId ? null : current));
     }
   }
 
@@ -10704,7 +10714,8 @@ export default function PatientDetailClient({
                                           }
                                           disabled={
                                             selectedInvoice.status !== "draft" ||
-                                            updatingInvoiceLineId === line.id
+                                            updatingInvoiceLineId === line.id ||
+                                            deletingInvoiceLineId === line.id
                                           }
                                         />
                                       </td>
@@ -10723,7 +10734,8 @@ export default function PatientDetailClient({
                                           }
                                           disabled={
                                             selectedInvoice.status !== "draft" ||
-                                            updatingInvoiceLineId === line.id
+                                            updatingInvoiceLineId === line.id ||
+                                            deletingInvoiceLineId === line.id
                                           }
                                         />
                                       </td>
@@ -10742,7 +10754,8 @@ export default function PatientDetailClient({
                                           }
                                           disabled={
                                             selectedInvoice.status !== "draft" ||
-                                            updatingInvoiceLineId === line.id
+                                            updatingInvoiceLineId === line.id ||
+                                            deletingInvoiceLineId === line.id
                                           }
                                         />
                                       </td>
@@ -10755,7 +10768,8 @@ export default function PatientDetailClient({
                                             data-testid={`invoice-line-update-${line.id}`}
                                             disabled={
                                               selectedInvoice.status !== "draft" ||
-                                              updatingInvoiceLineId === line.id
+                                              updatingInvoiceLineId === line.id ||
+                                              deletingInvoiceLineId === line.id
                                             }
                                             onClick={(event) =>
                                               void updateInvoiceLine(line.id, event.currentTarget)
@@ -10769,11 +10783,14 @@ export default function PatientDetailClient({
                                             data-testid={`invoice-line-remove-${line.id}`}
                                             disabled={
                                               selectedInvoice.status !== "draft" ||
-                                              updatingInvoiceLineId === line.id
+                                              updatingInvoiceLineId === line.id ||
+                                              deletingInvoiceLineId === line.id
                                             }
-                                            onClick={() => deleteInvoiceLine(line.id)}
+                                            onClick={(event) =>
+                                              void deleteInvoiceLine(line.id, event.currentTarget)
+                                            }
                                           >
-                                            Remove
+                                            {deletingInvoiceLineId === line.id ? "Removing..." : "Remove"}
                                           </button>
                                         </div>
                                       </td>

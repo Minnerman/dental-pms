@@ -721,6 +721,106 @@ test("patient invoice line update shows in-flight state and guards repeat submit
   });
 });
 
+test("patient invoice line remove shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Invoice",
+    last_name: `LineRemoveHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const invoice = (await createInvoice(request, patientId, {
+    notes: `Invoice line remove proof ${unique}`,
+  })) as { id: number; invoice_number: string };
+  const line = (await addInvoiceLine(request, invoice.id, {
+    description: `Invoice line remove ${unique}`,
+    quantity: 1,
+    unit_price_pence: 1110,
+  })) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("patient-tab-Financial").click();
+
+  const invoiceRow = page.locator("tr", { hasText: invoice.invoice_number });
+  await expect(invoiceRow).toBeVisible({ timeout: 15_000 });
+  await invoiceRow.getByRole("button", { name: "View" }).click();
+
+  const lineRow = page.getByTestId(`invoice-line-row-${line.id}`);
+  await expect(lineRow).toBeVisible({ timeout: 15_000 });
+
+  const removeButton = page.getByTestId(`invoice-line-remove-${line.id}`);
+  await expect(removeButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/invoices/${invoice.id}/lines/${line.id}$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const deleteResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "DELETE" &&
+      response.url().endsWith(`/api/invoices/${invoice.id}/lines/${line.id}`)
+  );
+
+  page.once("dialog", (dialog) => dialog.accept());
+  const clickState = await removeButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Remove invoice line button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(removeButton).toBeDisabled();
+  await expect(removeButton).toHaveText("Removing...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const deleteResponse = await deleteResponsePromise;
+  expect(deleteResponse.ok()).toBeTruthy();
+  await page.unroute(routePattern);
+
+  await expect(page.getByTestId(`invoice-line-row-${line.id}`)).toHaveCount(0, { timeout: 15_000 });
+
+  const verifyResponse = await request.get(`${baseUrl}/api/invoices/${invoice.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedInvoice = (await verifyResponse.json()) as {
+    lines: Array<{ id: number }>;
+  };
+  expect(updatedInvoice.lines.some((item) => item.id === line.id)).toBe(false);
+});
+
 test("patient home finance summary invoice PDF shows in-flight state and honors header filename", async ({
   page,
   request,
