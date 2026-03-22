@@ -106,6 +106,73 @@ test("patient charting export shows in-flight state and guards repeat submit", a
   await page.unroute(routePattern);
 });
 
+test("patient charting export falls back to backend-contract filename without header", async ({
+  page,
+  request,
+}) => {
+  const baseUrl = getBaseUrl();
+  test.skip(!chartingEnabled, "charting viewer disabled");
+  const configRes = await request.get(`${baseUrl}/api/config`);
+  const config = (await configRes.json()) as {
+    feature_flags?: { charting_viewer?: boolean };
+  };
+  test.skip(!config?.feature_flags?.charting_viewer, "charting viewer disabled");
+  const patientId = await createPatient(request, {
+    first_name: "Charting",
+    last_name: "ExportFallback",
+  });
+  const legacyPatientCode = 1012056;
+
+  const metaRoutePattern = new RegExp(`/api/patients/${patientId}/charting/meta(?:\\?.*)?$`);
+  await page.route(metaRoutePattern, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        patient_id: patientId,
+        legacy_patient_code: legacyPatientCode,
+        last_imported_at: "2024-07-04T10:00:00Z",
+        source: "r4",
+      }),
+    });
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/charting`));
+  await expect(page.getByTestId("charting-viewer")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Legacy code")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(String(legacyPatientCode))).toBeVisible({ timeout: 15_000 });
+
+  const exportButton = page.getByTestId("charting-export-csv");
+  await expect(exportButton).toBeVisible({ timeout: 15_000 });
+
+  const expectedFilename = `charting_${legacyPatientCode}_${new Date()
+    .toISOString()
+    .slice(0, 10)}.zip`;
+  const routePattern = new RegExp(`/api/patients/${patientId}/charting/export\\?`);
+  await page.route(routePattern, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+      },
+      body: Buffer.from("PK\x03\x04charting-export-fallback"),
+    });
+  });
+
+  const downloadPromise = page.waitForEvent("download");
+  await exportButton.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(expectedFilename);
+
+  await page.unroute(routePattern);
+  await page.unroute(metaRoutePattern);
+});
+
 test("patient charting review pack shows in-flight state and guards repeat submit", async ({
   page,
   request,
