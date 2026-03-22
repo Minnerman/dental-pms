@@ -360,6 +360,16 @@ test("patient charting review pack notes link excludes text search by default", 
 
   await primePageAuth(page, request);
   await installClipboardCapture(page, "reviewPackNotesLink");
+  const auditPayloads: Array<{ action?: string; section?: string }> = [];
+  const auditRoutePattern = new RegExp(`/api/patients/${patientId}/charting/audit$`);
+  await page.route(auditRoutePattern, async (route) => {
+    auditPayloads.push((route.request().postDataJSON() as { action?: string; section?: string }) ?? {});
+    await route.fulfill({
+      status: 204,
+      contentType: "application/json",
+      body: "",
+    });
+  });
   await page.goto(`${baseUrl}/patients/${patientId}/charting`, {
     waitUntil: "domcontentloaded",
   });
@@ -414,5 +424,14 @@ test("patient charting review pack notes link excludes text search by default", 
     expect(copied).not.toContain("charting_notes_q=");
     expect(copied).not.toContain("charting_notes_q_inc=1");
   }
+  await expect
+    .poll(() =>
+      auditPayloads.some(
+        (payload) =>
+          payload.action === "share_link_copied" && payload.section === "notes"
+      )
+    )
+    .toBe(true);
   await page.unroute(routePattern);
+  await page.unroute(auditRoutePattern);
 });

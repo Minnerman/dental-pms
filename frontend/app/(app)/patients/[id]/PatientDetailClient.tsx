@@ -2334,6 +2334,14 @@ export default function PatientDetailClient({
     return links;
   }
 
+  function getReviewPackSectionFromLabel(label: string) {
+    if (label === "Perio probes") return "perio";
+    if (label === "BPE") return "bpe";
+    if (label === "BPE furcations") return "furcations";
+    if (label === "Patient notes") return "notes";
+    return null;
+  }
+
   function buildReviewPackCopyTestId(label: string) {
     return `charting-review-pack-copy-${label
       .toLowerCase()
@@ -6856,6 +6864,14 @@ export default function PatientDetailClient({
                                       type="button"
                                       data-testid={buildReviewPackCopyTestId(label)}
                                       onClick={async () => {
+                                        const section =
+                                          getReviewPackSectionFromLabel(label);
+                                        if (section) {
+                                          void postChartingAudit(
+                                            "share_link_copied",
+                                            section
+                                          );
+                                        }
                                         if (navigator?.clipboard?.writeText) {
                                           await navigator.clipboard.writeText(link);
                                           return;
