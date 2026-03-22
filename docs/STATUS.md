@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk109 completed on `stage163h-chunk109-recalls-contact-hardening` from `master@ab3d49b` to harden the Recalls page contact log modal without reopening the just-finished Recalls export work or broadening into unrelated patient/appointments/document flows.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the live Recalls page contact log flow in `frontend/app/(app)/recalls/page.tsx`
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, billing, documents, templates, or the just-finished patient create / Recalls export slices
+    - the Recalls page `Save log` action is part of the core recall worklist flow, but `saveContact()` still relied only on async React state and did not synchronously disable the clicked modal save button before the contact request began
+    - no focused Playwright proof existed for duplicate-submit prevention on the Recalls page contact log modal
+  - Exact slice implemented:
+    - added an immediate clicked-button guard to the Recalls contact log save path and exposed a stable modal save test id
+    - added a focused Playwright proof that opens the Recalls page contact log modal, double-clicks `Save log`, verifies the immediate disabled `Saving...` state, confirms only one `POST /api/recalls/{id}/contact` request is sent, and verifies the saved contact metadata through the API
+  - Files changed in this slice:
+    - `frontend/app/(app)/recalls/page.tsx`
+    - `frontend/tests/recalls-contact.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/recalls-contact.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - Notes:
+    - the first focused Playwright run hit the older live frontend bundle before `./ops/verify.sh` rebuilt the app; the rebuilt rerun then exposed a proof-only label locator issue in the modal fields, which was tightened on the same branch before the final passing rerun
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk108 completed on `stage163h-chunk108-patient-create-hardening` from `master@29c7c92` to harden the new patient create flow against duplicate submit after a broader repo-guided scan found no stronger small live-surface gap in appointments, notes, documents, templates, or the recently exhausted patient/charting/estimate/invoice cluster.
   - What was inspected before implementation:
     - `AGENTS.md`
