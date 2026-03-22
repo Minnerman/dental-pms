@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk105 completed on `stage163h-chunk105-review-pack-link-audit` from `master@d82a232` to align charting review-pack copy-link audit behavior with the existing per-panel charting share-link contract without broadening into new charting filters, appointments work, or the older recall-save proof follow-up.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - charting share-link and review-pack copy behavior in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - focused charting proof coverage in `frontend/tests/charting-export.spec.ts`, `frontend/tests/charting-parity.spec.ts`, and `frontend/tests/charting-viewer.spec.ts`
+    - charting audit action schema in `backend/app/schemas/r4_charting.py`
+  - Evidence for choosing this slice:
+    - the existing per-panel `Copy filter link` path posts `share_link_copied` audit events via `postChartingAudit(...)`, but the generated review-pack `Copy link` buttons only wrote to clipboard/prompt and skipped that audit path entirely
+    - current charting coverage proved review-pack link contents, but did not prove that copying a generated review-pack link still emits the existing charting share-link audit event
+    - adjacent charting export/review-pack hardening and parity slices were already merged, making this the smallest remaining nearby audit/parity gap
+  - Exact slice implemented:
+    - mapped generated review-pack link labels back to their charting sections and routed review-pack `Copy link` actions through the existing `share_link_copied` audit contract when the generated copy action is invoked
+    - extended the focused review-pack notes-link proof to intercept charting audit posts and verify copying the generated patient-notes review-pack link emits `share_link_copied` for the `notes` section
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/charting-export.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/charting-export.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk104 completed on `stage163h-chunk104-review-pack-fallback-parity` from `master@22a20c7` to align the patient charting review-pack ZIP fallback filename with the backend export contract without broadening into new review-pack behavior, appointments work, or the older recall-save proof follow-up.
   - What was inspected before implementation:
     - `AGENTS.md`
