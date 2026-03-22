@@ -617,8 +617,13 @@ export default function RecallsPage() {
 
   async function updateRecall(
     row: RecallRow,
-    payload: { status?: RecallStatus; due_date?: string; completed_at?: string | null }
+    payload: { status?: RecallStatus; due_date?: string; completed_at?: string | null },
+    button?: HTMLButtonElement | null
   ) {
+    if (actionId === row.id || button?.disabled) {
+      return;
+    }
+    if (button) button.disabled = true;
     setActionId(row.id);
     setError(null);
     try {
@@ -660,11 +665,15 @@ export default function RecallsPage() {
     }
   }
 
-  function handleComplete(row: RecallRow) {
-    void updateRecall(row, {
-      status: "completed",
-      completed_at: new Date().toISOString(),
-    });
+  function handleComplete(row: RecallRow, button?: HTMLButtonElement | null) {
+    void updateRecall(
+      row,
+      {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      },
+      button
+    );
   }
 
   function handleSnooze(row: RecallRow, months: number) {
@@ -1142,12 +1151,13 @@ export default function RecallsPage() {
                       <button
                         className="btn btn-secondary"
                         type="button"
+                        data-testid={`recalls-complete-${row.id}`}
                         disabled={
                           actionId === row.id ||
                           row.status === "completed" ||
                           row.status === "cancelled"
                         }
-                        onClick={() => handleComplete(row)}
+                        onClick={(event) => handleComplete(row, event.currentTarget)}
                       >
                         {actionId === row.id ? "Updating..." : "Mark completed"}
                       </button>
@@ -1290,12 +1300,13 @@ export default function RecallsPage() {
                   <button
                     className="btn btn-secondary"
                     type="button"
+                    data-testid={`recalls-complete-${row.id}`}
                     disabled={
                       actionId === row.id ||
                       row.status === "completed" ||
                       row.status === "cancelled"
                     }
-                    onClick={() => handleComplete(row)}
+                    onClick={(event) => handleComplete(row, event.currentTarget)}
                   >
                     {actionId === row.id ? "Updating..." : "Mark completed"}
                   </button>
