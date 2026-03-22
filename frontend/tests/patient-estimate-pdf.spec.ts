@@ -320,6 +320,123 @@ test("patient estimate item add shows in-flight state and guards repeat submit",
   ).toBeTruthy();
 });
 
+test("patient estimate item remove shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Estimate",
+    last_name: `ItemRemoveHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+
+  const createResponse = await request.post(`${baseUrl}/api/patients/${patientId}/estimates`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      notes: `Estimate item remove proof ${unique}`,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const estimate = (await createResponse.json()) as { id: number };
+
+  const seedItemResponse = await request.post(`${baseUrl}/api/estimates/${estimate.id}/items`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      treatment_id: null,
+      description: `Estimate removable item ${unique}`,
+      qty: 1,
+      fee_type: "FIXED",
+      unit_amount_pence: 2250,
+    },
+  });
+  expect(seedItemResponse.ok()).toBeTruthy();
+  const item = (await seedItemResponse.json()) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.getByTestId("patient-tab-Treatment").click();
+
+  const viewButton = page.getByTestId(`estimate-view-${estimate.id}`);
+  await expect(viewButton).toBeVisible({ timeout: 15_000 });
+  await viewButton.click();
+
+  const itemRow = page.getByTestId(`estimate-item-row-${item.id}`);
+  await expect(itemRow).toBeVisible({ timeout: 15_000 });
+
+  const removeButton = page.getByTestId(`estimate-item-remove-${item.id}`);
+  await expect(removeButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/estimates/${estimate.id}/items/${item.id}$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const deleteResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "DELETE" &&
+      response.url().endsWith(`/api/estimates/${estimate.id}/items/${item.id}`)
+  );
+
+  const clickState = await removeButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Remove estimate item button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(removeButton).toBeDisabled();
+  await expect(removeButton).toHaveText("Removing...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const deleteResponse = await deleteResponsePromise;
+  expect(deleteResponse.status()).toBe(204);
+  await page.unroute(routePattern);
+
+  await expect(page.getByTestId(`estimate-item-row-${item.id}`)).toHaveCount(0, {
+    timeout: 15_000,
+  });
+
+  const verifyResponse = await request.get(`${baseUrl}/api/estimates/${estimate.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedEstimate = (await verifyResponse.json()) as {
+    items: Array<{ id: number }>;
+  };
+  expect(updatedEstimate.items.some((estimateItem) => estimateItem.id === item.id)).toBe(false);
+});
+
 test("patient estimate status save shows in-flight state and guards repeat submit", async ({
   page,
   request,
