@@ -31,8 +31,15 @@ export default function NewPatientPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const submitter =
+      e.nativeEvent instanceof SubmitEvent ? e.nativeEvent.submitter : null;
+    const submitButton = submitter instanceof HTMLButtonElement ? submitter : null;
+    if (saving || submitButton?.disabled) return;
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -266,7 +273,11 @@ export default function NewPatientPage() {
             />
           </div>
         </div>
-        <button className="btn btn-primary" disabled={saving}>
+        <button
+          className="btn btn-primary"
+          data-testid="patient-create-submit"
+          disabled={saving}
+        >
           {saving ? "Saving..." : "Save patient"}
         </button>
       </form>
