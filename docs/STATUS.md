@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk108 completed on `stage163h-chunk108-patient-create-hardening` from `master@29c7c92` to harden the new patient create flow against duplicate submit after a broader repo-guided scan found no stronger small live-surface gap in appointments, notes, documents, templates, or the recently exhausted patient/charting/estimate/invoice cluster.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the live new-patient create flow in `frontend/app/(app)/patients/new/page.tsx`
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small gap in appointments, notes, documents, attachments, templates, or the just-finished Recalls ZIP/export work
+    - the new patient create flow is core V1 functionality, but `frontend/app/(app)/patients/new/page.tsx` still relied only on async React state and did not synchronously disable the clicked `Save patient` button before the create request began
+    - no focused Playwright proof existed for duplicate-submit prevention on `/patients/new`
+  - Exact slice implemented:
+    - added an immediate clicked-button guard to the new patient create submit path and exposed a stable submit test id
+    - added a focused Playwright proof that opens `/patients/new`, double-clicks `Save patient`, verifies the immediate disabled `Saving...` state, confirms only one `POST /api/patients` request is sent, and waits for the created patient page to load
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/new/page.tsx`
+    - `frontend/tests/patient-create.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-create.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - Note:
+    - the first focused Playwright run hit the older live frontend bundle before `./ops/verify.sh` rebuilt the app; the rerun against the rebuilt bundle passed and this was not treated as a product-code blocker
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk107 completed on `stage163h-chunk107-recalls-zip-hardening` from `master@2d0a608` to harden the Recalls page `Download letters (ZIP)` action against duplicate submit after a broader repo-guided scan found no stronger small slice outside the recently exhausted patient/charting/estimate/invoice cluster.
   - What was inspected before implementation:
     - `AGENTS.md`
