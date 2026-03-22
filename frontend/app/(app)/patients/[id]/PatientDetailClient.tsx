@@ -109,6 +109,7 @@ const savingRecallCommunicationIds = new Set<number>();
 const savingRecallActionIds = new Set<number>();
 const savingEstimatePatientIds = new Set<string>();
 const savingEstimateStatusIds = new Set<number>();
+const addingEstimateItemIds = new Set<number>();
 const savingInvoicePatientIds = new Set<string>();
 const savingInvoiceMetaIds = new Set<number>();
 const voidingInvoiceIds = new Set<number>();
@@ -921,6 +922,9 @@ export default function PatientDetailClient({
     estimateId: number;
     status: EstimateStatus;
   } | null>(null);
+  const [addingEstimateItemEstimateId, setAddingEstimateItemEstimateId] = useState<number | null>(
+    null
+  );
   const [estimateNotes, setEstimateNotes] = useState("");
   const [estimateValidUntil, setEstimateValidUntil] = useState("");
   const [estimateItemTreatmentId, setEstimateItemTreatmentId] = useState("");
@@ -1813,7 +1817,7 @@ export default function PatientDetailClient({
     }
   }
 
-  async function addEstimateItem() {
+  async function addEstimateItem(button?: HTMLButtonElement | null) {
     if (!selectedEstimate) return;
     setEstimateError(null);
     const qty = Number(estimateItemQty);
@@ -1845,9 +1849,16 @@ export default function PatientDetailClient({
       payload.min_unit_amount_pence = min;
       payload.max_unit_amount_pence = max;
     }
+    if (!button || addingEstimateItemIds.has(selectedEstimate.id) || button.disabled) {
+      return;
+    }
+    const estimateId = selectedEstimate.id;
+    addingEstimateItemIds.add(estimateId);
+    button.disabled = true;
+    setAddingEstimateItemEstimateId(estimateId);
 
     try {
-      const res = await apiFetch(`/api/estimates/${selectedEstimate.id}/items`, {
+      const res = await apiFetch(`/api/estimates/${estimateId}/items`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -1867,10 +1878,13 @@ export default function PatientDetailClient({
       setEstimateItemAmount("");
       setEstimateItemMinAmount("");
       setEstimateItemMaxAmount("");
-      await loadEstimateDetail(selectedEstimate.id);
+      await loadEstimateDetail(estimateId);
       await loadEstimates();
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to add estimate item");
+    } finally {
+      addingEstimateItemIds.delete(estimateId);
+      setAddingEstimateItemEstimateId((current) => (current === estimateId ? null : current));
     }
   }
 
@@ -10330,6 +10344,7 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Treatment</label>
                               <select
+                                data-testid="patient-estimate-item-treatment"
                                 className="input"
                                 value={estimateItemTreatmentId}
                                 onChange={(e) => {
@@ -10344,6 +10359,7 @@ export default function PatientDetailClient({
                                     }
                                   }
                                 }}
+                                disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                               >
                                 <option value="">Free text</option>
                                 {treatments.map((treatment) => (
@@ -10356,18 +10372,22 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Description</label>
                               <input
+                                data-testid="patient-estimate-item-description"
                                 className="input"
                                 value={estimateItemDescription}
                                 onChange={(e) => setEstimateItemDescription(e.target.value)}
                                 placeholder="e.g. Composite filling"
+                                disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                               />
                             </div>
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Qty</label>
                               <input
+                                data-testid="patient-estimate-item-qty"
                                 className="input"
                                 value={estimateItemQty}
                                 onChange={(e) => setEstimateItemQty(e.target.value)}
+                                disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                               />
                             </div>
                           </div>
@@ -10375,11 +10395,13 @@ export default function PatientDetailClient({
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Fee type</label>
                               <select
+                                data-testid="patient-estimate-item-fee-type"
                                 className="input"
                                 value={estimateItemFeeType}
                                 onChange={(e) =>
                                   setEstimateItemFeeType(e.target.value as EstimateFeeType)
                                 }
+                                disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                               >
                                 <option value="FIXED">Fixed</option>
                                 <option value="RANGE">Range</option>
@@ -10389,9 +10411,11 @@ export default function PatientDetailClient({
                               <div className="stack" style={{ gap: 8 }}>
                                 <label className="label">Amount (£)</label>
                                 <input
+                                  data-testid="patient-estimate-item-amount"
                                   className="input"
                                   value={estimateItemAmount}
                                   onChange={(e) => setEstimateItemAmount(e.target.value)}
+                                  disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                                 />
                               </div>
                             ) : (
@@ -10399,24 +10423,36 @@ export default function PatientDetailClient({
                                 <div className="stack" style={{ gap: 8 }}>
                                   <label className="label">Min (£)</label>
                                   <input
+                                    data-testid="patient-estimate-item-min-amount"
                                     className="input"
                                     value={estimateItemMinAmount}
                                     onChange={(e) => setEstimateItemMinAmount(e.target.value)}
+                                    disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                                   />
                                 </div>
                                 <div className="stack" style={{ gap: 8 }}>
                                   <label className="label">Max (£)</label>
                                   <input
+                                    data-testid="patient-estimate-item-max-amount"
                                     className="input"
                                     value={estimateItemMaxAmount}
                                     onChange={(e) => setEstimateItemMaxAmount(e.target.value)}
+                                    disabled={addingEstimateItemEstimateId === selectedEstimate.id}
                                   />
                                 </div>
                               </>
                             )}
                           </div>
-                          <button className="btn btn-primary" type="button" onClick={addEstimateItem}>
-                            Add item
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            data-testid="patient-estimate-item-add"
+                            onClick={(event) => void addEstimateItem(event.currentTarget)}
+                            disabled={addingEstimateItemEstimateId === selectedEstimate.id}
+                          >
+                            {addingEstimateItemEstimateId === selectedEstimate.id
+                              ? "Adding..."
+                              : "Add item"}
                           </button>
                         </div>
 
