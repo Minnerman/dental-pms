@@ -61,6 +61,38 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk100 completed on `stage163h-chunk100-charting-export-hardening` from `master@8471e7d` to harden the patient charting `Export CSV` action against duplicate submit without broadening into charting review-pack work, appointment redesign, or the older recall-save proof follow-up.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments detail, note, and run-sheet proof surfaces across `frontend/tests/appointments-booking.spec.ts`, `frontend/tests/appointments-diary-interactions.spec.ts`, and `frontend/tests/appointments-runsheet.spec.ts`
+    - the charting export/review-pack actions in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - current charting proof coverage in `frontend/tests/charting-parity.spec.ts`
+    - the older recall-save proof in `frontend/tests/patient-save.spec.ts`, re-run on current master (`3/3` passes)
+  - Evidence for choosing this slice:
+    - the patient charting `Export CSV` action still relied only on React state for its duplicate-submit guard and did not synchronously disable the clicked button before the async export request began
+    - there was no focused Playwright proof for repeated submit on charting export; existing charting parity only checked that the export/review-pack buttons become enabled
+    - the older flaky recall-save proof was reconsidered, but it passed `3/3` on current `master`, so it was not the strongest next slice
+  - Exact slice implemented:
+    - added an immediate charting-export guard keyed by patient id before the async export request begins and synchronously disabled the clicked export button
+    - preserved the existing `Exporting...` in-flight state and re-enabled the button after the download completes
+    - added a focused Playwright proof that double-clicking `Export CSV` only sends one charting export request and still yields the expected downloaded filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/charting-export.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/charting-export.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk99 completed on `stage163h-chunk99-appointment-estimate-submit-hardening` from `master@d502e24` to harden the appointments-page `Create estimate` action against duplicate submit without broadening into appointments redesign, patient estimate workflow redesign, or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`

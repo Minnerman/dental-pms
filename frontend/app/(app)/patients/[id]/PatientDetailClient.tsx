@@ -126,6 +126,7 @@ const savingTreatmentPlanStatusIds = new Set<number>();
 const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
+const chartingExportPatientIds = new Set<string>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
@@ -5118,8 +5119,16 @@ export default function PatientDetailClient({
     }
   }
 
-  async function downloadChartingExport() {
-    if (!chartingViewerEnabled || chartingExporting) return;
+  async function downloadChartingExport(button?: HTMLButtonElement | null) {
+    if (
+      !chartingViewerEnabled ||
+      !button ||
+      chartingExporting ||
+      chartingExportPatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
     const selected = Object.entries(chartingExportEntities)
       .filter(([, enabled]) => enabled)
       .map(([entity]) => entity);
@@ -5127,6 +5136,8 @@ export default function PatientDetailClient({
       setChartingExportError("Select at least one charting entity to export.");
       return;
     }
+    chartingExportPatientIds.add(patientId);
+    button.disabled = true;
     setChartingExporting(true);
     setChartingExportError(null);
     try {
@@ -5161,6 +5172,10 @@ export default function PatientDetailClient({
         err instanceof Error ? err.message : "Failed to export charting"
       );
     } finally {
+      chartingExportPatientIds.delete(patientId);
+      if (button.isConnected) {
+        button.disabled = false;
+      }
       setChartingExporting(false);
     }
   }
@@ -6754,7 +6769,9 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary"
                               type="button"
-                              onClick={downloadChartingExport}
+                              onClick={(event) =>
+                                void downloadChartingExport(event.currentTarget)
+                              }
                               disabled={chartingExporting}
                               data-testid="charting-export-csv"
                             >
