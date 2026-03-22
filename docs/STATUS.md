@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk101 completed on `stage163h-chunk101-charting-review-pack-hardening` from `master@d41f0bd` to harden the patient charting `Generate review pack` action against duplicate submit without broadening into charting share-link redesign, appointments work, or the older recall-save proof follow-up.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - charting export/review-pack actions in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - current charting proof coverage in `frontend/tests/charting-export.spec.ts`, `frontend/tests/charting-parity.spec.ts`, and `frontend/tests/charting-viewer.spec.ts`
+  - Evidence for choosing this slice:
+    - the adjacent patient charting `Generate review pack` action still relied only on React state and did not synchronously disable the clicked button before the async export request began
+    - current Playwright coverage only proved the review-pack button became enabled; there was no focused repeat-submit proof for the live action
+    - the older recall-save proof was reconsidered, but current repo evidence still did not make it a stronger next slice than this still-unguarded charting action
+  - Exact slice implemented:
+    - added an immediate charting review-pack guard keyed by patient id before the async export request begins and synchronously disabled the clicked button
+    - added a stable test id for the review-pack button while preserving the existing `Generating...` in-flight state, notice text, and generated share links
+    - extended the focused charting Playwright proof to double-click `Generate review pack`, verify the immediate disabled state, confirm only one export request is sent, and assert the review-pack links render after download
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/charting-export.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/charting-export.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk100 completed on `stage163h-chunk100-charting-export-hardening` from `master@8471e7d` to harden the patient charting `Export CSV` action against duplicate submit without broadening into charting review-pack work, appointment redesign, or the older recall-save proof follow-up.
   - What was inspected before implementation:
     - `AGENTS.md`

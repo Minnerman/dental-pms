@@ -127,6 +127,7 @@ const archivingPatientIds = new Set<string>();
 const bookingPatientIds = new Set<string>();
 const recordingPaymentInvoiceIds = new Set<number>();
 const chartingExportPatientIds = new Set<string>();
+const chartingReviewPackPatientIds = new Set<string>();
 
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
@@ -5180,8 +5181,18 @@ export default function PatientDetailClient({
     }
   }
 
-  async function downloadChartingReviewPack() {
-    if (!chartingViewerEnabled || chartingReviewPackBusy) return;
+  async function downloadChartingReviewPack(button?: HTMLButtonElement | null) {
+    if (
+      !chartingViewerEnabled ||
+      !button ||
+      chartingReviewPackBusy ||
+      chartingReviewPackPatientIds.has(patientId) ||
+      button.disabled
+    ) {
+      return;
+    }
+    chartingReviewPackPatientIds.add(patientId);
+    button.disabled = true;
     setChartingReviewPackBusy(true);
     setChartingReviewPackError(null);
     setChartingReviewPackNotice(null);
@@ -5222,6 +5233,10 @@ export default function PatientDetailClient({
         err instanceof Error ? err.message : "Failed to generate review pack"
       );
     } finally {
+      chartingReviewPackPatientIds.delete(patientId);
+      if (button.isConnected) {
+        button.disabled = false;
+      }
       setChartingReviewPackBusy(false);
     }
   }
@@ -6780,8 +6795,11 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary"
                               type="button"
-                              onClick={downloadChartingReviewPack}
+                              onClick={(event) =>
+                                void downloadChartingReviewPack(event.currentTarget)
+                              }
                               disabled={chartingReviewPackBusy || chartingExporting}
+                              data-testid="charting-review-pack-generate"
                             >
                               {chartingReviewPackBusy
                                 ? "Generating..."
