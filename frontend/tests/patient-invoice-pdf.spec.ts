@@ -399,6 +399,102 @@ test("patient invoice save shows in-flight state and guards repeat submit", asyn
   expect(updatedInvoice.discount_pence).toBe(225);
 });
 
+test("patient invoice void shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Invoice",
+    last_name: `VoidHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const invoice = (await createInvoice(request, patientId, {
+    notes: `Invoice void proof ${unique}`,
+  })) as { id: number; invoice_number: string };
+  await addInvoiceLine(request, invoice.id, {
+    description: `Invoice void line ${unique}`,
+    quantity: 1,
+    unit_price_pence: 4100,
+  });
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("patient-tab-Financial").click();
+
+  const invoiceRow = page.locator("tr", { hasText: invoice.invoice_number });
+  await expect(invoiceRow).toBeVisible({ timeout: 15_000 });
+  await invoiceRow.getByRole("button", { name: "View" }).click();
+
+  const voidButton = page.getByTestId(`invoice-void-${invoice.id}`);
+  await expect(voidButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/invoices/${invoice.id}/void$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const voidResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/invoices/${invoice.id}/void`)
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+
+  const clickState = await voidButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Void invoice button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(voidButton).toBeDisabled();
+  await expect(voidButton).toHaveText("Voiding...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const voidResponse = await voidResponsePromise;
+  expect(voidResponse.ok()).toBeTruthy();
+  await page.unroute(routePattern);
+
+  await expect(voidButton).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText(/Status:\s*void/i)).toBeVisible({ timeout: 15_000 });
+
+  const verifyResponse = await request.get(`${baseUrl}/api/invoices/${invoice.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedInvoice = (await verifyResponse.json()) as { status: string };
+  expect(updatedInvoice.status).toBe("void");
+});
+
 test("patient home finance summary invoice PDF shows in-flight state and honors header filename", async ({
   page,
   request,
