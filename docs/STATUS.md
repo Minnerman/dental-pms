@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk107 completed on `stage163h-chunk107-recalls-zip-hardening` from `master@2d0a608` to harden the Recalls page `Download letters (ZIP)` action against duplicate submit after a broader repo-guided scan found no stronger small slice outside the recently exhausted patient/charting/estimate/invoice cluster.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - broader user-facing coverage in `frontend/tests/appointments-*.spec.ts`, `frontend/tests/patient-notes.spec.ts`, `frontend/tests/templates-*.spec.ts`, `frontend/tests/patient-document-*.spec.ts`, and `frontend/tests/recalls-export.spec.ts`
+    - live Recalls export actions in `frontend/app/(app)/recalls/page.tsx`
+  - Evidence for choosing this slice:
+    - the broader discovery pass did not reveal a stronger small gap in appointments, notes, documents, templates, or the recently exhausted patient/charting/estimate/invoice cluster
+    - on the Recalls surface, `downloadLettersZip()` still relied only on React state and did not synchronously disable the clicked button before the async ZIP request began
+    - existing `frontend/tests/recalls-export.spec.ts` proved filename preview/download parity and CSV repeat-click prevention, but did not prove visible in-flight state or repeat-click prevention for the live ZIP export action
+  - Exact slice implemented:
+    - added an immediate Recalls ZIP export guard keyed by the existing export lock set and synchronously disabled the clicked `Download letters (ZIP)` button before the async request starts
+    - extended the focused Recalls export proof to seed a recall, double-click the ZIP export button, verify the immediate disabled state and `Preparing...` text, and confirm only one ZIP request is sent
+  - Files changed in this slice:
+    - `frontend/app/(app)/recalls/page.tsx`
+    - `frontend/tests/recalls-export.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/recalls-export.spec.ts --grep "recalls export ZIP shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk106 completed on `stage163h-chunk106-recalls-export-hardening` from `master@369e8c6` to harden the Recalls page `Export CSV` action against duplicate submit without broadening into the adjacent ZIP export, charting follow-ups, or unrelated patient/document work.
   - What was inspected before implementation:
     - `AGENTS.md`

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import { apiFetch, clearToken } from "@/lib/auth";
 import Table from "@/components/ui/Table";
 
@@ -419,8 +420,15 @@ export default function RecallsPage() {
     }
   }
 
-  async function downloadLettersZip() {
-    setDownloadingZip(true);
+  async function downloadLettersZip(button?: HTMLButtonElement | null) {
+    if (!button || downloadingZip || recallsExportLocks.has("zip") || button.disabled) {
+      return;
+    }
+    recallsExportLocks.add("zip");
+    button.disabled = true;
+    flushSync(() => {
+      setDownloadingZip(true);
+    });
     setError(null);
     setExportCountError(null);
     try {
@@ -462,6 +470,7 @@ export default function RecallsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download letters ZIP");
     } finally {
+      recallsExportLocks.delete("zip");
       setDownloadingZip(false);
     }
   }
@@ -897,7 +906,7 @@ export default function RecallsPage() {
             <button
               className="btn btn-secondary"
               type="button"
-              onClick={() => void downloadLettersZip()}
+              onClick={(event) => void downloadLettersZip(event.currentTarget)}
               disabled={!exportReady || downloadingZip || exporting}
               data-testid="recalls-export-zip"
             >
