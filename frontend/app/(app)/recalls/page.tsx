@@ -357,7 +357,14 @@ export default function RecallsPage() {
     return match?.[1] || fallback;
   }
 
-  async function downloadRecallLetter(row: RecallRow) {
+  async function downloadRecallLetter(
+    row: RecallRow,
+    button?: HTMLButtonElement | null
+  ) {
+    if (!button || button.disabled) {
+      return;
+    }
+    button.disabled = true;
     setDownloadId(row.id);
     setError(null);
     try {
@@ -1116,8 +1123,11 @@ export default function RecallsPage() {
                       <button
                         className="btn btn-secondary"
                         type="button"
+                        data-testid={`recalls-generate-letter-${row.id}`}
                         disabled={downloadId === row.id}
-                        onClick={() => void downloadRecallLetter(row)}
+                        onClick={(event) =>
+                          void downloadRecallLetter(row, event.currentTarget)
+                        }
                       >
                         {downloadId === row.id ? "Generating..." : "Generate letter"}
                       </button>
@@ -1261,8 +1271,11 @@ export default function RecallsPage() {
                   <button
                     className="btn btn-secondary"
                     type="button"
+                    data-testid={`recalls-generate-letter-${row.id}`}
                     disabled={downloadId === row.id}
-                    onClick={() => void downloadRecallLetter(row)}
+                    onClick={(event) =>
+                      void downloadRecallLetter(row, event.currentTarget)
+                    }
                   >
                     {downloadId === row.id ? "Generating..." : "Generate letter"}
                   </button>
