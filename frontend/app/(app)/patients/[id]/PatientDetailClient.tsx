@@ -111,6 +111,7 @@ const savingEstimatePatientIds = new Set<string>();
 const savingEstimateStatusIds = new Set<number>();
 const savingInvoicePatientIds = new Set<string>();
 const savingInvoiceMetaIds = new Set<number>();
+const voidingInvoiceIds = new Set<number>();
 const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
@@ -885,6 +886,7 @@ export default function PatientDetailClient({
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [savingInvoiceMetaId, setSavingInvoiceMetaId] = useState<number | null>(null);
+  const [voidingInvoiceId, setVoidingInvoiceId] = useState<number | null>(null);
   const [issuingInvoiceId, setIssuingInvoiceId] = useState<number | null>(null);
   const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
   const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
@@ -4871,12 +4873,23 @@ export default function PatientDetailClient({
     }
   }
 
-  async function voidInvoice() {
-    if (!selectedInvoice) return;
+  async function voidInvoice(button?: HTMLButtonElement | null) {
+    if (
+      !selectedInvoice ||
+      !button ||
+      voidingInvoiceIds.has(selectedInvoice.id) ||
+      button.disabled
+    ) {
+      return;
+    }
     if (!confirm("Void this invoice?")) return;
+    const invoiceId = selectedInvoice.id;
+    voidingInvoiceIds.add(invoiceId);
+    button.disabled = true;
+    setVoidingInvoiceId(invoiceId);
     setInvoiceError(null);
     try {
-      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}/void`, { method: "POST" });
+      const res = await apiFetch(`/api/invoices/${invoiceId}/void`, { method: "POST" });
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
@@ -4891,6 +4904,9 @@ export default function PatientDetailClient({
       await loadInvoices();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to void invoice");
+    } finally {
+      voidingInvoiceIds.delete(invoiceId);
+      setVoidingInvoiceId((current) => (current === invoiceId ? null : current));
     }
   }
 
@@ -10560,8 +10576,16 @@ export default function PatientDetailClient({
                               </button>
                             )}
                             {selectedInvoice.status !== "void" && (
-                              <button className="btn btn-secondary" onClick={voidInvoice}>
-                                Void invoice
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                data-testid={`invoice-void-${selectedInvoice.id}`}
+                                onClick={(event) => void voidInvoice(event.currentTarget)}
+                                disabled={voidingInvoiceId === selectedInvoice.id}
+                              >
+                                {voidingInvoiceId === selectedInvoice.id
+                                  ? "Voiding..."
+                                  : "Void invoice"}
                               </button>
                             )}
                           </div>
