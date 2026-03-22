@@ -110,6 +110,7 @@ const savingRecallActionIds = new Set<number>();
 const savingEstimatePatientIds = new Set<string>();
 const savingEstimateStatusIds = new Set<number>();
 const savingInvoicePatientIds = new Set<string>();
+const savingInvoiceMetaIds = new Set<number>();
 const issuingInvoiceIds = new Set<number>();
 const savingLedgerEntryPatientIds = new Set<string>();
 const savingBpePatientIds = new Set<string>();
@@ -883,6 +884,7 @@ export default function PatientDetailClient({
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [savingInvoiceMetaId, setSavingInvoiceMetaId] = useState<number | null>(null);
   const [issuingInvoiceId, setIssuingInvoiceId] = useState<number | null>(null);
   const [newInvoiceNotes, setNewInvoiceNotes] = useState("");
   const [newInvoiceDiscount, setNewInvoiceDiscount] = useState("");
@@ -4686,14 +4688,25 @@ export default function PatientDetailClient({
     }
   }
 
-  async function saveInvoiceMeta() {
-    if (!selectedInvoice) return;
+  async function saveInvoiceMeta(button?: HTMLButtonElement | null) {
+    if (
+      !selectedInvoice ||
+      !button ||
+      savingInvoiceMetaIds.has(selectedInvoice.id) ||
+      button.disabled
+    ) {
+      return;
+    }
     setInvoiceError(null);
     const discountPence = toPence(invoiceDiscount || "0");
     if (discountPence === null) {
       setInvoiceError("Discount must be a number.");
       return;
     }
+    const invoiceId = selectedInvoice.id;
+    savingInvoiceMetaIds.add(invoiceId);
+    button.disabled = true;
+    setSavingInvoiceMetaId(invoiceId);
     const payload: { notes?: string | null; discount_pence?: number } = {
       notes: invoiceNotes.trim() || null,
     };
@@ -4701,7 +4714,7 @@ export default function PatientDetailClient({
       payload.discount_pence = discountPence;
     }
     try {
-      const res = await apiFetch(`/api/invoices/${selectedInvoice.id}`, {
+      const res = await apiFetch(`/api/invoices/${invoiceId}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
@@ -4719,6 +4732,9 @@ export default function PatientDetailClient({
       await loadInvoices();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Failed to update invoice");
+    } finally {
+      savingInvoiceMetaIds.delete(invoiceId);
+      setSavingInvoiceMetaId((current) => (current === invoiceId ? null : current));
     }
   }
 
@@ -10577,6 +10593,7 @@ export default function PatientDetailClient({
                         <div className="stack" style={{ gap: 8 }}>
                           <label className="label">Invoice notes</label>
                           <textarea
+                            data-testid="patient-invoice-edit-notes"
                             className="input"
                             rows={3}
                             value={invoiceNotes}
@@ -10586,14 +10603,21 @@ export default function PatientDetailClient({
                         <div className="stack" style={{ gap: 8 }}>
                           <label className="label">Discount (£)</label>
                           <input
+                            data-testid="patient-invoice-edit-discount"
                             className="input"
                             value={invoiceDiscount}
                             onChange={(e) => setInvoiceDiscount(e.target.value)}
                             disabled={selectedInvoice.status !== "draft"}
                           />
                         </div>
-                        <button className="btn btn-secondary" type="button" onClick={saveInvoiceMeta}>
-                          Save invoice
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          data-testid="patient-invoice-save"
+                          onClick={(event) => void saveInvoiceMeta(event.currentTarget)}
+                          disabled={savingInvoiceMetaId === selectedInvoice.id}
+                        >
+                          {savingInvoiceMetaId === selectedInvoice.id ? "Saving..." : "Save invoice"}
                         </button>
 
                         <div className="card" style={{ margin: 0 }}>
