@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk110 completed on `stage163h-chunk110-recalls-letter-hardening` from `master@22a43bf` to harden the Recalls worklist `Generate letter` action without reopening the just-finished Recalls contact/export slices or widening into unrelated patient/document/template work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - recall-letter download handling on both the Recalls page and patient page
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, billing, documents/attachments, templates, or the recently finished patient create / Recalls export / Recalls contact slices
+    - the patient-page recall letter action already had an immediate clicked-button guard, but the Recalls worklist `Generate letter` button still relied only on async `downloadId` state and could double-submit on fast repeat clicks
+    - no focused Playwright proof existed for duplicate-submit prevention on the Recalls worklist recall-letter action
+  - Exact slice implemented:
+    - added an immediate clicked-button guard to the Recalls worklist recall-letter path and exposed a stable per-row button test id
+    - extended the focused recall-letter Playwright coverage to double-click the Recalls worklist `Generate letter` button, verify the immediate disabled `Generating...` state, confirm only one letter request is sent, and verify the returned filename
+  - Files changed in this slice:
+    - `frontend/app/(app)/recalls/page.tsx`
+    - `frontend/tests/patient-recall-letter.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-recall-letter.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - Notes:
+    - the first focused Playwright run hit the older live frontend bundle before `./ops/verify.sh` rebuilt the app; the rebuilt rerun passed without any further product-code changes
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk109 completed on `stage163h-chunk109-recalls-contact-hardening` from `master@ab3d49b` to harden the Recalls page contact log modal without reopening the just-finished Recalls export work or broadening into unrelated patient/appointments/document flows.
   - What was inspected before implementation:
     - `AGENTS.md`
