@@ -201,6 +201,125 @@ test("patient estimate create shows in-flight state and guards repeat submit", a
   ).toBeTruthy();
 });
 
+test("patient estimate item add shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Estimate",
+    last_name: `ItemHardening${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+
+  const createResponse = await request.post(`${baseUrl}/api/patients/${patientId}/estimates`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      notes: `Estimate item proof ${unique}`,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const estimate = (await createResponse.json()) as { id: number };
+  const description = `Estimate item ${unique}`;
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.getByTestId("patient-tab-Treatment").click();
+
+  const viewButton = page.getByTestId(`estimate-view-${estimate.id}`);
+  await expect(viewButton).toBeVisible({ timeout: 15_000 });
+  await viewButton.click();
+
+  await page.getByTestId("patient-estimate-item-description").fill(description);
+  await page.getByTestId("patient-estimate-item-qty").fill("2");
+  await page.getByTestId("patient-estimate-item-amount").fill("12.50");
+
+  const addButton = page.getByTestId("patient-estimate-item-add");
+  await expect(addButton).toBeEnabled({ timeout: 15_000 });
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/estimates/${estimate.id}/items$`);
+  let seenRequest!: () => void;
+  const seenRequestPromise = new Promise<void>((resolve) => {
+    seenRequest = resolve;
+  });
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenRequest();
+      await releaseResponsePromise;
+    }
+    await route.continue();
+  });
+  const itemResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/estimates/${estimate.id}/items`)
+  );
+
+  const clickState = await addButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Add estimate item button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(addButton).toBeDisabled();
+  await expect(addButton).toHaveText("Adding...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseResponse();
+
+  const itemResponse = await itemResponsePromise;
+  expect(itemResponse.ok()).toBeTruthy();
+  expect(itemResponse.request().postDataJSON()).toMatchObject({
+    treatment_id: null,
+    description,
+    qty: 2,
+    fee_type: "FIXED",
+    unit_amount_pence: 1250,
+  });
+  await page.unroute(routePattern);
+
+  await expect(addButton).toHaveText("Add item", { timeout: 15_000 });
+  await expect(addButton).toBeEnabled();
+
+  const verifyResponse = await request.get(`${baseUrl}/api/estimates/${estimate.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const updatedEstimate = (await verifyResponse.json()) as {
+    items: Array<{ description: string; qty: number; unit_amount_pence: number | null }>;
+  };
+  expect(
+    updatedEstimate.items.some(
+      (item) =>
+        item.description === description &&
+        item.qty === 2 &&
+        item.unit_amount_pence === 1250
+    )
+  ).toBeTruthy();
+});
+
 test("patient estimate status save shows in-flight state and guards repeat submit", async ({
   page,
   request,
