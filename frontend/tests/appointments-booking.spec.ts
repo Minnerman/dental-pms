@@ -981,3 +981,121 @@ test("appointment detail save shows in-flight state and guards repeat submit", a
   await expect(detailPanel).toContainText("Location type: visit");
   await expect(detailPanel).toContainText(visitAddress);
 });
+
+test("appointment detail create estimate shows in-flight state and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const lastName = `Estimate ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Repeat",
+    last_name: lastName,
+  });
+  const token = await ensureAuthReady(request);
+  const appointment = await createAppointment(request, patientId, {
+    clinician_user_id: null,
+    starts_at: "2026-01-15T15:00:00.000Z",
+    ends_at: "2026-01-15T15:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 4",
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const row = page.locator("tbody tr", { hasText: new RegExp(lastName, "i") }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
+  await page.keyboard.press("Enter");
+
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+
+  const createButton = detailPanel.getByTestId("appointment-create-estimate");
+  await expect(createButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/patients/${patientId}/estimates$`);
+  let seenCreateRequest!: () => void;
+  const seenCreateRequestPromise = new Promise<void>((resolve) => {
+    seenCreateRequest = resolve;
+  });
+  let releaseCreateRequest!: () => void;
+  const releaseCreateRequestPromise = new Promise<void>((resolve) => {
+    releaseCreateRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenCreateRequest();
+      await releaseCreateRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/api/patients/${patientId}/estimates`)
+  );
+
+  const clickState = await createButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Create estimate button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCreateRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(createButton).toBeDisabled();
+  await expect(createButton).toHaveText("Creating estimate...");
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCreateRequest();
+
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  expect(createResponse.request().postDataJSON()).toMatchObject({
+    appointment_id: appointment.id,
+  });
+  const createdEstimate = (await createResponse.json()) as {
+    id: number;
+    appointment_id: number | null;
+  };
+  expect(createdEstimate.appointment_id).toBe(appointment.id);
+  await page.unroute(routePattern);
+
+  await expect(page.getByText(`Estimate created (EST-${createdEstimate.id}).`)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(createButton).toBeEnabled({ timeout: 15_000 });
+  await expect(createButton).toHaveText("Create estimate");
+
+  const verifyResponse = await request.get(`${getBaseUrl()}/api/patients/${patientId}/estimates`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(verifyResponse.ok()).toBeTruthy();
+  const savedEstimates = (await verifyResponse.json()) as Array<{
+    id: number;
+    appointment_id: number | null;
+  }>;
+  expect(
+    savedEstimates.some(
+      (estimate) =>
+        estimate.id === createdEstimate.id && estimate.appointment_id === appointment.id
+    )
+  ).toBeTruthy();
+});

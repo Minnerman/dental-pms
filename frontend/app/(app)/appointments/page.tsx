@@ -310,6 +310,7 @@ const appointmentsNoteArchiveLocks = new Set<number>();
 const appointmentsDiaryUndoLocks = new Set<number>();
 const appointmentsRecallPromptLocks = new Set<string>();
 const appointmentsPasteLocks = new Set<string>();
+const appointmentsCreateEstimateLocks = new Set<number>();
 
 const statusThemeTokens: Record<
   AppointmentStatus,
@@ -693,6 +694,9 @@ export default function AppointmentsPage() {
     useState<AppointmentLocationType>("clinic");
   const [detailLocationText, setDetailLocationText] = useState("");
   const [savingDetail, setSavingDetail] = useState(false);
+  const [creatingEstimateAppointmentId, setCreatingEstimateAppointmentId] = useState<number | null>(
+    null
+  );
   const [range, setRange] = useState<CalendarRange | null>(null);
   const [calendarView, setCalendarView] = useState<View>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -2068,7 +2072,21 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function createEstimateForAppointment(appt: Appointment) {
+  async function createEstimateForAppointment(
+    appt: Appointment,
+    button?: HTMLButtonElement | null
+  ) {
+    if (
+      !button ||
+      creatingEstimateAppointmentId === appt.id ||
+      appointmentsCreateEstimateLocks.has(appt.id) ||
+      button.disabled
+    ) {
+      return;
+    }
+    appointmentsCreateEstimateLocks.add(appt.id);
+    button.disabled = true;
+    setCreatingEstimateAppointmentId(appt.id);
     setError(null);
     try {
       const res = await apiFetch(`/api/patients/${appt.patient.id}/estimates`, {
@@ -2088,6 +2106,9 @@ export default function AppointmentsPage() {
       setNotice(`Estimate created (EST-${data.id}).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create estimate");
+    } finally {
+      appointmentsCreateEstimateLocks.delete(appt.id);
+      setCreatingEstimateAppointmentId((current) => (current === appt.id ? null : current));
     }
   }
 
@@ -4920,9 +4941,18 @@ export default function AppointmentsPage() {
                       </button>
                       <button
                         className="btn btn-secondary"
-                        onClick={() => createEstimateForAppointment(selectedAppointment)}
+                        data-testid="appointment-create-estimate"
+                        onClick={(event) =>
+                          void createEstimateForAppointment(
+                            selectedAppointment,
+                            event.currentTarget
+                          )
+                        }
+                        disabled={creatingEstimateAppointmentId === selectedAppointment.id}
                       >
-                        Create estimate
+                        {creatingEstimateAppointmentId === selectedAppointment.id
+                          ? "Creating estimate..."
+                          : "Create estimate"}
                       </button>
                       <Link
                         className="btn btn-secondary"

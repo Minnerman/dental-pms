@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-22: Stage 163H chunk99 completed on `stage163h-chunk99-appointment-estimate-submit-hardening` from `master@d502e24` to harden the appointments-page `Create estimate` action against duplicate submit without broadening into appointments redesign, patient estimate workflow redesign, or the older flaky recall-save proof.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - appointments-page appointment-detail actions in `frontend/app/(app)/appointments/page.tsx`
+    - the existing appointments detail proof surface in `frontend/tests/appointments-booking.spec.ts`
+    - prior continuity evidence that appointment↔estimate linkages are part of the merged appointments surface
+  - Evidence for choosing this slice:
+    - the appointment-detail `Create estimate` action still sent a live create request without an immediate duplicate-submit guard
+    - there was no focused appointments-page Playwright proof for repeated submit on appointment-linked estimate creation, even though adjacent appointment booking/edit/detail/recall prompt flows were already hardened
+    - the older flaky patient recall-save proof was reconsidered, but current repo evidence did not make it a better next slice than this still-unguarded live appointment action
+  - Exact slice implemented:
+    - added an immediate appointment-linked estimate-create guard keyed by appointment id before the async `POST` begins and synchronously disabled the clicked detail-panel button
+    - added a stable test id for the appointment-detail `Create estimate` action and surfaced `Creating estimate...` while the estimate request is in flight
+    - extended the focused appointments Playwright proof to open appointment detail, double-click `Create estimate`, verify the immediate disabled state, and confirm only one appointment-linked estimate request is sent and persisted
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-booking.spec.ts --grep "appointment detail create estimate shows in-flight state and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-22: Stage 163H chunk98 completed on `stage163h-chunk98-estimate-pdf-fallback-parity` from `master@54ddd87` to bring the patient estimate PDF fallback filename into parity with the backend contract without broadening into estimate workflow redesign or the older flaky recall-save proof.
   - What was inspected before implementation:
     - `AGENTS.md`
