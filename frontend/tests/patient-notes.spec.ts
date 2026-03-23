@@ -862,6 +862,61 @@ test("notes detail save shows in-flight state and guards repeat submit", async (
   await expect(saveButton).toHaveText("Save changes");
 });
 
+test("notes detail View audit shows created and updated entries", async ({ page, request }) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `NOTEAUDIT${unique}`,
+  });
+  const noteBody = `Patient note audit seed ${unique}`;
+  const editedBody = `Patient note audit updated ${unique}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+
+  await page.getByTestId("patient-tab-Notes").click();
+  await expect(page.getByTestId("patient-tab-Notes")).toHaveAttribute("aria-selected", "true");
+
+  await page.getByTestId("patient-note-type-select").selectOption("admin");
+  await page.getByPlaceholder("Write a clinical or admin note...").fill(noteBody);
+  await page.getByTestId("patient-note-add").click();
+
+  const noteCard = page.getByText(noteBody, { exact: true }).locator("xpath=..");
+  await expect(noteCard).toBeVisible({ timeout: 15_000 });
+  await noteCard.locator('[data-testid^="patient-note-open-"]').click();
+  await expect(page).toHaveURL(/\/notes\?note=\d+\b/, { timeout: 15_000 });
+
+  const noteIdMatch = page.url().match(/note=(\d+)/);
+  expect(noteIdMatch).toBeTruthy();
+  const noteId = Number(noteIdMatch?.[1]);
+
+  await expect(page.getByTestId("note-detail-body")).toHaveValue(noteBody);
+  await page.getByTestId("note-detail-body").fill(editedBody);
+  await page.getByTestId("note-detail-save").click();
+  await expect(page.getByText("Note updated.", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  const auditLink = page.getByRole("link", { name: "View audit" });
+  await expect(auditLink).toHaveAttribute("href", `/notes/${noteId}/audit`);
+  await auditLink.click();
+
+  await expect(page).toHaveURL(new RegExp(`/notes/${noteId}/audit$`), { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Note audit" })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const createdRow = page.locator("tbody tr").filter({ hasText: "note.created" }).first();
+  const updatedRow = page.locator("tbody tr").filter({ hasText: "note.updated" }).first();
+  await expect(createdRow).toBeVisible({ timeout: 15_000 });
+  await expect(updatedRow).toBeVisible({ timeout: 15_000 });
+  await expect(createdRow).toContainText(`note #${noteId}`);
+  await expect(updatedRow).toContainText(`note #${noteId}`);
+  await expect(updatedRow).toContainText("body");
+});
+
 test("notes detail archive shows in-flight state and guards repeat submit", async ({
   page,
   request,
