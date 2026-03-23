@@ -60,6 +60,12 @@ test("patient document save disables in-flight and guards repeat submit", async 
     await route.continue();
   });
 
+  const saveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/patients/${patientId}/documents`)
+  );
+
   await page.evaluate(() => {
     const button = document.querySelector('[data-testid="patient-document-save"]');
     if (!(button instanceof HTMLButtonElement)) {
@@ -77,21 +83,23 @@ test("patient document save disables in-flight and guards repeat submit", async 
 
   releaseResponse();
 
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok()).toBeTruthy();
+  const savedDocument = (await saveResponse.json()) as {
+    id: number;
+    title: string;
+    created_at: string;
+  };
+
   await expect(saveButton).toBeEnabled({ timeout: 15_000 });
   await expect(saveButton).toHaveText("Save document");
-  await expect
-    .poll(
-      async () => {
-        const response = await request.get(`${baseUrl}/api/patients/${patientId}/documents`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        expect(response.ok()).toBeTruthy();
-        const documents = (await response.json()) as { title: string }[];
-        return documents.filter((item) => item.title === documentTitle).length;
-      },
-      { timeout: 15_000 }
-    )
-    .toBe(1);
+  const savedDocumentCard = page.getByTestId(`patient-document-card-${savedDocument.id}`);
+  const expectedCreatedDate = await page.evaluate((createdAt) => {
+    return new Date(createdAt).toLocaleDateString("en-GB");
+  }, savedDocument.created_at);
+  await expect(savedDocumentCard).toBeVisible({ timeout: 15_000 });
+  await expect(savedDocumentCard).toContainText(documentTitle);
+  await expect(savedDocumentCard).toContainText(expectedCreatedDate);
 
   await page.unroute(routePattern);
 });
