@@ -107,6 +107,48 @@ test("patient personal save shows in-flight state and guards repeat submit", asy
   expect(savedPatient.notes).toBe(updatedNotes);
 });
 
+test("patient audit page shows created and updated entries", async ({ page, request }) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `AUDIT${unique}`,
+  });
+  const updatedNotes = `Patient audit proof ${unique}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  await page.getByTestId("patient-tab-Personal").click();
+  await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
+
+  await page.getByText("Patient details", { exact: true }).click();
+  const notesField = page.getByTestId("patient-notes-field");
+  await expect(notesField).toBeVisible();
+  await notesField.fill(updatedNotes);
+
+  const saveButton = page.getByTestId("patient-save-changes");
+  await saveButton.click();
+  await expect(saveButton).toHaveText("Save changes", { timeout: 15_000 });
+  await expect(saveButton).toBeEnabled();
+
+  await page.getByRole("link", { name: "Audit" }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/audit(?:\\?|$)`));
+  await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
+
+  const auditRows = page.locator("tbody tr");
+  await expect(auditRows).toHaveCount(2, { timeout: 15_000 });
+
+  const actionCells = auditRows.locator("td:nth-child(3)");
+  await expect(actionCells).toHaveText(["update", "create"]);
+
+  await auditRows.first().getByRole("button", { name: "View" }).click();
+  await expect(page.locator("pre")).toContainText(updatedNotes);
+});
+
 test("patient archive shows in-flight state and guards repeat submit", async ({
   page,
   request,
