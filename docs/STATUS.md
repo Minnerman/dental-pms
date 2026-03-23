@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-23: Stage 163H chunk116 completed on `stage163h-chunk116-patient-document-list-proof` from `master@33bce32` to close the remaining patient-document save UI proof gap without reopening the finished Recalls, patient create, audit, or attachments metadata slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the generated-documents UI in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, attachments, billing/payments/receipts, templates, or the recently finished Recalls and audit-proof slices
+    - `docs/V1_FINISH_LINE.md` still requires the documents/attachments list to update immediately
+    - the existing patient document save proof only polled the API after save and did not verify that the generated-documents UI itself showed the saved row or its visible created-date metadata
+  - Exact slice implemented:
+    - tightened the focused Playwright save proof to wait for the real document create response, then verify the generated-documents card appears in the UI with the saved title and visible created date
+    - no product-code change was required; the existing generated-documents UI satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/patient-document-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-23: Stage 163H chunk115 completed on `stage163h-chunk115-attachment-meta-proof` from `master@b9cc245` to close the remaining V1 attachments metadata proof gap without reopening the recently finished Recalls worklist slices, patient create, or the audit-proof areas.
   - What was inspected before implementation:
     - `AGENTS.md`
