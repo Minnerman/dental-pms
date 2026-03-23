@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-23: Stage 163H chunk114 completed on `stage163h-chunk114-patient-audit-proof` from `master@254c23f` to close the remaining basic patient-audit display proof gap without reopening the recently finished Recalls worklist slices, patient create, note-audit, or appointment-audit work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the live patient audit UI in `frontend/app/(app)/patients/[id]/audit/PatientAuditClient.tsx`
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, documents/attachments, billing/payments/receipts, templates, or the recently finished Recalls and other audit-proof slices
+    - `docs/V1_FINISH_LINE.md` still requires basic audit visibility for key entities and the patient detail surface already exposes a dedicated `Audit` route
+    - unlike notes and appointments, there was still no focused Playwright proof that editing a patient causes the patient audit page to show visible `create` and `update` entries
+  - Exact slice implemented:
+    - added a focused Playwright proof that edits patient details from the Personal tab, opens the patient `Audit` page, verifies the audit table shows `update` and `create` rows, and expands the newest entry to confirm the changed notes value is visible in the audit details
+    - no product-code change was required; the existing patient audit UI satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts --grep "patient audit page shows created and updated entries"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-23: Stage 163H chunk113 completed on `stage163h-chunk113-appointment-audit-proof` from `master@fc59ed4` to close the remaining V1 audit-display proof gap for appointment history without reopening the finished Recalls worklist slices, patient create, or note-audit work.
   - What was inspected before implementation:
     - `AGENTS.md`
