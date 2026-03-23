@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-23: Stage 163H chunk115 completed on `stage163h-chunk115-attachment-meta-proof` from `master@b9cc245` to close the remaining V1 attachments metadata proof gap without reopening the recently finished Recalls worklist slices, patient create, or the audit-proof areas.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the live attachments UI in `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, billing/payments/receipts, templates, or the recently finished Recalls worklist, patient-create, and audit-proof slices
+    - `docs/V1_FINISH_LINE.md` still requires patient documents/attachments to show basic metadata (`uploaded by/when`)
+    - the attachments card UI already rendered `Uploaded <timestamp> by <email>`, but there was still no focused Playwright proof that the metadata is visibly present after upload
+  - Exact slice implemented:
+    - added a focused Playwright proof that uploads an attachment on the patient Attachments page, reads back the server-side metadata from the attachments API, and verifies the rendered card shows the matching uploaded-by/when line
+    - no product-code change was required; the existing attachments UI satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-attachments.spec.ts --grep "patient attachments show uploaded-by and uploaded-at metadata"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-23: Stage 163H chunk114 completed on `stage163h-chunk114-patient-audit-proof` from `master@254c23f` to close the remaining basic patient-audit display proof gap without reopening the recently finished Recalls worklist slices, patient create, note-audit, or appointment-audit work.
   - What was inspected before implementation:
     - `AGENTS.md`
