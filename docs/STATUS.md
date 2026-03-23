@@ -61,6 +61,39 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-23: Stage 163H chunk118 completed on `stage163h-chunk118-smoke-stability` from `master@6af8df2` to stabilise the recurring external `playwright-smoke` blockers without widening proof-only PR `#453`.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - recurring GitHub `playwright-smoke` failure logs for:
+      - `tests/patient-attachments.spec.ts:7:5`
+      - `tests/patient-estimate-pdf.spec.ts:497:5`
+    - the attachments surface in `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - the estimate status action path in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the focused Playwright proofs in `frontend/tests/patient-attachments.spec.ts` and `frontend/tests/patient-estimate-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - PR `#453` remained clean and narrow, but required `playwright-smoke` stayed red on the same external attachment and estimate-status failures
+    - the attachment failure reduced to a real stale mount-load overwrite race once the initial attachments list response was delayed
+    - the estimate status failure reduced to the UI spinner staying tied to the slower post-PATCH estimates refresh instead of clearing as soon as the PATCH succeeded
+  - Exact slice implemented:
+    - invalidated stale in-flight attachment list loads when an upload succeeds so an older empty response cannot overwrite the newly uploaded row
+    - decoupled the estimate status button’s visible `Updating...` state from the slower post-PATCH estimates refresh by running that refresh in the background
+    - added deterministic Playwright proofs for:
+      - attachment upload surviving a stale initial attachments load
+      - estimate status action settling while the follow-up estimates refresh is artificially delayed
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; CI=1 npx playwright test tests/patient-attachments.spec.ts tests/patient-estimate-pdf.spec.ts --grep "patient attachments upload, preview, download, delete|patient attachment upload survives a stale initial attachments load|patient estimate status save shows in-flight state and guards repeat submit" --workers=2 --repeat-each=5` -> pass (`15 passed`)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-23: Stage 163H chunk116 completed on `stage163h-chunk116-patient-document-list-proof` from `master@33bce32` to close the remaining patient-document save UI proof gap without reopening the finished Recalls, patient create, audit, or attachments metadata slices.
   - What was inspected before implementation:
     - `AGENTS.md`

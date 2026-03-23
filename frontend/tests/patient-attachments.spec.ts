@@ -79,6 +79,60 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
   await expect(row).toHaveCount(0);
 });
 
+test("patient attachment upload survives a stale initial attachments load", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Docs",
+    last_name: `Attach Race ${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+
+  const attachmentsRoutePattern = new RegExp(`/api/patients/${patientId}/attachments$`);
+  let releaseInitialLoad!: () => void;
+  const releaseInitialLoadPromise = new Promise<void>((resolve) => {
+    releaseInitialLoad = resolve;
+  });
+  let heldInitialLoad = false;
+  await page.route(attachmentsRoutePattern, async (route) => {
+    if (route.request().method() !== "GET" || heldInitialLoad) {
+      await route.continue();
+      return;
+    }
+    heldInitialLoad = true;
+    await releaseInitialLoadPromise;
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([]),
+    });
+  });
+
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/attachments`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  const uploadInput = page
+    .getByTestId("attachment-upload")
+    .locator('input[type="file"]');
+  const fixturePath = path.resolve(__dirname, "fixtures", "sample.pdf");
+  await uploadInput.setInputFiles(fixturePath);
+
+  const uploadedRow = page
+    .locator('[data-testid^="attachment-card-"]')
+    .filter({ has: page.getByText("sample.pdf", { exact: true }) })
+    .first();
+  await expect(uploadedRow).toBeVisible({ timeout: 15_000 });
+
+  releaseInitialLoad();
+
+  await expect(uploadedRow).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("No attachments yet.")).toHaveCount(0);
+  await page.unroute(attachmentsRoutePattern);
+});
+
 test("patient attachments show uploaded-by and uploaded-at metadata", async ({
   page,
   request,
