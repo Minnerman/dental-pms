@@ -537,6 +537,11 @@ test("patient estimate status save shows in-flight state and guards repeat submi
   const releaseResponsePromise = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  const estimatesRoutePattern = new RegExp(`/api/patients/${patientId}/estimates$`);
+  let refreshDelayComplete!: () => void;
+  const refreshDelayCompletePromise = new Promise<void>((resolve) => {
+    refreshDelayComplete = resolve;
+  });
   await page.route(routePattern, async (route) => {
     if (route.request().method() !== "PATCH") {
       await route.continue();
@@ -548,6 +553,15 @@ test("patient estimate status save shows in-flight state and guards repeat submi
       await releaseResponsePromise;
     }
     await route.continue();
+  });
+  await page.route(estimatesRoutePattern, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    await page.waitForTimeout(5_000);
+    await route.continue();
+    refreshDelayComplete();
   });
   const statusResponsePromise = page.waitForResponse(
     (response) =>
@@ -584,8 +598,12 @@ test("patient estimate status save shows in-flight state and guards repeat submi
   });
   await page.unroute(routePattern);
 
-  await expect(issuedButton).toHaveText("Mark issued", { timeout: 15_000 });
-  await expect(issuedButton).toBeEnabled();
+  await expect(issuedButton).toHaveText("Mark issued", { timeout: 2_000 });
+  await expect(issuedButton).toBeEnabled({ timeout: 2_000 });
+  await expect(page.getByText(/Status:\s*ISSUED/)).toBeVisible({ timeout: 2_000 });
+
+  await refreshDelayCompletePromise;
+  await page.unroute(estimatesRoutePattern);
 
   const verifyResponse = await request.get(`${baseUrl}/api/estimates/${estimate.id}`, {
     headers: { Authorization: `Bearer ${token}` },
