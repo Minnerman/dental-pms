@@ -982,6 +982,60 @@ test("appointment detail save shows in-flight state and guards repeat submit", a
   await expect(detailPanel).toContainText(visitAddress);
 });
 
+test("appointment detail history shows created and updated entries", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  const unique = Date.now();
+  const lastName = `Audit ${unique}`;
+  const visitAddress = `163H Audit Road ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: lastName,
+  });
+  await createAppointment(request, patientId, {
+    clinician_user_id: null,
+    starts_at: "2026-01-15T16:00:00.000Z",
+    ends_at: "2026-01-15T16:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 5",
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const row = page.locator("tbody tr", { hasText: new RegExp(lastName, "i") }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
+  await page.keyboard.press("Enter");
+
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+
+  const detailForm = detailPanel.locator("form").first();
+  await detailForm.locator("select").selectOption("visit");
+  const visitAddressInput = detailForm.locator("textarea");
+  await expect(visitAddressInput).toBeVisible({ timeout: 15_000 });
+  await visitAddressInput.fill(visitAddress);
+
+  await detailPanel.getByTestId("appointment-detail-save").click();
+  await expect(page.getByText("Appointment updated.")).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel).toContainText("Location type: visit");
+  await expect(detailPanel).toContainText(visitAddress);
+
+  const historyToggle = detailPanel.getByTestId("appointment-history-toggle");
+  await expect(historyToggle).toHaveText("View");
+  await historyToggle.click();
+  await expect(historyToggle).toHaveText("Hide");
+
+  const historyRows = detailPanel.getByTestId("appointment-history-row");
+  await expect(historyRows).toHaveCount(2, { timeout: 15_000 });
+
+  const actionLabels = historyRows.locator("span:nth-of-type(2)");
+  await expect(actionLabels.filter({ hasText: /^created$/i }).first()).toBeVisible();
+  await expect(actionLabels.filter({ hasText: /^updated$/i }).first()).toBeVisible();
+});
+
 test("appointment detail create estimate shows in-flight state and guards repeat submit", async ({
   page,
   request,
