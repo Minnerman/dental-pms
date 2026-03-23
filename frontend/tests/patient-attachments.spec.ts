@@ -79,6 +79,74 @@ test("patient attachments upload, preview, download, delete", async ({ page, req
   await expect(row).toHaveCount(0);
 });
 
+test("patient attachments show uploaded-by and uploaded-at metadata", async ({
+  page,
+  request,
+}) => {
+  type AttachmentMetadata = {
+    id: number;
+    original_filename: string;
+    created_at: string;
+    created_by?: {
+      email?: string | null;
+    } | null;
+  };
+
+  const patientId = await createPatient(request, {
+    first_name: "Docs",
+    last_name: `Attach Meta ${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/attachments`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  const uploadInput = page
+    .getByTestId("attachment-upload")
+    .locator('input[type="file"]');
+  const fixturePath = path.resolve(__dirname, "fixtures", "sample.pdf");
+  await uploadInput.setInputFiles(fixturePath);
+
+  const token = await ensureAuthReady(request);
+  let attachment: AttachmentMetadata | null = null;
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${getBaseUrl()}/api/patients/${patientId}/attachments`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!response.ok()) {
+          return null;
+        }
+        const items = (await response.json()) as AttachmentMetadata[];
+        attachment = items.find((item) => item.original_filename === "sample.pdf") ?? null;
+        return attachment?.id ?? null;
+      },
+      { timeout: 20_000 }
+    )
+    .not.toBeNull();
+  if (attachment === null) {
+    throw new Error("Attachment metadata not available after upload");
+  }
+  const resolvedAttachment = attachment as AttachmentMetadata;
+
+  const row = page.getByTestId(`attachment-card-${resolvedAttachment.id}`);
+  await expect(row).toBeVisible({ timeout: 15_000 });
+
+  const expectedUploadedAt = await page.evaluate((createdAt) => {
+    return new Date(createdAt).toLocaleString("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }, resolvedAttachment.created_at);
+  const expectedUploadedBy = resolvedAttachment.created_by?.email ?? "—";
+
+  await expect(row).toContainText("sample.pdf");
+  await expect(row).toContainText(`Uploaded ${expectedUploadedAt} by ${expectedUploadedBy}`);
+});
+
 test("patient attachment upload shows in-flight state and guards repeat submit", async ({
   page,
   request,
