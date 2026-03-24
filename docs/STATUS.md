@@ -89,6 +89,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `./ops/verify.sh` -> pass
     - `git diff --check` -> pass
   - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
+- 2026-03-24: Stage 163H chunk124 started on `stage163h-chunk124-estimate-remove-stability` from `master@95a4803` to unblock PR `#459` by fixing the recurring estimate-item remove stability failure as a separate narrow slice.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - failed `playwright-smoke` logs for PR `#459`
+    - downloaded `playwright-report` artifact error context and screenshot for `tests/patient-estimate-pdf.spec.ts:380:5`
+  - Evidence for choosing this slice:
+    - PR `#459` itself remained clean and untouched, but `playwright-smoke` failed on `patient estimate item remove shows in-flight state and guards repeat submit`
+    - the CI artifact showed the estimate row still visible and the button stuck on `Removing...` after the DELETE succeeded, grounding this as a real estimate delete timing/state issue rather than speculative CI noise
+    - local `CI=1` repeat runs still passed, so the safest fix was to harden the visible estimate delete flow itself instead of widening PR `#459`
+  - Exact slice implemented:
+    - update estimate item delete to remove the item from visible estimate state immediately after a successful DELETE and refresh in the background
+    - tighten the focused estimate remove proof to assert the detail view settles to the empty-state after removal
+  - Files changed:
+    - `docs/STATUS.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+  - Validation:
+    - `cd frontend && npm run typecheck`
+    - `cd frontend && set -a && . /home/amir/dental-pms/.env && set +a && CI=1 npx playwright test tests/patient-estimate-pdf.spec.ts --grep "patient estimate item remove shows in-flight state and guards repeat submit"`
+    - `cd frontend && set -a && . /home/amir/dental-pms/.env && set +a && CI=1 npx playwright test tests/patient-estimate-pdf.spec.ts --grep "patient estimate item remove shows in-flight state and guards repeat submit" --workers=2 --repeat-each=10`
+    - `./ops/health.sh`
+    - `./ops/verify.sh`
+    - `git diff --check`
+  - Notes:
+    - PR `#459` remained untouched throughout this slice
+    - R4 was not touched
 - 2026-03-24: Stage 163H chunk122 completed on `stage163h-chunk122-treatment-plan-edit` from `master@fa45922` to close the remaining clinician UAT gap for treatment-plan item edit/save without reopening the finished Recalls, patient-create, audit, documents, attachments, billing, search, or appointment-cancel slices.
   - What was inspected before implementation:
     - `AGENTS.md`
