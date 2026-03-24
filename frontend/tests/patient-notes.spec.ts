@@ -653,6 +653,156 @@ test("patient treatment plan add shows in-flight state and guards repeat submit"
   ).toBeTruthy();
 });
 
+test("patient treatment plan edit shows in-flight state and persists updated fields", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `PLANEDIT${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const originalDescription = `Treatment plan edit original ${unique}`;
+  const updatedDescription = `Treatment plan edit updated ${unique}`;
+
+  const createResponse = await request.post(`${baseUrl}/api/patients/${patientId}/treatment-plan`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      tooth: "UR6",
+      procedure_code: "PLAN1",
+      description: originalDescription,
+      fee_pence: 4550,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const createdItem = (await createResponse.json()) as { id: number };
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+
+  const treatmentTab = page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ });
+  await treatmentTab.click();
+  await expect(treatmentTab).toHaveClass(/active/);
+
+  const editButton = page.getByTestId(`patient-treatment-plan-edit-${createdItem.id}`);
+  await expect(editButton).toBeEnabled();
+  await editButton.click();
+
+  await expect(page.getByRole("heading", { name: "Edit treatment plan item" })).toBeVisible();
+  await expect(page.getByTestId("patient-treatment-plan-code")).toHaveValue("PLAN1");
+  await expect(page.getByTestId("patient-treatment-plan-description")).toHaveValue(
+    originalDescription
+  );
+  await expect(page.getByTestId("patient-treatment-plan-fee")).toHaveValue("45.50");
+
+  await page.getByTestId("patient-treatment-plan-code").fill("PLAN2");
+  await page.getByTestId("patient-treatment-plan-description").fill(updatedDescription);
+  await page.getByTestId("patient-treatment-plan-fee").fill("78.90");
+
+  const saveButton = page.getByTestId("patient-treatment-plan-save");
+  await expect(saveButton).toBeEnabled();
+
+  let requestCount = 0;
+  const updateRoutePattern = new RegExp(`/api/treatment-plan/${createdItem.id}$`);
+  let seenUpdateRequest!: () => void;
+  const seenUpdateRequestPromise = new Promise<void>((resolve) => {
+    seenUpdateRequest = resolve;
+  });
+  let releaseUpdateRequest!: () => void;
+  const releaseUpdateRequestPromise = new Promise<void>((resolve) => {
+    releaseUpdateRequest = resolve;
+  });
+  await page.route(updateRoutePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      seenUpdateRequest();
+      await releaseUpdateRequestPromise;
+    }
+    await route.continue();
+  });
+  const updateResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/treatment-plan/${createdItem.id}`)
+  );
+
+  const clickState = await saveButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Save changes button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenUpdateRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(saveButton).toBeDisabled();
+  await expect(saveButton).toHaveText("Saving...");
+  await expect(page.getByRole("heading", { name: "Edit treatment plan item" })).toBeVisible();
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseUpdateRequest();
+
+  const updateResponse = await updateResponsePromise;
+  expect(updateResponse.ok()).toBeTruthy();
+  expect(updateResponse.request().postDataJSON()).toMatchObject({
+    tooth: "UR6",
+    surface: null,
+    procedure_code: "PLAN2",
+    description: updatedDescription,
+    fee_pence: 7890,
+  });
+  await page.unroute(updateRoutePattern);
+
+  await expect(page.getByRole("heading", { name: "Edit treatment plan item" })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  await expect(page.getByText(updatedDescription, { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const verifyResponse = await request.get(
+    `${baseUrl}/api/patients/${patientId}/clinical/summary?limit=200`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  expect(verifyResponse.ok()).toBeTruthy();
+  const clinicalSummary = (await verifyResponse.json()) as {
+    treatment_plan_items?: Array<{
+      id?: number;
+      tooth?: string | null;
+      procedure_code?: string | null;
+      description?: string | null;
+      fee_pence?: number | null;
+    }>;
+  };
+  expect(
+    (clinicalSummary.treatment_plan_items ?? []).some(
+      (item) =>
+        item.id === createdItem.id &&
+        item.tooth === "UR6" &&
+        item.procedure_code === "PLAN2" &&
+        item.description === updatedDescription &&
+        item.fee_pence === 7890
+    )
+  ).toBeTruthy();
+});
+
 test("patient BPE save shows in-flight state and guards repeat submit", async ({
   page,
   request,

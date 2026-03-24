@@ -1038,6 +1038,7 @@ export default function PatientDetailClient({
   const [savingClinicalNote, setSavingClinicalNote] = useState(false);
   const [clinicalNoteNotice, setClinicalNoteNotice] = useState<string | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingTreatmentPlanId, setEditingTreatmentPlanId] = useState<number | null>(null);
   const [planTooth, setPlanTooth] = useState("");
   const [planSurface, setPlanSurface] = useState("");
   const [planCode, setPlanCode] = useState("");
@@ -2721,11 +2722,37 @@ export default function PatientDetailClient({
 
   function openPlanFromChart() {
     if (!selectedTooth || !procedureCode || !procedureDescription.trim()) return;
+    setEditingTreatmentPlanId(null);
     setPlanTooth(selectedTooth);
     setPlanSurface(chartNoteSurface);
     setPlanCode(procedureCode);
     setPlanDescription(procedureDescription.trim());
     setPlanFee(procedureFee);
+    setShowPlanModal(true);
+  }
+
+  function resetTreatmentPlanForm() {
+    setEditingTreatmentPlanId(null);
+    setShowPlanModal(false);
+    setPlanTooth("");
+    setPlanSurface("");
+    setPlanCode("");
+    setPlanDescription("");
+    setPlanFee("");
+  }
+
+  function openTreatmentPlanModal() {
+    resetTreatmentPlanForm();
+    setShowPlanModal(true);
+  }
+
+  function startEditTreatmentPlanItem(item: TreatmentPlanItem) {
+    setEditingTreatmentPlanId(item.id);
+    setPlanTooth(item.tooth ?? "");
+    setPlanSurface(item.surface ?? "");
+    setPlanCode(item.procedure_code);
+    setPlanDescription(item.description);
+    setPlanFee(item.fee_pence != null ? (item.fee_pence / 100).toFixed(2) : "");
     setShowPlanModal(true);
   }
 
@@ -2815,38 +2842,47 @@ export default function PatientDetailClient({
     if (!button || planSaving || savingTreatmentPlanPatientIds.has(patientId) || button.disabled) {
       return;
     }
+    const editingItemId = editingTreatmentPlanId;
+    const isEditing = editingItemId !== null;
     savingTreatmentPlanPatientIds.add(patientId);
     button.disabled = true;
     setPlanSaving(true);
+    setClinicalError(null);
     try {
-      const res = await apiFetch(`/api/patients/${patientId}/treatment-plan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tooth: planTooth.trim() || null,
-          surface: planSurface || null,
-          procedure_code: planCode.trim(),
-          description: planDescription.trim(),
-          fee_pence: parseCurrencyToPence(planFee),
-        }),
-      });
+      const res = await apiFetch(
+        isEditing
+          ? `/api/treatment-plan/${editingItemId}`
+          : `/api/patients/${patientId}/treatment-plan`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tooth: planTooth.trim() || null,
+            surface: planSurface || null,
+            procedure_code: planCode.trim(),
+            description: planDescription.trim(),
+            fee_pence: parseCurrencyToPence(planFee),
+          }),
+        }
+      );
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to save treatment plan item (HTTP ${res.status})`);
+        throw new Error(
+          `Failed to ${isEditing ? "update" : "save"} treatment plan item (HTTP ${res.status})`
+        );
       }
-      setShowPlanModal(false);
-      setPlanTooth("");
-      setPlanSurface("");
-      setPlanCode("");
-      setPlanDescription("");
-      setPlanFee("");
-      await loadClinicalSummary();
+      resetTreatmentPlanForm();
+      await refreshClinicalData();
     } catch (err) {
-      setClinicalError(err instanceof Error ? err.message : "Failed to save treatment plan item");
+      setClinicalError(
+        err instanceof Error
+          ? err.message
+          : `Failed to ${isEditing ? "update" : "save"} treatment plan item`
+      );
     } finally {
       savingTreatmentPlanPatientIds.delete(patientId);
       setPlanSaving(false);
@@ -9184,7 +9220,7 @@ export default function PatientDetailClient({
                             className="btn btn-primary"
                             type="button"
                             data-testid="patient-treatment-plan-open"
-                            onClick={() => setShowPlanModal(true)}
+                            onClick={openTreatmentPlanModal}
                           >
                             Add item
                           </button>
@@ -9262,6 +9298,20 @@ export default function PatientDetailClient({
                                   <td>{formatShortDate(item.created_at)}</td>
                                   <td>
                                     <div className="table-actions">
+                                      <button
+                                        className="btn btn-secondary"
+                                        type="button"
+                                        data-testid={`patient-treatment-plan-edit-${item.id}`}
+                                        onClick={() => startEditTreatmentPlanItem(item)}
+                                        disabled={
+                                          planSaving ||
+                                          rowActionPending ||
+                                          isFinal ||
+                                          item.status !== "proposed"
+                                        }
+                                      >
+                                        Edit
+                                      </button>
                                       <button
                                         className="btn btn-secondary"
                                         type="button"
@@ -11088,7 +11138,11 @@ export default function PatientDetailClient({
               <div className="stack">
                 <div className="row">
                   <div>
-                    <h3 style={{ marginTop: 0 }}>Add treatment plan item</h3>
+                    <h3 style={{ marginTop: 0 }}>
+                      {editingTreatmentPlanId !== null
+                        ? "Edit treatment plan item"
+                        : "Add treatment plan item"}
+                    </h3>
                     <p style={{ color: "var(--muted)" }}>
                       Proposed treatment for {patient.first_name} {patient.last_name}.
                     </p>
@@ -11096,7 +11150,8 @@ export default function PatientDetailClient({
                   <button
                     className="btn btn-secondary"
                     type="button"
-                    onClick={() => setShowPlanModal(false)}
+                    onClick={resetTreatmentPlanForm}
+                    disabled={planSaving}
                   >
                     Close
                   </button>
@@ -11112,6 +11167,7 @@ export default function PatientDetailClient({
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">Tooth (optional)</label>
                       <select
+                        data-testid="patient-treatment-plan-tooth"
                         className="input"
                         value={planTooth}
                         onChange={(e) => setPlanTooth(e.target.value)}
@@ -11127,6 +11183,7 @@ export default function PatientDetailClient({
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">Surface</label>
                       <input
+                        data-testid="patient-treatment-plan-surface"
                         className="input"
                         value={planSurface}
                         onChange={(e) => setPlanSurface(e.target.value)}
@@ -11172,6 +11229,7 @@ export default function PatientDetailClient({
                   <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Fee (optional)</label>
                     <input
+                      data-testid="patient-treatment-plan-fee"
                       className="input"
                       value={planFee}
                       onChange={(e) => setPlanFee(e.target.value)}
@@ -11181,11 +11239,19 @@ export default function PatientDetailClient({
                   <button
                     className="btn btn-primary"
                     type="button"
-                    data-testid="patient-treatment-plan-add"
+                    data-testid={
+                      editingTreatmentPlanId !== null
+                        ? "patient-treatment-plan-save"
+                        : "patient-treatment-plan-add"
+                    }
                     onClick={(event) => void submitTreatmentPlanItem(event.currentTarget)}
                     disabled={planSaving || !planCode.trim() || !planDescription.trim()}
                   >
-                    {planSaving ? "Saving..." : "Add item"}
+                    {planSaving
+                      ? "Saving..."
+                      : editingTreatmentPlanId !== null
+                        ? "Save changes"
+                        : "Add item"}
                   </button>
                 </div>
               </div>
