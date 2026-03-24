@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-24: Stage 163H chunk121 completed on `stage163h-chunk121-recalls-filters-proof` from `master@5010521` to close the remaining receptionist UAT proof gap for recalls worklist filters without reopening the finished Recalls action, patient-create, audit, documents, attachments, billing, search, or appointment-cancel slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the Recalls filter/query surface in `frontend/app/(app)/recalls/page.tsx`
+    - the existing Recalls focused proofs in `frontend/tests/recalls-export.spec.ts`, `frontend/tests/recalls-contact.spec.ts`, `frontend/tests/recalls-complete.spec.ts`, and `frontend/tests/patient-recall-letter.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly requires opening Recalls and applying filter changes to verify that worklist rows update as expected
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, documents/attachments, billing/payments/receipts, or templates after excluding the recently finished slices
+    - the recent Recalls hardening covered export, contact logging, letter generation, and completion, but there was still no focused proof that filter changes update the visible worklist and export-summary count
+  - Exact slice implemented:
+    - added a focused Playwright proof that creates isolated overdue recalls, applies date/type/contact-state/method filter changes on the Recalls page, verifies the expected rows appear/disappear, and confirms the export-summary count tracks the filtered worklist
+    - no product-code change was required; the existing Recalls filter UI satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/recalls-filters.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/recalls-filters.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-24: Stage 163H chunk120 completed on `stage163h-chunk120-appointment-cancel-hardening` from `master@f245b02` to close the remaining narrow appointment-cancel guard gap without reopening the finished Recalls, patient-create, audit, documents, attachments, billing, search, or smoke-stability slices.
   - What was inspected before implementation:
     - `AGENTS.md`
