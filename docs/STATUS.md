@@ -61,6 +61,39 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-24: Stage 163H chunk122 completed on `stage163h-chunk122-treatment-plan-edit` from `master@fa45922` to close the remaining clinician UAT gap for treatment-plan item edit/save without reopening the finished Recalls, patient-create, audit, documents, attachments, billing, search, or appointment-cancel slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the treatment-plan UI in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the treatment-plan create/update contract in `backend/app/routers/clinical.py` and `backend/app/schemas/clinical.py`
+    - the existing clinical focused proofs in `frontend/tests/patient-notes.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly requires clinicians to add a treatment item, edit it, and save it
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, documents/attachments, billing/payments/receipts, recalls, or templates after excluding the recently finished slices
+    - the backend already supported treatment-plan item updates, but the clinical page exposed only add plus status transitions, so the edit/save path was missing from the live UI and had no focused proof
+  - Exact slice implemented:
+    - exposed an `Edit` action for proposed treatment-plan items in the clinical treatment-plan table
+    - reused the treatment-plan modal for add/edit, preserving in-flight state while save is pending and only closing/resetting after a successful save
+    - extended the treatment-plan update schema to accept editable tooth/surface fields so the UI can save the full item consistently
+    - added a focused Playwright proof that edits a treatment-plan item, verifies the save button shows `Saving...` and rejects repeat submit, then confirms the updated fields persist in the UI and clinical summary
+  - Files changed in this slice:
+    - `backend/app/schemas/clinical.py`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts --grep "patient treatment plan (add|accept|edit) shows in-flight state"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-24: Stage 163H chunk121 completed on `stage163h-chunk121-recalls-filters-proof` from `master@5010521` to close the remaining receptionist UAT proof gap for recalls worklist filters without reopening the finished Recalls action, patient-create, audit, documents, attachments, billing, search, or appointment-cancel slices.
   - What was inspected before implementation:
     - `AGENTS.md`

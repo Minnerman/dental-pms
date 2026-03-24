@@ -62,6 +62,8 @@ class TreatmentPlanItemCreate(BaseModel):
 
 class TreatmentPlanItemUpdate(BaseModel):
     appointment_id: Optional[int] = None
+    tooth: Optional[str] = None
+    surface: Optional[str] = None
     procedure_code: Optional[str] = None
     description: Optional[str] = None
     fee_pence: Optional[int] = None
