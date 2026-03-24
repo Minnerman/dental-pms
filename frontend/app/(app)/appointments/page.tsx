@@ -726,6 +726,9 @@ export default function AppointmentsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+  const [cancellingAppointmentId, setCancellingAppointmentId] = useState<number | null>(
+    null
+  );
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(
     null
   );
@@ -1934,9 +1937,9 @@ export default function AppointmentsPage() {
     status: AppointmentStatus,
     cancelReasonText?: string,
     button?: HTMLButtonElement | null
-  ) {
+  ): Promise<boolean> {
     if (appointmentsStatusActionLocks.has(appointmentId) || button?.disabled) {
-      return;
+      return false;
     }
     appointmentsStatusActionLocks.add(appointmentId);
     if (button) button.disabled = true;
@@ -1952,7 +1955,7 @@ export default function AppointmentsPage() {
       if (res.status === 401) {
         clearToken();
         router.replace("/login");
-        return;
+        return false;
       }
       if (!res.ok) {
         const msg = await res.text();
@@ -1962,8 +1965,10 @@ export default function AppointmentsPage() {
       setAppointments((prev) => prev.map((appt) => (appt.id === updated.id ? updated : appt)));
       setSelectedAppointment((prev) => (prev && prev.id === updated.id ? updated : prev));
       setNotice(`Status updated to ${statusLabels[status]}.`);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update appointment");
+      return false;
     } finally {
       appointmentsStatusActionLocks.delete(appointmentId);
     }
@@ -5204,6 +5209,10 @@ export default function AppointmentsPage() {
         {showCancelModal && cancelTarget && (
           <div className="card" style={{ margin: 0 }}>
             <div className="stack">
+              {(() => {
+                const isCancelling = cancellingAppointmentId === cancelTarget.id;
+                return (
+                  <>
               <div className="row">
                 <div>
                   <h3 style={{ marginTop: 0 }}>Cancel appointment</h3>
@@ -5214,6 +5223,7 @@ export default function AppointmentsPage() {
                 </div>
                 <button
                   className="btn btn-secondary"
+                  disabled={isCancelling}
                   onClick={() => {
                     setShowCancelModal(false);
                     setCancelTarget(null);
@@ -5224,7 +5234,7 @@ export default function AppointmentsPage() {
                 </button>
               </div>
               <form
-                onSubmit={(event) => {
+                onSubmit={async (event) => {
                   event.preventDefault();
                   const submitter =
                     event.nativeEvent instanceof SubmitEvent
@@ -5238,12 +5248,17 @@ export default function AppointmentsPage() {
                     setError("Cancellation reason is required.");
                     return;
                   }
-                  void updateAppointmentStatus(
+                  setCancellingAppointmentId(cancelTarget.id);
+                  const didCancel = await updateAppointmentStatus(
                     cancelTarget.id,
                     "cancelled",
-                    cancelReason,
+                    cancelReason.trim(),
                     button
                   );
+                  setCancellingAppointmentId(null);
+                  if (!didCancel) {
+                    return;
+                  }
                   setShowCancelModal(false);
                   setCancelTarget(null);
                   setCancelReason("");
@@ -5255,11 +5270,21 @@ export default function AppointmentsPage() {
                   className="input"
                   rows={3}
                   value={cancelReason}
+                  disabled={isCancelling}
                   onChange={(event) => setCancelReason(event.target.value)}
                   placeholder="Patient cancelled, clinician unavailable, etc."
                 />
-                <button className="btn btn-primary">Confirm cancel</button>
+                <button
+                  className="btn btn-primary"
+                  data-testid="appointments-cancel-confirm"
+                  disabled={isCancelling}
+                >
+                  {isCancelling ? "Cancelling..." : "Confirm cancel"}
+                </button>
               </form>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
