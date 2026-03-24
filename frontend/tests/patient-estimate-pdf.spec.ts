@@ -483,6 +483,7 @@ test("patient estimate item remove shows in-flight state and guards repeat submi
   await expect(page.getByTestId(`estimate-item-row-${item.id}`)).toHaveCount(0, {
     timeout: 15_000,
   });
+  await expect(page.getByText("No items yet.")).toBeVisible({ timeout: 15_000 });
 
   const verifyResponse = await request.get(`${baseUrl}/api/estimates/${estimate.id}`, {
     headers: { Authorization: `Bearer ${token}` },

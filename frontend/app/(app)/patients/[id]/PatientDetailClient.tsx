@@ -1898,12 +1898,13 @@ export default function PatientDetailClient({
     if (!selectedEstimate || !button || deletingEstimateItemIds.has(itemId) || button.disabled) {
       return;
     }
+    const estimateId = selectedEstimate.id;
     deletingEstimateItemIds.add(itemId);
     button.disabled = true;
     setDeletingEstimateItemId(itemId);
     setEstimateError(null);
     try {
-      const res = await apiFetch(`/api/estimates/${selectedEstimate.id}/items/${itemId}`, {
+      const res = await apiFetch(`/api/estimates/${estimateId}/items/${itemId}`, {
         method: "DELETE",
       });
       if (res.status === 401) {
@@ -1915,8 +1916,26 @@ export default function PatientDetailClient({
         const msg = await res.text();
         throw new Error(msg || `Failed to delete estimate item (HTTP ${res.status})`);
       }
-      await loadEstimateDetail(selectedEstimate.id);
-      await loadEstimates();
+      setSelectedEstimate((current) =>
+        current && current.id === estimateId
+          ? {
+              ...current,
+              items: current.items.filter((estimateItem) => estimateItem.id !== itemId),
+            }
+          : current
+      );
+      setEstimates((current) =>
+        current.map((estimate) =>
+          estimate.id === estimateId
+            ? {
+                ...estimate,
+                items: estimate.items.filter((estimateItem) => estimateItem.id !== itemId),
+              }
+            : estimate
+        )
+      );
+      void loadEstimateDetail(estimateId);
+      void loadEstimates();
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to delete estimate item");
     } finally {
