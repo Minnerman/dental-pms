@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-24: Stage 163H chunk120 completed on `stage163h-chunk120-appointment-cancel-hardening` from `master@f245b02` to close the remaining narrow appointment-cancel guard gap without reopening the finished Recalls, patient-create, audit, documents, attachments, billing, search, or smoke-stability slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the appointment status action path in `frontend/app/(app)/appointments/page.tsx`
+    - the existing diary interaction coverage in `frontend/tests/appointments-diary-interactions.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires appointment create/edit/cancel readiness and `docs/UAT_CHECKLIST.md` keeps appointment diary actions on the live receptionist path
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in patients, notes, documents/attachments, billing/payments/receipts, recalls, or templates after excluding the recently finished slices
+    - the cancel modal closed immediately on submit, so its visible state did not stay aligned with the in-flight PATCH and the typed cancellation reason would be lost if the request failed
+    - there was no focused Playwright proof that the cancel action kept modal state in-flight and rejected repeat submit
+  - Exact slice implemented:
+    - kept the appointment cancel modal open while the cancellation request is in flight
+    - disabled the modal controls during the in-flight cancel, surfaced `Cancelling...`, and only cleared/closed the modal after a successful status update
+    - added a focused Playwright proof that right-click cancel in the diary sends exactly one PATCH, preserves the typed reason during the in-flight state, and lands in visible `cancelled` state
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `./ops/verify.sh` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts --grep "diary cancel appointment keeps modal state in-flight and guards repeat submit"` -> pass
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-24: Stage 163H chunk119 completed on `stage163h-chunk119-patient-search-proof` from `master@dc90d8e` to close the remaining receptionist UAT proof gap for patient search/open-record without reopening the finished Recalls, patient-create, audit, attachments, documents, billing, or smoke-stability slices.
   - What was inspected before implementation:
     - `AGENTS.md`

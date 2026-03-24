@@ -873,3 +873,119 @@ test("appointment drawer note actions use appointment-scoped edit save archive r
   await page.getByTestId("appointment-detail-close").click();
   await expect(row.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
 });
+
+test("diary cancel appointment keeps modal state in-flight and guards repeat submit", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `CANCEL${unique}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    starts_at: `${date}T14:00:00.000Z`,
+    ends_at: `${date}T14:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-CANCEL-${unique}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/appointments?date=${date}&view=day`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-calendar").click();
+  await switchToDayView(page);
+
+  const eventCard = page.getByTestId(`appointment-event-${appointment.id}`);
+  await expect(eventCard).toBeVisible({ timeout: 20_000 });
+  await eventCard.click({ button: "right" });
+  await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
+  await page.getByTestId("appointments-context-cancel").click();
+
+  const reason = `Patient cancelled ${unique}`;
+  const cancelTextarea = page.getByPlaceholder(
+    "Patient cancelled, clinician unavailable, etc."
+  );
+  await expect(cancelTextarea).toBeVisible({ timeout: 15_000 });
+  await cancelTextarea.fill(reason);
+  const confirmButton = page.getByTestId("appointments-cancel-confirm");
+  await expect(confirmButton).toBeEnabled();
+
+  let requestCount = 0;
+  const routePattern = new RegExp(`/api/appointments/${appointment.id}$`);
+  let seenCancelRequest!: () => void;
+  const seenCancelRequestPromise = new Promise<void>((resolve) => {
+    seenCancelRequest = resolve;
+  });
+  let releaseCancelRequest!: () => void;
+  const releaseCancelRequestPromise = new Promise<void>((resolve) => {
+    releaseCancelRequest = resolve;
+  });
+
+  await page.route(routePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    requestCount += 1;
+    if (requestCount === 1) {
+      expect(route.request().postDataJSON()).toMatchObject({
+        status: "cancelled",
+        cancel_reason: reason,
+      });
+      seenCancelRequest();
+      await releaseCancelRequestPromise;
+    }
+    await route.continue();
+  });
+
+  const cancelResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/appointments/${appointment.id}`)
+  );
+
+  const clickState = await confirmButton.evaluate((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Cancel confirm button not found");
+    }
+    const beforeDisabled = button.disabled;
+    button.click();
+    const afterFirstDisabled = button.disabled;
+    button.click();
+    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+  });
+  await seenCancelRequestPromise;
+
+  expect(clickState.beforeDisabled).toBe(false);
+  expect(clickState.afterFirstDisabled).toBe(true);
+  expect(clickState.afterSecondDisabled).toBe(true);
+  await expect(confirmButton).toBeDisabled();
+  await expect(confirmButton).toHaveText("Cancelling...");
+  await expect(cancelTextarea).toBeDisabled();
+  await expect(cancelTextarea).toHaveValue(reason);
+  await page.waitForTimeout(250);
+  expect(requestCount).toBe(1);
+
+  releaseCancelRequest();
+
+  const cancelResponse = await cancelResponsePromise;
+  expect(cancelResponse.ok()).toBeTruthy();
+  await expect(confirmButton).toHaveCount(0);
+  await expect(cancelTextarea).toHaveCount(0);
+  await expect
+    .poll(async () => (await getAppointmentById(request, appointment.id)).status, {
+      timeout: 20_000,
+    })
+    .toBe("cancelled");
+  await expect(
+    page
+      .getByTestId(`appointment-event-${appointment.id}`)
+      .locator('[data-status="cancelled"]')
+  ).toBeVisible({ timeout: 20_000 });
+});
