@@ -3,6 +3,69 @@ import { expect, test } from "@playwright/test";
 import { createPatient } from "./helpers/api";
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
+test("patient document flow previews merged content, saves from template, and downloads PDF", async ({
+  page,
+  request,
+}) => {
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Letter",
+    last_name: "FlowProof",
+  });
+  const token = await ensureAuthReady(request);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const templateResponse = await request.post(`${baseUrl}/api/document-templates`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      name: `Patient Letter Flow Template ${Date.now()}`,
+      kind: "letter",
+      content: "Dear {{patient.full_name}},\nThis is your flow proof.",
+      is_active: true,
+    },
+  });
+  expect(templateResponse.ok()).toBeTruthy();
+  const template = (await templateResponse.json()) as { id: number };
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/documents`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await page.getByTestId("patient-document-template-select").selectOption(String(template.id));
+  await page.getByTestId("patient-document-title-input").fill("Patient Letter Flow Proof");
+
+  await page.getByTestId("patient-document-preview").click();
+  const previewOutput = page.locator("textarea[readonly]");
+  await expect(previewOutput).toHaveValue(/Dear Letter FlowProof,/);
+  await expect(previewOutput).toHaveValue(/This is your flow proof\./);
+
+  const saveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/patients/${patientId}/documents`)
+  );
+  await page.getByTestId("patient-document-save").click();
+
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok()).toBeTruthy();
+  const patientDocument = (await saveResponse.json()) as { id: number };
+
+  const documentCard = page.getByTestId(`patient-document-card-${patientDocument.id}`);
+  await expect(documentCard).toBeVisible({ timeout: 15_000 });
+  await expect(documentCard).toContainText("Patient Letter Flow Proof");
+
+  const pdfButton = page.getByTestId(`patient-document-download-pdf-${patientDocument.id}`);
+  await expect(pdfButton).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await pdfButton.click();
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toBe(`Patient_Letter_Flow_Proof_FlowProof_${today}.pdf`);
+  expect(await download.failure()).toBeNull();
+});
+
 test("patient document PDF download shows in-flight state and honors header filename", async ({
   page,
   request,

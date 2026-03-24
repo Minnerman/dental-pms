@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-24: Stage 163H chunk123 completed on `stage163h-chunk123-document-pdf-flow-proof` from `master@95a4803` to close the remaining clinician UAT proof gap for generating a patient letter from a template and downloading its PDF without reopening the finished Recalls, patient-create, audit, attachments, billing, search, appointment-cancel, or treatment-plan slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the patient documents UI in `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - the existing focused proofs in `frontend/tests/patient-document-preview.spec.ts`, `frontend/tests/patient-document-save.spec.ts`, `frontend/tests/patient-document-pdf.spec.ts`, and `frontend/tests/patient-template-download.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly requires generating a patient letter PDF from a template
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, attachments, billing/payments/receipts, recalls, or templates after excluding the recently finished slices
+    - the repo already proved preview, save, and PDF download behaviors separately, but there was still no focused proof that the real patient documents UI could preview merged content, save from the selected template, and immediately download the resulting PDF in one clinician-facing flow
+  - Exact slice implemented:
+    - added a focused Playwright proof that creates a template, opens the patient documents page, previews merged patient content, saves the document from the selected template, and downloads the resulting PDF from the generated document card
+    - no product-code change was required; the existing documents flow satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/patient-document-pdf.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-pdf.spec.ts --grep "patient document flow previews merged content, saves from template, and downloads PDF"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-24: Stage 163H chunk122 completed on `stage163h-chunk122-treatment-plan-edit` from `master@fa45922` to close the remaining clinician UAT gap for treatment-plan item edit/save without reopening the finished Recalls, patient-create, audit, documents, attachments, billing, search, or appointment-cancel slices.
   - What was inspected before implementation:
     - `AGENTS.md`
