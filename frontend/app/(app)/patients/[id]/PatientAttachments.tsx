@@ -66,6 +66,7 @@ export default function PatientAttachments({
   const uploadingAttachmentRef = useRef(false);
   const previewingAttachmentRef = useRef(false);
   const deletingAttachmentRef = useRef<number | null>(null);
+  const attachmentLoadRequestIdRef = useRef(0);
 
   const authFetch = useCallback((path: string, init: RequestInit = {}) => {
     const token = getToken();
@@ -75,6 +76,7 @@ export default function PatientAttachments({
   }, []);
 
   const loadAttachments = useCallback(async () => {
+    const requestId = ++attachmentLoadRequestIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -88,11 +90,18 @@ export default function PatientAttachments({
         throw new Error(`Failed to load attachments (HTTP ${res.status})`);
       }
       const data = (await res.json()) as Attachment[];
+      if (requestId !== attachmentLoadRequestIdRef.current) {
+        return;
+      }
       setAttachments(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load attachments");
+      if (requestId === attachmentLoadRequestIdRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to load attachments");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === attachmentLoadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [authFetch, patientId, router]);
 
@@ -136,7 +145,9 @@ export default function PatientAttachments({
         throw new Error(msg || `Failed to upload attachment (HTTP ${res.status})`);
       }
       const created = (await res.json()) as Attachment;
+      attachmentLoadRequestIdRef.current += 1;
       setAttachments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
+      setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload attachment");
     } finally {

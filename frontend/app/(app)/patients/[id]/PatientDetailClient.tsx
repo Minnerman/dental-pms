@@ -1957,7 +1957,7 @@ export default function PatientDetailClient({
       }
       const data = (await res.json()) as Estimate;
       setSelectedEstimate(data);
-      await loadEstimates();
+      void loadEstimates();
     } catch (err) {
       setEstimateError(err instanceof Error ? err.message : "Failed to update estimate");
     } finally {
