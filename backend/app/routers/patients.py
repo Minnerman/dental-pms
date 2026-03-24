@@ -4,7 +4,7 @@ import base64
 import json
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from sqlalchemy import and_, func, nullslast, or_, select
+from sqlalchemy import and_, func, literal, nullslast, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.db.session import get_db
@@ -189,6 +189,7 @@ def list_patients(
             or_(
                 Patient.first_name.ilike(like),
                 Patient.last_name.ilike(like),
+                (Patient.first_name + literal(" ") + Patient.last_name).ilike(like),
                 Patient.email.ilike(like),
                 Patient.phone.ilike(like),
             )

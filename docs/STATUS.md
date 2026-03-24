@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-24: Stage 163H chunk119 completed on `stage163h-chunk119-patient-search-proof` from `master@dc90d8e` to close the remaining receptionist UAT proof gap for patient search/open-record without reopening the finished Recalls, patient-create, audit, attachments, documents, billing, or smoke-stability slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the patients list UI in `frontend/app/(app)/patients/page.tsx`
+    - the `/api/patients` search query logic in `backend/app/routers/patients.py`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` explicitly requires searching by full and partial patient name and opening the selected patient record
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, notes, documents/attachments, billing/payments/receipts, templates, or the recently finished Recalls, patient-create, audit, and smoke-stability slices
+    - the patients page had no focused Playwright proof for this receptionist flow, and the backend search query only matched first and last names separately rather than the visible full-name string shown in the UI
+  - Exact slice implemented:
+    - extended the patients list query to match the visible `first_name + " " + last_name` full-name string
+    - added a focused Playwright proof that searches the patients page by exact full name and partial name, then opens the selected patient record and verifies the patient header
+  - Files changed in this slice:
+    - `backend/app/routers/patients.py`
+    - `frontend/tests/patient-search.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-search.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-23: Stage 163H chunk118 completed on `stage163h-chunk118-smoke-stability` from `master@6af8df2` to stabilise the recurring external `playwright-smoke` blockers without widening proof-only PR `#453`.
   - What was inspected before implementation:
     - `AGENTS.md`
