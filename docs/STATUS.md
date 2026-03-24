@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-24: Stage 163H chunk126 started on `stage163h-chunk126-appointment-note-stability` from `master@c4e2362` to unblock PR `#461` by fixing the recurring appointment-detail Add note stability failure as a separate narrow slice.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - failed `playwright-smoke` logs for PR `#461`
+    - downloaded `playwright-report` artifact error context for `tests/appointments-diary-interactions.spec.ts:480:5`
+  - Evidence for choosing this slice:
+    - PR `#461` itself remained clean and untouched, but `playwright-smoke` failed on `appointment detail Add note shows in-flight state and guards repeat submit`
+    - the CI artifact showed the detail panel stuck on `Saving...` and `Loading notes…` after the note POST had succeeded, grounding this as a real appointment-note timing/state issue rather than speculative CI noise
+    - local `CI=1` repeat runs still passed, so the safest fix was to harden the visible appointment-detail note flow itself instead of widening PR `#461`
+  - Exact slice implemented:
+    - update appointment-detail note add to insert the created note into visible note state immediately after a successful POST and refresh notes in the background
+    - tighten the focused appointment-detail note proof to delay the follow-up notes reload and verify the new note remains visible while the refresh is still in flight
+  - Files changed:
+    - `docs/STATUS.md`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+  - Validation:
+    - `cd frontend && npm run typecheck`
+    - `cd frontend && set -a && . /home/amir/dental-pms/.env && set +a && CI=1 npx playwright test tests/appointments-diary-interactions.spec.ts --grep "appointment detail Add note shows in-flight state and guards repeat submit"`
+    - `cd frontend && set -a && . /home/amir/dental-pms/.env && set +a && CI=1 npx playwright test tests/appointments-diary-interactions.spec.ts --grep "appointment detail Add note shows in-flight state and guards repeat submit" --workers=1 --repeat-each=10`
+    - `./ops/health.sh`
+    - `./ops/verify.sh`
+    - `git diff --check`
+  - Notes:
+    - PR `#461` remained untouched throughout this slice
+    - R4 was not touched
 - 2026-03-24: Stage 163H chunk123 completed on `stage163h-chunk123-document-pdf-flow-proof` from `master@95a4803` to close the remaining clinician UAT proof gap for generating a patient letter from a template and downloading its PDF without reopening the finished Recalls, patient-create, audit, attachments, billing, search, appointment-cancel, or treatment-plan slices.
   - What was inspected before implementation:
     - `AGENTS.md`

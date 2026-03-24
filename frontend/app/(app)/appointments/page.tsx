@@ -2633,6 +2633,7 @@ export default function AppointmentsPage() {
     if (button) button.disabled = true;
     setSaving(true);
     setError(null);
+    let savingHandled = false;
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}/notes`, {
         method: "POST",
@@ -2650,14 +2651,31 @@ export default function AppointmentsPage() {
         const msg = await res.text();
         throw new Error(msg || `Failed to add note (HTTP ${res.status})`);
       }
+      const createdNote = (await res.json()) as AppointmentNote;
       setNoteBody("");
-      await loadAppointmentNotes(appointmentId);
       setNotice("Note added.");
+      setNotes((prev) =>
+        prev.some((note) => note.id === createdNote.id) ? prev : [createdNote, ...prev]
+      );
+      setNoteCache((prev) => {
+        const existingBodies = prev[appointmentId] ?? [];
+        if (existingBodies.includes(createdNote.body)) return prev;
+        return {
+          ...prev,
+          [appointmentId]: [createdNote.body, ...existingBodies],
+        };
+      });
+      setSaving(false);
+      if (button) button.disabled = false;
+      savingHandled = true;
+      void loadAppointmentNotes(appointmentId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add note");
     } finally {
       appointmentsNoteSubmitLocks.delete(appointmentId);
-      setSaving(false);
+      if (!savingHandled) {
+        setSaving(false);
+      }
     }
   }
 
@@ -5022,9 +5040,8 @@ export default function AppointmentsPage() {
                     </button>
                   </form>
 
-                  {loadingNotes ? (
-                    <div className="badge">Loading notes…</div>
-                  ) : (
+                  <>
+                    {loadingNotes ? <div className="badge">Loading notes…</div> : null}
                     <div className="stack">
                       <label
                         style={{
@@ -5054,7 +5071,7 @@ export default function AppointmentsPage() {
                         Show archived
                       </label>
                       {notes.length === 0 ? (
-                        <div className="notice">No notes yet.</div>
+                        loadingNotes ? null : <div className="notice">No notes yet.</div>
                       ) : (
                         notes.map((note) => (
                           <div
@@ -5200,7 +5217,7 @@ export default function AppointmentsPage() {
                         ))
                       )}
                     </div>
-                  )}
+                  </>
                 </>
               )}
             </div>

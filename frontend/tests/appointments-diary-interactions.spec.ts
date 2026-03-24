@@ -516,6 +516,7 @@ test("appointment detail Add note shows in-flight state and guards repeat submit
   const detailPanel = page.getByTestId("appointment-detail-panel");
   await expect(detailPanel).toBeVisible({ timeout: 15_000 });
   await expect(detailPanel).toContainText(`NOTE${unique}`);
+  await expect(detailPanel.getByText("No notes yet.")).toBeVisible({ timeout: 15_000 });
 
   const quickNote = detailPanel.getByPlaceholder("Add a brief clinical note");
   await quickNote.fill(newNote);
@@ -533,8 +534,36 @@ test("appointment detail Add note shows in-flight state and guards repeat submit
   const releaseCreateRequestPromise = new Promise<void>((resolve) => {
     releaseCreateRequest = resolve;
   });
+  let holdReloadRequest = false;
+  let reloadRequestCount = 0;
+  let seenReloadRequest!: () => void;
+  const seenReloadRequestPromise = new Promise<void>((resolve) => {
+    seenReloadRequest = resolve;
+  });
+  let releaseReloadRequest!: () => void;
+  const releaseReloadRequestPromise = new Promise<void>((resolve) => {
+    releaseReloadRequest = resolve;
+  });
+  const reloadResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      response.url().includes(`/api/appointments/${appointment.id}/notes`)
+  );
 
   await page.route(routePattern, async (route) => {
+    if (route.request().method() === "GET") {
+      if (!holdReloadRequest) {
+        await route.continue();
+        return;
+      }
+      reloadRequestCount += 1;
+      if (reloadRequestCount === 1) {
+        seenReloadRequest();
+        await releaseReloadRequestPromise;
+      }
+      await route.continue();
+      return;
+    }
     if (route.request().method() !== "POST") {
       await route.continue();
       return;
@@ -573,6 +602,7 @@ test("appointment detail Add note shows in-flight state and guards repeat submit
   await page.waitForTimeout(250);
   expect(requestCount).toBe(1);
 
+  holdReloadRequest = true;
   releaseCreateRequest();
 
   const createResponse = await createResponsePromise;
@@ -581,8 +611,19 @@ test("appointment detail Add note shows in-flight state and guards repeat submit
     body: newNote,
     note_type: "clinical",
   });
+
+  await seenReloadRequestPromise;
+  await expect(detailPanel.getByText(newNote)).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(250);
+  expect(reloadRequestCount).toBe(1);
+
+  releaseReloadRequest();
+  const reloadResponse = await reloadResponsePromise;
+  expect(reloadResponse.ok()).toBeTruthy();
   await page.unroute(routePattern);
 
+  await expect(addNoteButton).toBeEnabled({ timeout: 15_000 });
+  await expect(addNoteButton).toHaveText("Add note");
   await expect(detailPanel.getByText(newNote)).toBeVisible({ timeout: 15_000 });
   await page.getByTestId("appointment-detail-close").click();
   await expect(row.locator(".day-sheet-note-icon")).toBeVisible({ timeout: 15_000 });
