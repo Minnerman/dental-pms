@@ -94,6 +94,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `./ops/verify.sh` -> pass
     - `git diff --check` -> pass
   - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
+- 2026-03-23: Stage 163H chunk117 completed on `stage163h-chunk117-part-paid-proof` from `master@6af8df2` to close the remaining V1 billing proof gap for visible partial-payment status without reopening the finished Recalls, patient-create, audit, attachments, or patient-document slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and focused Playwright specs across billing, documents, attachments, and templates
+    - the invoice payment-status UI in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+  - Evidence for choosing this slice:
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, documents/attachments, templates, or the recently finished Recalls and audit-proof slices
+    - `docs/V1_FINISH_LINE.md` still requires billing payments to show paid/part-paid status correctly
+    - the billing coverage already proved the fully paid path, receipt downloads, and duplicate-submit protection, but there was still no focused proof that a partial payment renders the explicit `Part-paid` UI state and leaves the payment action available
+  - Exact slice implemented:
+    - added a focused Playwright proof that records a partial payment against an issued invoice, then verifies the patient financial detail surface shows `Part-paid`, keeps `Record payment` enabled, and exposes the latest receipt action
+    - no product-code change was required; the existing billing UI satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts --grep "recording a partial payment shows part-paid status and keeps payment action available"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-23: Stage 163H chunk116 completed on `stage163h-chunk116-patient-document-list-proof` from `master@33bce32` to close the remaining patient-document save UI proof gap without reopening the finished Recalls, patient create, audit, or attachments metadata slices.
   - What was inspected before implementation:
     - `AGENTS.md`

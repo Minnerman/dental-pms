@@ -150,6 +150,54 @@ test("recording a payment updates status and enables receipt download", async ({
   await page.unroute(routePattern);
 });
 
+test("recording a partial payment shows part-paid status and keeps payment action available", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Billing",
+    last_name: `Part Paid ${Date.now()}`,
+  });
+  const invoice = await createInvoice(request, patientId);
+  await addInvoiceLine(request, invoice.id, {
+    description: "Partial payment proof",
+    quantity: 1,
+    unit_price_pence: 5000,
+  });
+  const issued = await issueInvoice(request, invoice.id);
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}`, { waitUntil: "domcontentloaded" });
+
+  await page.getByTestId("patient-tab-Financial").click();
+
+  const invoiceRow = page.locator("tr", { hasText: issued.invoice_number });
+  await expect(invoiceRow).toBeVisible({ timeout: 15_000 });
+  await invoiceRow.getByRole("button", { name: "View" }).click();
+
+  const recordButton = page.getByTestId("record-payment");
+  await expect(recordButton).toBeVisible({ timeout: 15_000 });
+  await expect(recordButton).toBeEnabled();
+  await page.getByTestId("payment-amount").fill("25.00");
+
+  const paymentResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/invoices/${invoice.id}/payments`)
+    );
+  });
+  await recordButton.click();
+
+  const paymentResponse = await paymentResponsePromise;
+  expect(paymentResponse.ok()).toBeTruthy();
+
+  const paymentStatus = page.getByTestId("invoice-payment-status");
+  await expect(paymentStatus).toHaveText("Part-paid", { timeout: 15_000 });
+  await expect(recordButton).toBeEnabled();
+  await expect(recordButton).toHaveText("Record payment");
+  await expect(page.getByTestId("download-latest-receipt")).toBeVisible({ timeout: 15_000 });
+});
+
 test("finance summary receipt quick action honors backend filename", async ({ page, request }) => {
   const patientId = await createPatient(request, {
     first_name: "Finance",
