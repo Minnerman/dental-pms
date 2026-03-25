@@ -61,6 +61,40 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk133 started on `stage163h-chunk133-recalls-worklist-filter-proof` from `master@473b613` to close the remaining receptionist recalls worklist/filter proof gap without reopening appointments, patients, auth, billing, charting, or any R4 work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/app/(app)/recalls/page.tsx`
+    - `frontend/tests/recalls-export.spec.ts`
+    - `frontend/tests/recalls-filters.spec.ts`
+    - `frontend/tests/recalls-contact.spec.ts`
+    - `frontend/tests/recalls-complete.spec.ts`
+    - related recall references in `frontend/tests/patient-recall-letter.spec.ts` and `frontend/tests/patient-save.spec.ts`
+    - `backend/app/routers/recalls.py`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly includes receptionist `Recall worklist + filters`
+    - the Recalls page already had the live receptionist filter surface for status, type, due-date range, contact state, last contact, method, reset filters, and an export-summary count badge
+    - there was already a focused recalls filter spec, but it was not strong enough on the live dataset because it assumed the filtered summary count would only contain the two seeded rows; on current `master@473b613` it failed with extra matching recalls already in the database
+    - no product-code bug was exposed; the gap was proof determinism on shared clinic data
+  - Exact slice implemented:
+    - hardened the existing focused Playwright recalls filter proof to compare the UI summary badge against the live `/api/recalls/export_count` result for the same filter set instead of assuming a globally clean dataset
+    - made the seeded due-date window vary per run to reduce accidental collisions with historical test data
+    - extended the proof to cover the `last contact` filter and a guaranteed no-results path using the logically impossible combination `contact_state=never` plus `method=phone`
+    - kept product code unchanged; only the focused recalls proof was tightened
+  - Files changed in this slice:
+    - `frontend/tests/recalls-filters.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git diff --check` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/recalls-filters.spec.ts` -> pass (`1 passed`)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> pass
+  - R4 untouched: no R4 files or routes were modified, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk132 started on `stage163h-chunk132-shell-search-signout-proof` from `master@6a98f0c` to close the remaining receptionist shell proof gap for top-bar patient search, open-record, and sign-out without reopening appointments, patient internals, billing, recalls, auth redesign, charting, or any R4 work.
   - What was inspected before implementation:
     - `AGENTS.md`
