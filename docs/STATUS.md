@@ -77,12 +77,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `docs/UAT_CHECKLIST.md` still explicitly includes `Day sheet cut/copy/paste (if enabled)` in receptionist UAT
     - the appointments UI already had clipboard state, paste locks, keyboard shortcuts, and context-menu `Move` / `Copy` actions
     - existing focused proof only covered the calendar repeat-submit guard and did not strongly prove day-sheet cut, copy, paste, and persistence after reload
-    - the live day-sheet paste path was slightly incomplete because keyboard paste depended on a previously selected calendar slot (`lastSelectedSlot`) instead of using the currently selected day-sheet appointment row as the target time
+    - the live day-sheet paste path was slightly incomplete because keyboard paste depended on a previously selected calendar slot (`lastSelectedSlot`) instead of using an explicitly reselected day-sheet destination row after entering clipboard mode
   - Exact slice implemented:
-    - added a narrow appointments clipboard target resolver so `Ctrl/Cmd+V` in day-sheet view pastes to the selected appointment row time before falling back to calendar slot selection
+    - added a narrow day-sheet clipboard destination tracker so `Ctrl/Cmd+V` only pastes after an explicit destination row is selected post-copy/cut, instead of reusing the still-selected source row
     - updated clipboard guidance strings to mention selecting a slot or appointment, matching the actual supported paths
     - fixed the copy-paste success notice typo so successful copy paste reports `Copied appointment.` instead of `Copyd appointment.`
-    - added a focused Playwright proof that covers day-sheet `Move` and `Copy`, pastes into target rows, and verifies persistence after reload via both UI and API checks
+    - added a focused Playwright proof that covers the no-destination/source-still-selected guard for both `Move` and `Copy`, then pastes into target rows and verifies persistence after reload via both UI and API checks
   - Files changed in this slice:
     - `frontend/app/(app)/appointments/page.tsx`
     - `frontend/tests/appointments-diary-interactions.spec.ts`

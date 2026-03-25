@@ -495,6 +495,22 @@ test("day sheet clipboard cut and copy paste persist after reload", async ({
       exact: true,
     })
   ).toBeVisible();
+  let cutRequestCount = 0;
+  const cutRoutePattern = new RegExp(`/api/appointments/${cutSource.id}$`);
+  await page.route(cutRoutePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    cutRequestCount += 1;
+    await route.continue();
+  });
+  await page.keyboard.press(`${modKey}+v`);
+  await expect(
+    page.getByText("Select a slot or appointment before pasting.", { exact: true })
+  ).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(250);
+  expect(cutRequestCount).toBe(0);
   await cutTargetRow.click();
 
   const cutRequestPromise = page.waitForRequest(
@@ -515,6 +531,7 @@ test("day sheet clipboard cut and copy paste persist after reload", async ({
   expect(normalizeIso(cutPayload.ends_at)).toBe(normalizeIso(cutTarget.ends_at));
   const cutResponse = await cutResponsePromise;
   expect(cutResponse.ok()).toBeTruthy();
+  expect(cutRequestCount).toBe(1);
   await expect(page.getByText("Moved appointment.", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
@@ -537,6 +554,22 @@ test("day sheet clipboard cut and copy paste persist after reload", async ({
       exact: true,
     })
   ).toBeVisible();
+  let copyRequestCount = 0;
+  const copyRoutePattern = /\/api\/appointments$/;
+  await page.route(copyRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    copyRequestCount += 1;
+    await route.continue();
+  });
+  await page.keyboard.press(`${modKey}+v`);
+  await expect(
+    page.getByText("Select a slot or appointment before pasting.", { exact: true })
+  ).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(250);
+  expect(copyRequestCount).toBe(0);
   await copyTargetRow.click();
 
   const copyRequestPromise = page.waitForRequest(
@@ -568,6 +601,7 @@ test("day sheet clipboard cut and copy paste persist after reload", async ({
   expect(normalizeIso(copyPayload.ends_at)).toBe(normalizeIso(copyTarget.ends_at));
   const copyResponse = await copyResponsePromise;
   expect(copyResponse.ok()).toBeTruthy();
+  expect(copyRequestCount).toBe(1);
   const copiedAppointment = (await copyResponse.json()) as AppointmentDetails;
   expect(copiedAppointment.id).toBeGreaterThan(0);
   expect(copiedAppointment.id).not.toBe(copySource.id);
@@ -612,6 +646,8 @@ test("day sheet clipboard cut and copy paste persist after reload", async ({
       }
     )
     .toBe(normalizeIso(copyTarget.starts_at));
+  await page.unroute(cutRoutePattern);
+  await page.unroute(copyRoutePattern);
 });
 
 test("appointment detail notes stay scoped to the selected appointment and refresh row state", async ({

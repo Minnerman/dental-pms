@@ -734,6 +734,8 @@ export default function AppointmentsPage() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(
     null
   );
+  const [daySheetPasteTargetAppointmentId, setDaySheetPasteTargetAppointmentId] =
+    useState<number | null>(null);
   const [bookingSubmitError, setBookingSubmitError] = useState<string | null>(null);
   const [lastSelectedSlot, setLastSelectedSlot] = useState<Date | null>(null);
   const [noteCache, setNoteCache] = useState<Record<number, string[]>>({});
@@ -2931,6 +2933,7 @@ export default function AppointmentsPage() {
         }
         setNotice(successNotice);
         setClipboard(null);
+        setDaySheetPasteTargetAppointmentId(null);
         await loadAppointments();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to paste appointment");
@@ -2939,18 +2942,34 @@ export default function AppointmentsPage() {
         appointmentsPasteLocks.delete(pasteLockKey);
       }
     },
-    [clipboard, loadAppointments, router, schedule, updateAppointmentTimes]
+    [
+      clipboard,
+      loadAppointments,
+      router,
+      schedule,
+      setDaySheetPasteTargetAppointmentId,
+      updateAppointmentTimes,
+    ]
   );
 
   const getClipboardPasteTarget = useCallback(() => {
-    if (viewMode === "day_sheet" && selectedAppointmentId !== null) {
-      const targetAppointment = appointments.find((item) => item.id === selectedAppointmentId);
+    if (viewMode === "day_sheet") {
+      if (
+        daySheetPasteTargetAppointmentId === null ||
+        clipboard?.appointment.id === daySheetPasteTargetAppointmentId
+      ) {
+        return null;
+      }
+      const targetAppointment = appointments.find(
+        (item) => item.id === daySheetPasteTargetAppointmentId
+      );
       if (targetAppointment) {
         return new Date(targetAppointment.starts_at);
       }
+      return null;
     }
     return lastSelectedSlot;
-  }, [appointments, lastSelectedSlot, selectedAppointmentId, viewMode]);
+  }, [appointments, clipboard, daySheetPasteTargetAppointmentId, lastSelectedSlot, viewMode]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -3011,6 +3030,7 @@ export default function AppointmentsPage() {
         }
         if (selectedAppointmentId !== null) {
           setSelectedAppointmentId(null);
+          setDaySheetPasteTargetAppointmentId(null);
           handled = true;
         }
         if (handled) {
@@ -3083,6 +3103,7 @@ export default function AppointmentsPage() {
         const appt = appointments.find((item) => item.id === selectedAppointmentId);
         if (appt) {
           setClipboard({ mode: "copy", appointment: appt });
+          setDaySheetPasteTargetAppointmentId(null);
           setNotice(`Copied appointment. ${clipboardPasteInstruction}`);
         }
         return;
@@ -3091,6 +3112,7 @@ export default function AppointmentsPage() {
         const appt = appointments.find((item) => item.id === selectedAppointmentId);
         if (appt) {
           setClipboard({ mode: "cut", appointment: appt });
+          setDaySheetPasteTargetAppointmentId(null);
           setNotice(`Cut appointment. ${clipboardPasteInstruction}`);
         }
         return;
@@ -4050,7 +4072,14 @@ export default function AppointmentsPage() {
                       <tr
                         key={appt.id}
                         className={`${isCancelled ? "row-muted" : ""}${isHighlighted || isSelected ? " row-highlight" : ""}`}
-                        onClick={() => setSelectedAppointmentId(appt.id)}
+                        onClick={() => {
+                          setSelectedAppointmentId(appt.id);
+                          if (clipboard) {
+                            setDaySheetPasteTargetAppointmentId(
+                              clipboard.appointment.id === appt.id ? null : appt.id
+                            );
+                          }
+                        }}
                         onDoubleClick={() => openAppointment(appt, "edit")}
                         onContextMenu={(event) => {
                           event.preventDefault();
@@ -4222,6 +4251,7 @@ export default function AppointmentsPage() {
               data-testid="appointments-context-move"
               onClick={() => {
                 setClipboard({ mode: "cut", appointment: contextMenu.appointment });
+                setDaySheetPasteTargetAppointmentId(null);
                 setNotice(`Move mode enabled. ${clipboardPasteInstruction}`);
                 setContextMenu(null);
               }}
@@ -4233,6 +4263,7 @@ export default function AppointmentsPage() {
               data-testid="appointments-context-copy"
               onClick={() => {
                 setClipboard({ mode: "copy", appointment: contextMenu.appointment });
+                setDaySheetPasteTargetAppointmentId(null);
                 setNotice(`Copied appointment. ${clipboardPasteInstruction}`);
                 setContextMenu(null);
               }}
