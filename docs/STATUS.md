@@ -61,6 +61,40 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk131 started on `stage163h-chunk131-appointments-clipboard-proof` from `master@02f5338` to close the remaining receptionist day-sheet clipboard proof gap without reopening auth, patients, billing, recalls, charting, or broader appointments work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `frontend/tests/appointments-diary-parity-hardening.spec.ts`
+    - `frontend/tests/appointments-diary-drag-resize.spec.ts`
+    - `frontend/tests/appointments-runsheet.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly includes `Day sheet cut/copy/paste (if enabled)` in receptionist UAT
+    - the appointments UI already had clipboard state, paste locks, keyboard shortcuts, and context-menu `Move` / `Copy` actions
+    - existing focused proof only covered the calendar repeat-submit guard and did not strongly prove day-sheet cut, copy, paste, and persistence after reload
+    - the live day-sheet paste path was slightly incomplete because keyboard paste depended on a previously selected calendar slot (`lastSelectedSlot`) instead of using the currently selected day-sheet appointment row as the target time
+  - Exact slice implemented:
+    - added a narrow appointments clipboard target resolver so `Ctrl/Cmd+V` in day-sheet view pastes to the selected appointment row time before falling back to calendar slot selection
+    - updated clipboard guidance strings to mention selecting a slot or appointment, matching the actual supported paths
+    - fixed the copy-paste success notice typo so successful copy paste reports `Copied appointment.` instead of `Copyd appointment.`
+    - added a focused Playwright proof that covers day-sheet `Move` and `Copy`, pastes into target rows, and verifies persistence after reload via both UI and API checks
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-diary-interactions.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git diff --check` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-diary-interactions.spec.ts --grep "day sheet clipboard cut and copy paste persist after reload|diary cut/copy paste guards repeat paste submit"` -> pass (`2 passed`)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> pass (`308 passed, 2 skipped`)
+  - R4 untouched: no R4 files or routes were modified, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk130 started on `stage163h-chunk130-password-reset-proof` from `master@c4773d7` to close the remaining receptionist auth/password-reset proof gap without reopening patients, appointments, billing, recalls, charting, or any R4 work.
   - What was inspected before implementation:
     - `AGENTS.md`
