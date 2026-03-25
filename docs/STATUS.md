@@ -61,6 +61,44 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk130 started on `stage163h-chunk130-password-reset-proof` from `master@c4773d7` to close the remaining receptionist auth/password-reset proof gap without reopening patients, appointments, billing, recalls, charting, or any R4 work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/app/(auth)/login/page.tsx`
+    - `frontend/app/(auth)/forgot-password/page.tsx`
+    - `frontend/app/(auth)/reset-password/ResetPasswordClient.tsx`
+    - `frontend/tests/helpers/auth.ts`
+    - `backend/app/routers/auth.py`
+    - existing auth-related frontend/backend tests and CI workflows
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still includes receptionist login/auth acceptance and password reset when that flow is enabled
+    - the forgot-password and reset-password UI routes already existed, and backend reset request/confirm routes were already implemented
+    - there was no focused Playwright proof covering forgot-password request, reset confirm, and logging in with the new password on the live frontend
+    - the reset token is intentionally exposed only in debug mode, so PR smoke needed a CI-only `RESET_TOKEN_DEBUG=true` env flip to make the existing test-only debug link observable in CI
+  - Exact slice implemented:
+    - added one focused Playwright happy-path proof for forgot-password request, reset confirm, and receptionist sign-in with the new password
+    - enabled `RESET_TOKEN_DEBUG` only in the PR smoke workflow job so the existing debug reset link is available during CI proof runs without changing production behavior
+    - fixed the in-scope auth form accessibility defect by associating visible labels with their inputs on login, forgot-password, and reset-password so the proof can target real form controls semantically
+    - hardened the spec against first-compile hydration timing by navigating directly to the auth routes and waiting for the route to settle before submission
+  - Files changed in this slice:
+    - `.github/workflows/playwright-smoke.yml`
+    - `frontend/app/(auth)/login/page.tsx`
+    - `frontend/app/(auth)/forgot-password/page.tsx`
+    - `frontend/app/(auth)/reset-password/ResetPasswordClient.tsx`
+    - `frontend/tests/auth-password-reset.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `git diff --check` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `set -a && . /home/amir/dental-pms/.env && export RESET_TOKEN_DEBUG=true && set +a && docker compose up -d --force-recreate backend && cd frontend && npx playwright test tests/auth-password-reset.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> pass (`308 passed, 2 skipped`)
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk129 continued on `stage163h-chunk129-patient-responsive-hardening` from `master@566af85` to close the remaining V1 patient-route narrow-viewport hardening gap on the existing PR `#465` without reopening finished billing, charting parity, recalls, documents, or appointment slices.
   - What was inspected before implementation:
     - `AGENTS.md`

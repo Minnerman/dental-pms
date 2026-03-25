@@ -48,8 +48,11 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="stack">
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Email</label>
+              <label className="label" htmlFor="login-email">
+                Email
+              </label>
               <input
+                id="login-email"
                 className="input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -57,9 +60,12 @@ export default function LoginPage() {
               />
             </div>
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Password</label>
+              <label className="label" htmlFor="login-password">
+                Password
+              </label>
               <div className="input-wrap">
                 <input
+                  id="login-password"
                   className="input"
                   type={showPassword ? "text" : "password"}
                   value={password}
