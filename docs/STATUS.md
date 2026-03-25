@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk127 started on `stage163h-chunk127-bpe-furcation-proof` from `master@5f8be21` to close the remaining clinician UAT proof gap for viewing seeded BPE entries and BPE furcations on the live patient charting page without reopening finished appointments, recalls, documents, billing, search, treatment-plan, or perio-probe slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - the existing charting-focused proofs in `frontend/tests/patient-notes.spec.ts`, `frontend/tests/clinical-perio-view.spec.ts`, `frontend/tests/charting-viewer.spec.ts`, and `frontend/tests/charting-parity.spec.ts`
+    - the charting seed route in `backend/app/routers/test_seed.py` and seeded BPE/furcation demo data in `backend/app/services/charting_seed.py`
+    - the read-only BPE and furcation panels in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly requires viewing BPE entries and BPE furcation data for patients known to have charting history
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, documents/attachments, billing/payments/receipts, recalls, or templates after excluding the recently finished slices
+    - the repo already had BPE save hardening and broad charting parity coverage, but there was still no focused clinician-facing proof that the live patient charting page renders seeded BPE entry and furcation data cleanly for a patient with both kinds of history
+  - Exact slice implemented:
+    - added a focused Playwright proof that seeds deterministic charting demo data, opens the matching patient charting page, and verifies the visible BPE entries and BPE furcations panels render the expected seeded counts and row values for patient `1000035`
+    - no product-code change was required; the existing charting surface satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/clinical-bpe-furcation-view.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/clinical-bpe-furcation-view.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-24: Stage 163H chunk125 completed on `stage163h-chunk125-perio-probe-proof` from `master@c4e2362` to close the remaining clinician UAT proof gap for opening a patient with perio probe history and viewing probe data on the live charting page without reopening finished appointments, billing, document, recall, search, or treatment-plan slices.
   - What was inspected before implementation:
     - `AGENTS.md`
