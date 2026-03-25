@@ -27,6 +27,17 @@ type PatientTab = {
   label: string;
 };
 
+function getPatientSearchUrl(query: string) {
+  const params = new URLSearchParams();
+  params.set("limit", "20");
+  if (query.includes(" ")) {
+    params.set("query", query);
+    return `/api/patients?${params.toString()}`;
+  }
+  params.set("q", query);
+  return `/api/patients/search?${params.toString()}`;
+}
+
 const baseTabs = [
   { href: "/", label: "Home" },
   { href: "/patients", label: "Patients" },
@@ -211,7 +222,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
       setSearching(true);
       try {
-        const res = await apiFetch(`/api/patients/search?q=${encodeURIComponent(trimmed)}`);
+        const res = await apiFetch(getPatientSearchUrl(trimmed));
         if (res.status === 401) {
           clearToken();
           router.replace("/login");

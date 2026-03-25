@@ -61,6 +61,41 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk132 started on `stage163h-chunk132-shell-search-signout-proof` from `master@6a98f0c` to close the remaining receptionist shell proof gap for top-bar patient search, open-record, and sign-out without reopening appointments, patient internals, billing, recalls, auth redesign, charting, or any R4 work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/app/(app)/AppShell.tsx`
+    - `frontend/tests/auth-password-reset.spec.ts`
+    - `frontend/tests/patient-save.spec.ts`
+    - `frontend/tests/patient-search.spec.ts`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/tests/helpers/auth.ts`
+    - `frontend/lib/auth.ts`
+    - `frontend/middleware.ts`
+    - `backend/app/routers/patients.py`
+  - Evidence for choosing this slice:
+    - `docs/UAT_CHECKLIST.md` still explicitly includes receptionist `Login + logout` and `Patient search + open record`
+    - the existing password-reset proof only established sign-in and a visible `Sign out` button, not the live shell search/open-record/logout flow
+    - the existing patient search proof covered the `/patients` page search form, not the global AppShell dropdown used from the receptionist shell
+    - there was no focused proof that top-bar search works for partial and full patient names, opens the chosen record, returns to `/login` on sign-out, and re-locks protected routes afterward
+  - Exact slice implemented:
+    - added a focused Playwright proof that creates a receptionist session, searches from the top bar by partial and full patient name, opens the selected patient record, signs out, and verifies protected patient routes redirect back to `/login`
+    - fixed the shell-only full-name search gap by routing multi-word top-bar queries through `/api/patients?query=...&limit=20`, while leaving single-token lookups on the existing `/api/patients/search?q=...&limit=20` path
+    - corrected the focused proof harness so it seeds auth once for the initial page load instead of re-injecting the token on every navigation after sign-out
+  - Files changed in this slice:
+    - `frontend/app/(app)/AppShell.tsx`
+    - `frontend/tests/shell-search-signout.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git diff --check` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/shell-search-signout.spec.ts` -> pass (`1 passed`)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+  - R4 untouched: no R4 files or routes were modified, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk131 started on `stage163h-chunk131-appointments-clipboard-proof` from `master@02f5338` to close the remaining receptionist day-sheet clipboard proof gap without reopening auth, patients, billing, recalls, charting, or broader appointments work.
   - What was inspected before implementation:
     - `AGENTS.md`
