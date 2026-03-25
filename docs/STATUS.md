@@ -61,6 +61,33 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 139 narrow save-path fix completed on `stage139-bpe-save-path-fix` from `master@f9e5f39` to restore the clinician BPE record proof without reopening Stage 138, Stage 140, letters/PDF, treatment-plan, or any other charting domain.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `frontend/tests/clinical-bpe-furcation-view.spec.ts`
+  - Evidence for choosing this slice:
+    - the focused Stage 139 save-path proof on `master@f9e5f39` failed while the Stage 139 view-path proof still passed
+    - the failing save request dropped earlier sextant entries from the outgoing BPE payload during rapid sequential input fills
+  - Exact slice implemented:
+    - changed the six BPE input handlers to use a functional `setBpeScores` update so each sextant edit merges onto the latest state instead of a stale closed-over array
+    - left the existing proof unchanged because it already captured the real user-facing failure
+    - no backend, schema, API, or R4 changes were required
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts --grep "patient BPE save shows in-flight state and guards repeat submit"` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/clinical-bpe-furcation-view.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk133 started on `stage163h-chunk133-recalls-worklist-filter-proof` from `master@473b613` to close the remaining receptionist recalls worklist/filter proof gap without reopening appointments, patients, auth, billing, charting, or any R4 work.
   - What was inspected before implementation:
     - `AGENTS.md`
