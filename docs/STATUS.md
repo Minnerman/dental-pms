@@ -61,6 +61,41 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk129 continued on `stage163h-chunk129-patient-responsive-hardening` from `master@566af85` to close the remaining V1 patient-route narrow-viewport hardening gap on the existing PR `#465` without reopening finished billing, charting parity, recalls, documents, or appointment slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - PR `#465` diff and branch head `f3ee9b13ff08c0712e985a060aa01121b5ea6968`
+    - `frontend/app/(app)/patients/[id]/layout.tsx`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/app/(app)/patients/[id]/patient-responsive.module.css`
+    - `frontend/tests/patient-responsive.spec.ts`
+  - Evidence for tightening the existing PR:
+    - `docs/V1_FINISH_LINE.md` still requires the patient detail page to be usable and responsive on V1
+    - the submitted PR proof failed locally because it asserted a missing appointments test id and whole-document overflow that included unrelated app-shell width outside the patient route
+    - the original CSS depended on fragile inline-style substring selectors and missed the actual patient clinical two-column grid that needed to collapse on narrow screens
+  - Exact slice implemented on the same branch/PR:
+    - kept the nested patient route layout wrapper and added an explicit route-shell test id for route-scoped responsiveness checks
+    - replaced brittle inline-style matching with explicit patient-route class hooks and test ids on the sticky header card, appointment row grid, booking grid, clinical grid, and odontogram panel
+    - tightened the focused Playwright proof so it verifies narrow-screen patient-route layout, relaxed sticky header behaviour, and internal chart scrolling without asserting unrelated global shell overflow
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/layout.tsx`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/app/(app)/patients/[id]/patient-responsive.module.css`
+    - `frontend/tests/patient-responsive.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `git diff --check` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-responsive.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> pass (`308 passed, 2 skipped`)
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk128 started on `stage163h-chunk128-receipt-error-proof` from `master@02ec74e` to close the remaining V1 billing proof gap for visible receipt download error handling without reopening finished appointments, recalls, search, charting, patient-create, treatment-plan, or document slices.
   - What was inspected before implementation:
     - `AGENTS.md`

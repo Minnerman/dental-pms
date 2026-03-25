@@ -1,0 +1,94 @@
+.shell {
+  width: 100%;
+  min-width: 0;
+}
+
+.shell :global(.app-grid) {
+  min-width: 0;
+}
+
+.shell :global(.app-grid > div),
+.shell :global(.stack),
+.shell :global(.card),
+.shell :global(.notice),
+.shell :global(.badge),
+.shell :global(.row),
+.shell :global(.summary-grid),
+.shell :global(.summary-stack),
+.shell :global(.panel) {
+  min-width: 0;
+}
+
+.shell :global(input),
+.shell :global(select),
+.shell :global(textarea),
+.shell :global(button),
+.shell :global(a),
+.shell :global(td),
+.shell :global(th),
+.shell :global(p),
+.shell :global(h2),
+.shell :global(h3),
+.shell :global(h4),
+.shell :global(span),
+.shell :global(div) {
+  overflow-wrap: anywhere;
+}
+
+.shell :global([data-testid="clinical-chart"]),
+.shell :global([data-testid="bpe-grid"]),
+.shell :global([data-testid="patient-appointments"]),
+.shell :global([data-testid="patient-header"]),
+.shell :global([data-testid="charting-viewer"]) {
+  min-width: 0;
+}
+
+.shell :global(.patient-route-header-grid > *),
+.shell :global(.patient-route-clinical-grid > *) {
+  min-width: 0;
+}
+
+.shell :global([data-testid="clinical-chart"]),
+.shell :global([data-testid="charting-viewer"] .table),
+.shell :global(.recall-table),
+.shell :global(.patient-route-chart-panel) {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .shell :global(.patient-route-appointment-grid),
+  .shell :global(.patient-route-booking-grid),
+  .shell :global(.patient-route-clinical-grid),
+  .shell :global([data-testid="charting-viewer"] .grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell :global(.patient-route-sticky-card) {
+    position: static !important;
+    top: auto !important;
+  }
+
+  .shell :global([data-testid="patient-appointments"]),
+  .shell :global([data-testid="charting-viewer"]),
+  .shell :global([data-testid="clinical-chart"]),
+  .shell :global(.patient-route-chart-panel),
+  .shell :global([data-testid="odontogram-overlay-legend"]) {
+    overflow-x: auto;
+  }
+
+  .shell :global(.patient-route-odontogram-grid) {
+    min-width: 760px;
+  }
+
+  .shell :global([data-testid="bpe-grid"]),
+  .shell :global([data-testid="patient-appointments"] button.card),
+  .shell :global(.recall-card) {
+    max-width: 100%;
+  }
+
+  .shell :global(.row) {
+    align-items: flex-start;
+  }
+}

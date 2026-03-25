@@ -5540,8 +5540,16 @@ export default function PatientDetailClient({
         <div className="notice">{error}</div>
       ) : patient ? (
         <div className="stack">
-          <div className="card" style={{ position: "sticky", top: 12, zIndex: 1 }}>
-            <div style={patientHeaderGridStyle} data-testid="patient-header">
+          <div
+            className="card patient-route-sticky-card"
+            style={{ position: "sticky", top: 12, zIndex: 1 }}
+            data-testid="patient-header-card"
+          >
+            <div
+              className="patient-route-header-grid"
+              style={patientHeaderGridStyle}
+              data-testid="patient-header"
+            >
               <div
                 data-testid="patient-header-name"
                 className="stack"
@@ -5581,7 +5589,7 @@ export default function PatientDetailClient({
                 style={patientHeaderPanelStyle}
               >
                 <div className="label">Identifiers</div>
-                <div style={patientHeaderMetricGridStyle}>
+                <div className="patient-route-header-metrics" style={patientHeaderMetricGridStyle}>
                   {patientHeaderIdentifiers.map((item) => (
                     <div
                       key={item.label}
@@ -5696,6 +5704,8 @@ export default function PatientDetailClient({
 
             <div className="stack" style={{ gap: 12, marginTop: 12 }}>
               <div
+                className="patient-route-overview-grid"
+                data-testid="patient-overview-grid"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -6158,6 +6168,7 @@ export default function PatientDetailClient({
                       <div
                         className="card"
                         id="patient-appointments"
+                        data-testid="patient-appointments"
                         style={{ margin: 0, scrollMarginTop: 96 }}
                       >
                         <div className="stack">
@@ -6198,6 +6209,8 @@ export default function PatientDetailClient({
                                       }}
                                     >
                                       <div
+                                        className="patient-route-appointment-grid"
+                                        data-testid="patient-appointment-card-grid"
                                         style={{
                                           display: "grid",
                                           gap: 6,
@@ -6270,6 +6283,8 @@ export default function PatientDetailClient({
                                       }}
                                     >
                                       <div
+                                        className="patient-route-appointment-grid"
+                                        data-testid="patient-appointment-card-grid"
                                         style={{
                                           display: "grid",
                                           gap: 6,
@@ -8429,18 +8444,21 @@ export default function PatientDetailClient({
                     </div>
                   )}
                   <div
+                    className="patient-route-clinical-grid"
+                    data-testid="patient-clinical-grid"
                     style={{
                       display: "grid",
-                          gap: 16,
-                          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
-                        }}
-                      >
+                      gap: 16,
+                      gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+                    }}
+                  >
                         <div className="stack" style={{ gap: 16 }}>
-                          <Panel title="Odontogram">
+                          <Panel title="Odontogram" className="patient-route-chart-panel">
                             <div className="stack" style={{ gap: 16 }} data-testid="clinical-chart">
                               <div className="stack" style={{ gap: 8 }}>
                                 <div className="label">Upper</div>
                                 <div
+                                  className="patient-route-odontogram-grid"
                                   style={{
                                     display: "grid",
                                     gap: 6,
@@ -8644,6 +8662,7 @@ export default function PatientDetailClient({
                               <div className="stack" style={{ gap: 8 }}>
                                 <div className="label">Lower</div>
                                 <div
+                                  className="patient-route-odontogram-grid"
                                   style={{
                                     display: "grid",
                                     gap: 6,
@@ -11353,6 +11372,7 @@ export default function PatientDetailClient({
             <div
               className="card"
               id="patient-book-appointment"
+              data-testid="patient-book-appointment"
               style={{ margin: 0, scrollMarginTop: 96 }}
             >
               <div className="stack">
@@ -11372,7 +11392,11 @@ export default function PatientDetailClient({
                   </button>
                 </div>
                 <form onSubmit={createBooking} className="stack">
-                  <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+                  <div
+                    className="patient-route-booking-grid"
+                    data-testid="patient-booking-grid"
+                    style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}
+                  >
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">Date</label>
                       <input
