@@ -7,5 +7,9 @@ export default function PatientRouteLayout({
 }: {
   children: ReactNode;
 }) {
-  return <div className={styles.shell}>{children}</div>;
+  return (
+    <div className={styles.shell} data-testid="patient-route-shell">
+      {children}
+    </div>
+  );
 }

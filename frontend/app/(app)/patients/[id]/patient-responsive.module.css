@@ -1,4 +1,5 @@
 .shell {
+  width: 100%;
   min-width: 0;
 }
 
@@ -13,7 +14,8 @@
 .shell :global(.badge),
 .shell :global(.row),
 .shell :global(.summary-grid),
-.shell :global(.summary-stack) {
+.shell :global(.summary-stack),
+.shell :global(.panel) {
   min-width: 0;
 }
 
@@ -41,68 +43,47 @@
   min-width: 0;
 }
 
+.shell :global(.patient-route-header-grid > *),
+.shell :global(.patient-route-clinical-grid > *) {
+  min-width: 0;
+}
+
 .shell :global([data-testid="clinical-chart"]),
 .shell :global([data-testid="charting-viewer"] .table),
-.shell :global(.recall-table) {
+.shell :global(.recall-table),
+.shell :global(.patient-route-chart-panel) {
   max-width: 100%;
 }
 
 @media (max-width: 900px) {
-  .shell :global([data-testid="patient-header"]) {
-    grid-template-columns: 1fr !important;
-  }
-
-  .shell :global(.summary-grid) {
-    grid-template-columns: 1fr !important;
-  }
-
-  .shell :global([data-testid="patient-appointments"] button.card > div[style*="grid-template-columns: 200px 1fr 1fr"]) {
-    grid-template-columns: 1fr !important;
-  }
-
-  .shell :global(details > .stack form .grid.grid-2),
-  .shell :global(details > .stack form .grid.grid-3),
-  .shell :global([data-testid="charting-viewer"] .grid.grid-2),
-  .shell :global([data-testid="charting-viewer"] .grid.grid-3),
-  .shell :global([data-testid="patient-book-appointment"] form > div[style*="grid-template-columns: \"1fr 1fr\""])
-  {
-    grid-template-columns: 1fr !important;
-  }
-
-  .shell :global([data-testid="clinical-chart"] > div[style*="grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr)"]) {
+  .shell :global(.patient-route-appointment-grid),
+  .shell :global(.patient-route-booking-grid),
+  .shell :global(.patient-route-clinical-grid),
+  .shell :global([data-testid="charting-viewer"] .grid) {
     grid-template-columns: 1fr !important;
   }
 }
 
 @media (max-width: 720px) {
-  .shell :global(.card[style*="position: sticky"]) {
+  .shell :global(.patient-route-sticky-card) {
     position: static !important;
     top: auto !important;
-  }
-
-  .shell :global([data-testid="patient-header"] [style*="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))"]) {
-    grid-template-columns: 1fr !important;
-  }
-
-  .shell :global([data-testid="patient-header"] [style*="display: flex"]) {
-    align-items: flex-start;
   }
 
   .shell :global([data-testid="patient-appointments"]),
   .shell :global([data-testid="charting-viewer"]),
   .shell :global([data-testid="clinical-chart"]),
+  .shell :global(.patient-route-chart-panel),
   .shell :global([data-testid="odontogram-overlay-legend"]) {
     overflow-x: auto;
   }
 
-  .shell :global([data-testid="clinical-chart"] > .stack > div > div[style*="grid-template-columns: repeat(16, minmax(40px, 1fr))"]) {
+  .shell :global(.patient-route-odontogram-grid) {
     min-width: 760px;
   }
 
   .shell :global([data-testid="bpe-grid"]),
-  .shell :global([data-testid="patient-book-appointment"]),
   .shell :global([data-testid="patient-appointments"] button.card),
-  .shell :global(details .stack form),
   .shell :global(.recall-card) {
     max-width: 100%;
   }
