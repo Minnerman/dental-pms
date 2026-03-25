@@ -12,6 +12,10 @@ const stage158dDir = path.resolve(__dirname, "..", "..", ".run", "stage158d");
 type AppointmentDetails = {
   id: number;
   status: string;
+  starts_at: string;
+  ends_at: string;
+  location?: string | null;
+  location_type: "clinic" | "visit";
 };
 
 async function getAppointmentById(
@@ -54,6 +58,17 @@ async function firstDiaryEvent(page: Page) {
   const events = page.locator('[data-testid^="appointment-event-"]');
   await expect(events.first()).toBeVisible({ timeout: 15_000 });
   return events.first();
+}
+
+function daySheetRow(page: Page, patientMarker: string) {
+  return page
+    .locator(".day-sheet-table tbody tr")
+    .filter({ hasText: patientMarker })
+    .first();
+}
+
+function normalizeIso(value: string) {
+  return new Date(value).toISOString();
 }
 
 async function openAppointmentNoteEditorFromContextMenu(
@@ -336,7 +351,11 @@ test("diary cut/copy paste guards repeat paste submit", async ({ page, request }
   await eventCard.click({ button: "right" });
   await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
   await page.getByTestId("appointments-context-copy").click();
-  await expect(page.getByText("Copied appointment. Select a slot to paste.")).toBeVisible();
+  await expect(
+    page.getByText("Copied appointment. Select a slot or appointment to paste.", {
+      exact: true,
+    })
+  ).toBeVisible();
 
   await page.evaluate(() => {
     window.confirm = () => true;
@@ -392,6 +411,243 @@ test("diary cut/copy paste guards repeat paste submit", async ({ page, request }
     status: "booked",
   });
   await page.unroute(routePattern);
+});
+
+test("day sheet clipboard cut and copy paste persist after reload", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180_000);
+  const unique = Date.now();
+  const date = "2026-01-16";
+  const baseUrl = getBaseUrl();
+  const modKey = process.platform === "darwin" ? "Meta" : "Control";
+
+  const cutPatientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `CUT${unique}`,
+  });
+  const cutTargetPatientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `CUTTARGET${unique}`,
+  });
+  const copyPatientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `COPY${unique}`,
+  });
+  const copyTargetPatientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `COPYTARGET${unique}`,
+  });
+
+  const cutSource = await createAppointment(request, cutPatientId, {
+    starts_at: `${date}T09:00:00.000Z`,
+    ends_at: `${date}T09:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-CUT-SOURCE-${unique}`,
+  });
+  const cutTarget = await createAppointment(request, cutTargetPatientId, {
+    starts_at: `${date}T10:00:00.000Z`,
+    ends_at: `${date}T10:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-CUT-TARGET-${unique}`,
+  });
+  const copySource = await createAppointment(request, copyPatientId, {
+    starts_at: `${date}T11:00:00.000Z`,
+    ends_at: `${date}T11:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-COPY-SOURCE-${unique}`,
+  });
+  const copyTarget = await createAppointment(request, copyTargetPatientId, {
+    starts_at: `${date}T12:00:00.000Z`,
+    ends_at: `${date}T12:30:00.000Z`,
+    location_type: "clinic",
+    location: `S163H-COPY-TARGET-${unique}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.setViewportSize({ width: 1400, height: 1200 });
+  await page.goto(`${baseUrl}/appointments?date=${date}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-day-sheet").click();
+
+  const cutSourceRow = daySheetRow(page, `CUT${unique}`);
+  const cutTargetRow = daySheetRow(page, `CUTTARGET${unique}`);
+  const copySourceRow = daySheetRow(page, `COPY${unique}`);
+  const copyTargetRow = daySheetRow(page, `COPYTARGET${unique}`);
+
+  await expect(cutSourceRow).toBeVisible({ timeout: 20_000 });
+  await expect(cutTargetRow).toBeVisible({ timeout: 20_000 });
+  await expect(copySourceRow).toBeVisible({ timeout: 20_000 });
+  await expect(copyTargetRow).toBeVisible({ timeout: 20_000 });
+
+  await page.evaluate(() => {
+    window.confirm = () => true;
+  });
+
+  await cutSourceRow.click({ button: "right" });
+  await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
+  await page.getByTestId("appointments-context-move").click();
+  await expect(
+    page.getByText("Move mode enabled. Select a slot or appointment to paste.", {
+      exact: true,
+    })
+  ).toBeVisible();
+  let cutRequestCount = 0;
+  const cutRoutePattern = new RegExp(`/api/appointments/${cutSource.id}$`);
+  await page.route(cutRoutePattern, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    cutRequestCount += 1;
+    await route.continue();
+  });
+  await page.keyboard.press(`${modKey}+v`);
+  await expect(
+    page.getByText("Select a slot or appointment before pasting.", { exact: true })
+  ).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(250);
+  expect(cutRequestCount).toBe(0);
+  await cutTargetRow.click();
+
+  const cutRequestPromise = page.waitForRequest(
+    (request) =>
+      request.method() === "PATCH" &&
+      request.url().includes(`/api/appointments/${cutSource.id}`)
+  );
+  const cutResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/appointments/${cutSource.id}`)
+  );
+  await page.keyboard.press(`${modKey}+v`);
+
+  const cutRequest = await cutRequestPromise;
+  const cutPayload = cutRequest.postDataJSON() as { starts_at: string; ends_at: string };
+  expect(normalizeIso(cutPayload.starts_at)).toBe(normalizeIso(cutTarget.starts_at));
+  expect(normalizeIso(cutPayload.ends_at)).toBe(normalizeIso(cutTarget.ends_at));
+  const cutResponse = await cutResponsePromise;
+  expect(cutResponse.ok()).toBeTruthy();
+  expect(cutRequestCount).toBe(1);
+  await expect(page.getByText("Moved appointment.", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect
+    .poll(async () => normalizeIso((await getAppointmentById(request, cutSource.id)).starts_at), {
+      timeout: 20_000,
+    })
+    .toBe(normalizeIso(cutTarget.starts_at));
+  await expect
+    .poll(async () => normalizeIso((await getAppointmentById(request, cutSource.id)).ends_at), {
+      timeout: 20_000,
+    })
+    .toBe(normalizeIso(cutTarget.ends_at));
+
+  await copySourceRow.click({ button: "right" });
+  await expect(page.getByTestId("appointments-context-menu")).toBeVisible();
+  await page.getByTestId("appointments-context-copy").click();
+  await expect(
+    page.getByText("Copied appointment. Select a slot or appointment to paste.", {
+      exact: true,
+    })
+  ).toBeVisible();
+  let copyRequestCount = 0;
+  const copyRoutePattern = /\/api\/appointments$/;
+  await page.route(copyRoutePattern, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    copyRequestCount += 1;
+    await route.continue();
+  });
+  await page.keyboard.press(`${modKey}+v`);
+  await expect(
+    page.getByText("Select a slot or appointment before pasting.", { exact: true })
+  ).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(250);
+  expect(copyRequestCount).toBe(0);
+  await copyTargetRow.click();
+
+  const copyRequestPromise = page.waitForRequest(
+    (request) => request.method() === "POST" && request.url().endsWith("/api/appointments")
+  );
+  const copyResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/api/appointments")
+  );
+  await page.keyboard.press(`${modKey}+v`);
+
+  const copyRequest = await copyRequestPromise;
+  const copyPayload = copyRequest.postDataJSON() as {
+    patient_id: number;
+    starts_at: string;
+    ends_at: string;
+    location?: string | null;
+    location_type: "clinic" | "visit";
+    status: string;
+  };
+  expect(copyPayload).toMatchObject({
+    patient_id: Number(copyPatientId),
+    location: copySource.location,
+    location_type: copySource.location_type,
+    status: "booked",
+  });
+  expect(normalizeIso(copyPayload.starts_at)).toBe(normalizeIso(copyTarget.starts_at));
+  expect(normalizeIso(copyPayload.ends_at)).toBe(normalizeIso(copyTarget.ends_at));
+  const copyResponse = await copyResponsePromise;
+  expect(copyResponse.ok()).toBeTruthy();
+  expect(copyRequestCount).toBe(1);
+  const copiedAppointment = (await copyResponse.json()) as AppointmentDetails;
+  expect(copiedAppointment.id).toBeGreaterThan(0);
+  expect(copiedAppointment.id).not.toBe(copySource.id);
+  await expect(page.getByText("Copied appointment.", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect
+    .poll(
+      async () => normalizeIso((await getAppointmentById(request, copiedAppointment.id)).starts_at),
+      {
+        timeout: 20_000,
+      }
+    )
+    .toBe(normalizeIso(copyTarget.starts_at));
+  await expect
+    .poll(
+      async () => normalizeIso((await getAppointmentById(request, copiedAppointment.id)).ends_at),
+      {
+        timeout: 20_000,
+      }
+    )
+    .toBe(normalizeIso(copyTarget.ends_at));
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-day-sheet").click();
+
+  await expect(daySheetRow(page, `CUT${unique}`)).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page.locator(".day-sheet-table tbody tr").filter({ hasText: `COPY${unique}` })
+  ).toHaveCount(2);
+  await expect
+    .poll(async () => normalizeIso((await getAppointmentById(request, cutSource.id)).starts_at), {
+      timeout: 20_000,
+    })
+    .toBe(normalizeIso(cutTarget.starts_at));
+  await expect
+    .poll(
+      async () => normalizeIso((await getAppointmentById(request, copiedAppointment.id)).starts_at),
+      {
+        timeout: 20_000,
+      }
+    )
+    .toBe(normalizeIso(copyTarget.starts_at));
+  await page.unroute(cutRoutePattern);
+  await page.unroute(copyRoutePattern);
 });
 
 test("appointment detail notes stay scoped to the selected appointment and refresh row state", async ({
