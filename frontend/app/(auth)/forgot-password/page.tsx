@@ -53,8 +53,11 @@ export default function ForgotPasswordPage() {
 
           <form onSubmit={onSubmit} className="stack">
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Email</label>
+              <label className="label" htmlFor="forgot-password-email">
+                Email
+              </label>
               <input
+                id="forgot-password-email"
                 className="input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

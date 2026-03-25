@@ -66,8 +66,11 @@ export default function ResetPasswordClient() {
 
           <form onSubmit={onSubmit} className="stack">
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Reset token</label>
+              <label className="label" htmlFor="reset-password-token">
+                Reset token
+              </label>
               <input
+                id="reset-password-token"
                 className="input"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
@@ -76,9 +79,12 @@ export default function ResetPasswordClient() {
             </div>
 
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">New password</label>
+              <label className="label" htmlFor="reset-password-new">
+                New password
+              </label>
               <div className="input-wrap">
                 <input
+                  id="reset-password-new"
                   className="input"
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -97,8 +103,11 @@ export default function ResetPasswordClient() {
             </div>
 
             <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Confirm password</label>
+              <label className="label" htmlFor="reset-password-confirm">
+                Confirm password
+              </label>
               <input
+                id="reset-password-confirm"
                 className="input"
                 type={showPassword ? "text" : "password"}
                 value={confirm}
