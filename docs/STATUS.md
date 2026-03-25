@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-25: Stage 163H chunk128 started on `stage163h-chunk128-receipt-error-proof` from `master@02ec74e` to close the remaining V1 billing proof gap for visible receipt download error handling without reopening finished appointments, recalls, search, charting, patient-create, treatment-plan, or document slices.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - repo-wide active product `TODO`/`FIXME` markers in `frontend/app`, `frontend/tests`, `backend/app`, and `docs`
+    - active V1 user-facing surfaces in `frontend/app/(app)/appointments`, `frontend/app/(app)/patients`, `frontend/app/(app)/notes`, `frontend/app/(app)/recalls`, `frontend/app/(app)/templates`, and related focused Playwright specs
+    - existing finance proofs in `frontend/tests/billing-payment.spec.ts` and `frontend/tests/patient-invoice-pdf.spec.ts`
+    - the financial receipt download UI and error banner in `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still explicitly requires reliable receipt download with in-flight and error states
+    - the broader repo-guided pass did not reveal a stronger small live-surface gap in appointments, patients, notes, documents/attachments, recalls, or templates after excluding the recently finished slices
+    - the repo already proved receipt success, in-flight disablement, and filename fallback, but there was still no focused proof that the visible latest-receipt action surfaces an error cleanly and allows a successful retry
+  - Exact slice implemented:
+    - added a focused Playwright proof that forces the latest-receipt action to fail once, verifies the visible error notice and button recovery, then retries successfully and downloads the PDF
+    - no product-code change was required; the existing billing surface satisfied the new focused proof
+  - Files changed in this slice:
+    - `frontend/tests/billing-payment.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `git status --short` -> pass
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/billing-payment.spec.ts --grep "selected invoice latest receipt shows an error state and allows retry"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-25: Stage 163H chunk127 started on `stage163h-chunk127-bpe-furcation-proof` from `master@5f8be21` to close the remaining clinician UAT proof gap for viewing seeded BPE entries and BPE furcations on the live patient charting page without reopening finished appointments, recalls, documents, billing, search, treatment-plan, or perio-probe slices.
   - What was inspected before implementation:
     - `AGENTS.md`
