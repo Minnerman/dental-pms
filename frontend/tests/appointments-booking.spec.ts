@@ -48,6 +48,64 @@ async function switchToCalendarDayView(page: any) {
   await expect(page.getByTestId("appointments-diary-shell")).toBeVisible({ timeout: 15_000 });
 }
 
+function getFutureClinicWeekdayDate(seed: number) {
+  const date = new Date(Date.UTC(2030, 0, 1));
+  date.setUTCDate(date.getUTCDate() + (seed % 365));
+  const day = date.getUTCDay();
+  if (day === 6) {
+    date.setUTCDate(date.getUTCDate() + 2);
+  } else if (day === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function getClinicSlot(seed: number, attempt: number) {
+  const starts = [
+    "09:10",
+    "09:50",
+    "10:30",
+    "11:10",
+    "11:50",
+    "12:30",
+    "13:10",
+    "13:50",
+    "14:30",
+    "15:10",
+    "15:50",
+    "16:30",
+  ];
+  const index = (Math.floor(seed / 1000) + attempt) % starts.length;
+  const start = starts[index];
+  const [hours, minutes] = start.split(":").map(Number);
+  const endDate = new Date(Date.UTC(2030, 0, 1, hours, minutes + 30));
+  const end = `${String(endDate.getUTCHours()).padStart(2, "0")}:${String(
+    endDate.getUTCMinutes()
+  ).padStart(2, "0")}`;
+  return { start, end };
+}
+
+async function fillBookableClinicSlot(page: any, testDate: string, seed: number) {
+  const startInput = page.getByTestId("booking-start");
+  const endInput = page.getByTestId("booking-end");
+  const submitButton = page.getByTestId("booking-submit");
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const slot = getClinicSlot(seed, attempt);
+    await startInput.fill(`${testDate}T${slot.start}`);
+    await endInput.fill(`${testDate}T${slot.end}`);
+    try {
+      await expect.poll(async () => submitButton.isDisabled(), { timeout: 3_000 }).toBe(false);
+      return slot;
+    } catch {
+      // Try the next in-hours slot if this one is blocked by validation or an existing conflict.
+    }
+  }
+
+  const modalText = await page.getByTestId("booking-modal").textContent();
+  throw new Error(`Could not find a bookable clinic slot on ${testDate}: ${modalText ?? ""}`);
+}
+
 async function createConflictAppointment(
   request: any,
   patientId: string,
@@ -280,9 +338,7 @@ test("appointment creation appears in clinician diary immediately and persists a
 }) => {
   test.setTimeout(120_000);
   const unique = Date.now();
-  const testDateValue = new Date(Date.UTC(2030, 0, 1));
-  testDateValue.setUTCDate(testDateValue.getUTCDate() + (unique % 365));
-  const testDate = testDateValue.toISOString().slice(0, 10);
+  const testDate = getFutureClinicWeekdayDate(unique);
   const lastName = `Visible ${unique}`;
   const room = `Room 163H-${unique}`;
   const patientId = await createPatient(request, {
@@ -301,8 +357,7 @@ test("appointment creation appears in clinician diary immediately and persists a
   await clickNewAppointment(page);
 
   await selectBookingPatient(page, patientId, lastName);
-  await page.getByTestId("booking-start").fill(`${testDate}T13:10`);
-  await page.getByTestId("booking-end").fill(`${testDate}T13:40`);
+  const bookableSlot = await fillBookableClinicSlot(page, testDate, unique);
   await page.getByTestId("booking-location-room").fill(room);
 
   const clinicianSelect = page.getByTestId("booking-modal").locator("select").nth(2);
@@ -358,7 +413,7 @@ test("appointment creation appears in clinician diary immediately and persists a
 
   const createdEvent = page.getByTestId(`appointment-event-${createdAppointment.id}`);
   await expect(createdEvent).toBeVisible({ timeout: 15_000 });
-  await expect(createdEvent).toContainText("13:10");
+  await expect(createdEvent).toContainText(bookableSlot.start);
   await expect(createdEvent).toContainText(lastName.toUpperCase());
   await expect(createdEvent).toContainText(`@ ${room}`);
 
@@ -379,7 +434,7 @@ test("appointment creation appears in clinician diary immediately and persists a
 
   const reloadedEvent = page.getByTestId(`appointment-event-${createdAppointment.id}`);
   await expect(reloadedEvent).toBeVisible({ timeout: 15_000 });
-  await expect(reloadedEvent).toContainText("13:10");
+  await expect(reloadedEvent).toContainText(bookableSlot.start);
   await expect(reloadedEvent).toContainText(lastName.toUpperCase());
   await expect(reloadedEvent).toContainText(`@ ${room}`);
 });
