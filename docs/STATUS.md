@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk139 completed on `clinical-page-timeline-proof` from `master@c1a20fc` to close the remaining clinician proof gap for opening the clinical page with both chart and timeline content without reopening treatment-plan, BPE/furcation/perio, letter/PDF, broader patient-page work, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/tests/clinical-view-mode.spec.ts`
+    - `frontend/tests/clinical-chart.spec.ts`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - the timeline render in `frontend/components/timeline/Timeline.tsx`
+    - the timeline source contract in `backend/app/routers/timeline.py`
+  - Evidence for choosing this slice:
+    - the clinician UAT still explicitly required opening the patient clinical page with chart and timeline content
+    - current focused proofs already covered chart render, badge stability, and view-mode persistence, but none explicitly asserted the `Recent activity` timeline content on the clinical page
+    - the clinical page already rendered the `Recent activity` card and patient timeline route using deterministic audit-log summaries, so the gap was proof-only
+  - Exact slice implemented:
+    - added one focused Playwright proof in `frontend/tests/clinical-view-mode.spec.ts` that seeds a patient, appointment, and clinical procedure, opens `/patients/{id}/clinical`, verifies the chart badge renders, verifies the `Recent activity` timeline card is visible, and confirms the seeded appointment-created timeline row links to the matching appointment audit page
+    - no product-code change was required; the existing clinical page satisfied the new proof
+  - Files changed in this slice:
+    - `frontend/tests/clinical-view-mode.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/clinical-view-mode.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 files, routes, imports, queries, or write paths were changed or used.
 - 2026-03-26: Stage 163H chunk138 completed on `startup-remove-create-all` from `master@be77a9f` to remove startup schema creation so Alembic remains the only authoritative schema-management path without widening into a broader lifespan refactor, new migrations, frontend work, or any R4 change.
   - What was inspected before implementation:
     - `AGENTS.md`

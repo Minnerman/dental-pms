@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  createAppointment,
   createClinicalProcedure,
   createPatient,
   createTreatmentPlanItem,
@@ -17,6 +18,45 @@ async function openClinical(page: any, request: any, patientId: string) {
   await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("clinical-chart-toggle")).toBeVisible();
 }
+
+test("clinical page opens with chart and recent activity timeline content", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const patientId = await createPatient(request, {
+    first_name: "Clinical",
+    last_name: `Timeline ${unique}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    starts_at: "2026-01-15T14:00:00.000Z",
+    ends_at: "2026-01-15T14:30:00.000Z",
+    location_type: "clinic",
+    location: `Timeline Room ${unique}`,
+  });
+  await createClinicalProcedure(request, patientId, {
+    tooth: "UR2",
+    procedure_code: "TLN1",
+    description: `Timeline chart proof ${unique}`,
+  });
+
+  await openClinical(page, request, patientId);
+
+  await expect(page.getByTestId("tooth-badge-UR2")).toContainText("H", { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Recent activity" })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  const appointmentAuditLink = page
+    .locator(`a[href="/appointments/${appointment.id}/audit"]`)
+    .first();
+  await expect(appointmentAuditLink).toBeVisible({ timeout: 30_000 });
+  const appointmentTimelineCard = appointmentAuditLink.locator(
+    "xpath=ancestor::div[contains(@class,'card')][1]"
+  );
+  await expect(appointmentTimelineCard).toContainText("appointment.created");
+  await expect(appointmentTimelineCard).toContainText("appointment.created appointment");
+});
 
 test("clinical view mode persists across refresh and patient navigation", async ({
   page,
