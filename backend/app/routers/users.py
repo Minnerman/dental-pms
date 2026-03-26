@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import require_admin, require_capability, require_roles
+from app.deps import require_capability, require_roles
 from app.models.user import Role, User
 from app.schemas.capability import CapabilityOut, UserCapabilitiesUpdate
 from app.schemas.user import UserCreate, UserOut, UserPasswordResetRequest, UserPasswordResetResponse, UserUpdate
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("", response_model=list[UserOut])
 def list_users(
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    _=Depends(require_roles("superadmin")),
 ):
     return list(db.scalars(select(User).order_by(User.id)))
 
@@ -26,7 +26,7 @@ def list_users(
 def add_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_roles("superadmin")),
 ):
     existing = get_user_by_email(db, payload.email)
     if existing:
@@ -53,7 +53,7 @@ def add_user(
 
 
 @router.get("/roles", response_model=list[str])
-def list_roles(_=Depends(require_admin)):
+def list_roles(_=Depends(require_roles("superadmin"))):
     return [role.value for role in Role]
 
 
@@ -61,7 +61,7 @@ def list_roles(_=Depends(require_admin)):
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    _=Depends(require_roles("superadmin")),
 ):
     user = get_user_by_id(db, user_id)
     if not user:
@@ -74,10 +74,8 @@ def patch_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_roles("superadmin")),
 ):
-    if (payload.role is not None or payload.is_active is not None) and admin.role != Role.superadmin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -144,7 +142,7 @@ def reset_user_password(
     user_id: int,
     payload: UserPasswordResetRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_roles("superadmin")),
 ):
     user = get_user_by_id(db, user_id)
     if not user:

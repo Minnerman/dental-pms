@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk135 completed on `users-rbac-superadmin-hardening` from `master@962f2db` to restore the documented superadmin-only `/users` management policy without widening into password-policy, audit-transaction, startup-schema, frontend, or any R4 work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/AUTH_RBAC.md`
+    - `backend/app/deps.py`
+    - `backend/app/routers/users.py`
+    - existing backend auth/capabilities/admin tests
+  - Evidence for choosing this slice:
+    - the live `/users` router still depended on the broader `require_admin` guard
+    - `require_admin` admits `senior_admin`, `dentist`, `nurse`, `receptionist`, and `reception`, which drifted from the documented superadmin-only `/users` policy
+    - that drift left non-superadmins able to reach user listing, creation, patch, and reset-password actions on the `/users` surface
+  - Exact slice implemented:
+    - changed the `/users` router management endpoints to depend on `require_roles("superadmin")` instead of the broader `require_admin` guard
+    - removed the now-dead patch-only superadmin branch because the route itself is superadmin-only
+    - added focused backend RBAC proof covering superadmin allow and dentist/nurse/receptionist/reception deny across `/users`, `/users/roles`, `/users/{id}`, `POST /users`, `PATCH /users/{id}`, and `POST /users/{id}/reset-password`
+    - clarified `docs/AUTH_RBAC.md` so the `/users` management surface is consistently described as superadmin-only
+  - Files changed in this slice:
+    - `backend/app/routers/users.py`
+    - `backend/tests/admin/test_users_rbac.py`
+    - `docs/AUTH_RBAC.md`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm backend pytest -q tests/admin/test_users_rbac.py` -> pass (`30 passed`)
+    - `docker compose exec -T backend pytest -q` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-26: Stage 163H chunk134 completed on `appointment-create-visibility-proof` from `master@30e343a` to close the remaining receptionist `Create appointment` proof gap without reopening appointment move/edit/cancel, clinician charting, or any R4 work.
   - What was inspected before implementation:
     - `AGENTS.md`
