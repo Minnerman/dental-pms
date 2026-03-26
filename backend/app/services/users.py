@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Iterator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,16 @@ PASSWORD_MAX_BYTES = 72
 
 class PasswordPolicyError(ValueError):
     pass
+
+
+@contextmanager
+def atomic_user_write(db: Session) -> Iterator[None]:
+    try:
+        yield
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def validate_password_policy(password: str) -> str:
@@ -50,6 +62,7 @@ def create_user(
     role: Role = Role.reception,
     is_active: bool = True,
     must_change_password: bool = False,
+    commit: bool = True,
 ) -> User:
     ensure_capabilities(db)
     now = datetime.now(timezone.utc)
@@ -65,9 +78,14 @@ def create_user(
         updated_at=now,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
-    grant_all_capabilities(db, user)
+    if commit:
+        with atomic_user_write(db):
+            db.flush()
+            grant_all_capabilities(db, user, commit=False)
+        db.refresh(user)
+    else:
+        db.flush()
+        grant_all_capabilities(db, user, commit=False)
     return user
 
 
@@ -112,6 +130,7 @@ def update_user(
     role: Role | None = None,
     is_active: bool | None = None,
     password: str | None = None,
+    commit: bool = True,
 ) -> User:
     if full_name is not None:
         user.full_name = full_name
@@ -125,8 +144,12 @@ def update_user(
         user.must_change_password = False
     user.updated_at = datetime.now(timezone.utc)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        with atomic_user_write(db):
+            db.flush()
+        db.refresh(user)
+    else:
+        db.flush()
     return user
 
 
@@ -136,6 +159,7 @@ def set_password(
     user: User,
     new_password: str,
     must_change_password: bool | None = None,
+    commit: bool = True,
 ) -> User:
     validated_password = validate_password_policy(new_password)
     user.hashed_password = hash_password(validated_password)
@@ -143,8 +167,12 @@ def set_password(
         user.must_change_password = must_change_password
     user.updated_at = datetime.now(timezone.utc)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        with atomic_user_write(db):
+            db.flush()
+        db.refresh(user)
+    else:
+        db.flush()
     return user
 
 
@@ -154,14 +182,19 @@ def set_password_reset_token(
     user: User,
     token_hash: str,
     expires_at: datetime,
+    commit: bool = True,
 ) -> User:
     user.reset_token_hash = token_hash
     user.reset_token_expires_at = expires_at
     user.reset_token_used_at = None
     user.updated_at = datetime.now(timezone.utc)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        with atomic_user_write(db):
+            db.flush()
+        db.refresh(user)
+    else:
+        db.flush()
     return user
 
 
@@ -170,6 +203,7 @@ def reset_password_with_token(
     *,
     token_hash: str,
     new_password: str,
+    commit: bool = True,
 ) -> User | None:
     now = datetime.now(timezone.utc)
     user = db.scalar(
@@ -190,6 +224,10 @@ def reset_password_with_token(
     user.reset_token_expires_at = None
     user.updated_at = now
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    if commit:
+        with atomic_user_write(db):
+            db.flush()
+        db.refresh(user)
+    else:
+        db.flush()
     return user

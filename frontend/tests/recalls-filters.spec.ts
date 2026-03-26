@@ -115,10 +115,13 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   const methodFilter = page.getByTestId("recalls-filter-method");
   const resetButton = page.getByTestId("recalls-reset-filters");
   const exportSummary = page.getByTestId("recalls-export-summary");
+  const pageSize = page.getByLabel("Per page");
 
   const uncontactedRow = page.locator("table tbody tr").filter({ hasText: uncontactedNotes });
   const contactedRow = page.locator("table tbody tr").filter({ hasText: contactedNotes });
 
+  await pageSize.selectOption("200");
+  await expect(pageSize).toHaveValue("200");
   await startDateFilter.fill(startDate);
   await endDateFilter.fill(endDate);
 

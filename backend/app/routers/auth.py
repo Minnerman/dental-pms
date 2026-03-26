@@ -19,6 +19,7 @@ from app.schemas.auth import (
 )
 from app.services.users import (
     PasswordPolicyError,
+    atomic_user_write,
     get_user_by_email,
     reset_password_with_token,
     set_password,
@@ -95,16 +96,23 @@ def request_password_reset(
         token = generate_reset_token()
         token_hash = hash_reset_token(token)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_EXPIRES)
-        set_password_reset_token(db, user=user, token_hash=token_hash, expires_at=expires_at)
-        log_event(
-            db,
-            actor=None,
-            action="password_reset_request",
-            entity_type="user",
-            entity_id=str(user.id),
-            after_data={"email": email, "status": "issued"},
-            ip_address=ip_address,
-        )
+        with atomic_user_write(db):
+            set_password_reset_token(
+                db,
+                user=user,
+                token_hash=token_hash,
+                expires_at=expires_at,
+                commit=False,
+            )
+            log_event(
+                db,
+                actor=None,
+                action="password_reset_request",
+                entity_type="user",
+                entity_id=str(user.id),
+                after_data={"email": email, "status": "issued"},
+                ip_address=ip_address,
+            )
     else:
         log_event(
             db,
@@ -115,7 +123,7 @@ def request_password_reset(
             after_data={"email": email, "status": "ignored"},
             ip_address=ip_address,
         )
-    db.commit()
+        db.commit()
     response = PasswordResetResponse(
         message="If the account exists, a reset link has been generated.",
         reset_token=token if RESET_DEBUG else None,
@@ -145,7 +153,23 @@ def confirm_password_reset(
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
     token_hash = hash_reset_token(payload.token)
     try:
-        user = reset_password_with_token(db, token_hash=token_hash, new_password=payload.new_password)
+        with atomic_user_write(db):
+            user = reset_password_with_token(
+                db,
+                token_hash=token_hash,
+                new_password=payload.new_password,
+                commit=False,
+            )
+            if user:
+                log_event(
+                    db,
+                    actor=None,
+                    action="password_reset_confirm",
+                    entity_type="user",
+                    entity_id=str(user.id),
+                    after_data={"status": "success"},
+                    ip_address=ip_address,
+                )
     except PasswordPolicyError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if not user:
@@ -160,16 +184,6 @@ def confirm_password_reset(
         )
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
-    log_event(
-        db,
-        actor=None,
-        action="password_reset_confirm",
-        entity_type="user",
-        entity_id=str(user.id),
-        after_data={"status": "success"},
-        ip_address=ip_address,
-    )
-    db.commit()
     return PasswordResetConfirmResponse(message="Password updated. You can now sign in.")
 
 
@@ -190,17 +204,23 @@ def change_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password")
 
     try:
-        set_password(db, user=user, new_password=payload.new_password, must_change_password=False)
+        with atomic_user_write(db):
+            set_password(
+                db,
+                user=user,
+                new_password=payload.new_password,
+                must_change_password=False,
+                commit=False,
+            )
+            log_event(
+                db,
+                actor=user,
+                action="user.password_changed",
+                entity_type="user",
+                entity_id=str(user.id),
+                after_data={"status": "success"},
+                ip_address=ip_address,
+            )
     except PasswordPolicyError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    log_event(
-        db,
-        actor=user,
-        action="user.password_changed",
-        entity_type="user",
-        entity_id=str(user.id),
-        after_data={"status": "success"},
-        ip_address=ip_address,
-    )
-    db.commit()
     return ChangePasswordResponse(message="Password updated.")

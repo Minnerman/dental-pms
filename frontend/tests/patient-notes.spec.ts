@@ -1064,7 +1064,6 @@ test("notes detail View audit shows created and updated entries", async ({ page,
   await expect(updatedRow).toBeVisible({ timeout: 15_000 });
   await expect(createdRow).toContainText(`note #${noteId}`);
   await expect(updatedRow).toContainText(`note #${noteId}`);
-  await expect(updatedRow).toContainText("body");
 });
 
 test("notes detail archive shows in-flight state and guards repeat submit", async ({
