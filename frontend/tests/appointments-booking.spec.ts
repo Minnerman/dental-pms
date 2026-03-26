@@ -32,6 +32,22 @@ async function clickNewAppointment(page: any) {
   }
 }
 
+async function switchToCalendarDayView(page: any) {
+  await page.getByTestId("appointments-view-calendar").click();
+  const explicit = page.getByTestId("appointments-calendar-view-day");
+  if (await explicit.count()) {
+    await explicit.click();
+  } else {
+    const fallback = page
+      .locator(".rbc-toolbar button")
+      .filter({ hasText: /^day$/i })
+      .first();
+    await expect(fallback).toBeVisible({ timeout: 10_000 });
+    await fallback.click();
+  }
+  await expect(page.getByTestId("appointments-diary-shell")).toBeVisible({ timeout: 15_000 });
+}
+
 async function createConflictAppointment(
   request: any,
   patientId: string,
@@ -256,6 +272,116 @@ test("appointment creation uses latest clinician and location selections", async
   expect(payload.location_type).toBe("clinic");
   expect(payload.location).toBe("Room 2");
   expect((payload.location_text as string | undefined) ?? "").toBe("");
+});
+
+test("appointment creation appears in clinician diary immediately and persists after refresh", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const unique = Date.now();
+  const testDateValue = new Date(Date.UTC(2030, 0, 1));
+  testDateValue.setUTCDate(testDateValue.getUTCDate() + (unique % 365));
+  const testDate = testDateValue.toISOString().slice(0, 10);
+  const lastName = `Visible ${unique}`;
+  const room = `Room 163H-${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: lastName,
+  });
+
+  const usersResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" && new URL(response.url()).pathname.endsWith("/api/users")
+  );
+  await openAppointments(page, request, `/appointments?date=${testDate}`);
+  const usersResponse = await usersResponsePromise;
+  expect(usersResponse.ok()).toBeTruthy();
+  await switchToCalendarDayView(page);
+  await clickNewAppointment(page);
+
+  await selectBookingPatient(page, patientId, lastName);
+  await page.getByTestId("booking-start").fill(`${testDate}T13:10`);
+  await page.getByTestId("booking-end").fill(`${testDate}T13:40`);
+  await page.getByTestId("booking-location-room").fill(room);
+
+  const clinicianSelect = page.getByTestId("booking-modal").locator("select").nth(2);
+  await expect
+    .poll(
+      async () =>
+        clinicianSelect.evaluate(
+          (select) =>
+            Array.from((select as HTMLSelectElement).options)
+              .map((option) => option.value)
+              .filter(Boolean).length
+        ),
+      { timeout: 15_000 }
+    )
+    .toBeGreaterThan(0);
+  const clinicianOption = await clinicianSelect.evaluate((select) => {
+    const option = Array.from((select as HTMLSelectElement).options).find((entry) => entry.value);
+    if (!option) {
+      return null;
+    }
+    return {
+      value: option.value,
+      label: option.text.trim(),
+    };
+  });
+  expect(clinicianOption).toBeTruthy();
+
+  await clinicianSelect.selectOption(clinicianOption!.value);
+  const expectedClinicianLabel = clinicianOption!.label.replace(/\s+\([^)]*\)\s*$/, "");
+  const diaryColumns = page.getByTestId("appointments-diary-columns");
+  const clinicianFilter = page.getByTestId("appointments-diary-clinician-filter");
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/api/appointments")
+  );
+
+  await page.getByTestId("booking-submit").click();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  const createdAppointment = (await createResponse.json()) as { id: number };
+
+  await expect(page.getByTestId("booking-modal")).toBeHidden({ timeout: 15_000 });
+  await expect(page.getByText("Appointment created.")).toBeVisible({ timeout: 15_000 });
+
+  const diaryGrouping = page.getByTestId("appointments-diary-grouping");
+  await diaryGrouping.selectOption("clinician");
+  await expect(diaryColumns).toContainText(expectedClinicianLabel, { timeout: 15_000 });
+
+  await clinicianFilter.selectOption({ label: expectedClinicianLabel });
+  await page.getByTestId("appointments-diary-search").fill(lastName);
+
+  const createdEvent = page.getByTestId(`appointment-event-${createdAppointment.id}`);
+  await expect(createdEvent).toBeVisible({ timeout: 15_000 });
+  await expect(createdEvent).toContainText("13:10");
+  await expect(createdEvent).toContainText(lastName.toUpperCase());
+  await expect(createdEvent).toContainText(`@ ${room}`);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await switchToCalendarDayView(page);
+  await page.getByTestId("appointments-diary-grouping").selectOption("clinician");
+  await expect(page.getByTestId("appointments-diary-columns")).toContainText(
+    expectedClinicianLabel,
+    {
+      timeout: 15_000,
+    }
+  );
+  await page
+    .getByTestId("appointments-diary-clinician-filter")
+    .selectOption({ label: expectedClinicianLabel });
+  await page.getByTestId("appointments-diary-search").fill(lastName);
+
+  const reloadedEvent = page.getByTestId(`appointment-event-${createdAppointment.id}`);
+  await expect(reloadedEvent).toBeVisible({ timeout: 15_000 });
+  await expect(reloadedEvent).toContainText("13:10");
+  await expect(reloadedEvent).toContainText(lastName.toUpperCase());
+  await expect(reloadedEvent).toContainText(`@ ${room}`);
 });
 
 test("appointments booking shows in-flight state and guards repeat submit", async ({

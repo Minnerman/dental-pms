@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk134 completed on `appointment-create-visibility-proof` from `master@30e343a` to close the remaining receptionist `Create appointment` proof gap without reopening appointment move/edit/cancel, clinician charting, or any R4 work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - the existing focused booking proof only covered clinician/location payload shape and in-flight duplicate-submit protection
+    - the receptionist UAT still required proof that the created appointment becomes visible in the diary and persists after refresh
+    - `docs/STATUS.md` only carried that visibility/persistence point as a manual check
+  - Exact slice implemented:
+    - added a focused Playwright proof in `frontend/tests/appointments-booking.spec.ts` that creates an appointment from the appointments page, switches to clinician-grouped day view, verifies the new diary event is visible with the expected time/location context, reloads, and verifies the same event persists after refresh
+    - kept the slice proof-only; no production code changed
+    - hardened the new proof to wait for the existing `/api/users` load and to use a per-run future date so it does not collide with prior seeded appointments in the shared test database
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-booking.spec.ts --grep "appointments modal survives view and location switches|appointment creation uses latest clinician and location selections|appointment creation appears in clinician diary immediately and persists after refresh"` -> pass (`3 passed`)
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-booking.spec.ts` -> pass (`16 passed, 4 skipped`)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-25: Stage 139 narrow save-path fix completed on `stage139-bpe-save-path-fix` from `master@f9e5f39` to restore the clinician BPE record proof without reopening Stage 138, Stage 140, letters/PDF, treatment-plan, or any other charting domain.
   - What was inspected before implementation:
     - `AGENTS.md`
