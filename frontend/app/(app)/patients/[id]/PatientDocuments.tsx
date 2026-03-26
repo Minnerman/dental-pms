@@ -19,6 +19,9 @@ type PatientDocument = {
   title: string;
   rendered_content: string;
   created_at: string;
+  created_by?: {
+    email?: string | null;
+  } | null;
 };
 
 const mergeFields = [
@@ -99,6 +102,13 @@ function buildPatientDocumentDownloadFilename(
   const safeTitle = sanitizePatientDocumentFilename(doc.title);
   const dateSuffix = dateSuffixFromHeader(responseDateHeader) ?? new Date().toISOString().slice(0, 10);
   return `${safeTitle}_${patientLastName ?? ""}_${dateSuffix}.${extension}`;
+}
+
+function formatDocumentCreatedAt(value: string) {
+  return new Date(value).toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export default function PatientDocuments({
@@ -627,8 +637,12 @@ export default function PatientDocuments({
                   >
                     <div>
                       <div style={{ fontWeight: 600 }}>{doc.title}</div>
-                      <div style={{ color: "var(--muted)" }}>
-                        {new Date(doc.created_at).toLocaleDateString("en-GB")}
+                      <div
+                        style={{ color: "var(--muted)" }}
+                        data-testid={`patient-document-meta-${doc.id}`}
+                      >
+                        Created {formatDocumentCreatedAt(doc.created_at)} by{" "}
+                        {doc.created_by?.email || "—"}
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>

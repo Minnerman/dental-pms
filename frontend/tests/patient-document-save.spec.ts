@@ -89,17 +89,26 @@ test("patient document save disables in-flight and guards repeat submit", async 
     id: number;
     title: string;
     created_at: string;
+    created_by: {
+      email: string;
+    };
   };
 
   await expect(saveButton).toBeEnabled({ timeout: 15_000 });
   await expect(saveButton).toHaveText("Save document");
   const savedDocumentCard = page.getByTestId(`patient-document-card-${savedDocument.id}`);
-  const expectedCreatedDate = await page.evaluate((createdAt) => {
-    return new Date(createdAt).toLocaleDateString("en-GB");
+  const documentMeta = page.getByTestId(`patient-document-meta-${savedDocument.id}`);
+  const expectedCreatedAt = await page.evaluate((createdAt) => {
+    return new Date(createdAt).toLocaleString("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
   }, savedDocument.created_at);
   await expect(savedDocumentCard).toBeVisible({ timeout: 15_000 });
   await expect(savedDocumentCard).toContainText(documentTitle);
-  await expect(savedDocumentCard).toContainText(expectedCreatedDate);
+  await expect(documentMeta).toBeVisible();
+  await expect(documentMeta).toContainText(`Created ${expectedCreatedAt}`);
+  await expect(documentMeta).toContainText(`by ${savedDocument.created_by.email}`);
 
   await page.unroute(routePattern);
 });
