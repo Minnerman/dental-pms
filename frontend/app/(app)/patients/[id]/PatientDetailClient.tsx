@@ -8932,9 +8932,12 @@ export default function PatientDetailClient({
                                       className="input"
                                       value={bpeScores[index] ?? ""}
                                       onChange={(e) => {
-                                        const next = [...bpeScores];
-                                        next[index] = e.target.value;
-                                        setBpeScores(next);
+                                        const value = e.target.value;
+                                        setBpeScores((prev) => {
+                                          const next = [...prev];
+                                          next[index] = value;
+                                          return next;
+                                        });
                                         setBpeNotice(null);
                                       }}
                                       placeholder="0-4 / *"
