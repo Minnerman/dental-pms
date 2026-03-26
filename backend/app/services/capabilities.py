@@ -55,7 +55,7 @@ def ensure_capabilities(db: Session) -> list[Capability]:
     return list_capabilities(db)
 
 
-def grant_all_capabilities(db: Session, user: User, *, commit: bool = True) -> int:
+def grant_all_capabilities(db: Session, user: User) -> int:
     capability_ids = list(db.scalars(select(Capability.id)))
     if not capability_ids:
         return 0
@@ -68,10 +68,7 @@ def grant_all_capabilities(db: Session, user: User, *, commit: bool = True) -> i
     for cap_id in missing:
         db.add(UserCapability(user_id=user.id, capability_id=cap_id))
     if missing:
-        if commit:
-            db.commit()
-        else:
-            db.flush()
+        db.commit()
     return len(missing)
 
 
