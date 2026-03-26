@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.actor import ActorOut
+
 
 class PatientDocumentCreate(BaseModel):
     template_id: int
@@ -19,6 +21,7 @@ class PatientDocumentOut(BaseModel):
     title: str
     rendered_content: str
     created_at: datetime
+    created_by: ActorOut
     unknown_fields: list[str] | None = None
 
 

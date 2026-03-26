@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk141 completed on `patient-document-creator-metadata` from `master@7dc7c30` to close the remaining narrow V1 generated-document metadata gap without reopening attachments behavior, preview/download flow, broader documents redesign, auth/admin work, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `backend/app/models/patient_document.py`
+    - `backend/app/schemas/patient_document.py`
+    - `backend/app/routers/patient_documents.py`
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-save.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires documents/attachments to show basic metadata such as who/when
+    - the generated-documents card only showed the created date, while attachments already visibly rendered `Uploaded <timestamp> by <email>`
+    - the patient document model already persisted `created_by_user_id`, but the response schema omitted creator metadata, so the smallest correct fix was to expose and render that existing field
+  - Exact slice implemented:
+    - added `created_by` to the patient-document response in the existing `ActorOut` style and exposed the matching joined relationship on the model
+    - updated generated document cards to show `Created <timestamp> by <email>` in the existing muted metadata style
+    - extended the focused patient-document save Playwright proof to verify the visible creator-and-date metadata on the saved document card
+  - Files changed in this slice:
+    - `backend/app/models/patient_document.py`
+    - `backend/app/schemas/patient_document.py`
+    - `frontend/app/(app)/patients/[id]/PatientDocuments.tsx`
+    - `frontend/tests/patient-document-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-document-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 files, routes, imports, queries, or write paths were changed or used.
 - 2026-03-26: Stage 163H chunk140 completed on `patient-header-last-updated-metadata` from `master@439155d` to close the remaining narrow V1 patient-record metadata gap without reopening patient audit, appointments metadata, broader patient-page design, backend work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
