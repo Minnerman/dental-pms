@@ -9,7 +9,14 @@ from app.schemas.capability import CapabilityOut, UserCapabilitiesUpdate
 from app.schemas.user import UserCreate, UserOut, UserPasswordResetRequest, UserPasswordResetResponse, UserUpdate
 from app.services.audit import log_event
 from app.services.capabilities import get_user_capabilities, replace_user_capabilities
-from app.services.users import create_user, get_user_by_email, get_user_by_id, set_password, update_user
+from app.services.users import (
+    PasswordPolicyError,
+    create_user,
+    get_user_by_email,
+    get_user_by_id,
+    set_password,
+    update_user,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -31,15 +38,18 @@ def add_user(
     existing = get_user_by_email(db, payload.email)
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
-    user = create_user(
-        db,
-        email=payload.email,
-        password=payload.temp_password,
-        full_name=payload.full_name,
-        role=Role(payload.role),
-        is_active=True,
-        must_change_password=True,
-    )
+    try:
+        user = create_user(
+            db,
+            email=payload.email,
+            password=payload.temp_password,
+            full_name=payload.full_name,
+            role=Role(payload.role),
+            is_active=True,
+            must_change_password=True,
+        )
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     log_event(
         db,
         actor=admin,
@@ -104,14 +114,17 @@ def patch_user(
             )
     previous_role = user.role
     previous_active = user.is_active
-    updated = update_user(
-        db,
-        user=user,
-        full_name=payload.full_name,
-        role=Role(payload.role) if payload.role else None,
-        is_active=payload.is_active,
-        password=payload.password,
-    )
+    try:
+        updated = update_user(
+            db,
+            user=user,
+            full_name=payload.full_name,
+            role=Role(payload.role) if payload.role else None,
+            is_active=payload.is_active,
+            password=payload.password,
+        )
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if payload.role and updated.role != previous_role:
         log_event(
             db,
@@ -147,12 +160,10 @@ def reset_user_password(
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    temp_password = payload.temp_password
-    if len(temp_password) < 12:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too short")
-    if len(temp_password.encode("utf-8")) > 72:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too long")
-    set_password(db, user=user, new_password=temp_password, must_change_password=True)
+    try:
+        set_password(db, user=user, new_password=payload.temp_password, must_change_password=True)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     log_event(
         db,
         actor=admin,

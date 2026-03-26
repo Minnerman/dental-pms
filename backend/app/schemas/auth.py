@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 
+from app.services.users import PASSWORD_MIN_LENGTH
+
 
 class Token(BaseModel):
     access_token: str
@@ -23,7 +25,7 @@ class PasswordResetResponse(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str = Field(min_length=20)
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class PasswordResetConfirmResponse(BaseModel):
@@ -31,7 +33,7 @@ class PasswordResetConfirmResponse(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
     old_password: str | None = None
 
 
