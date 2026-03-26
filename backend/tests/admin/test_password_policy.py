@@ -3,10 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-import pytest
-
-from app.routers import auth as auth_router
-from app.core.security import hash_reset_token
+from app.core.security import create_access_token, hash_reset_token, verify_password
+from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.user import Role
 from app.services.users import (
@@ -23,19 +21,6 @@ TOO_SHORT_PASSWORD = "A" * (PASSWORD_MIN_LENGTH - 1)
 OVERLONG_PASSWORD = "A" * (PASSWORD_MAX_BYTES + 1)
 
 
-@pytest.fixture(autouse=True)
-def reset_auth_rate_limiters():
-    auth_router.LOGIN_LIMITER._events.clear()
-    auth_router.LOGIN_IP_LIMITER._events.clear()
-    auth_router.RESET_REQUEST_LIMITER._events.clear()
-    auth_router.RESET_CONFIRM_LIMITER._events.clear()
-    yield
-    auth_router.LOGIN_LIMITER._events.clear()
-    auth_router.LOGIN_IP_LIMITER._events.clear()
-    auth_router.RESET_REQUEST_LIMITER._events.clear()
-    auth_router.RESET_CONFIRM_LIMITER._events.clear()
-
-
 def _error_detail(response) -> str:
     payload = response.json()
     detail = payload.get("detail")
@@ -44,7 +29,22 @@ def _error_detail(response) -> str:
     return str(detail)
 
 
-def _create_user_with_login(api_client, *, password: str = VALID_PASSWORD) -> dict[str, object]:
+def _jwt_secret() -> str:
+    return settings.secret_key or settings.jwt_secret or "change-me"
+
+
+def _auth_headers_for_user(*, user_id: int, email: str, role: Role) -> dict[str, str]:
+    token = create_access_token(
+        subject=str(user_id),
+        secret=_jwt_secret(),
+        alg=settings.jwt_alg,
+        expires_minutes=settings.access_token_expire_minutes,
+        extra={"role": role.value, "email": email},
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _create_user(*, password: str = VALID_PASSWORD, role: Role = Role.external) -> dict[str, object]:
     email = f"password-policy-{uuid4().hex[:12]}@example.com"
     session = SessionLocal()
     try:
@@ -53,20 +53,18 @@ def _create_user_with_login(api_client, *, password: str = VALID_PASSWORD) -> di
             email=email,
             password=password,
             full_name="Password Policy User",
-            role=Role.external,
+            role=role,
         )
         user_id = int(user.id)
     finally:
         session.close()
 
-    login = api_client.post("/auth/login", json={"email": email, "password": password})
-    assert login.status_code == 200, login.text
-    token = login.json()["access_token"]
     return {
         "user_id": user_id,
         "email": email,
         "password": password,
-        "headers": {"Authorization": f"Bearer {token}"},
+        "role": role,
+        "headers": _auth_headers_for_user(user_id=user_id, email=email, role=role),
     }
 
 
@@ -87,8 +85,24 @@ def _issue_reset_token(user_id: int) -> str:
     return token
 
 
+def _get_user_state(user_id: int):
+    session = SessionLocal()
+    try:
+        user = get_user_by_id(session, user_id)
+        assert user is not None
+        return {
+            "hashed_password": user.hashed_password,
+            "must_change_password": user.must_change_password,
+            "reset_token_hash": user.reset_token_hash,
+            "reset_token_expires_at": user.reset_token_expires_at,
+            "reset_token_used_at": user.reset_token_used_at,
+        }
+    finally:
+        session.close()
+
+
 def test_change_password_rejects_too_short_password(api_client):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.post(
         "/auth/change-password",
@@ -101,7 +115,7 @@ def test_change_password_rejects_too_short_password(api_client):
 
 
 def test_change_password_rejects_overlong_password(api_client):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.post(
         "/auth/change-password",
@@ -114,7 +128,7 @@ def test_change_password_rejects_overlong_password(api_client):
 
 
 def test_change_password_accepts_valid_password(api_client):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.post(
         "/auth/change-password",
@@ -123,14 +137,14 @@ def test_change_password_accepts_valid_password(api_client):
     )
 
     assert response.status_code == 200, response.text
-    old_login = api_client.post("/auth/login", json={"email": user["email"], "password": user["password"]})
-    assert old_login.status_code == 401, old_login.text
-    new_login = api_client.post("/auth/login", json={"email": user["email"], "password": UPDATED_PASSWORD})
-    assert new_login.status_code == 200, new_login.text
+    state = _get_user_state(int(user["user_id"]))
+    assert verify_password(UPDATED_PASSWORD, state["hashed_password"])
+    assert not verify_password(user["password"], state["hashed_password"])
+    assert state["must_change_password"] is False
 
 
 def test_password_reset_confirm_rejects_too_short_password(api_client):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
     token = _issue_reset_token(int(user["user_id"]))
 
     response = api_client.post(
@@ -143,7 +157,7 @@ def test_password_reset_confirm_rejects_too_short_password(api_client):
 
 
 def test_password_reset_confirm_rejects_overlong_password(api_client):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
     token = _issue_reset_token(int(user["user_id"]))
 
     response = api_client.post(
@@ -156,7 +170,7 @@ def test_password_reset_confirm_rejects_overlong_password(api_client):
 
 
 def test_password_reset_confirm_accepts_valid_password(api_client):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
     token = _issue_reset_token(int(user["user_id"]))
 
     response = api_client.post(
@@ -165,14 +179,17 @@ def test_password_reset_confirm_accepts_valid_password(api_client):
     )
 
     assert response.status_code == 200, response.text
-    old_login = api_client.post("/auth/login", json={"email": user["email"], "password": user["password"]})
-    assert old_login.status_code == 401, old_login.text
-    new_login = api_client.post("/auth/login", json={"email": user["email"], "password": UPDATED_PASSWORD})
-    assert new_login.status_code == 200, new_login.text
+    state = _get_user_state(int(user["user_id"]))
+    assert verify_password(UPDATED_PASSWORD, state["hashed_password"])
+    assert not verify_password(user["password"], state["hashed_password"])
+    assert state["must_change_password"] is False
+    assert state["reset_token_hash"] is None
+    assert state["reset_token_expires_at"] is None
+    assert state["reset_token_used_at"] is not None
 
 
 def test_admin_reset_password_rejects_too_short_password(api_client, auth_headers):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.post(
         f"/users/{user['user_id']}/reset-password",
@@ -185,7 +202,7 @@ def test_admin_reset_password_rejects_too_short_password(api_client, auth_header
 
 
 def test_admin_reset_password_rejects_overlong_password(api_client, auth_headers):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.post(
         f"/users/{user['user_id']}/reset-password",
@@ -198,7 +215,7 @@ def test_admin_reset_password_rejects_overlong_password(api_client, auth_headers
 
 
 def test_admin_reset_password_accepts_valid_password(api_client, auth_headers):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.post(
         f"/users/{user['user_id']}/reset-password",
@@ -207,13 +224,14 @@ def test_admin_reset_password_accepts_valid_password(api_client, auth_headers):
     )
 
     assert response.status_code == 200, response.text
-    login = api_client.post("/auth/login", json={"email": user["email"], "password": UPDATED_PASSWORD})
-    assert login.status_code == 200, login.text
-    assert login.json()["must_change_password"] is True
+    state = _get_user_state(int(user["user_id"]))
+    assert verify_password(UPDATED_PASSWORD, state["hashed_password"])
+    assert not verify_password(user["password"], state["hashed_password"])
+    assert state["must_change_password"] is True
 
 
 def test_patch_user_password_rejects_too_short_password(api_client, auth_headers):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.patch(
         f"/users/{user['user_id']}",
@@ -226,7 +244,7 @@ def test_patch_user_password_rejects_too_short_password(api_client, auth_headers
 
 
 def test_patch_user_password_rejects_overlong_password(api_client, auth_headers):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.patch(
         f"/users/{user['user_id']}",
@@ -239,7 +257,7 @@ def test_patch_user_password_rejects_overlong_password(api_client, auth_headers)
 
 
 def test_patch_user_password_accepts_valid_password(api_client, auth_headers):
-    user = _create_user_with_login(api_client)
+    user = _create_user()
 
     response = api_client.patch(
         f"/users/{user['user_id']}",
@@ -248,7 +266,7 @@ def test_patch_user_password_accepts_valid_password(api_client, auth_headers):
     )
 
     assert response.status_code == 200, response.text
-    old_login = api_client.post("/auth/login", json={"email": user["email"], "password": user["password"]})
-    assert old_login.status_code == 401, old_login.text
-    new_login = api_client.post("/auth/login", json={"email": user["email"], "password": UPDATED_PASSWORD})
-    assert new_login.status_code == 200, new_login.text
+    state = _get_user_state(int(user["user_id"]))
+    assert verify_password(UPDATED_PASSWORD, state["hashed_password"])
+    assert not verify_password(user["password"], state["hashed_password"])
+    assert state["must_change_password"] is False
