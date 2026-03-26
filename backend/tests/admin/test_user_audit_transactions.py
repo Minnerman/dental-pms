@@ -4,8 +4,10 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.main import app
 from app.core.security import create_access_token, hash_reset_token, verify_password
 from app.core.settings import settings
 from app.db.session import SessionLocal
@@ -34,6 +36,13 @@ def _auth_headers_for_user(*, user_id: int, email: str, role: Role) -> dict[str,
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture
+def local_api_client():
+    # Rollback tests monkeypatch router-local audit helpers, so they must hit the app in-process.
+    with TestClient(app) as client:
+        yield client
+
+
 def _create_user(*, password: str = VALID_PASSWORD, role: Role = Role.external) -> dict[str, object]:
     email = f"user-audit-{uuid4().hex[:12]}@example.com"
     session = SessionLocal()
@@ -55,6 +64,17 @@ def _create_user(*, password: str = VALID_PASSWORD, role: Role = Role.external) 
         "role": role,
         "headers": _auth_headers_for_user(user_id=user_id, email=email, role=role),
     }
+
+
+def _admin_headers(admin_credentials: tuple[str, str]) -> dict[str, str]:
+    email, _password = admin_credentials
+    session = SessionLocal()
+    try:
+        user = get_user_by_email(session, email)
+        assert user is not None
+        return _auth_headers_for_user(user_id=int(user.id), email=user.email, role=user.role)
+    finally:
+        session.close()
 
 
 def _get_user(user_id: int) -> User:
@@ -138,14 +158,14 @@ def test_create_user_writes_audit_in_same_transaction(api_client, auth_headers, 
     assert audit.after_json == {"email": user.email, "role": user.role.value}
 
 
-def test_create_user_rolls_back_when_audit_write_fails(api_client, auth_headers, monkeypatch):
+def test_create_user_rolls_back_when_audit_write_fails(local_api_client, admin_credentials, monkeypatch):
     email = f"atomic-create-fail-{uuid4().hex[:12]}@example.com"
     monkeypatch.setattr(users_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.post(
+        local_api_client.post(
             "/users",
-            headers=auth_headers,
+            headers=_admin_headers(admin_credentials),
             json={
                 "email": email,
                 "full_name": "Atomic Create Fail",
@@ -176,14 +196,14 @@ def test_patch_role_change_writes_audit_in_same_transaction(api_client, auth_hea
     assert audit.after_json == {"role": Role.nurse.value}
 
 
-def test_patch_role_change_rolls_back_when_audit_write_fails(api_client, auth_headers, monkeypatch):
+def test_patch_role_change_rolls_back_when_audit_write_fails(local_api_client, admin_credentials, monkeypatch):
     user = _create_user(role=Role.external)
     monkeypatch.setattr(users_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.patch(
+        local_api_client.patch(
             f"/users/{user['user_id']}",
-            headers=auth_headers,
+            headers=_admin_headers(admin_credentials),
             json={"role": Role.nurse.value},
         )
 
@@ -211,15 +231,15 @@ def test_patch_password_writes_audit_in_same_transaction(api_client, auth_header
     assert audit.after_json == {"status": "success"}
 
 
-def test_patch_password_rolls_back_when_audit_write_fails(api_client, auth_headers, monkeypatch):
+def test_patch_password_rolls_back_when_audit_write_fails(local_api_client, admin_credentials, monkeypatch):
     user = _create_user()
     original = _get_user(int(user["user_id"]))
     monkeypatch.setattr(users_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.patch(
+        local_api_client.patch(
             f"/users/{user['user_id']}",
-            headers=auth_headers,
+            headers=_admin_headers(admin_credentials),
             json={"password": UPDATED_PASSWORD},
         )
 
@@ -248,15 +268,15 @@ def test_admin_reset_writes_audit_in_same_transaction(api_client, auth_headers, 
     assert audit.after_json == {"status": "issued"}
 
 
-def test_admin_reset_rolls_back_when_audit_write_fails(api_client, auth_headers, monkeypatch):
+def test_admin_reset_rolls_back_when_audit_write_fails(local_api_client, admin_credentials, monkeypatch):
     user = _create_user()
     original = _get_user(int(user["user_id"]))
     monkeypatch.setattr(users_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.post(
+        local_api_client.post(
             f"/users/{user['user_id']}/reset-password",
-            headers=auth_headers,
+            headers=_admin_headers(admin_credentials),
             json={"temp_password": UPDATED_PASSWORD},
         )
 
@@ -284,12 +304,12 @@ def test_password_reset_request_writes_audit_in_same_transaction(api_client):
     assert audit.after_json == {"email": user["email"], "status": "issued"}
 
 
-def test_password_reset_request_rolls_back_when_audit_write_fails(api_client, monkeypatch):
+def test_password_reset_request_rolls_back_when_audit_write_fails(local_api_client, monkeypatch):
     user = _create_user()
     monkeypatch.setattr(auth_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.post(
+        local_api_client.post(
             "/auth/password-reset/request",
             json={"email": user["email"]},
         )
@@ -321,14 +341,14 @@ def test_password_reset_confirm_writes_audit_in_same_transaction(api_client):
     assert audit.after_json == {"status": "success"}
 
 
-def test_password_reset_confirm_rolls_back_when_audit_write_fails(api_client, monkeypatch):
+def test_password_reset_confirm_rolls_back_when_audit_write_fails(local_api_client, monkeypatch):
     user = _create_user()
     token = _issue_reset_token(int(user["user_id"]))
     original = _get_user(int(user["user_id"]))
     monkeypatch.setattr(auth_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.post(
+        local_api_client.post(
             "/auth/password-reset/confirm",
             json={"token": token, "new_password": UPDATED_PASSWORD},
         )
@@ -359,13 +379,13 @@ def test_change_password_writes_audit_in_same_transaction(api_client):
     assert audit.after_json == {"status": "success"}
 
 
-def test_change_password_rolls_back_when_audit_write_fails(api_client, monkeypatch):
+def test_change_password_rolls_back_when_audit_write_fails(local_api_client, monkeypatch):
     user = _create_user()
     original = _get_user(int(user["user_id"]))
     monkeypatch.setattr(auth_router, "log_event", _boom)
 
     with pytest.raises(RuntimeError, match="audit write failed"):
-        api_client.post(
+        local_api_client.post(
             "/auth/change-password",
             headers=user["headers"],
             json={"old_password": user["password"], "new_password": UPDATED_PASSWORD},
