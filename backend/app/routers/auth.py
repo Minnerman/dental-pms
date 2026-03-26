@@ -17,7 +17,13 @@ from app.schemas.auth import (
     PasswordResetResponse,
     Token,
 )
-from app.services.users import get_user_by_email, reset_password_with_token, set_password, set_password_reset_token
+from app.services.users import (
+    PasswordPolicyError,
+    get_user_by_email,
+    reset_password_with_token,
+    set_password,
+    set_password_reset_token,
+)
 from app.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -138,7 +144,10 @@ def confirm_password_reset(
         db.commit()
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
     token_hash = hash_reset_token(payload.token)
-    user = reset_password_with_token(db, token_hash=token_hash, new_password=payload.new_password)
+    try:
+        user = reset_password_with_token(db, token_hash=token_hash, new_password=payload.new_password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if not user:
         log_event(
             db,
@@ -180,7 +189,10 @@ def change_password(
     elif payload.old_password and not verify_password(payload.old_password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password")
 
-    set_password(db, user=user, new_password=payload.new_password, must_change_password=False)
+    try:
+        set_password(db, user=user, new_password=payload.new_password, must_change_password=False)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     log_event(
         db,
         actor=user,

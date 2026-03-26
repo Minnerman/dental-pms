@@ -61,6 +61,49 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk136 completed on `password-policy-backend-centralisation` from `master@3eacd3d` to centralise backend password validation and harmonise the live password-setting policy without widening into RBAC, audit-transaction refactors, startup-schema cleanup, frontend redesign, or any R4 work.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `backend/app/schemas/auth.py`
+    - `backend/app/schemas/user.py`
+    - `backend/app/services/users.py`
+    - `backend/app/routers/auth.py`
+    - `backend/app/routers/users.py`
+    - `frontend/app/(auth)/change-password/page.tsx`
+    - `frontend/app/(auth)/reset-password/ResetPasswordClient.tsx`
+    - existing backend `/users` RBAC coverage and frontend auth reset proof
+  - Evidence for choosing this slice:
+    - self-service change/reset still accepted 8-character passwords while admin reset already required 12
+    - the actual backend write helpers hashed password inputs directly, so route/schema checks were not the final enforcement point
+    - `PATCH /users/{id}` could also write passwords without any dedicated schema minimum, which left the backend write path inconsistent with the intended policy
+    - bcrypt's 72-byte input limit was only enforced on the admin reset route, not across the shared password write helpers
+  - Exact slice implemented:
+    - added one shared backend password-policy validator in `backend/app/services/users.py` and routed `create_user`, `update_user`, `set_password`, and `reset_password_with_token` through it
+    - set the enforced policy to minimum `12` characters and maximum `72` UTF-8 bytes
+    - updated auth schemas so self-service change/reset now align to the same 12-character minimum
+    - removed the duplicated inline admin reset password checks and translated shared password-policy failures to `400` responses at the auth/users routers
+    - aligned the change-password and reset-password frontend forms so their local validation/messages now match the backend's 12-character minimum and 72-byte cap
+    - added focused backend regression coverage for self-service change password, self-service reset password, admin reset password, and `PATCH /users/{id}` for too-short rejection, over-72-byte rejection, and valid-password success
+  - Files changed in this slice:
+    - `backend/app/services/users.py`
+    - `backend/app/schemas/auth.py`
+    - `backend/app/schemas/user.py`
+    - `backend/app/routers/auth.py`
+    - `backend/app/routers/users.py`
+    - `backend/tests/admin/test_password_policy.py`
+    - `frontend/app/(auth)/change-password/page.tsx`
+    - `frontend/app/(auth)/reset-password/ResetPasswordClient.tsx`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `docker compose run --rm --build backend pytest -q tests/admin/test_password_policy.py tests/admin/test_users_rbac.py` -> pass (`42 passed`)
+    - `docker compose run --rm --build backend pytest -q` -> pass (`350 passed, 2 skipped`)
+    - `./ops/verify.sh` -> pass
+    - `docker compose exec -T backend pytest -q` -> pass (`350 passed, 2 skipped`)
+    - `./ops/health.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 files, routes, imports, or write paths were changed or used.
 - 2026-03-26: Stage 163H chunk135 completed on `users-rbac-superadmin-hardening` from `master@962f2db` to restore the documented superadmin-only `/users` management policy without widening into password-policy, audit-transaction, startup-schema, frontend, or any R4 work.
   - What was inspected before implementation:
     - `AGENTS.md`

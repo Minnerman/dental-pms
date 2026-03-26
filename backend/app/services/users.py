@@ -8,6 +8,21 @@ from app.core.security import hash_password, verify_password
 from app.models.user import Role, User
 from app.services.capabilities import ensure_capabilities, grant_all_capabilities
 
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_MAX_BYTES = 72
+
+
+class PasswordPolicyError(ValueError):
+    pass
+
+
+def validate_password_policy(password: str) -> str:
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise PasswordPolicyError(f"Password must be at least {PASSWORD_MIN_LENGTH} characters.")
+    if len(password.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        raise PasswordPolicyError(f"Password must be {PASSWORD_MAX_BYTES} bytes or fewer.")
+    return password
+
 
 def get_user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(User.email == email))
@@ -38,13 +53,14 @@ def create_user(
 ) -> User:
     ensure_capabilities(db)
     now = datetime.now(timezone.utc)
+    validated_password = validate_password_policy(password)
     user = User(
         email=email.lower().strip(),
         full_name=full_name,
         role=role,
         is_active=is_active,
         must_change_password=must_change_password,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(validated_password),
         created_at=now,
         updated_at=now,
     )
@@ -103,8 +119,9 @@ def update_user(
         user.role = role
     if is_active is not None:
         user.is_active = is_active
-    if password:
-        user.hashed_password = hash_password(password)
+    if password is not None:
+        validated_password = validate_password_policy(password)
+        user.hashed_password = hash_password(validated_password)
         user.must_change_password = False
     user.updated_at = datetime.now(timezone.utc)
     db.add(user)
@@ -120,7 +137,8 @@ def set_password(
     new_password: str,
     must_change_password: bool | None = None,
 ) -> User:
-    user.hashed_password = hash_password(new_password)
+    validated_password = validate_password_policy(new_password)
+    user.hashed_password = hash_password(validated_password)
     if must_change_password is not None:
         user.must_change_password = must_change_password
     user.updated_at = datetime.now(timezone.utc)
@@ -164,7 +182,8 @@ def reset_password_with_token(
     )
     if not user or not user.is_active:
         return None
-    user.hashed_password = hash_password(new_password)
+    validated_password = validate_password_policy(new_password)
+    user.hashed_password = hash_password(validated_password)
     user.must_change_password = False
     user.reset_token_used_at = now
     user.reset_token_hash = None

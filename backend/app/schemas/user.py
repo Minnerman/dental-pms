@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import Role as RoleEnum
+from app.services.users import PASSWORD_MIN_LENGTH
 
 
 class UserOut(BaseModel):
@@ -22,7 +23,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = ""
     role: RoleEnum
-    temp_password: str = Field(min_length=12)
+    temp_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class UserUpdate(BaseModel):
@@ -33,7 +34,7 @@ class UserUpdate(BaseModel):
 
 
 class UserPasswordResetRequest(BaseModel):
-    temp_password: str = Field(min_length=12)
+    temp_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class UserPasswordResetResponse(BaseModel):

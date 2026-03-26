@@ -24,8 +24,12 @@ export default function ResetPasswordClient() {
       setError("Enter a valid reset token.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (password.length < 12) {
+      setError("Password must be at least 12 characters.");
+      return;
+    }
+    if (new TextEncoder().encode(password).length > 72) {
+      setError("Password must be 72 bytes or fewer.");
       return;
     }
     if (password !== confirm) {
