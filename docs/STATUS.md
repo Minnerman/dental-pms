@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk140 completed on `patient-header-last-updated-metadata` from `master@439155d` to close the remaining narrow V1 patient-record metadata gap without reopening patient audit, appointments metadata, broader patient-page design, backend work, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires visible created / last-updated metadata for key entities
+    - the patient payload and frontend patient type already included `created_at`, `updated_at`, `created_by`, and `updated_by`
+    - the live patient header only surfaced `Created by`, while the appointment detail surface already exposed the stronger visible created/updated metadata pattern
+  - Exact slice implemented:
+    - added a patient-header metadata pill that shows `Last updated by <email> · <timestamp>` using the already-loaded patient record fields
+    - added a focused Playwright proof in `frontend/tests/patient-save.spec.ts` that edits patient details through the existing save flow and verifies the visible patient-header last-updated metadata changes after save
+    - no backend change was required; the frontend already received the needed metadata fields on current `master`
+  - Files changed in this slice:
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-save.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 files, routes, imports, queries, or write paths were changed or used.
 - 2026-03-26: Stage 163H chunk139 completed on `clinical-page-timeline-proof` from `master@c1a20fc` to close the remaining clinician proof gap for opening the clinical page with both chart and timeline content without reopening treatment-plan, BPE/furcation/perio, letter/PDF, broader patient-page work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`

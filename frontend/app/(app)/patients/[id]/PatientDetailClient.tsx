@@ -5580,6 +5580,15 @@ export default function PatientDetailClient({
                     Care {careSettingLabels[patient.care_setting]}
                   </span>
                   <span style={patientHeaderMetaPillStyle}>Created by {patient.created_by.email}</span>
+                  <span
+                    style={patientHeaderMetaPillStyle}
+                    data-testid="patient-header-updated-meta"
+                    data-iso={patient.updated_at}
+                  >
+                    Last updated by{" "}
+                    {patient.updated_by?.email || patient.created_by.email || "—"} ·{" "}
+                    {formatDateTime(patient.updated_at)}
+                  </span>
                 </div>
               </div>
 

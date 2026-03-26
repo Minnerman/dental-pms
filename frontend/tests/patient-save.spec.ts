@@ -107,6 +107,50 @@ test("patient personal save shows in-flight state and guards repeat submit", asy
   expect(savedPatient.notes).toBe(updatedNotes);
 });
 
+test("patient header last updated metadata changes after save", async ({ page, request }) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `META${unique}`,
+  });
+  const updatedNotes = `Patient header metadata proof ${unique}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  const header = page.getByTestId("patient-header-name");
+  const updatedMeta = page.getByTestId("patient-header-updated-meta");
+  await expect(header.getByText(/^Created by /)).toBeVisible();
+  await expect(updatedMeta).toBeVisible();
+  await expect(updatedMeta).toContainText("Last updated by");
+  const beforeIso = await updatedMeta.getAttribute("data-iso");
+  expect(beforeIso).toBeTruthy();
+
+  await page.getByTestId("patient-tab-Personal").click();
+  await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
+  await page.getByText("Patient details", { exact: true }).click();
+  const notesField = page.getByTestId("patient-notes-field");
+  await expect(notesField).toBeVisible();
+  await notesField.fill(updatedNotes);
+
+  const saveButton = page.getByTestId("patient-save-changes");
+  await saveButton.click();
+  await expect(saveButton).toHaveText("Save changes", { timeout: 15_000 });
+  await expect(saveButton).toBeEnabled();
+
+  await expect
+    .poll(async () => updatedMeta.getAttribute("data-iso"), {
+      timeout: 15_000,
+    })
+    .not.toBe(beforeIso);
+  await expect(updatedMeta).toContainText("Last updated by");
+  await expect(updatedMeta).not.toContainText("Created by");
+});
+
 test("patient audit page shows created and updated entries", async ({ page, request }) => {
   const unique = Date.now();
   const baseUrl = getBaseUrl();
