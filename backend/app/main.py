@@ -4,8 +4,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings, validate_settings
-from app.db.session import SessionLocal, engine
-from app.models import Base
+from app.db.session import SessionLocal
 from app.routers.auth import router as auth_router
 from app.routers.appointments import router as appointments_router
 from app.routers.invoices import router as invoices_router
@@ -61,7 +60,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 def startup():
     validate_settings(settings)
-    Base.metadata.create_all(bind=engine)
 
     admin_email = str(settings.admin_email)
     admin_password = settings.admin_password.strip()

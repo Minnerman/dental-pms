@@ -61,6 +61,31 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-26: Stage 163H chunk138 completed on `startup-remove-create-all` from `master@be77a9f` to remove startup schema creation so Alembic remains the only authoritative schema-management path without widening into a broader lifespan refactor, new migrations, frontend work, or any R4 change.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `backend/app/main.py`
+    - `backend/tests/conftest.py`
+    - CI and ops migration paths already using `alembic upgrade head`
+  - Evidence for choosing this slice:
+    - `backend/app/main.py` startup validated settings, then called `Base.metadata.create_all(bind=engine)` before any seeding work
+    - in-process backend tests hit startup via `TestClient(app)`, so that was the only plausible remaining dependency to re-check locally
+    - the repo's documented and automated schema bootstrap path already runs Alembic migrations explicitly, so leaving `create_all` in startup risked silent schema drift
+  - Exact slice implemented:
+    - removed the startup `Base.metadata.create_all(bind=engine)` call and its now-unused imports from `backend/app/main.py`
+    - added a focused backend regression test that monkeypatches `sqlalchemy.MetaData.create_all`, runs `startup()`, and proves startup still executes its seeding flow without invoking metadata-driven schema creation
+  - Files changed in this slice:
+    - `backend/app/main.py`
+    - `backend/tests/test_startup_schema_bootstrap.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm --build backend pytest -q tests/test_startup_schema_bootstrap.py` -> pass (`1 passed`)
+    - `docker compose run --rm --build backend pytest -q` -> pass (`365 passed, 2 skipped`)
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 files, routes, imports, queries, or write paths were changed or used.
 - 2026-03-26: Stage 163H chunk137 completed on `user-audit-transaction-hardening` from `master@ce51263` to make user/password mutations commit atomically with their audit records without widening into startup-schema cleanup, broader audit redesign, frontend work, or any R4 change.
   - What was inspected before implementation:
     - `AGENTS.md`
