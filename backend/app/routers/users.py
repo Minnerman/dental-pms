@@ -11,6 +11,7 @@ from app.services.audit import log_event
 from app.services.capabilities import get_user_capabilities, replace_user_capabilities
 from app.services.users import (
     PasswordPolicyError,
+    atomic_user_write,
     create_user,
     get_user_by_email,
     get_user_by_id,
@@ -39,26 +40,27 @@ def add_user(
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
     try:
-        user = create_user(
-            db,
-            email=payload.email,
-            password=payload.temp_password,
-            full_name=payload.full_name,
-            role=Role(payload.role),
-            is_active=True,
-            must_change_password=True,
-        )
+        with atomic_user_write(db):
+            user = create_user(
+                db,
+                email=payload.email,
+                password=payload.temp_password,
+                full_name=payload.full_name,
+                role=Role(payload.role),
+                is_active=True,
+                must_change_password=True,
+                commit=False,
+            )
+            log_event(
+                db,
+                actor=admin,
+                action="user.created",
+                entity_type="user",
+                entity_id=str(user.id),
+                after_data={"email": user.email, "role": user.role.value},
+            )
     except PasswordPolicyError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    log_event(
-        db,
-        actor=admin,
-        action="user.created",
-        entity_type="user",
-        entity_id=str(user.id),
-        after_data={"email": user.email, "role": user.role.value},
-    )
-    db.commit()
     return user
 
 
@@ -114,39 +116,49 @@ def patch_user(
             )
     previous_role = user.role
     previous_active = user.is_active
+    password_changed = payload.password is not None
     try:
-        updated = update_user(
-            db,
-            user=user,
-            full_name=payload.full_name,
-            role=Role(payload.role) if payload.role else None,
-            is_active=payload.is_active,
-            password=payload.password,
-        )
+        with atomic_user_write(db):
+            updated = update_user(
+                db,
+                user=user,
+                full_name=payload.full_name,
+                role=Role(payload.role) if payload.role else None,
+                is_active=payload.is_active,
+                password=payload.password,
+                commit=False,
+            )
+            if password_changed:
+                log_event(
+                    db,
+                    actor=admin,
+                    action="user.password_changed",
+                    entity_type="user",
+                    entity_id=str(updated.id),
+                    after_data={"status": "success"},
+                )
+            if payload.role and updated.role != previous_role:
+                log_event(
+                    db,
+                    actor=admin,
+                    action="user.role_changed",
+                    entity_type="user",
+                    entity_id=str(updated.id),
+                    before_data={"role": previous_role.value},
+                    after_data={"role": updated.role.value},
+                )
+            if payload.is_active is not None and updated.is_active != previous_active:
+                log_event(
+                    db,
+                    actor=admin,
+                    action="user.activated" if updated.is_active else "user.deactivated",
+                    entity_type="user",
+                    entity_id=str(updated.id),
+                    before_data={"is_active": previous_active},
+                    after_data={"is_active": updated.is_active},
+                )
     except PasswordPolicyError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    if payload.role and updated.role != previous_role:
-        log_event(
-            db,
-            actor=admin,
-            action="user.role_changed",
-            entity_type="user",
-            entity_id=str(updated.id),
-            before_data={"role": previous_role.value},
-            after_data={"role": updated.role.value},
-        )
-        db.commit()
-    if payload.is_active is not None and updated.is_active != previous_active:
-        log_event(
-            db,
-            actor=admin,
-            action="user.activated" if updated.is_active else "user.deactivated",
-            entity_type="user",
-            entity_id=str(updated.id),
-            before_data={"is_active": previous_active},
-            after_data={"is_active": updated.is_active},
-        )
-        db.commit()
     return updated
 
 
@@ -161,18 +173,24 @@ def reset_user_password(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     try:
-        set_password(db, user=user, new_password=payload.temp_password, must_change_password=True)
+        with atomic_user_write(db):
+            set_password(
+                db,
+                user=user,
+                new_password=payload.temp_password,
+                must_change_password=True,
+                commit=False,
+            )
+            log_event(
+                db,
+                actor=admin,
+                action="user.password_reset",
+                entity_type="user",
+                entity_id=str(user.id),
+                after_data={"status": "issued"},
+            )
     except PasswordPolicyError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    log_event(
-        db,
-        actor=admin,
-        action="user.password_reset",
-        entity_type="user",
-        entity_id=str(user.id),
-        after_data={"status": "issued"},
-    )
-    db.commit()
     return UserPasswordResetResponse(message="Temporary password set.")
 
 
