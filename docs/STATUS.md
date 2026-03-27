@@ -61,6 +61,32 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk147 completed on `patient-ledger-payment-audit-proof` from `master@1abb282` to close the remaining narrow V1 billing-audit proof gap for patient-ledger quick payments without reopening invoice billing, appointments, documents, auth/admin work, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PERMISSIONS_AND_AUDIT.md`
+    - `backend/app/routers/patients.py`
+    - `frontend/tests/patient-save.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/PERMISSIONS_AND_AUDIT.md` still names billing payment recorded as a minimum audited action
+    - current master already had settled quick-payment workflow proof on the patient ledger surface, but no focused proof that the patient-level `ledger.payment_recorded` audit row is actually written
+    - the patient ledger quick-payment route already logged `ledger.payment_recorded`, so the smallest justified next step was proof-only backend coverage
+  - Exact slice implemented:
+    - added a focused backend audit test that creates a patient, records a quick payment through `/patients/{id}/payments`, queries `/audit` for that patient entity, and verifies a stable `ledger.payment_recorded` entry captures the payment ledger details
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `backend/tests/patients/test_patient_ledger_audit.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm --build backend pytest -q tests/patients/test_patient_ledger_audit.py` -> pass
+    - `docker compose run --rm --build backend pytest -q` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk146 completed on `appointment-audit-reschedule-cancel-proof` from `master@4b4bcae` to close the remaining narrow V1 appointment-audit proof gap for reschedule and cancel without reopening appointment create/edit visibility, diary UX, billing, documents, auth/admin work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
