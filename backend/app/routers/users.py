@@ -212,13 +212,27 @@ def replace_capabilities(
     user_id: int,
     payload: UserCapabilitiesUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles("superadmin")),
+    admin: User = Depends(require_roles("superadmin")),
     __=Depends(require_capability("admin.permissions.manage")),
 ):
     user = get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     try:
-        return replace_user_capabilities(db, user_id, payload.capability_codes)
+        before_codes = [cap.code for cap in get_user_capabilities(db, user_id)]
+        with atomic_user_write(db):
+            updated = replace_user_capabilities(db, user_id, payload.capability_codes, commit=False)
+            after_codes = [cap.code for cap in updated]
+            if after_codes != before_codes:
+                log_event(
+                    db,
+                    actor=admin,
+                    action="user.capabilities_changed",
+                    entity_type="user",
+                    entity_id=str(user.id),
+                    before_data={"capability_codes": before_codes},
+                    after_data={"capability_codes": after_codes},
+                )
+        return updated
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
