@@ -4,6 +4,29 @@ import { expect, test } from "@playwright/test";
 import { createPatient } from "./helpers/api";
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
+test("patient attachments tab shows an empty-state CTA when no attachments exist", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Docs",
+    last_name: `Attach Empty ${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/attachments`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await expect(page.getByRole("heading", { name: "Attachments" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText("Loading attachments…")).toHaveCount(0);
+  await expect(page.getByText("No attachments yet.")).toBeVisible();
+  await expect(page.locator('[data-testid^="attachment-card-"]')).toHaveCount(0);
+  await expect(page.getByTestId("attachment-upload")).toBeVisible();
+});
+
 test("patient attachments upload, preview, download, delete", async ({ page, request }) => {
   const patientId = await createPatient(request, {
     first_name: "Docs",

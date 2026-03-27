@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk150 completed on `stage163h-chunk150-patient-attachments-empty-state-proof` from `master@6669884` to close the remaining narrow patient-attachments empty-state smoke gap without reopening the settled audit slices, broader patient-route redesign, billing, appointments, recalls, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientAttachments.tsx`
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `frontend/tests/patient-document-save.spec.ts`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `frontend/tests/patient-responsive.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` still explicitly requires the attachments tab to show an empty-state CTA when no attachments exist
+    - current master already renders the empty-state notice and upload control in `PatientAttachments.tsx`, but the focused attachments specs only covered upload, preview, download, delete, metadata, and in-flight behavior after items exist or uploads start
+    - a focused proof on the empty attachments state was the smallest live patient-route acceptance gap remaining after the patient-documents empty-state proof merged
+  - Exact slice implemented:
+    - added a focused Playwright proof that creates a new patient, opens `/patients/{id}/attachments`, and verifies the attachments heading, cleared loading state, empty-state notice, zero existing attachment cards, and visible upload CTA
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-attachments.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-attachments.spec.ts --grep "patient attachments tab shows an empty-state CTA when no attachments exist"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk149 completed on `stage163h-chunk149-patient-documents-empty-state-proof` from `master@b83f5aa` to close the remaining narrow patient-documents empty-state smoke gap without reopening the settled audit slices, broader patient-route redesign, billing, appointments, recalls, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
