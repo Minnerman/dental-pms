@@ -458,7 +458,7 @@ def add_payment(
         )
 
     payment = Payment(
-        invoice_id=invoice.id,
+        invoice=invoice,
         amount_pence=payload.amount_pence,
         method=payload.method,
         paid_at=payload.paid_at or datetime.now(timezone.utc),

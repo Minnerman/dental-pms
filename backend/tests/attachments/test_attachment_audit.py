@@ -131,3 +131,63 @@ def test_document_template_audit_entries(api_client, auth_headers):
     assert "document_template.updated" in actions
     assert "document_template.downloaded" in actions
     assert "document_template.deleted" in actions
+
+
+def test_billing_paid_receipt_audit_entries(api_client, auth_headers):
+    patient_res = api_client.post(
+        "/patients",
+        json={"first_name": "Billing", "last_name": "Audit"},
+        headers=auth_headers,
+    )
+    assert patient_res.status_code == 201, patient_res.text
+    patient_id = patient_res.json()["id"]
+
+    invoice_res = api_client.post(
+        "/invoices",
+        json={"patient_id": patient_id},
+        headers=auth_headers,
+    )
+    assert invoice_res.status_code == 201, invoice_res.text
+    invoice_id = invoice_res.json()["id"]
+
+    line_res = api_client.post(
+        f"/invoices/{invoice_id}/lines",
+        json={
+            "description": "Audit proof exam",
+            "quantity": 1,
+            "unit_price_pence": 2500,
+        },
+        headers=auth_headers,
+    )
+    assert line_res.status_code == 201, line_res.text
+
+    issue_res = api_client.post(
+        f"/invoices/{invoice_id}/issue",
+        headers=auth_headers,
+    )
+    assert issue_res.status_code == 200, issue_res.text
+
+    payment_res = api_client.post(
+        f"/invoices/{invoice_id}/payments",
+        json={"amount_pence": 2500, "method": "card"},
+        headers=auth_headers,
+    )
+    assert payment_res.status_code == 201, payment_res.text
+    payment_id = payment_res.json()["id"]
+
+    receipt_res = api_client.get(
+        f"/payments/{payment_id}/receipt.pdf",
+        headers=auth_headers,
+    )
+    assert receipt_res.status_code == 200, receipt_res.text
+
+    audit_res = api_client.get(
+        "/audit",
+        params={"entity_type": "invoice", "entity_id": str(invoice_id)},
+        headers=auth_headers,
+    )
+    assert audit_res.status_code == 200, audit_res.text
+    actions = {entry["action"] for entry in audit_res.json()}
+    assert "payment.recorded" in actions
+    assert "invoice.paid" in actions
+    assert "payment.receipt_generated" in actions
