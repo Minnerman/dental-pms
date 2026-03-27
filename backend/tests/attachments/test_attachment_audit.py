@@ -27,3 +27,56 @@ def test_attachment_audit_entries(api_client, auth_headers):
     actions = {entry["action"] for entry in audit_res.json()}
     assert "attachment.uploaded" in actions
     assert "attachment.deleted" in actions
+
+
+def test_patient_document_audit_entries(api_client, auth_headers):
+    patient_payload = {"first_name": "Document", "last_name": "Audit"}
+    patient_res = api_client.post("/patients", json=patient_payload, headers=auth_headers)
+    assert patient_res.status_code == 201, patient_res.text
+    patient_id = patient_res.json()["id"]
+
+    template_payload = {
+        "name": "Patient Document Audit Template",
+        "kind": "letter",
+        "content": "Audit body for {{patient.full_name}}",
+        "is_active": True,
+    }
+    template_res = api_client.post(
+        "/document-templates",
+        json=template_payload,
+        headers=auth_headers,
+    )
+    assert template_res.status_code == 201, template_res.text
+    template_id = template_res.json()["id"]
+
+    create_res = api_client.post(
+        f"/patients/{patient_id}/documents",
+        json={"template_id": template_id, "title": "Patient Document Audit Proof"},
+        headers=auth_headers,
+    )
+    assert create_res.status_code == 201, create_res.text
+    document_id = create_res.json()["id"]
+
+    download_res = api_client.get(
+        f"/patient-documents/{document_id}/download",
+        params={"format": "text"},
+        headers=auth_headers,
+    )
+    assert download_res.status_code == 200, download_res.text
+
+    delete_res = api_client.delete(
+        f"/patient-documents/{document_id}",
+        headers=auth_headers,
+    )
+    assert delete_res.status_code == 200, delete_res.text
+
+    audit_res = api_client.get(
+        "/audit",
+        params={"entity_type": "patient_document", "entity_id": str(document_id)},
+        headers=auth_headers,
+    )
+    assert audit_res.status_code == 200, audit_res.text
+    actions = {entry["action"] for entry in audit_res.json()}
+    assert "patient_document.created" in actions
+    assert "patient_document.downloaded" in actions
+    assert "patient_document.deleted" in actions

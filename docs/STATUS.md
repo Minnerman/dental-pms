@@ -61,6 +61,31 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk143 completed on `patient-document-audit-proof` from `master@79c8d00` to close the remaining narrow V1 audit proof gap for generated patient documents without reopening patient letter/PDF, broader documents redesign, frontend/UI, auth/admin work, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `backend/tests/attachments/test_attachment_audit.py`
+    - `backend/app/routers/patient_documents.py`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires minimal audit log entries for key actions
+    - the patient-document router already logged `patient_document.created`, `patient_document.downloaded`, and `patient_document.deleted`
+    - the repo already had focused workflow proof for patient-document save/download/delete UI and a focused attachment audit proof, but no direct proof that generated patient-document actions actually wrote audit rows
+  - Exact slice implemented:
+    - added a focused backend audit test that creates a patient document, downloads its text version, deletes it, queries `/audit` for that `patient_document` entity, and verifies `patient_document.created`, `patient_document.downloaded`, and `patient_document.deleted`
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `backend/tests/attachments/test_attachment_audit.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm --build backend pytest -q tests/attachments/test_attachment_audit.py` -> pass
+    - `docker compose run --rm --build backend pytest -q` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk142 completed on `appointment-edit-visible-persistence-proof` from `master@8146bcb` to close the remaining V1 proof gap on visible appointment edit persistence without reopening appointment create/reschedule/cancel, broader appointments redesign, auth/admin work, billing, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
