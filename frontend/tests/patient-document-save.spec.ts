@@ -3,6 +3,30 @@ import { expect, test } from "@playwright/test";
 import { createPatient } from "./helpers/api";
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
 
+test("patient documents tab shows an empty-state CTA when no generated documents exist", async ({
+  page,
+  request,
+}) => {
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Document",
+    last_name: "EmptyState",
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}/documents`, {
+    waitUntil: "domcontentloaded",
+  });
+
+  await expect(page.getByRole("heading", { name: "Generated documents" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText("Loading documents…")).toHaveCount(0);
+  await expect(page.getByText("No documents generated yet. Use a template above to create the first.")).toBeVisible();
+  await expect(page.locator('[data-testid^="patient-document-card-"]')).toHaveCount(0);
+  await expect(page.getByTestId("patient-document-template-select")).toBeVisible();
+});
+
 test("patient document save disables in-flight and guards repeat submit", async ({
   page,
   request,
