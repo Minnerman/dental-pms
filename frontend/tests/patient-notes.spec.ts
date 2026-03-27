@@ -10,6 +10,30 @@ async function waitForPatientClinicalPage(page: Page, patientId: string) {
   await expect(page.getByText("Loading patient…")).toHaveCount(0);
 }
 
+test("patient clinical route shows empty-state guidance when notes and procedures are empty", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `EMPTYCLIN${Date.now()}`,
+  });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+
+  const notesPanelButton = page.getByRole("button", { name: /^Notes \(\d+\)$/ });
+  await notesPanelButton.click();
+  await expect(page.getByText("Add clinical note", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText("No clinical notes recorded yet.")).toBeVisible();
+  await expect(page.getByText("No procedures recorded yet.")).toBeVisible();
+});
+
 test("patient notes tab allows selecting admin note type on create", async ({ page, request }) => {
   const unique = Date.now();
   const baseUrl = getBaseUrl();
