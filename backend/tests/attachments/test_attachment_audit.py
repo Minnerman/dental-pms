@@ -80,3 +80,54 @@ def test_patient_document_audit_entries(api_client, auth_headers):
     assert "patient_document.created" in actions
     assert "patient_document.downloaded" in actions
     assert "patient_document.deleted" in actions
+
+
+def test_document_template_audit_entries(api_client, auth_headers):
+    create_res = api_client.post(
+        "/document-templates",
+        json={
+            "name": "Template Audit Proof",
+            "kind": "letter",
+            "content": "Template audit proof body",
+            "is_active": True,
+        },
+        headers=auth_headers,
+    )
+    assert create_res.status_code == 201, create_res.text
+    template_id = create_res.json()["id"]
+
+    update_res = api_client.patch(
+        f"/document-templates/{template_id}",
+        json={
+            "name": "Template Audit Proof Updated",
+            "kind": "letter",
+            "content": "Template audit proof updated body",
+            "is_active": True,
+        },
+        headers=auth_headers,
+    )
+    assert update_res.status_code == 200, update_res.text
+
+    download_res = api_client.get(
+        f"/document-templates/{template_id}/download",
+        headers=auth_headers,
+    )
+    assert download_res.status_code == 200, download_res.text
+
+    delete_res = api_client.delete(
+        f"/document-templates/{template_id}",
+        headers=auth_headers,
+    )
+    assert delete_res.status_code == 200, delete_res.text
+
+    audit_res = api_client.get(
+        "/audit",
+        params={"entity_type": "document_template", "entity_id": str(template_id)},
+        headers=auth_headers,
+    )
+    assert audit_res.status_code == 200, audit_res.text
+    actions = {entry["action"] for entry in audit_res.json()}
+    assert "document_template.created" in actions
+    assert "document_template.updated" in actions
+    assert "document_template.downloaded" in actions
+    assert "document_template.deleted" in actions
