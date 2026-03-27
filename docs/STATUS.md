@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk145 completed on `billing-audit-proof` from `master@59c257b` to close the remaining narrow V1 audit proof gap for the billing paid-and-receipt path without reopening billing UI, invoice UX, broader audit redesign, auth/admin work, patient letter/PDF flow, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `backend/app/routers/invoices.py`
+    - `backend/app/routers/payments.py`
+    - `backend/tests/attachments/test_attachment_audit.py`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires minimal audit log entries for key actions
+    - the billing backend already logged `payment.recorded`, `invoice.paid`, and `payment.receipt_generated` on the invoice entity for the core paid-and-receipt path
+    - the repo already had focused workflow proof for payment and receipt UI behavior, but no direct proof that this billing path actually wrote the expected audit rows
+  - Exact slice implemented:
+    - added a focused backend audit test that creates a patient and invoice, adds a line, issues the invoice, records a full payment, generates the receipt PDF, queries `/audit` for that invoice entity, and verifies `payment.recorded`, `invoice.paid`, and `payment.receipt_generated`
+    - while running that proof, found a narrow live bug: the full-payment path missed `invoice.paid` because the just-created payment was attached by foreign key only, leaving the in-request invoice payments relationship stale during status recalculation
+    - fixed that bug in the payment handler by attaching the new `Payment` to the loaded `Invoice` relationship before recalculating status, which restored the `invoice.paid` audit event without widening the billing surface
+  - Files changed in this slice:
+    - `backend/app/routers/invoices.py`
+    - `backend/tests/attachments/test_attachment_audit.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm --build backend pytest -q tests/attachments/test_attachment_audit.py` -> pass
+    - `docker compose run --rm --build backend pytest -q` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk144 completed on `document-template-audit-proof` from `master@bfd48b2` to close the remaining narrow V1 audit proof gap for document templates without reopening template UI work, patient letter/PDF flow, broader documents redesign, auth/admin work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
