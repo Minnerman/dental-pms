@@ -61,6 +61,31 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk142 completed on `appointment-edit-visible-persistence-proof` from `master@8146bcb` to close the remaining V1 proof gap on visible appointment edit persistence without reopening appointment create/reschedule/cancel, broader appointments redesign, auth/admin work, billing, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires appointment create/edit/cancel readiness
+    - the existing appointment-edit proofs already covered updated metadata and duplicate-submit protection, but did not explicitly prove that an edited user-visible field rendered the new value after save and still showed the new value after refresh
+    - the existing main appointments-page edit implementation already updated local state and re-rendered the detail panel, so the smallest justified slice was proof-only
+  - Exact slice implemented:
+    - added a focused Playwright proof in `frontend/tests/appointments-booking.spec.ts` that opens an appointment from the main appointments page, edits appointment type, saves, verifies the updated type renders in the appointment detail panel, reloads, reopens the appointment, and verifies the edited type still persists after refresh
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/appointments-booking.spec.ts` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-26: Stage 163H chunk141 completed on `patient-document-creator-metadata` from `master@7dc7c30` to close the remaining narrow V1 generated-document metadata gap without reopening attachments behavior, preview/download flow, broader documents redesign, auth/admin work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
