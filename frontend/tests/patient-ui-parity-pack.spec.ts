@@ -234,3 +234,54 @@ test("stage160b patient tab shortcuts follow locked order", async ({ page, reque
     await expect(tab, `Shortcut failed for ${label}`).toHaveAttribute("aria-selected", "true");
   }
 });
+
+test("stage160b patient tab shortcuts are ignored while typing in editable fields", async ({
+  page,
+  request,
+}) => {
+  const representative = await resolvePatientRepresentativeSet(request, {
+    outputPath: representativeSetPath,
+  });
+  const first = representative.patients[0];
+  expect(first).toBeTruthy();
+  const baseUrl = getBaseUrl();
+
+  await primePageAuth(page, request);
+  const chartingEnabled = await fetchChartingViewerEnabled(baseUrl, request);
+  await page.goto(`${baseUrl}/patients/${first.patient_id}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientUiReady(page, first.patient_id, { expectChartingTab: chartingEnabled });
+
+  const personalTab = page.getByTestId("patient-tab-Personal");
+  const notesTab = page.getByTestId("patient-tab-Notes");
+  const treatmentTab = page.getByTestId("patient-tab-Treatment");
+
+  await notesTab.click();
+  await expect(notesTab).toHaveAttribute("aria-selected", "true");
+
+  const noteTypeSelect = page.getByTestId("patient-note-type-select");
+  await expect(noteTypeSelect).toBeVisible({ timeout: 15_000 });
+  await noteTypeSelect.focus();
+  await noteTypeSelect.press(buildShortcut(1));
+  await expect(notesTab).toHaveAttribute("aria-selected", "true");
+  await expect(personalTab).toHaveAttribute("aria-selected", "false");
+
+  const noteBody = page.getByPlaceholder("Write a clinical or admin note...");
+  await noteBody.fill("Shortcut guard note body");
+  await noteBody.press(buildShortcut(1));
+  await expect(notesTab).toHaveAttribute("aria-selected", "true");
+  await expect(personalTab).toHaveAttribute("aria-selected", "false");
+  await expect(noteBody).toHaveValue("Shortcut guard note body");
+
+  await treatmentTab.click();
+  await expect(treatmentTab).toHaveAttribute("aria-selected", "true");
+
+  const estimateNotes = page.getByTestId("patient-estimate-notes");
+  await expect(estimateNotes).toBeVisible({ timeout: 15_000 });
+  await estimateNotes.fill("Shortcut guard estimate note");
+  await estimateNotes.press(buildShortcut(1));
+  await expect(treatmentTab).toHaveAttribute("aria-selected", "true");
+  await expect(personalTab).toHaveAttribute("aria-selected", "false");
+  await expect(estimateNotes).toHaveValue("Shortcut guard estimate note");
+});

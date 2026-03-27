@@ -61,6 +61,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk153 completed on `stage163h-chunk153-patient-shortcut-editable-proof` from `master@fe2e617` to close the remaining Stage160B proof gap for patient tab shortcuts being ignored while typing, without reopening the settled patient booking, empty-state, PDF, audit, billing, appointments, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `frontend/tests/patient-estimate-pdf.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` still explicitly requires patient tab shortcuts to be ignored while typing in editable fields
+    - current master already had the `isEditableShortcutTarget(...)` guard in `PatientDetailClient.tsx`, but the existing Stage160B proof only covered positive `Ctrl/Cmd+1..8` navigation and did not directly prove the editable-field guard
+    - stronger adjacent candidates in patient smoke, UAT PDF flow, and responsive hardening were already directly covered on current master
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens the patient clinical route and verifies patient tab shortcuts do not switch tabs while focus is inside the note type select, note textarea, and treatment estimate notes input
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-ui-parity-pack.spec.ts --grep "stage160b patient tab shortcuts are ignored while typing in editable fields"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
 - 2026-03-27: Stage 163H chunk152 completed on `stage163h-chunk152-patient-booking-scroll-proof` from `master@38097b9` to close the remaining patient-summary booking-scroll smoke gap without reopening the settled audit slices, notes-detail flow, recent empty-state proofs, broader patient-route redesign, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
