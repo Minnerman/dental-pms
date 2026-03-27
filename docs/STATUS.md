@@ -61,6 +61,31 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk144 completed on `document-template-audit-proof` from `master@bfd48b2` to close the remaining narrow V1 audit proof gap for document templates without reopening template UI work, patient letter/PDF flow, broader documents redesign, auth/admin work, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `backend/tests/attachments/test_attachment_audit.py`
+    - `backend/app/routers/document_templates.py`
+  - Evidence for choosing this slice:
+    - `docs/V1_FINISH_LINE.md` still requires minimal audit log entries for key actions
+    - the document-template router already logged `document_template.created`, `document_template.updated`, `document_template.downloaded`, and `document_template.deleted`
+    - the repo already had focused workflow proof for template create/edit/download/delete UI, but no direct proof that document-template actions actually wrote audit rows
+  - Exact slice implemented:
+    - added a focused backend audit test that creates a document template, updates it, downloads it, deletes it, queries `/audit` for that `document_template` entity, and verifies `document_template.created`, `document_template.updated`, `document_template.downloaded`, and `document_template.deleted`
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `backend/tests/attachments/test_attachment_audit.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm --build backend pytest -q tests/attachments/test_attachment_audit.py` -> pass
+    - `docker compose run --rm --build backend pytest -q` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk143 completed on `patient-document-audit-proof` from `master@79c8d00` to close the remaining narrow V1 audit proof gap for generated patient documents without reopening patient letter/PDF, broader documents redesign, frontend/UI, auth/admin work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
