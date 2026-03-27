@@ -10,6 +10,42 @@ async function waitForPatientSummary(page: Page, patientId: string) {
   await expect(page.getByText("Loading patient…")).toHaveCount(0);
 }
 
+test("patient page Book appointment opens and scrolls the booking panel on summary tab", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `BOOKSCROLL${Date.now()}`,
+  });
+
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientSummary(page, patientId);
+
+  const scrollBeforeClick = await page.evaluate(() => Math.round(window.scrollY));
+  const bookingCard = page.locator("#patient-book-appointment");
+
+  await page.getByRole("button", { name: "Book appointment" }).click();
+
+  await expect(bookingCard).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(async () => page.evaluate(() => Math.round(window.scrollY)), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(scrollBeforeClick);
+  await expect
+    .poll(
+      async () =>
+        bookingCard.evaluate((node) => Math.round(node.getBoundingClientRect().top)),
+      { timeout: 15_000 }
+    )
+    .toBeLessThanOrEqual(140);
+});
+
 test("patient page booking shows in-flight state and guards repeat submit", async ({
   page,
   request,
