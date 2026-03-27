@@ -967,6 +967,57 @@ test("appointment last updated metadata changes after edit", async ({ page, requ
     .not.toBe(beforeIso);
 });
 
+test("appointment edited type stays visible after save and refresh", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const lastName = `Persist ${unique}`;
+  const updatedType = `Review ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Visible",
+    last_name: lastName,
+  });
+  await createAppointment(request, patientId, {
+    clinician_user_id: null,
+    starts_at: "2026-01-15T12:45:00.000Z",
+    ends_at: "2026-01-15T13:15:00.000Z",
+    location_type: "clinic",
+    location: "Room 7",
+  });
+
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const row = page.locator("tbody tr", { hasText: new RegExp(lastName, "i") }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.click();
+  await page.keyboard.press("Enter");
+
+  const detailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+  await detailPanel.getByRole("button", { name: "Edit" }).click();
+
+  const typeInput = detailPanel.getByTestId("edit-appointment-type");
+  await expect(typeInput).toBeVisible({ timeout: 15_000 });
+  await typeInput.fill(updatedType);
+  await detailPanel.getByTestId("appointment-edit-save").click();
+
+  await expect(page.getByText("Appointment updated.")).toBeVisible({ timeout: 15_000 });
+  await expect(detailPanel).toContainText(`Type: ${updatedType}`);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await openAppointments(page, request, page.url());
+  await page.getByTestId("appointments-view-day-sheet").click();
+  const reloadedRow = page.locator("tbody tr", { hasText: new RegExp(lastName, "i") }).first();
+  await expect(reloadedRow).toBeVisible({ timeout: 15_000 });
+  await reloadedRow.click();
+  await page.keyboard.press("Enter");
+
+  const reloadedDetailPanel = page.getByTestId("appointment-detail-panel");
+  await expect(reloadedDetailPanel).toBeVisible({ timeout: 15_000 });
+  await expect(reloadedDetailPanel).toContainText(`Type: ${updatedType}`);
+});
+
 test("appointment edit save shows in-flight state and guards repeat submit", async ({
   page,
   request,
