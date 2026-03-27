@@ -61,6 +61,36 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk151 completed on `stage163h-chunk151-patient-clinical-empty-state-proof` from `master@fe970b4` to close the remaining narrow clinical empty-state smoke gap without reopening the settled audit slices, appointments, billing, recalls, broader patient-route redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-notes.spec.ts`
+    - `frontend/tests/patient-booking.spec.ts`
+    - `frontend/tests/patient-responsive.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` still explicitly requires the clinical tab to show empty-state guidance for notes and procedures when empty
+    - current master already renders the empty-state notices in `PatientDetailClient.tsx`, but the focused clinical notes specs only covered create/save flows and did not directly prove the empty guidance state
+    - the adjacent remaining smoke items were already directly covered more strongly than this empty-state case, making this the smallest live acceptance gap
+  - Exact slice implemented:
+    - added a focused Playwright proof that creates a new patient, opens `/patients/{id}/clinical`, switches to the notes panel, and verifies the empty-state guidance for both clinical notes and recent procedures
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-notes.spec.ts --grep "patient clinical route shows empty-state guidance when notes and procedures are empty"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk150 completed on `stage163h-chunk150-patient-attachments-empty-state-proof` from `master@6669884` to close the remaining narrow patient-attachments empty-state smoke gap without reopening the settled audit slices, broader patient-route redesign, billing, appointments, recalls, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
