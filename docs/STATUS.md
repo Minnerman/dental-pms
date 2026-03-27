@@ -61,6 +61,34 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk152 completed on `stage163h-chunk152-patient-booking-scroll-proof` from `master@38097b9` to close the remaining patient-summary booking-scroll smoke gap without reopening the settled audit slices, notes-detail flow, recent empty-state proofs, broader patient-route redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-booking.spec.ts`
+    - `frontend/tests/patient-responsive.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` still explicitly requires the patient summary Book appointment action to open and scroll the booking panel
+    - current master already contained the scroll-anchor hardening in `PatientDetailClient.tsx`, but the focused booking specs only proved open/create flows and did not directly assert the scroll effect
+    - the stronger adjacent candidate from the previous pass was already directly covered, so this became the next smallest live acceptance gap
+  - Exact slice implemented:
+    - added a focused Playwright proof that creates a new patient, opens the summary page, clicks Book appointment, and verifies the booking panel both opens and is scrolled into view
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-booking.spec.ts`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `cd frontend && npm run typecheck` -> pass
+    - `cd frontend && set -a; . /home/amir/dental-pms/.env; set +a; npx playwright test tests/patient-booking.spec.ts --grep "patient page Book appointment opens and scrolls the booking panel on summary tab"` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
 - 2026-03-27: Stage 163H chunk151 completed on `stage163h-chunk151-patient-clinical-empty-state-proof` from `master@fe970b4` to close the remaining narrow clinical empty-state smoke gap without reopening the settled audit slices, appointments, billing, recalls, broader patient-route redesign, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
