@@ -109,11 +109,16 @@ def replace_user_capabilities(
     db: Session,
     user_id: int,
     capability_codes: list[str],
+    *,
+    commit: bool = True,
 ) -> list[Capability]:
     codes = [code.strip() for code in capability_codes if code.strip()]
     if not codes:
         db.execute(delete(UserCapability).where(UserCapability.user_id == user_id))
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return []
     capabilities = list(
         db.scalars(select(Capability).where(Capability.code.in_(codes)))
@@ -125,7 +130,10 @@ def replace_user_capabilities(
     db.execute(delete(UserCapability).where(UserCapability.user_id == user_id))
     for cap in capabilities:
         db.add(UserCapability(user_id=user_id, capability_id=cap.id))
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return list(
         db.scalars(
             select(Capability)

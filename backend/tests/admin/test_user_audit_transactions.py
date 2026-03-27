@@ -15,6 +15,7 @@ from app.models.audit_log import AuditLog
 from app.models.user import Role, User
 from app.routers import auth as auth_router
 from app.routers import users as users_router
+from app.services.capabilities import CAPABILITIES, get_user_capabilities
 from app.services.users import create_user, get_user_by_email, get_user_by_id, set_password_reset_token
 
 VALID_PASSWORD = "AuditAtomic12!"
@@ -110,6 +111,14 @@ def _get_audit(action: str, entity_id: str) -> AuditLog | None:
         if audit is not None:
             session.expunge(audit)
         return audit
+    finally:
+        session.close()
+
+
+def _get_capability_codes(user_id: int) -> list[str]:
+    session = SessionLocal()
+    try:
+        return [cap.code for cap in get_user_capabilities(session, user_id)]
     finally:
         session.close()
 
@@ -395,3 +404,42 @@ def test_change_password_rolls_back_when_audit_write_fails(local_api_client, mon
     assert current.hashed_password == original.hashed_password
     assert verify_password(user["password"], current.hashed_password)
     assert _get_audit("user.password_changed", str(current.id)) is None
+
+
+def test_replace_capabilities_writes_audit_in_same_transaction(api_client, auth_headers, admin_credentials):
+    user = _create_user(role=Role.reception)
+
+    response = api_client.put(
+        f"/users/{user['user_id']}/capabilities",
+        headers=auth_headers,
+        json={"capability_codes": ["patients.view"]},
+    )
+
+    assert response.status_code == 200, response.text
+    updated_codes = [item["code"] for item in response.json()]
+    assert updated_codes == ["patients.view"]
+
+    audit = _get_audit("user.capabilities_changed", str(user["user_id"]))
+    assert audit is not None
+    assert audit.actor_email == admin_credentials[0]
+    assert set(audit.before_json["capability_codes"]) == {code for code, _ in CAPABILITIES}
+    assert audit.after_json == {"capability_codes": ["patients.view"]}
+    assert _get_capability_codes(int(user["user_id"])) == ["patients.view"]
+
+
+def test_replace_capabilities_rolls_back_when_audit_write_fails(
+    local_api_client, admin_credentials, monkeypatch
+):
+    user = _create_user(role=Role.reception)
+    original_codes = _get_capability_codes(int(user["user_id"]))
+    monkeypatch.setattr(users_router, "log_event", _boom)
+
+    with pytest.raises(RuntimeError, match="audit write failed"):
+        local_api_client.put(
+            f"/users/{user['user_id']}/capabilities",
+            headers=_admin_headers(admin_credentials),
+            json={"capability_codes": ["patients.view"]},
+        )
+
+    assert _get_capability_codes(int(user["user_id"])) == original_codes
+    assert _get_audit("user.capabilities_changed", str(user["user_id"])) is None

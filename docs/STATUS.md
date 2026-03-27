@@ -61,6 +61,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-27: Stage 163H chunk148 completed on `capability-change-audit-proof` from `master@33b67a9` to close the remaining narrow audit-plan gap for capability changes without reopening the settled `/users` RBAC policy, broader auth/admin redesign, billing, appointments, or any R4 surface.
+  - What was inspected before implementation:
+    - `AGENTS.md`
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PERMISSIONS_AND_AUDIT.md`
+    - `backend/app/routers/users.py`
+    - `backend/app/services/capabilities.py`
+    - `backend/tests/admin/test_user_audit_transactions.py`
+    - `backend/tests/capabilities/test_capabilities_api.py`
+  - Evidence for choosing this slice:
+    - `docs/PERMISSIONS_AND_AUDIT.md` still names permission capability changes as a minimum audited action when enabled
+    - current master already exposes live capability management endpoints under `/users/{id}/capabilities`
+    - the capability replacement path committed directly with no audit log entry at all, so this was a real product gap rather than only a missing proof
+  - Exact slice implemented:
+    - updated the capability replacement path to stage changes under the existing atomic user-write helper and log `user.capabilities_changed` with stable before/after capability code lists
+    - added focused backend proof that capability replacement writes the audit row and rolls back the change if the audit write fails
+  - Files changed in this slice:
+    - `backend/app/routers/users.py`
+    - `backend/app/services/capabilities.py`
+    - `backend/tests/admin/test_user_audit_transactions.py`
+    - `docs/STATUS.md`
+  - Validation on this stop-point:
+    - `docker compose run --rm --build backend pytest -q tests/admin/test_user_audit_transactions.py` -> pass
+    - `docker compose run --rm --build backend pytest -q tests/capabilities/test_capabilities_api.py` -> pass
+    - `docker compose run --rm --build backend pytest -q` -> pass
+    - `./ops/health.sh` -> pass
+    - `./ops/verify.sh` -> pass
+    - `git diff --check` -> pass
+  - R4 untouched: no R4 reads/writes were added, and no R4-side mutation occurred.
 - 2026-03-27: Stage 163H chunk147 completed on `patient-ledger-payment-audit-proof` from `master@1abb282` to close the remaining narrow V1 billing-audit proof gap for patient-ledger quick payments without reopening invoice billing, appointments, documents, auth/admin work, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
