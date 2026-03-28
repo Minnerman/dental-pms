@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk157 started on `stage163h-chunk157-patient-header-alerts-proof` from `master@994f1fc` to close the remaining narrow Stage161 patient-header alerts proof gap without reopening the settled smoke slices, keyboard ambiguity, broader patient redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `frontend/tests/patient-save.spec.ts`
+    - `backend/app/routers/patients.py`
+    - `backend/app/schemas/patient.py`
+  - Evidence for choosing this slice:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` Stage 161 still requires the patient header to surface medical, financial, and notes flags plus recall status at header level
+    - current master already rendered those header alerts from saved patient fields, but existing coverage only proved header block order, quick actions, and quick links
+    - stronger remaining manual-smoke, UAT PDF, responsive, and Stage160B candidates were already directly covered or explicitly abandoned as ambiguous
+  - Exact slice implemented:
+    - added a focused Playwright proof that seeds a patient through the existing update API with medical, financial, notes, and recall data, then verifies the header alerts block surfaces the expected badges and detail text on the live patient route
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk156 started on `stage163h-chunk156-patient-header-quick-links-proof` from `master@3beaa76` to close the remaining narrow Stage161 header quick-links proof gap without reopening the settled patient smoke slices, shortcut ambiguity, broader patient redesign, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
