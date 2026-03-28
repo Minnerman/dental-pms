@@ -81,6 +81,26 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Files changed in this slice:
     - `frontend/tests/charting-parity.spec.ts`
     - `docs/STATUS.md`
+- 2026-03-28: Stage 163H chunk169 started on `stage163h-chunk169-appointments-z-start-proof` from `master@f2190eb` to close the next narrow appointments deep-link proof gap for UTC `start` handling without reopening settled patient/header work, broader calendar route-state cases, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` Stage 31 still explicitly requires deep link `/appointments?book=1&start=2026-01-14T13:30:00Z` to convert to local time
+    - current live appointments page already routes timezone-bearing `start` params through `parseStartParam(...)` and `toLocalDateTimeInput(...)`, but current master had no direct proof for the UTC-start path
+    - the remaining date/view/day-sheet deep-link cases widen into broader route-state behavior, so this was the smallest live-surface hardening gap left
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens `/appointments?book=1&start=2026-01-14T13:30:00Z`, verifies the booking modal opens, verifies the surfaced `booking-start` value matches the browser-local conversion of the UTC timestamp, and confirms that value persists after the one-time `book` param cleanup
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk168 started on `stage163h-chunk168-appointments-invalid-start-proof` from `master@2eb5a2a` to close the remaining narrow appointments deep-link hardening gap for invalid `start` handling without reopening settled patient/header slices, broader appointments routing work, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
