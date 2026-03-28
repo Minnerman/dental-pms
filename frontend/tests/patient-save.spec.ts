@@ -166,6 +166,44 @@ test("patient header last updated metadata changes after save", async ({ page, r
   await expect(updatedMeta).not.toContainText("Created by");
 });
 
+test("patient clinical header name block surfaces patient id and provenance context", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const firstName = "Stage163H";
+  const lastName = `HEADERNAME${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: firstName,
+    last_name: lastName,
+  });
+  const token = await primePageAuth(page, request);
+
+  await patchPatient(request, token, patientId, {
+    patient_category: "DOMICILIARY_PRIVATE",
+    care_setting: "CARE_HOME",
+  });
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/clinical(?:\\?|$)`));
+  await expect(page.getByTestId("patient-header-name")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Loading patient…")).toHaveCount(0);
+  await expect(page.getByText("Loading clinical…")).toHaveCount(0);
+
+  const headerName = page.getByTestId("patient-header-name");
+  await expect(
+    headerName.getByRole("heading", { level: 2, name: `${firstName} ${lastName}` })
+  ).toBeVisible();
+  await expect(headerName).toContainText(`Patient #${patientId}`);
+  await expect(headerName).toContainText("Category Domiciliary (Private)");
+  await expect(headerName).toContainText("Care Care home");
+  await expect(headerName.getByText(/^Created by /)).toBeVisible();
+  await expect(headerName.getByText(/^Last updated by /)).toBeVisible();
+});
+
 test("patient header quick actions show call and email when contact details are saved", async ({
   page,
   request,
