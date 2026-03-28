@@ -10,6 +10,21 @@ async function waitForPatientPersonalTab(page: Page, patientId: string) {
   await expect(page.getByText("Loading patient…")).toHaveCount(0);
 }
 
+async function patchPatient(
+  request: Parameters<typeof createPatient>[0],
+  token: string,
+  patientId: string,
+  payload: Record<string, unknown>
+) {
+  const baseUrl = getBaseUrl();
+  const response = await request.patch(`${baseUrl}/api/patients/${patientId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: payload,
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
 test("patient personal save shows in-flight state and guards repeat submit", async ({
   page,
   request,
@@ -212,6 +227,51 @@ test("patient header quick actions show call and email when contact details are 
     "href",
     `mailto:${email}`
   );
+});
+
+test("patient header alerts surface medical financial notes and recall status", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `HEADERALERTS${unique}`,
+  });
+  const token = await primePageAuth(page, request);
+  const allergy = `Penicillin ${unique}`;
+  const medicalAlert = `Warfarin ${unique}`;
+  const financialAlert = `Finance review ${unique}`;
+  const notesAlert = `Interpreter required ${unique}`;
+  const dueDate = "2026-12-15";
+
+  await patchPatient(request, token, patientId, {
+    allergies: allergy,
+    medical_alerts: medicalAlert,
+    alerts_financial: financialAlert,
+    notes: notesAlert,
+    recall_due_date: dueDate,
+    recall_status: "booked",
+  });
+
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  const headerAlerts = page.getByTestId("patient-header-alerts");
+  await expect(headerAlerts.getByText("No alerts")).toHaveCount(0);
+  await expect(headerAlerts.getByText("Recall not set")).toHaveCount(0);
+  await expect(headerAlerts.locator(".badge", { hasText: /^Medical$/ })).toBeVisible();
+  await expect(headerAlerts.locator(".badge", { hasText: /^Financial$/ })).toBeVisible();
+  await expect(headerAlerts.locator(".badge", { hasText: /^Notes$/ })).toBeVisible();
+  await expect(
+    headerAlerts.locator(".badge", { hasText: /^Recall Booked · 15\/12\/2026$/ })
+  ).toBeVisible();
+  await expect(headerAlerts).toContainText(`Medical: ${allergy} · ${medicalAlert}`);
+  await expect(headerAlerts).toContainText(`Financial: ${financialAlert}`);
+  await expect(headerAlerts).toContainText(`Notes: ${notesAlert}`);
 });
 
 test("patient audit page shows created and updated entries", async ({ page, request }) => {
