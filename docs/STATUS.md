@@ -61,6 +61,30 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk162 started on `stage163h-chunk162-appointments-clinician-deeplink-proof` from `master@6fe3f95` to close the remaining narrow appointments deep-link proof gap for clinician preselection without reopening settled patient/header slices, broader appointments redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/tests/patient-booking.spec.ts`
+    - `frontend/tests/helpers/auth.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `backend/app/routers/users.py`
+    - `backend/app/schemas/user.py`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` Stage 31 still explicitly requires optional deep link `/appointments?book=1&clinicianId=2` to preselect clinician in the booking flow
+    - current live appointments page still implements `clinicianId` deep-link handling, but current master had no direct proof for that preselection path
+    - stronger remaining patient-route/header candidates were already directly covered or explicitly abandoned as too wide or ambiguous
+  - Exact slice implemented:
+    - added a focused Playwright proof that fetches a live active user, opens `/appointments?date=2026-01-15&book=1&clinicianId=<id>`, and verifies the booking modal preselects that clinician both on first open and after the `book` param is cleaned from the URL
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk161 started on `stage163h-chunk161-appointments-booking-smoke-fix` from `master@42f800b` to isolate and fix the reproduced unrelated appointments smoke blocker discovered while reviewing PR #497, without touching the sticky-header slice, widening into broader appointments redesign, or touching any R4 surface.
   - What was inspected before implementation:
     - `frontend/tests/appointments-booking.spec.ts`

@@ -207,6 +207,37 @@ test("appointments navigation back/forward keeps modal state consistent", async 
   }
 });
 
+test("appointments deep link preselects clinician in booking flow", async ({
+  page,
+  request,
+}) => {
+  const token = await ensureAuthReady(request);
+  const usersResponse = await request.get(`${getBaseUrl()}/api/users`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(usersResponse.ok()).toBeTruthy();
+  const users = (await usersResponse.json()) as Array<{ id: number; is_active: boolean }>;
+  const clinician = users.find((user) => user.is_active);
+  test.skip(!clinician, "No active users available for clinician deep-link preselect coverage");
+
+  await openAppointments(
+    page,
+    request,
+    `/appointments?date=2026-01-15&book=1&clinicianId=${clinician!.id}`
+  );
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+
+  const clinicianSelect = page
+    .getByTestId("booking-modal")
+    .getByText("Clinician (optional)", { exact: true })
+    .locator("xpath=following-sibling::select[1]");
+  await expect(clinicianSelect).toBeVisible();
+  await expect(clinicianSelect).toHaveValue(String(clinician!.id));
+
+  await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
+  await expect(clinicianSelect).toHaveValue(String(clinician!.id));
+});
+
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
