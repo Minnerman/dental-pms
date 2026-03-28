@@ -2,6 +2,14 @@
 
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
+## Pause / handover
+- V1 is closed on `master@bf91a1face93655d48a63c9543cab29049bc4228`.
+- There is no active implementation slice; PR #506 remains deferred to V1.1 and is not a V1 blocker.
+- V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
+- When development resumes: sync `master`, confirm the current baseline/latest SHA, review this file, and choose the next smallest V1.1 item only.
+- Do not reopen V1 unless a real regression is proven.
+- R4 remains strictly SELECT-only/read-only.
+
 ## What's working now
 - Auth + RBAC with admin-only `/users`
 - Patients list/create/edit + notes per patient

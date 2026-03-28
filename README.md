@@ -2,6 +2,14 @@
 
 Dental Practice Management System (PMS) with a R4-style workflow: patient tabs, day sheet diary, and patient-led booking.
 
+## Current project state
+- V1 is closed.
+- The repo is currently paused on `master@bf91a1face93655d48a63c9543cab29049bc4228`.
+- `docs/STATUS.md` is the source of truth for continuation and V1 closure evidence.
+- The next phase is V1.1, not V1 closeout.
+- On resume: sync `master`, confirm the latest baseline SHA, review `docs/STATUS.md`, choose the next smallest V1.1 item, and do not reopen V1 unless a real regression is proven.
+- R4 remains strictly read-only.
+
 ## Safety
 This project lives ONLY in `~/dental-pms`. Do not mix it with other server projects.
 
