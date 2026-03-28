@@ -277,6 +277,36 @@ test("appointments deep link prefills start time in booking flow", async ({ page
   await expect(startInput).toHaveValue(startValue);
 });
 
+test("appointments deep link prefills patient and start together in booking flow", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `AAABOTH${Date.now()}`,
+  });
+  const startValue = "2026-01-14T13:30";
+
+  await openAppointments(
+    page,
+    request,
+    `/appointments?book=1&patientId=${patientId}&start=${startValue}`
+  );
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+
+  const patientSelect = page.getByTestId("booking-patient-select");
+  const startInput = page.getByTestId("booking-start");
+  await expect(patientSelect.locator(`option[value="${patientId}"]`)).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  await expect(patientSelect).toHaveValue(String(patientId));
+  await expect(startInput).toHaveValue(startValue);
+
+  await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
+  await expect(patientSelect).toHaveValue(String(patientId));
+  await expect(startInput).toHaveValue(startValue);
+});
+
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
