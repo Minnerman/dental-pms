@@ -180,6 +180,15 @@ function getNotesPanel(page: Page) {
     .filter({ has: page.locator(".panel-title", { hasText: "Patient notes" }) });
 }
 
+async function getReadyNotesPanel(page: Page) {
+  const notesPanel = getNotesPanel(page);
+  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
+  const notesInput = page.getByPlaceholder("Find text...");
+  await expect(notesInput).toBeVisible({ timeout: 30_000 });
+  await notesInput.scrollIntoViewIfNeeded();
+  return getNotesPanel(page);
+}
+
 function getPanelInput(panel: Locator, label: string) {
   return panel
     .locator("label", { hasText: label })
@@ -578,9 +587,7 @@ test("charting filters reduce totals in UI", async ({ page, request }) => {
   });
   await waitForChartingReady(page);
 
-  const notesPanel = getNotesPanel(page);
-  await expect(notesPanel).toBeVisible();
-  await notesPanel.scrollIntoViewIfNeeded();
+  const notesPanel = await getReadyNotesPanel(page);
   const notesBadge = notesPanel.locator(".badge", { hasText: "Showing" }).first();
   await expect(notesBadge).toHaveText(/Showing\s+\d+\s+records/i, {
     timeout: 30_000,
@@ -621,9 +628,7 @@ test("charting notes preset export/import roundtrip", async ({ page, request }) 
   });
   await waitForChartingReady(page);
 
-  const notesPanel = getNotesPanel(page);
-  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
-  await notesPanel.scrollIntoViewIfNeeded();
+  const notesPanel = await getReadyNotesPanel(page);
   const notesInput = notesPanel.getByPlaceholder("Find text...");
   await notesInput.fill("note 1");
   await page.waitForTimeout(400);
@@ -671,9 +676,7 @@ test("charting notes share link roundtrip (non-text filters)", async ({ page, re
   });
   await waitForChartingReady(page);
 
-  const notesPanel = getNotesPanel(page);
-  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
-  await notesPanel.scrollIntoViewIfNeeded();
+  const notesPanel = await getReadyNotesPanel(page);
 
   const fromInput = getPanelInput(notesPanel, "From");
   const toInput = getPanelInput(notesPanel, "To");
@@ -741,9 +744,7 @@ test("charting notes share link includes text search when opted in", async ({
   });
   await waitForChartingReady(page);
 
-  const notesPanel = getNotesPanel(page);
-  await expect(notesPanel).toBeVisible({ timeout: 30_000 });
-  await notesPanel.scrollIntoViewIfNeeded();
+  const notesPanel = await getReadyNotesPanel(page);
   await notesPanel.getByPlaceholder("Find text...").fill("note 1");
   await notesPanel.getByLabel("Include text search in link").check();
   await notesPanel.getByRole("button", { name: "Copy filter link" }).click();

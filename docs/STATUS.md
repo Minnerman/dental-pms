@@ -61,6 +61,26 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk170 started on `stage163h-chunk170-charting-parity-notes-fix` from `master@f2190eb` to isolate the unrelated charting parity blocker on PR #506 without changing the UTC-start deep-link slice, broader charting behavior, or any R4 surface.
+  - What was inspected before implementation:
+    - `frontend/tests/charting-parity.spec.ts`
+    - `frontend/tests/helpers/clipboard.ts`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `backend/app/routers/clinical.py`
+    - `.github/workflows/playwright-smoke.yml`
+    - `docs/STATUS.md`
+  - Evidence for choosing this slice:
+    - PR #506's new appointments UTC-start proof passed review and was not implicated by the failing required check
+    - the reproduced parity blocker was in `frontend/tests/charting-parity.spec.ts` for `charting notes preset export/import roundtrip`
+    - CI failed at `notesPanel.scrollIntoViewIfNeeded()` with `Element is not attached to the DOM`, which points to a stale notes-panel locator during charting-view rerender rather than a broken notes preset export/import flow
+    - the same brittle notes-panel scroll pattern was repeated across the nearby notes parity tests, so a tiny helper to scroll a stable notes input and reacquire the panel was the smallest justified hardening
+  - Exact slice implemented:
+    - added a focused `getReadyNotesPanel(...)` helper in `frontend/tests/charting-parity.spec.ts`
+    - updated the notes parity tests to use that helper before interacting with notes filters, preset, and share-link controls
+    - kept the slice test-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/charting-parity.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk168 started on `stage163h-chunk168-appointments-invalid-start-proof` from `master@2eb5a2a` to close the remaining narrow appointments deep-link hardening gap for invalid `start` handling without reopening settled patient/header slices, broader appointments routing work, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
