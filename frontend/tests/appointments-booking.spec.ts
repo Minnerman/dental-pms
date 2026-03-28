@@ -357,8 +357,6 @@ test("appointment creation appears in clinician diary immediately and persists a
   await clickNewAppointment(page);
 
   await selectBookingPatient(page, patientId, lastName);
-  const bookableSlot = await fillBookableClinicSlot(page, testDate, unique);
-  await page.getByTestId("booking-location-room").fill(room);
 
   const clinicianSelect = page.getByTestId("booking-modal").locator("select").nth(2);
   await expect
@@ -387,6 +385,8 @@ test("appointment creation appears in clinician diary immediately and persists a
 
   await clinicianSelect.selectOption(clinicianOption!.value);
   const expectedClinicianLabel = clinicianOption!.label.replace(/\s+\([^)]*\)\s*$/, "");
+  const bookableSlot = await fillBookableClinicSlot(page, testDate, unique);
+  await page.getByTestId("booking-location-room").fill(room);
   const diaryColumns = page.getByTestId("appointments-diary-columns");
   const clinicianFilter = page.getByTestId("appointments-diary-clinician-filter");
 
