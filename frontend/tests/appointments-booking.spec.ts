@@ -238,6 +238,32 @@ test("appointments deep link preselects clinician in booking flow", async ({
   await expect(clinicianSelect).toHaveValue(String(clinician!.id));
 });
 
+test("appointments deep link preselects patient in booking flow", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `AAADEEPLINK${Date.now()}`,
+  });
+
+  await openAppointments(
+    page,
+    request,
+    `/appointments?date=2026-01-15&book=1&patientId=${patientId}`
+  );
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+
+  const patientSelect = page.getByTestId("booking-patient-select");
+  await expect(patientSelect.locator(`option[value="${patientId}"]`)).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  await expect(patientSelect).toHaveValue(String(patientId));
+
+  await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
+  await expect(patientSelect).toHaveValue(String(patientId));
+});
+
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
