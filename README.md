@@ -4,7 +4,7 @@ Dental Practice Management System (PMS) with a R4-style workflow: patient tabs, 
 
 ## Current project state
 - V1 is closed.
-- The repo is currently paused on `master@bf91a1face93655d48a63c9543cab29049bc4228`.
+- The repo is currently paused on `master@eda8cd0bbd0488f0dbb37bc26fc91a8f4f47dfdd`.
 - `docs/STATUS.md` is the source of truth for continuation and V1 closure evidence.
 - The next phase is V1.1, not V1 closeout.
 - On resume: sync `master`, confirm the latest baseline SHA, review `docs/STATUS.md`, choose the next smallest V1.1 item, and do not reopen V1 unless a real regression is proven.
