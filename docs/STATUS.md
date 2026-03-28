@@ -61,6 +61,23 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk161 started on `stage163h-chunk161-appointments-booking-smoke-fix` from `master@42f800b` to isolate and fix the reproduced unrelated appointments smoke blocker discovered while reviewing PR #497, without touching the sticky-header slice, widening into broader appointments redesign, or touching any R4 surface.
+  - What was inspected before implementation:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/tests/helpers/api.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `backend/app/routers/appointments.py`
+    - `docs/STATUS.md`
+  - Evidence for choosing this slice:
+    - PR #497 itself stayed proof-only and its new sticky-header test passed both locally and in CI reruns
+    - the blocking required check reproduced twice in the same existing appointments smoke test: `appointment creation appears in clinician diary immediately and persists after refresh`
+    - the failing smoke path chose a slot before selecting a clinician, while the appointments UI and backend both enforce clinician conflict checks at submit time
+  - Exact slice implemented:
+    - hardened the blocking smoke test so it selects the clinician before searching for a bookable slot, allowing the existing submit-enabled polling to account for clinician conflict checks before submit
+    - kept the fix test-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk159 started on `stage163h-chunk159-patient-header-name-proof` from `master@47fe52b` to close the remaining narrow Stage161 patient-header name/provenance proof gap without reopening the settled smoke slices, header legacy-identifier ambiguity, broader patient redesign, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
