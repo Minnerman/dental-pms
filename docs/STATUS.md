@@ -61,6 +61,16 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: V1 release-candidate signoff completed on `master@5e37681` with the V1 board frozen to the 9 finish-line conditions only, no product scope changes, PR #506 explicitly deferred to V1.1, and R4 kept read-only throughout.
+  - Signoff evidence captured on the exact master commit:
+    - GitHub check-runs on `5e37681f81b14039fa251294d4abbc23beb9c71b`: `backend` success, `frontend` success, `playwright-parity` success, `playwright-smoke` success, `recalls-api` success
+    - `docker-build` is skipped on `master` push by workflow design because `.github/workflows/ci.yml` gates that job behind `if: github.event_name == 'pull_request'`
+    - `.github/workflows/playwright-smoke.yml` and `.github/workflows/recalls-api-tests.yml` are `pull_request`/`workflow_dispatch` workflows, so the correct master signoff path was explicit dispatch on the reviewed master SHA rather than waiting for a nonexistent automatic `push` attachment
+    - explicit master signoff runs used: Playwright smoke `23692274049` and Recalls API tests `23692274059`
+    - local master release chain on the same SHA passed: `./ops/health.sh`, `./ops/verify.sh`, `git diff --check`, and clean working tree
+  - V1 closure result:
+    - the frozen 9-condition V1 board is fully green
+    - V1 is closed
 - 2026-03-28: Stage 163H chunk170 started on `stage163h-chunk170-charting-parity-notes-fix` from `master@f2190eb` to isolate the unrelated charting parity blocker on PR #506 without changing the UTC-start deep-link slice, broader charting behavior, or any R4 surface.
   - What was inspected before implementation:
     - `frontend/tests/charting-parity.spec.ts`
