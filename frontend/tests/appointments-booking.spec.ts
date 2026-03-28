@@ -331,6 +331,23 @@ test("appointments deep link prefills end time from duration in booking flow", a
   await expect(endInput).toHaveValue(endValue);
 });
 
+test("appointments deep link ignores invalid start safely in booking flow", async ({
+  page,
+  request,
+}) => {
+  await openAppointments(page, request, "/appointments?book=1&start=not-a-date");
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+
+  const startInput = page.getByTestId("booking-start");
+  const endInput = page.getByTestId("booking-end");
+  await expect(startInput).toHaveValue("");
+  await expect(endInput).toHaveValue("");
+
+  await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
+  await expect(startInput).toHaveValue("");
+  await expect(endInput).toHaveValue("");
+});
+
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);

@@ -61,6 +61,26 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk168 started on `stage163h-chunk168-appointments-invalid-start-proof` from `master@2eb5a2a` to close the remaining narrow appointments deep-link hardening gap for invalid `start` handling without reopening settled patient/header slices, broader appointments routing work, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` Stage 31 still explicitly requires invalid `start` to be ignored safely
+    - current live appointments page already routes `start` through `parseStartParam` and only prefills booking state when parsing succeeds, but current master had no direct proof for the invalid-input path
+    - stronger remaining date/view/day-sheet deep-link cases would widen into broader route-state behavior than this hardening slice
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens `/appointments?book=1&start=not-a-date`, verifies the booking modal still opens, verifies `booking-start` and `booking-end` stay blank, and confirms that empty state persists after the one-time `book` param cleanup
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk167 started on `stage163h-chunk167-patient-notes-smoke-fix` from `master@6f820f6` to isolate the unrelated patient-notes smoke blocker without changing PR #503 or reopening any settled appointments/patient slice.
   - What was inspected before implementation:
     - `frontend/tests/patient-notes.spec.ts`
