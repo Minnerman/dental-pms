@@ -61,6 +61,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk159 started on `stage163h-chunk159-patient-header-name-proof` from `master@47fe52b` to close the remaining narrow Stage161 patient-header name/provenance proof gap without reopening the settled smoke slices, header legacy-identifier ambiguity, broader patient redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-save.spec.ts`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `frontend/tests/patient-responsive.spec.ts`
+    - `backend/app/models/patient.py`
+  - Evidence for choosing this slice:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` Stage 161 still requires `patient-header-name` to include the patient full name plus patient ID and provenance context on `/patients/{id}/clinical`
+    - current master already directly proved header block order, metadata updates, quick actions, quick links, and alerts, but did not directly prove the clinical-route header name/provenance block
+    - the stronger remaining header-identifiers legacy-code candidate had already been abandoned as too wide, which left header name/provenance as the smallest defensible Stage161 acceptance gap
+  - Exact slice implemented:
+    - added a focused Playwright proof that seeds patient category and care setting through the existing patient update API, opens `/patients/{id}/clinical`, and verifies the header name block shows the patient full name, patient ID, category, care setting, and created/updated provenance metadata
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk157 started on `stage163h-chunk157-patient-header-alerts-proof` from `master@994f1fc` to close the remaining narrow Stage161 patient-header alerts proof gap without reopening the settled smoke slices, keyboard ambiguity, broader patient redesign, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
