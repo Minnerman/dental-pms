@@ -264,6 +264,19 @@ test("appointments deep link preselects patient in booking flow", async ({
   await expect(patientSelect).toHaveValue(String(patientId));
 });
 
+test("appointments deep link prefills start time in booking flow", async ({ page, request }) => {
+  const startValue = "2026-01-14T13:30";
+
+  await openAppointments(page, request, `/appointments?book=1&start=${startValue}`);
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+
+  const startInput = page.getByTestId("booking-start");
+  await expect(startInput).toHaveValue(startValue);
+
+  await page.waitForURL((url) => !url.searchParams.has("book"), { timeout: 15_000 });
+  await expect(startInput).toHaveValue(startValue);
+});
+
 test("appointments modal survives view and location switches", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
