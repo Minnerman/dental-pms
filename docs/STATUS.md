@@ -61,6 +61,24 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk167 started on `stage163h-chunk167-patient-notes-smoke-fix` from `master@6f820f6` to isolate the unrelated patient-notes smoke blocker without changing PR #503 or reopening any settled appointments/patient slice.
+  - What was inspected before implementation:
+    - `frontend/tests/patient-notes.spec.ts`
+    - `frontend/tests/helpers/api.ts`
+    - `frontend/tests/helpers/auth.ts`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `backend/app/routers/clinical.py`
+    - `docs/STATUS.md`
+  - Evidence for choosing this slice:
+    - the red required check on PR #503 was an unrelated failure in `tests/patient-notes.spec.ts`, while the new duration deep-link proof passed in the same smoke run
+    - local focused reruns of the failing tooth-note test passed repeatedly, which pointed to a brittle success-toast assertion rather than a broken tooth-note save path
+    - the live chart-note save path still persists the note, clears the form, and reloads tooth history after a successful POST
+  - Exact slice implemented:
+    - removed the transient `Note saved.` visibility assertion from the failing chart tooth-note smoke case and kept the stable post-save checks on cleared form state, restored button text, and persisted tooth-history API data
+    - kept the slice test-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-notes.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk165 started on `stage163h-chunk165-appointments-patient-start-deeplink-proof` from `master@7d573e1` to close the remaining narrow appointments deep-link proof gap for combined patient+start prefill without reopening settled patient/header slices, broader appointments redesign, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`

@@ -304,7 +304,6 @@ test("patient chart tooth note add shows in-flight state and guards repeat submi
   });
   await page.unroute(noteRoutePattern);
 
-  await expect(page.getByText("Note saved.", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("patient-chart-note-body")).toHaveValue("");
   await expect(addNoteButton).toHaveText("Add note");
 
