@@ -78,6 +78,25 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - kept the slice test-only; no production code changed
   - Files changed in this slice:
     - `frontend/tests/patient-notes.spec.ts`
+- 2026-03-28: Stage 163H chunk166 started on `stage163h-chunk166-appointments-duration-deeplink-proof` from `master@6f820f6` to close the remaining narrow appointments deep-link proof gap for duration-driven end-time prefill without reopening settled patient/header slices, broader appointments redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` Stage 31 still explicitly requires optional `duration=30` to prefill the booking end time when `start` is valid
+    - current live appointments page still computes `endsAt` and the duration select from the same one-time deep-link handler, but current master had no direct proof for that path
+    - stronger remaining patient-route/header candidates were already directly covered or explicitly abandoned as too wide or ambiguous
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens `/appointments?book=1&start=2026-01-14T13:30&duration=30`, verifies the booking modal prepopulates the start field and end field, and confirms those values persist after the one-time `book` param cleanup
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
     - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk165 started on `stage163h-chunk165-appointments-patient-start-deeplink-proof` from `master@7d573e1` to close the remaining narrow appointments deep-link proof gap for combined patient+start prefill without reopening settled patient/header slices, broader appointments redesign, or any R4 surface.
   - What was inspected before implementation:
