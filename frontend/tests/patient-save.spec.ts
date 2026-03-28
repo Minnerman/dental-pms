@@ -151,6 +151,69 @@ test("patient header last updated metadata changes after save", async ({ page, r
   await expect(updatedMeta).not.toContainText("Created by");
 });
 
+test("patient header quick actions show call and email when contact details are saved", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Stage163H",
+    last_name: `HEADERCTA${unique}`,
+  });
+  const email = `stage163h-header-${unique}@example.com`;
+  const phone = `07123${String(unique).slice(-6)}`;
+
+  await primePageAuth(page, request);
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPersonalTab(page, patientId);
+
+  const headerActions = page.getByTestId("patient-header-actions");
+  await expect(headerActions.getByText("No phone")).toBeVisible();
+  await expect(headerActions.getByText("No email")).toBeVisible();
+
+  await page.getByTestId("patient-tab-Personal").click();
+  await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
+  await page.getByText("Patient details", { exact: true }).click();
+
+  const patientDetails = page.locator("details.card").filter({
+    has: page.getByTestId("patient-save-changes"),
+  });
+  const emailField = patientDetails.locator(
+    'xpath=.//label[normalize-space()="Email"]/following-sibling::input[1]'
+  );
+  const phoneField = patientDetails.locator(
+    'xpath=.//label[normalize-space()="Phone"]/following-sibling::input[1]'
+  );
+  await expect(emailField).toBeVisible();
+  await expect(phoneField).toBeVisible();
+
+  await emailField.fill(email);
+  await phoneField.fill(phone);
+
+  const saveButton = page.getByTestId("patient-save-changes");
+  await saveButton.click();
+  await expect(saveButton).toHaveText("Save changes", { timeout: 15_000 });
+  await expect(saveButton).toBeEnabled();
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForPatientPersonalTab(page, patientId);
+
+  const reloadedHeaderActions = page.getByTestId("patient-header-actions");
+  await expect(reloadedHeaderActions.getByText("No phone")).toHaveCount(0);
+  await expect(reloadedHeaderActions.getByText("No email")).toHaveCount(0);
+  await expect(reloadedHeaderActions.getByRole("link", { name: "Call" })).toHaveAttribute(
+    "href",
+    `tel:${phone}`
+  );
+  await expect(reloadedHeaderActions.getByRole("link", { name: "Email" })).toHaveAttribute(
+    "href",
+    `mailto:${email}`
+  );
+});
+
 test("patient audit page shows created and updated entries", async ({ page, request }) => {
   const unique = Date.now();
   const baseUrl = getBaseUrl();

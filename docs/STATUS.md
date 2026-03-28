@@ -61,6 +61,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk155 started on `stage163h-chunk155-patient-header-quick-actions-proof` from `master@427c51b` to close the remaining narrow Stage161 header quick-action proof gap without reopening the settled patient-route smoke slices, keyboard ambiguity, broader patient redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `frontend/tests/patient-save.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` Stage 161 still requires quick actions (`Call`, `Email`) when supported by available patient data
+    - current master already rendered those header quick actions from saved patient contact details, but existing coverage only proved header block order and metadata, not the live quick-action behavior
+    - stronger remaining manual-smoke, UAT PDF, responsive, and Stage160B candidates were already directly covered or explicitly abandoned as ambiguous
+  - Exact slice implemented:
+    - added a focused Playwright proof that saves phone and email through the existing patient personal-details form, reloads the patient route, and verifies the header quick actions expose working `Call` and `Email` links instead of empty-state badges
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-save.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-27: Stage 163H chunk153 completed on `stage163h-chunk153-patient-shortcut-editable-proof` from `master@fe2e617` to close the remaining Stage160B proof gap for patient tab shortcuts being ignored while typing, without reopening the settled patient booking, empty-state, PDF, audit, billing, appointments, or any R4 surface.
   - What was inspected before implementation:
     - `AGENTS.md`
