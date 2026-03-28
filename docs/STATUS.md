@@ -77,6 +77,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - kept the fix test-only; no production code changed
   - Files changed in this slice:
     - `frontend/tests/appointments-booking.spec.ts`
+- 2026-03-28: Stage 163H chunk160 started on `stage163h-chunk160-patient-header-sticky-proof` from `master@42f800b` to close the remaining narrow Stage161 sticky-header proof gap without reopening the settled smoke slices, header legacy-identifier ambiguity, broader patient redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/app/(app)/patients/[id]/patient-responsive.module.css`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `frontend/tests/patient-responsive.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` Stage 161 still requires the clinical-route patient header to remain sticky for high-throughput scanability
+    - current master already directly proved the narrow-screen relaxation to `position: static`, but there was still no direct proof that the desktop clinical-route header remains sticky while the page scrolls
+    - stronger remaining header-identifiers legacy-code, PDF, responsive overflow, and Esc-close candidates were already directly covered or explicitly abandoned as too wide or ambiguous
+  - Exact slice implemented:
+    - added a focused Playwright proof that uses the existing representative patient set to select a scrollable clinical route on desktop width, verifies the header card computes as `position: sticky`, scrolls the page, and confirms the header stays pinned near the top of the viewport
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
     - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk159 started on `stage163h-chunk159-patient-header-name-proof` from `master@47fe52b` to close the remaining narrow Stage161 patient-header name/provenance proof gap without reopening the settled smoke slices, header legacy-identifier ambiguity, broader patient redesign, or any R4 surface.
   - What was inspected before implementation:

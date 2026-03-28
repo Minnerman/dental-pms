@@ -331,3 +331,62 @@ test("stage161 patient header quick links navigate between main and clinical rou
   await mainRouteHeaderActions.getByRole("link", { name: "Clinical route" }).click();
   await waitForPatientUiReady(page, first.patient_id, { expectChartingTab: chartingEnabled });
 });
+
+test("stage161 patient clinical header stays sticky on desktop scroll", async ({
+  page,
+  request,
+}) => {
+  const representative = await resolvePatientRepresentativeSet(request, {
+    outputPath: representativeSetPath,
+  });
+  const baseUrl = getBaseUrl();
+
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  await primePageAuth(page, request);
+  const chartingEnabled = await fetchChartingViewerEnabled(baseUrl, request);
+
+  let selectedPatientId: number | null = null;
+  for (const item of representative.patients) {
+    await page.goto(`${baseUrl}/patients/${item.patient_id}/clinical`, {
+      waitUntil: "domcontentloaded",
+    });
+    await waitForPatientUiReady(page, item.patient_id, { expectChartingTab: chartingEnabled });
+    const overflowHeight = await page.evaluate(() => {
+      const root = document.scrollingElement || document.documentElement;
+      return Math.max(0, root.scrollHeight - window.innerHeight);
+    });
+    if (overflowHeight > 200) {
+      selectedPatientId = item.patient_id;
+      break;
+    }
+  }
+
+  expect(
+    selectedPatientId,
+    "No representative patient produced a scrollable clinical route for sticky-header proof."
+  ).toBeTruthy();
+
+  const headerCard = page.getByTestId("patient-header-card");
+  await expect(headerCard).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(
+      async () => headerCard.evaluate((element) => getComputedStyle(element).position),
+      { timeout: 15_000 }
+    )
+    .toBe("sticky");
+
+  const beforeTop = await headerCard.evaluate((element) => element.getBoundingClientRect().top);
+  expect(beforeTop).toBeGreaterThanOrEqual(0);
+
+  await page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+  });
+  await expect
+    .poll(async () => page.evaluate(() => window.scrollY), { timeout: 15_000 })
+    .toBeGreaterThan(50);
+
+  const afterTop = await headerCard.evaluate((element) => element.getBoundingClientRect().top);
+  expect(afterTop).toBeLessThan(beforeTop);
+  expect(afterTop).toBeGreaterThanOrEqual(0);
+  expect(afterTop).toBeLessThanOrEqual(32);
+});
