@@ -95,6 +95,21 @@ async function waitForPatientUiReady(
   await expect(page.getByText("Loading clinical…")).toHaveCount(0);
 }
 
+async function waitForPatientMainRouteReady(page: Page, patientId: number) {
+  await expect(page).toHaveURL(new RegExp(`/patients/${patientId}(?:\\?|$)`));
+  await expect(page.getByRole("link", { name: "← Back to patients" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.locator("h2").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(new RegExp(`Patient #${patientId}\\b`))).toBeVisible({
+    timeout: 20_000,
+  });
+  await assertHeaderBlockOrder(page);
+  await expect(page.getByTestId("patient-tabs")).toBeVisible();
+  await assertLockedTabOrder(page);
+  await expect(page.getByText("Loading patient…")).toHaveCount(0);
+}
+
 async function prepareDeterministicScreenshot(page: Page) {
   await page.locator("body").click({ position: { x: 5, y: 5 } });
   await page.evaluate(() => {
@@ -284,4 +299,35 @@ test("stage160b patient tab shortcuts are ignored while typing in editable field
   await expect(treatmentTab).toHaveAttribute("aria-selected", "true");
   await expect(personalTab).toHaveAttribute("aria-selected", "false");
   await expect(estimateNotes).toHaveValue("Shortcut guard estimate note");
+});
+
+test("stage161 patient header quick links navigate between main and clinical routes", async ({
+  page,
+  request,
+}) => {
+  const representative = await resolvePatientRepresentativeSet(request, {
+    outputPath: representativeSetPath,
+  });
+  const first = representative.patients[0];
+  expect(first).toBeTruthy();
+  const baseUrl = getBaseUrl();
+
+  await primePageAuth(page, request);
+  const chartingEnabled = await fetchChartingViewerEnabled(baseUrl, request);
+  await page.goto(`${baseUrl}/patients/${first.patient_id}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientUiReady(page, first.patient_id, { expectChartingTab: chartingEnabled });
+
+  const headerActions = page.getByTestId("patient-header-actions");
+  await expect(headerActions.getByRole("link", { name: "Main route" })).toBeVisible();
+  await expect(headerActions.getByRole("link", { name: "Clinical route" })).toBeVisible();
+
+  await headerActions.getByRole("link", { name: "Main route" }).click();
+  await waitForPatientMainRouteReady(page, first.patient_id);
+
+  const mainRouteHeaderActions = page.getByTestId("patient-header-actions");
+  await expect(mainRouteHeaderActions.getByRole("link", { name: "Clinical route" })).toBeVisible();
+  await mainRouteHeaderActions.getByRole("link", { name: "Clinical route" }).click();
+  await waitForPatientUiReady(page, first.patient_id, { expectChartingTab: chartingEnabled });
 });

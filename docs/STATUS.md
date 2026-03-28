@@ -61,6 +61,27 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-03-28: Stage 163H chunk156 started on `stage163h-chunk156-patient-header-quick-links-proof` from `master@3beaa76` to close the remaining narrow Stage161 header quick-links proof gap without reopening the settled patient smoke slices, shortcut ambiguity, broader patient redesign, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/PATIENT_UI_ACCEPTANCE.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/DEPLOY_RUNBOOK.md`
+    - `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `frontend/tests/appointments-booking.spec.ts`
+  - Evidence for choosing this slice:
+    - `docs/PATIENT_UI_ACCEPTANCE.md` Stage 161 still requires patient header quick route links without displacing the locked tab model
+    - current master already rendered header quick links (`Main route`, `Clinical route`, plus conditional extras), but existing coverage only proved header block order and did not directly prove navigation through those links
+    - stronger remaining manual-smoke, UAT PDF, responsive, and Stage160B candidates were already directly covered or explicitly abandoned as ambiguous
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens the patient clinical route from the representative set, navigates via the header `Main route` link, verifies the main route keeps the locked tabs/header intact, then returns via the header `Clinical route` link
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/patient-ui-parity-pack.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk155 started on `stage163h-chunk155-patient-header-quick-actions-proof` from `master@427c51b` to close the remaining narrow Stage161 header quick-action proof gap without reopening the settled patient-route smoke slices, keyboard ambiguity, broader patient redesign, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
