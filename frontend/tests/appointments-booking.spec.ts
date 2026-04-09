@@ -207,6 +207,22 @@ test("appointments navigation back/forward keeps modal state consistent", async 
   }
 });
 
+test("appointments deep link jumps to requested date", async ({ page, request }) => {
+  const targetDate = "2026-01-14";
+
+  await openAppointments(page, request, `/appointments?date=${targetDate}`);
+
+  const jumpDateInput = page.getByTestId("appointments-jump-date-input");
+  await expect(jumpDateInput).toHaveValue(targetDate);
+
+  await page.getByTestId("appointments-view-calendar").click();
+  const dayViewButton = page.getByTestId("appointments-calendar-view-day");
+  await expect(dayViewButton).toBeVisible({ timeout: 15_000 });
+  await dayViewButton.click();
+
+  await expect(jumpDateInput).toHaveValue(targetDate);
+});
+
 test("appointments deep link preselects clinician in booking flow", async ({
   page,
   request,

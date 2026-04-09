@@ -100,6 +100,24 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Files changed in this slice:
     - `frontend/tests/charting-parity.spec.ts`
     - `docs/STATUS.md`
+- 2026-04-09: Stage 163H chunk171 started on `fix/appointments-date-deeplink-proof` from `master@950b64f` to close the next narrow appointments deep-link proof gap for plain `date` routing without widening into week-view persistence, combined book/date flows, day-sheet mode state, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/SMOKE_TESTS.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` Stage 31 still explicitly requires deep link `/appointments?date=2026-01-14` to jump the calendar to that date
+    - current master already proves the narrower `book=1`, `patientId`, `clinicianId`, local `start`, UTC `start`, `duration`, and invalid `start` deep-link paths
+    - the adjacent `date+view=week`, `date+book=1`, and day-sheet persistence cases remain separate route-state follow-ons and were intentionally left out of this slice
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens `/appointments?date=2026-01-14`, asserts the user-visible `Jump to` control reflects that requested date, switches into calendar day view using the existing stable appointments controls, and confirms the same requested date remains the active shown date
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk169 started on `stage163h-chunk169-appointments-z-start-proof` from `master@f2190eb` to close the next narrow appointments deep-link proof gap for UTC `start` handling without reopening settled patient/header work, broader calendar route-state cases, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
