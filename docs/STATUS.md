@@ -3,7 +3,8 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- V1 is closed on `master@eda8cd0bbd0488f0dbb37bc26fc91a8f4f47dfdd`.
+- The paused product / V1-closeout baseline is `master@eda8cd0bbd0488f0dbb37bc26fc91a8f4f47dfdd`.
+- Current repo `master` is `b498ae63cc4b0fff0b33acf0c3113d152be3bb73`; the difference from the paused product baseline is docs-only continuity work, not resumed product development.
 - There is no active implementation slice; PR #506 remains deferred to V1.1 and is not a V1 blocker.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
 - When development resumes: sync `master`, confirm the current baseline/latest SHA, review this file, and choose the next smallest V1.1 item only.
