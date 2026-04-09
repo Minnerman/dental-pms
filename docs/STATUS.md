@@ -118,6 +118,29 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Files changed in this slice:
     - `frontend/tests/appointments-booking.spec.ts`
     - `docs/STATUS.md`
+- 2026-04-09: Stage 163H chunk172 started on `fix/appointments-date-weekview-route-state` from `master@969012b` after a proof-only attempt showed `/appointments?date=2026-01-14&view=week` kept the requested date but stayed in Day sheet instead of calendar week view.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/tests/appointments-diary-parity-pack.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Confirmed root cause:
+    - current appointments route-state logic read the persisted `dental_pms_appointments_view` value after the initial `day_sheet` state had already been written back to localStorage, so explicit `view=week` never took effect as calendar mode on first load
+  - Exact slice implemented:
+    - applied the narrowest production fix so an explicit valid `view=day|week|month` query takes precedence over persisted Day sheet mode for that route-state pass, while leaving unrelated appointments behaviour unchanged
+    - added a focused Playwright regression that opens `/appointments?date=2026-01-14&view=week`, asserts the requested date is active in `Jump to`, and confirms calendar week view is visibly active
+    - kept `date+book=1` and broader day-sheet persistence explicitly out of scope for this slice
+  - Validation and outcome:
+    - targeted Playwright proof now passes against the rebuilt frontend runtime for `/appointments?date=2026-01-14&view=week`
+    - the plain `date+view=week` route-state bug is now closed on master once this slice lands
+    - adjacent follow-ons remain separate: `date+book=1` and broader day-sheet mode/state persistence
+  - Files changed in this slice:
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk169 started on `stage163h-chunk169-appointments-z-start-proof` from `master@f2190eb` to close the next narrow appointments deep-link proof gap for UTC `start` handling without reopening settled patient/header work, broader calendar route-state cases, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`

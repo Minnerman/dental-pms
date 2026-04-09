@@ -414,6 +414,10 @@ function parseDateParam(value: string) {
   return parsed;
 }
 
+function isCalendarRouteView(value: string | null): value is View {
+  return value === "day" || value === "week" || value === "month";
+}
+
 function getRangeForView(date: Date, view: View) {
   if (view === "week") {
     const start = startOfWeek(date, { locale: enGB });
@@ -854,6 +858,7 @@ export default function AppointmentsPage() {
 
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
+  const didPersistViewMode = useRef(false);
   const [modalClinicianUserId, setModalClinicianUserId] = useState<string | null>(null);
   const [modalLocationType, setModalLocationType] =
     useState<AppointmentLocationType | null>(null);
@@ -1461,6 +1466,10 @@ export default function AppointmentsPage() {
   }, []);
 
   useEffect(() => {
+    if (!didPersistViewMode.current) {
+      didPersistViewMode.current = true;
+      return;
+    }
     localStorage.setItem("dental_pms_appointments_view", viewMode);
   }, [viewMode]);
 
@@ -3162,20 +3171,22 @@ export default function AppointmentsPage() {
     const parsed = parseDateParam(targetDate);
     if (!parsed) return;
     const viewParam = searchParams.get("view");
-    const allowedViews = ["day", "week", "month"];
-    const nextView =
-      viewParam && allowedViews.includes(viewParam)
-        ? (viewParam as View)
-        : calendarView;
+    const hasExplicitCalendarView = isCalendarRouteView(viewParam);
+    const nextView = hasExplicitCalendarView ? viewParam : calendarView;
     const applyKey = `${targetDate}|${viewParam ?? ""}`;
-    if (didApplyDate.current === applyKey) return;
-    didApplyDate.current = applyKey;
     const storedViewMode = localStorage.getItem("dental_pms_appointments_view");
-    const resolvedViewMode =
-      storedViewMode === "calendar" || storedViewMode === "day_sheet"
+    const resolvedViewMode = hasExplicitCalendarView
+      ? "calendar"
+      : storedViewMode === "calendar" || storedViewMode === "day_sheet"
         ? storedViewMode
         : viewMode;
-    if (viewParam && allowedViews.includes(viewParam) && resolvedViewMode === "calendar") {
+    const isAlreadyApplied =
+      didApplyDate.current === applyKey &&
+      (!hasExplicitCalendarView || (viewMode === "calendar" && calendarView === nextView));
+    if (isAlreadyApplied) return;
+    didApplyDate.current = applyKey;
+    if (hasExplicitCalendarView) {
+      setViewMode("calendar");
       setCalendarView(nextView);
     }
     setCurrentDate(parsed);
