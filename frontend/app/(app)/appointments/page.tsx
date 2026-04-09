@@ -858,6 +858,7 @@ export default function AppointmentsPage() {
 
   const didAutoOpen = useRef(false);
   const didApplyDate = useRef<string | null>(null);
+  const didSettleExplicitRouteView = useRef<string | null>(null);
   const didPersistViewMode = useRef(false);
   const [modalClinicianUserId, setModalClinicianUserId] = useState<string | null>(null);
   const [modalLocationType, setModalLocationType] =
@@ -3180,10 +3181,14 @@ export default function AppointmentsPage() {
       : storedViewMode === "calendar" || storedViewMode === "day_sheet"
         ? storedViewMode
         : viewMode;
-    const isAlreadyApplied =
-      didApplyDate.current === applyKey &&
-      (!hasExplicitCalendarView || (viewMode === "calendar" && calendarView === nextView));
-    if (isAlreadyApplied) return;
+    if (hasExplicitCalendarView) {
+      if (didSettleExplicitRouteView.current === applyKey) return;
+      if (viewMode === "calendar" && calendarView === nextView) {
+        didSettleExplicitRouteView.current = applyKey;
+      }
+    } else if (didApplyDate.current === applyKey) {
+      return;
+    }
     didApplyDate.current = applyKey;
     if (hasExplicitCalendarView) {
       setViewMode("calendar");
