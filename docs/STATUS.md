@@ -159,6 +159,28 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Files changed in this slice:
     - `frontend/tests/appointments-booking.spec.ts`
     - `docs/STATUS.md`
+- 2026-04-10: Stage 163H chunk174 started on `fix/appointments-conflict-warning-parity` from `master@2f7e1cd` to restore the documented non-blocking same-clinician booking-conflict behaviour during appointment creation without widening into broader reschedule conflict policy, day-sheet route-state work, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/SMOKE_TESTS.md`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `backend/app/routers/appointments.py`
+  - Confirmed current-master mismatch:
+    - `docs/SMOKE_TESTS.md` still requires same-clinician overlap to show a warning and remain non-blocking during create, and requires the conflict action to jump to the conflict day/time
+    - current booking form disabled `Create appointment` whenever a conflict warning was present
+    - current `POST /appointments` also returned `409` for clinician overlap, so the documented warning-only create flow could not succeed even if the frontend button were re-enabled
+    - current Playwright coverage only proved the conflict link was visible and locked in the blocking behaviour with a submit-disabled assertion
+  - Exact slice implemented:
+    - removed the create-form submit lock tied to warning-only clinician conflicts while keeping the visible conflict notice and `View day` action
+    - narrowed backend overlap enforcement so create accepts same-clinician overlap again, while leaving update/reschedule conflict handling unchanged
+    - strengthened focused regression coverage to prove the warning remains visible, create still succeeds, and `View day` jumps the appointments view onto the conflict day context
+  - Files changed in this slice:
+    - `backend/app/routers/appointments.py`
+    - `backend/tests/appointments/test_appointment_conflicts.py`
+    - `frontend/app/(app)/appointments/page.tsx`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk169 started on `stage163h-chunk169-appointments-z-start-proof` from `master@f2190eb` to close the next narrow appointments deep-link proof gap for UTC `start` handling without reopening settled patient/header work, broader calendar route-state cases, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`
