@@ -1724,9 +1724,6 @@ export default function AppointmentsPage() {
 
   const bookingValidationError =
     bookingFieldErrors.patient || bookingFieldErrors.time || bookingFieldErrors.visit || null;
-  const bookingConflictError = conflictWarning
-    ? "Conflicts detected. Choose a different time."
-    : null;
   const activeConflictWarning = showNewModal
     ? conflictWarning
     : isEditingAppointment
@@ -2290,10 +2287,6 @@ export default function AppointmentsPage() {
       });
       const warning = buildConflictWarning(conflicts, clinicianId);
       setConflictWarning(warning);
-      if (warning) {
-        setBookingSubmitError("Conflicts detected. Choose a different time.");
-        return;
-      }
     }
     if (
       saving ||
@@ -4329,9 +4322,9 @@ export default function AppointmentsPage() {
                 </button>
               </div>
               <form onSubmit={createAppointment} className="stack">
-                {(bookingSubmitError || bookingValidationError || bookingConflictError) && (
+                {(bookingSubmitError || bookingValidationError) && (
                   <div className="notice" data-testid="booking-error">
-                    {bookingSubmitError || bookingValidationError || bookingConflictError}
+                    {bookingSubmitError || bookingValidationError}
                   </div>
                 )}
                 <div className="stack" style={{ gap: 8 }}>
@@ -4572,8 +4565,7 @@ export default function AppointmentsPage() {
                   disabled={
                     saving ||
                     conflictChecking ||
-                    Boolean(bookingValidationError) ||
-                    Boolean(bookingConflictError)
+                    Boolean(bookingValidationError)
                   }
                 >
                   {saving ? "Saving..." : "Create appointment"}

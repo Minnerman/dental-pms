@@ -201,15 +201,6 @@ def create_appointment(
         if not ok:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
-    conflicts = find_conflicting_appointments(
-        db,
-        payload.clinician_user_id,
-        payload.starts_at,
-        payload.ends_at,
-    )
-    if conflicts:
-        return conflict_response(conflicts)
-
     appt = Appointment(
         patient_id=payload.patient_id,
         clinician_user_id=payload.clinician_user_id,

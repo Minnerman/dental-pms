@@ -160,7 +160,7 @@ async function selectBookingPatient(page: any, patientId: string, searchTerm: st
     )
     .catch(() => null);
   await search.fill("");
-  await search.pressSequentially(searchTerm, { delay: 20 });
+  await search.fill(searchTerm);
   await expect(search).toHaveValue(searchTerm);
   await searchResponse;
   await expect(select.locator(`option[value="${patientId}"]`)).toHaveCount(1, {
@@ -168,6 +168,33 @@ async function selectBookingPatient(page: any, patientId: string, searchTerm: st
   });
   await select.selectOption(String(patientId));
   await expect(select).toHaveValue(String(patientId));
+}
+
+async function getFirstActiveClinician(request: any) {
+  const token = await ensureAuthReady(request);
+  const usersResponse = await request.get(`${getBaseUrl()}/api/users`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(usersResponse.ok()).toBeTruthy();
+  const users = (await usersResponse.json()) as Array<{
+    id: number;
+    is_active: boolean;
+    full_name?: string | null;
+    email?: string | null;
+  }>;
+  const clinician = users.find((user) => user.is_active);
+  expect(clinician).toBeTruthy();
+  return clinician!;
+}
+
+async function selectBookingClinician(page: any, clinicianId: number) {
+  const clinicianSelect = page.getByTestId("booking-modal").locator("select").nth(2);
+  await expect(clinicianSelect).toBeVisible({ timeout: 15_000 });
+  await expect(clinicianSelect.locator(`option[value="${clinicianId}"]`)).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  await clinicianSelect.selectOption(String(clinicianId));
+  await expect(clinicianSelect).toHaveValue(String(clinicianId));
 }
 test("appointments deep link opens modal and cleans URL", async ({ page, request }) => {
   await openAppointments(page, request, "/appointments?date=2026-01-15&book=1");
@@ -974,51 +1001,45 @@ test("conflict banner shows overlapping appointments with view day link", async 
     first_name: "Conflict",
     last_name: conflictLastName,
   });
-  const bookingLastName = `Patient ${Date.now()}`;
-  const bookingPatientId = await createPatient(request, {
-    first_name: "Booking",
-    last_name: bookingLastName,
-  });
 
-  await openAppointments(page, request, "/appointments?date=2026-01-15");
-  await clickNewAppointment(page);
-
-  const clinicianSelect = page.getByLabel("Clinician (optional)");
-  const clinicianOptions = await clinicianSelect
-    .locator("option")
-    .evaluateAll((options) =>
-      options
-        .map((option) => (option as HTMLOptionElement).value)
-        .filter(Boolean)
-    );
-  if (clinicianOptions.length === 0) {
-    test.skip();
-    return;
-  }
-  const clinicianId = Number(clinicianOptions[0]);
-  await createAppointment(request, conflictPatientId, {
-    clinician_user_id: clinicianId,
+  const clinician = await getFirstActiveClinician(request);
+  const conflictAppointment = await createAppointment(request, conflictPatientId, {
+    clinician_user_id: clinician.id,
     starts_at: "2026-01-15T09:00:00.000Z",
     ends_at: "2026-01-15T09:30:00.000Z",
     location_type: "clinic",
     location: "Room 1",
   });
 
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await openAppointments(page, request, page.url());
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
-  await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
+  await selectBookingClinician(page, clinician.id);
 
-  await selectBookingPatient(page, bookingPatientId, bookingLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T09:15");
-  await page.getByTestId("booking-end").fill("2026-01-15T09:45");
+  await expect(page.getByTestId("booking-end")).toHaveValue("2026-01-15T09:45", {
+    timeout: 15_000,
+  });
 
+  const jumpDateInput = page.getByTestId("appointments-jump-date-input");
   await expect(page.getByTestId("booking-conflicts")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("booking-conflict-row").first()).toBeVisible();
   await expect(page.getByTestId("booking-conflict-view-day")).toBeVisible();
+  await page.getByTestId("booking-conflict-view-day").click();
+
+  await expect(jumpDateInput).toHaveValue("2026-01-15");
+  await expect(page.getByTestId("appointments-view-calendar")).toHaveClass(/btn btn-primary/);
+  await expect(page.getByTestId("appointments-calendar-view-day")).toHaveClass(
+    /btn btn-primary/
+  );
+  await expect(page.getByTestId(`appointment-event-${conflictAppointment.id}`)).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
-test("booking submit is blocked when conflicts exist", async ({ page, request }) => {
+test("booking conflict warning remains non-blocking during create", async ({
+  page,
+  request,
+}) => {
   const conflictLastName = `Patient ${Date.now()}`;
   const conflictPatientId = await createPatient(request, {
     first_name: "Conflict",
@@ -1030,43 +1051,39 @@ test("booking submit is blocked when conflicts exist", async ({ page, request })
     last_name: bookingLastName,
   });
 
-  await openAppointments(page, request, "/appointments?date=2026-01-15");
-  await clickNewAppointment(page);
-
-  const clinicianSelect = page.getByLabel("Clinician (optional)");
-  const clinicianOptions = await clinicianSelect
-    .locator("option")
-    .evaluateAll((options) =>
-      options
-        .map((option) => (option as HTMLOptionElement).value)
-        .filter(Boolean)
-    );
-  if (clinicianOptions.length === 0) {
-    test.skip();
-    return;
-  }
-  const clinicianId = Number(clinicianOptions[0]);
-
+  const clinician = await getFirstActiveClinician(request);
   await createAppointment(request, conflictPatientId, {
-    clinician_user_id: clinicianId,
+    clinician_user_id: clinician.id,
     starts_at: "2026-01-15T10:00:00.000Z",
     ends_at: "2026-01-15T10:30:00.000Z",
     location_type: "clinic",
     location: "Room 1",
   });
 
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await openAppointments(page, request, page.url());
+  await openAppointments(page, request, "/appointments?date=2026-01-15");
   await clickNewAppointment(page);
-  await page.getByLabel("Clinician (optional)").selectOption(clinicianOptions[0]);
+  await selectBookingClinician(page, clinician.id);
 
   await selectBookingPatient(page, bookingPatientId, bookingLastName);
   await page.getByTestId("booking-start").fill("2026-01-15T10:15");
   await page.getByTestId("booking-end").fill("2026-01-15T10:45");
 
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/api/appointments")
+  );
+
   await expect(page.getByTestId("booking-conflicts")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("booking-submit")).toBeDisabled();
-  await expect(page.getByTestId("booking-error")).toContainText(/conflict/i);
+  await expect(page.getByTestId("booking-submit")).toBeEnabled();
+  await expect(page.getByTestId("booking-error")).toHaveCount(0);
+
+  await page.getByTestId("booking-submit").click();
+
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  await expect(page.getByText("Appointment created.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("booking-modal")).toBeHidden({ timeout: 15_000 });
 });
 
 test("rescheduling respects conflicts and persists successful moves", async ({
