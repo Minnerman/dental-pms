@@ -141,6 +141,24 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `frontend/app/(app)/appointments/page.tsx`
     - `frontend/tests/appointments-booking.spec.ts`
     - `docs/STATUS.md`
+- 2026-04-10: Stage 163H chunk173 started on `fix/appointments-date-book-proof` from `master@ac67ff6` to close the next narrow appointments route-state proof gap for combined `date+book=1` behavior without widening into broader day-sheet mode/state persistence, any further `view` handling, or any R4 surface.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/SMOKE_TESTS.md`
+    - `docs/UAT_CHECKLIST.md`
+    - `docs/V1_FINISH_LINE.md`
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `frontend/app/(app)/appointments/page.tsx`
+  - Evidence for choosing this slice:
+    - `docs/SMOKE_TESTS.md` Stage 31 still explicitly requires deep link `/appointments?date=2026-01-14&book=1` to still open booking
+    - current master already proves the booking modal opens and the one-time `book` cleanup runs for `?date=...&book=1`, but did not directly prove that the requested date remains in effect across that cleanup
+    - broader day-sheet mode/state persistence remains a separate, more stateful follow-on and was intentionally left out of this slice
+  - Exact slice implemented:
+    - added a focused Playwright proof that opens `/appointments?date=2026-01-14&book=1`, verifies the booking modal opens, verifies the user-visible `Jump to` control keeps the requested date, and confirms the one-time URL cleanup removes `book` without losing the requested date
+    - kept the slice proof-only; no production code changed
+  - Files changed in this slice:
+    - `frontend/tests/appointments-booking.spec.ts`
+    - `docs/STATUS.md`
 - 2026-03-28: Stage 163H chunk169 started on `stage163h-chunk169-appointments-z-start-proof` from `master@f2190eb` to close the next narrow appointments deep-link proof gap for UTC `start` handling without reopening settled patient/header work, broader calendar route-state cases, or any R4 surface.
   - What was inspected before implementation:
     - `docs/STATUS.md`

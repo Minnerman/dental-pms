@@ -242,6 +242,27 @@ test("appointments deep link preserves week view in calendar mode", async ({
   await expect(weekViewButton).toHaveClass(/btn btn-primary/);
 });
 
+test("appointments deep link keeps requested date while opening booking", async ({
+  page,
+  request,
+}) => {
+  const targetDate = "2026-01-14";
+
+  await openAppointments(page, request, `/appointments?date=${targetDate}&book=1`);
+
+  const jumpDateInput = page.getByTestId("appointments-jump-date-input");
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+  await expect(jumpDateInput).toHaveValue(targetDate);
+
+  await page.waitForURL(
+    (url) => !url.searchParams.has("book") && url.searchParams.get("date") === targetDate,
+    { timeout: 15_000 }
+  );
+
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 15_000 });
+  await expect(jumpDateInput).toHaveValue(targetDate);
+});
+
 test("appointments deep link preselects clinician in booking flow", async ({
   page,
   request,
