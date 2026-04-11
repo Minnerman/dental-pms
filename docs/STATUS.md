@@ -8687,3 +8687,4 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## 2026-04-11
 - Odontogram `dbo.Transactions.Status` passive read-only investigation completed; continuity note saved in `docs/r4/ODONTOGRAM_TRANSACTIONS_STATUS_CONTINUITY.md`. Current answer is behavioural/inference-led rather than documentary, and this result does not justify a new charting/odontogram module or refactor.
+- Charting parity roadmap documented in `docs/r4/CHARTING_PARITY_ROADMAP.md` as a planning guide for future implementation. This is a roadmap/specification step only and does not itself justify immediate runtime or module changes.
