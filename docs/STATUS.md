@@ -8693,3 +8693,4 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - First selected golden cases now documented in `docs/r4/CHARTING_GOLDEN_SELECTED_CASES_V1.md`. This is still docs/evidence curation work and does not create runtime or module changes.
 - Narrow charting corpus gap-fill candidates now documented in `docs/r4/CHARTING_GOLDEN_GAP_FILL_CANDIDATES_V1.md`. This is still read-only evidence curation work and does not create runtime or module changes.
 - Selected golden cases V2 now documented in `docs/r4/CHARTING_GOLDEN_SELECTED_CASES_V2.md`. This is still docs/evidence curation work and does not create runtime or module changes.
+- First explicit charting rule recovery now documented in `docs/r4/CHARTING_RULE_RECOVERY_V1.md`. This is still read-only evidence/rule extraction work and does not create runtime or module changes.
