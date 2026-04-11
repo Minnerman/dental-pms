@@ -1097,6 +1097,172 @@ def test_tooth_state_allows_different_families_to_coexist_on_one_tooth(api_clien
         session.close()
 
 
+def test_tooth_state_allows_crown_root_canal_and_post_to_coexist_on_one_tooth(
+    api_client, auth_headers
+):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    crown_code_id: int | None = None
+    root_code_id: int | None = None
+    post_code_id: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 998820000 + (uuid4().int % 100000)
+        code_seed = legacy_code % 100000
+        crown_code_id = 980000 + code_seed
+        root_code_id = 981000 + code_seed
+        post_code_id = 982000 + code_seed
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+
+        session.add_all(
+            [
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=crown_code_id,
+                    description="White Crown",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=root_code_id,
+                    description="Root Filling",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=post_code_id,
+                    description="Post and core build-up",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage176a-tooth-state-{legacy_code}-crown",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="crown-family",
+                    legacy_patient_code=legacy_code,
+                    tooth=11,
+                    surface=1,
+                    code_id=crown_code_id,
+                    status="1",
+                    recorded_at=datetime(2025, 1, 10, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 11,
+                        "surface": 1,
+                        "code_id": crown_code_id,
+                        "status_description": "White Crown",
+                        "description": "White Crown",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage176a-tooth-state-{legacy_code}-root",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="root-family",
+                    legacy_patient_code=legacy_code,
+                    tooth=11,
+                    surface=32,
+                    code_id=root_code_id,
+                    status="1",
+                    recorded_at=datetime(2025, 1, 11, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 11,
+                        "surface": 32,
+                        "code_id": root_code_id,
+                        "status_description": "Root Filling",
+                        "description": "Root Filling",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage176a-tooth-state-{legacy_code}-post",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="post-family",
+                    legacy_patient_code=legacy_code,
+                    tooth=11,
+                    surface=0,
+                    code_id=post_code_id,
+                    status="1",
+                    recorded_at=datetime(2025, 1, 12, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 11,
+                        "surface": 0,
+                        "code_id": post_code_id,
+                        "status_description": "Post and core build-up",
+                        "description": "Post and core build-up",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/tooth-state?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        tooth_11 = res.json()["teeth"]["11"]
+        types = {item["type"] for item in tooth_11["restorations"]}
+        assert types == {"crown", "root_canal", "post"}
+
+        crown = next(item for item in tooth_11["restorations"] if item["type"] == "crown")
+        root_canal = next(item for item in tooth_11["restorations"] if item["type"] == "root_canal")
+        post = next(item for item in tooth_11["restorations"] if item["type"] == "post")
+
+        assert crown["surfaces"] == ["M"]
+        assert crown["meta"]["code_id"] == crown_code_id
+        assert crown["meta"]["code_label"] == "White Crown"
+
+        assert root_canal["surfaces"] == ["I"]
+        assert root_canal["meta"]["raw_surface"] == 32
+        assert root_canal["meta"]["code_id"] == root_code_id
+        assert root_canal["meta"]["code_label"] == "Root Filling"
+
+        assert post["surfaces"] == []
+        assert post["meta"]["code_id"] == post_code_id
+        assert post["meta"]["code_label"] == "Post and core build-up"
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            code_ids = [
+                code_id
+                for code_id in (crown_code_id, root_code_id, post_code_id)
+                if code_id is not None
+            ]
+            if code_ids:
+                session.execute(
+                    delete(R4Treatment).where(
+                        R4Treatment.legacy_source == "r4",
+                        R4Treatment.legacy_treatment_code.in_(code_ids),
+                    )
+                )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
+        session.close()
+
+
 def test_tooth_state_reset_boundary_ignores_older_rows_and_skips_tooth_present_scaffold(
     api_client, auth_headers
 ):
