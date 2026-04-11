@@ -785,6 +785,476 @@ def test_tooth_state_prefers_real_restorative_domain_over_tp_proxy(api_client, a
         session.close()
 
 
+def test_tooth_state_latest_row_wins_per_family_and_status_value_does_not_change_family(
+    api_client, auth_headers
+):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    older_code_id: int | None = None
+    newer_code_id: int | None = None
+    status_one_code_id: int | None = None
+    status_four_code_id: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 998600000 + (uuid4().int % 100000)
+        code_seed = legacy_code % 100000
+        older_code_id = 950000 + code_seed
+        newer_code_id = 951000 + code_seed
+        status_one_code_id = 952000 + code_seed
+        status_four_code_id = 953000 + code_seed
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+
+        session.add_all(
+            [
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=older_code_id,
+                    description="Composite filling old",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=newer_code_id,
+                    description="Composite filling new",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=status_one_code_id,
+                    description="Composite filling status 1",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=status_four_code_id,
+                    description="Composite filling status 4",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-older",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="older-fill",
+                    legacy_patient_code=legacy_code,
+                    tooth=14,
+                    surface=3,
+                    code_id=older_code_id,
+                    status="1",
+                    recorded_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 14,
+                        "surface": 3,
+                        "code_id": older_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling old",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-newer",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="newer-fill",
+                    legacy_patient_code=legacy_code,
+                    tooth=14,
+                    surface=3,
+                    code_id=newer_code_id,
+                    status="4",
+                    recorded_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 14,
+                        "surface": 3,
+                        "code_id": newer_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling new",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-status1",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="status-one-fill",
+                    legacy_patient_code=legacy_code,
+                    tooth=15,
+                    surface=3,
+                    code_id=status_one_code_id,
+                    status="1",
+                    recorded_at=datetime(2025, 1, 2, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 15,
+                        "surface": 3,
+                        "code_id": status_one_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling status 1",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-status4",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="status-four-fill",
+                    legacy_patient_code=legacy_code,
+                    tooth=16,
+                    surface=3,
+                    code_id=status_four_code_id,
+                    status="4",
+                    recorded_at=datetime(2025, 1, 2, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 16,
+                        "surface": 3,
+                        "code_id": status_four_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling status 4",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/tooth-state?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        payload = res.json()
+
+        tooth_14 = payload["teeth"]["14"]
+        assert len(tooth_14["restorations"]) == 1
+        assert tooth_14["restorations"][0]["type"] == "filling"
+        assert tooth_14["restorations"][0]["surfaces"] == ["D"]
+        assert tooth_14["restorations"][0]["meta"]["code_id"] == newer_code_id
+        assert tooth_14["restorations"][0]["meta"]["code_label"] == "Composite filling new"
+
+        tooth_15 = payload["teeth"]["15"]["restorations"][0]
+        tooth_16 = payload["teeth"]["16"]["restorations"][0]
+        assert tooth_15["type"] == tooth_16["type"] == "filling"
+        assert tooth_15["surfaces"] == tooth_16["surfaces"] == ["D"]
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            code_ids = [
+                code_id
+                for code_id in (
+                    older_code_id,
+                    newer_code_id,
+                    status_one_code_id,
+                    status_four_code_id,
+                )
+                if code_id is not None
+            ]
+            if code_ids:
+                session.execute(
+                    delete(R4Treatment).where(
+                        R4Treatment.legacy_source == "r4",
+                        R4Treatment.legacy_treatment_code.in_(code_ids),
+                    )
+                )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
+        session.close()
+
+
+def test_tooth_state_allows_different_families_to_coexist_on_one_tooth(api_client, auth_headers):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    filling_code_id: int | None = None
+    root_code_id: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 998700000 + (uuid4().int % 100000)
+        code_seed = legacy_code % 100000
+        filling_code_id = 960000 + code_seed
+        root_code_id = 961000 + code_seed
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+
+        session.add_all(
+            [
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=filling_code_id,
+                    description="Composite filling",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=root_code_id,
+                    description="Root Filling",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-fill",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="fill-family",
+                    legacy_patient_code=legacy_code,
+                    tooth=26,
+                    surface=3,
+                    code_id=filling_code_id,
+                    status="1",
+                    recorded_at=datetime(2025, 1, 10, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 26,
+                        "surface": 3,
+                        "code_id": filling_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-root",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="root-family",
+                    legacy_patient_code=legacy_code,
+                    tooth=26,
+                    surface=224,
+                    code_id=root_code_id,
+                    status="4",
+                    recorded_at=datetime(2025, 1, 11, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 26,
+                        "surface": 224,
+                        "code_id": root_code_id,
+                        "status_description": "Root Filling",
+                        "description": "Root Filling",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/tooth-state?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        tooth_26 = res.json()["teeth"]["26"]
+        types = {item["type"] for item in tooth_26["restorations"]}
+        assert types == {"filling", "root_canal"}
+        root_canal = next(item for item in tooth_26["restorations"] if item["type"] == "root_canal")
+        filling = next(item for item in tooth_26["restorations"] if item["type"] == "filling")
+        assert root_canal["surfaces"] == []
+        assert root_canal["meta"]["raw_surface"] == 224
+        assert filling["surfaces"] == ["D"]
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            code_ids = [code_id for code_id in (filling_code_id, root_code_id) if code_id is not None]
+            if code_ids:
+                session.execute(
+                    delete(R4Treatment).where(
+                        R4Treatment.legacy_source == "r4",
+                        R4Treatment.legacy_treatment_code.in_(code_ids),
+                    )
+                )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
+        session.close()
+
+
+def test_tooth_state_reset_boundary_ignores_older_rows_and_skips_tooth_present_scaffold(
+    api_client, auth_headers
+):
+    session = SessionLocal()
+    patient_id = None
+    legacy_code: int | None = None
+    older_code_id: int | None = None
+    newer_code_id: int | None = None
+    try:
+        if not _charting_enabled(api_client):
+            return
+        actor_id = resolve_actor_id(session)
+        legacy_code = 998800000 + (uuid4().int % 100000)
+        code_seed = legacy_code % 100000
+        older_code_id = 970000 + code_seed
+        newer_code_id = 971000 + code_seed
+        patient = _create_patient(session, legacy_code, actor_id)
+        patient_id = patient.id
+
+        session.add_all(
+            [
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=older_code_id,
+                    description="Composite filling before reset",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+                R4Treatment(
+                    legacy_source="r4",
+                    legacy_treatment_code=newer_code_id,
+                    description="Composite filling after reset",
+                    created_by_user_id=actor_id,
+                    updated_by_user_id=actor_id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-pre-reset",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="pre-reset-fill",
+                    legacy_patient_code=legacy_code,
+                    tooth=35,
+                    surface=20,
+                    code_id=older_code_id,
+                    status="1",
+                    recorded_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 35,
+                        "surface": 20,
+                        "code_id": older_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling before reset",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-reset",
+                    domain="restorative_treatment",
+                    r4_source="dbo.Transactions",
+                    r4_source_id="reset-row",
+                    legacy_patient_code=legacy_code,
+                    tooth=35,
+                    surface=0,
+                    code_id=None,
+                    status="4",
+                    recorded_at=datetime(2025, 1, 2, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 35,
+                        "surface": 0,
+                        "status_description": "Reset Tooth",
+                        "description": "Reset Tooth",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-present",
+                    domain="restorative_treatment",
+                    r4_source="dbo.Transactions",
+                    r4_source_id="present-row",
+                    legacy_patient_code=legacy_code,
+                    tooth=35,
+                    surface=0,
+                    code_id=None,
+                    status="3",
+                    recorded_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 35,
+                        "surface": 0,
+                        "status_description": "Tooth Present",
+                        "description": "Tooth Present",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+                R4ChartingCanonicalRecord(
+                    unique_key=f"stage173g-tooth-state-{legacy_code}-post-reset",
+                    domain="restorative_treatment",
+                    r4_source="dbo.vwTreatments",
+                    r4_source_id="post-reset-fill",
+                    legacy_patient_code=legacy_code,
+                    tooth=35,
+                    surface=20,
+                    code_id=newer_code_id,
+                    status="1",
+                    recorded_at=datetime(2025, 1, 4, tzinfo=timezone.utc),
+                    payload={
+                        "tooth": 35,
+                        "surface": 20,
+                        "code_id": newer_code_id,
+                        "status_description": "Fillings",
+                        "description": "Composite filling after reset",
+                        "completed": True,
+                        "complete": True,
+                    },
+                ),
+            ]
+        )
+        session.commit()
+
+        res = api_client.get(
+            f"/patients/{patient.id}/charting/tooth-state?limit=5000",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200, res.text
+        tooth_35 = res.json()["teeth"]["35"]
+        assert len(tooth_35["restorations"]) == 1
+        assert tooth_35["restorations"][0]["type"] == "filling"
+        assert tooth_35["restorations"][0]["surfaces"] == ["M", "O"]
+        assert tooth_35["restorations"][0]["meta"]["code_id"] == newer_code_id
+        assert tooth_35["restorations"][0]["meta"]["code_label"] == "Composite filling after reset"
+    finally:
+        session.rollback()
+        if legacy_code is not None:
+            session.execute(
+                delete(R4ChartingCanonicalRecord).where(
+                    R4ChartingCanonicalRecord.legacy_patient_code == legacy_code
+                )
+            )
+            code_ids = [code_id for code_id in (older_code_id, newer_code_id) if code_id is not None]
+            if code_ids:
+                session.execute(
+                    delete(R4Treatment).where(
+                        R4Treatment.legacy_source == "r4",
+                        R4Treatment.legacy_treatment_code.in_(code_ids),
+                    )
+                )
+        if patient_id is not None and legacy_code is not None:
+            _cleanup(session, patient_id, legacy_code)
+        session.commit()
+        session.close()
+
+
 def test_charting_requires_auth(api_client, auth_headers):
     session = SessionLocal()
     patient_id = None

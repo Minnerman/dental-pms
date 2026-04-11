@@ -319,6 +319,32 @@ def _extract_surface_keys(
     return surface_keys
 
 
+def _normalize_tooth_state_label(value: str | None) -> str | None:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    return " ".join(text.split())
+
+
+def _resolve_tooth_state_label(
+    record: R4ChartingCanonicalRecord,
+    payload: dict[str, object],
+    code_label: str | None,
+) -> tuple[int | None, str | None]:
+    resolved_code_id = record.code_id
+    if resolved_code_id is None:
+        resolved_code_id = _coerce_optional_int(payload.get("code_id"))
+    resolved_code_label = code_label
+    if not resolved_code_label:
+        raw_label = payload.get("description") or payload.get("status_description") or record.status
+        resolved_code_label = str(raw_label).strip() if raw_label is not None else None
+    if resolved_code_label == "":
+        resolved_code_label = None
+    if not resolved_code_label and resolved_code_id is not None:
+        resolved_code_label = "Unknown code"
+    return resolved_code_id, resolved_code_label
+
+
 def _bool_from_payload(payload: dict[str, object], keys: tuple[str, ...]) -> bool | None:
     for key in keys:
         if key in payload:
@@ -783,6 +809,7 @@ def get_tooth_state(
 
         teeth: dict[str, R4ToothStateEntryOut] = {}
         seen_restorations: dict[str, set[str]] = {}
+        blocked_teeth_after_reset: set[str] = set()
         real_domain_names = {"restorative_treatment", "restorative_treatments"}
         proxy_domain_names = {"treatment_plan_item", "treatment_plan_items"}
         candidate_rows: list[tuple[R4ChartingCanonicalRecord, dict[str, object], str | None, str]] = []
@@ -813,18 +840,20 @@ def get_tooth_state(
             domain = (record.domain or "").strip().lower()
             if tooth_key in real_teeth and domain in proxy_domain_names:
                 continue
+            if tooth_key in blocked_teeth_after_reset:
+                continue
 
-            resolved_code_id = record.code_id
-            if resolved_code_id is None:
-                resolved_code_id = _coerce_optional_int(payload.get("code_id"))
-            resolved_code_label: str | None = code_label
-            if not resolved_code_label:
-                raw_label = payload.get("description") or payload.get("status_description")
-                resolved_code_label = str(raw_label).strip() if raw_label is not None else None
-            if resolved_code_label == "":
-                resolved_code_label = None
-            if not resolved_code_label and resolved_code_id is not None:
-                resolved_code_label = "Unknown code"
+            resolved_code_id, resolved_code_label = _resolve_tooth_state_label(
+                record,
+                payload,
+                code_label,
+            )
+            normalized_label = _normalize_tooth_state_label(resolved_code_label)
+            if normalized_label == "reset tooth":
+                blocked_teeth_after_reset.add(tooth_key)
+                continue
+            if normalized_label == "tooth present":
+                continue
 
             entry = teeth.setdefault(
                 tooth_key,
@@ -846,8 +875,6 @@ def get_tooth_state(
                 [
                     restoration_type,
                     ",".join(restoration_surfaces),
-                    record.r4_source or "",
-                    record.r4_source_id or "",
                 ]
             )
             seen = seen_restorations.setdefault(tooth_key, set())
