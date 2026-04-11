@@ -8684,3 +8684,6 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## 2026-02-01
 - Stage 129C: added SELECT-only SQL Server charting canonical extractor (BPE + PerioProbe) with bounded pilot/reporting; CLI supports charting_canonical with dry-run/report output; tests green.
+
+## 2026-04-11
+- Odontogram `dbo.Transactions.Status` passive read-only investigation completed; continuity note saved in `docs/r4/ODONTOGRAM_TRANSACTIONS_STATUS_CONTINUITY.md`. Current answer is behavioural/inference-led rather than documentary, and this result does not justify a new charting/odontogram module or refactor.
