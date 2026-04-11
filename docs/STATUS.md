@@ -8695,3 +8695,4 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Selected golden cases V2 now documented in `docs/r4/CHARTING_GOLDEN_SELECTED_CASES_V2.md`. This is still docs/evidence curation work and does not create runtime or module changes.
 - First explicit charting rule recovery now documented in `docs/r4/CHARTING_RULE_RECOVERY_V1.md`. This is still read-only evidence/rule extraction work and does not create runtime or module changes.
 - First charting rule-hardening pass now documented in `docs/r4/CHARTING_RULE_HARDENING_V1.md`. This is still read-only evidence/rule hardening work and does not create runtime or module changes.
+- First charting engine boundary/design now documented in `docs/r4/CHARTING_ENGINE_BOUNDARY_V1.md`. This is still a design step only and does not itself create runtime or module changes yet.
