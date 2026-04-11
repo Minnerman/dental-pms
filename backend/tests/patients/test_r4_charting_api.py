@@ -940,14 +940,14 @@ def test_tooth_state_latest_row_wins_per_family_and_status_value_does_not_change
         tooth_14 = payload["teeth"]["14"]
         assert len(tooth_14["restorations"]) == 1
         assert tooth_14["restorations"][0]["type"] == "filling"
-        assert tooth_14["restorations"][0]["surfaces"] == ["D"]
+        assert tooth_14["restorations"][0]["surfaces"] == ["M", "O"]
         assert tooth_14["restorations"][0]["meta"]["code_id"] == newer_code_id
         assert tooth_14["restorations"][0]["meta"]["code_label"] == "Composite filling new"
 
         tooth_15 = payload["teeth"]["15"]["restorations"][0]
         tooth_16 = payload["teeth"]["16"]["restorations"][0]
         assert tooth_15["type"] == tooth_16["type"] == "filling"
-        assert tooth_15["surfaces"] == tooth_16["surfaces"] == ["D"]
+        assert tooth_15["surfaces"] == tooth_16["surfaces"] == ["M", "O"]
     finally:
         session.rollback()
         if legacy_code is not None:
@@ -1072,9 +1072,9 @@ def test_tooth_state_allows_different_families_to_coexist_on_one_tooth(api_clien
         assert types == {"filling", "root_canal"}
         root_canal = next(item for item in tooth_26["restorations"] if item["type"] == "root_canal")
         filling = next(item for item in tooth_26["restorations"] if item["type"] == "filling")
-        assert root_canal["surfaces"] == []
+        assert root_canal["surfaces"] == ["I"]
         assert root_canal["meta"]["raw_surface"] == 224
-        assert filling["surfaces"] == ["D"]
+        assert filling["surfaces"] == ["M", "O"]
     finally:
         session.rollback()
         if legacy_code is not None:
@@ -1230,7 +1230,7 @@ def test_tooth_state_reset_boundary_ignores_older_rows_and_skips_tooth_present_s
         tooth_35 = res.json()["teeth"]["35"]
         assert len(tooth_35["restorations"]) == 1
         assert tooth_35["restorations"][0]["type"] == "filling"
-        assert tooth_35["restorations"][0]["surfaces"] == ["M", "O"]
+        assert tooth_35["restorations"][0]["surfaces"] == ["D", "L"]
         assert tooth_35["restorations"][0]["meta"]["code_id"] == newer_code_id
         assert tooth_35["restorations"][0]["meta"]["code_label"] == "Composite filling after reset"
     finally:
