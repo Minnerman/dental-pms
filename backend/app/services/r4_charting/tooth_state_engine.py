@@ -46,6 +46,47 @@ class ToothStateProjectedTooth:
     extracted: bool = False
 
 
+@dataclass(frozen=True)
+class ToothStateExplainRow:
+    tooth: int
+    tooth_key: str
+    family: ToothStateType
+    recorded_at: datetime | None
+    domain: str
+    source_table: str | None
+    source_id: str | None
+    raw_surface: object | None
+    surfaces: tuple[str, ...]
+    code_id: int | None
+    code_label: str | None
+    normalized_label: str | None
+    is_real_domain: bool
+    is_proxy_domain: bool
+
+
+@dataclass(frozen=True)
+class ToothStateSuppressedRow:
+    row: ToothStateExplainRow
+    reason: str
+    blocking_row_source_id: str | None = None
+
+
+@dataclass
+class ToothStateProjectedToothExplain:
+    considered_rows: list[ToothStateExplainRow] = field(default_factory=list)
+    latest_reset_boundary: ToothStateExplainRow | None = None
+    suppressed_rows: list[ToothStateSuppressedRow] = field(default_factory=list)
+    surviving_rows: list[ToothStateExplainRow] = field(default_factory=list)
+    effective_rows: list[ToothStateExplainRow] = field(default_factory=list)
+    projected_tooth: ToothStateProjectedTooth = field(default_factory=ToothStateProjectedTooth)
+
+
+@dataclass
+class ToothStateProjectionResult:
+    teeth: dict[str, ToothStateProjectedTooth] = field(default_factory=dict)
+    explain: dict[str, ToothStateProjectedToothExplain] = field(default_factory=dict)
+
+
 def _canonical_payload(record: R4ChartingCanonicalRecord) -> dict[str, object]:
     if isinstance(record.payload, dict):
         return dict(record.payload)
@@ -242,25 +283,97 @@ def _row_sort_key(row: ToothStateEngineRow) -> tuple[str, str]:
     return (recorded_at_key, row.source_id or "")
 
 
-def project_tooth_state_rows(
+def _build_explain_row(row: ToothStateEngineRow) -> ToothStateExplainRow:
+    return ToothStateExplainRow(
+        tooth=row.tooth,
+        tooth_key=row.tooth_key,
+        family=row.restoration_type,
+        recorded_at=row.recorded_at,
+        domain=row.domain,
+        source_table=row.source_table,
+        source_id=row.source_id,
+        raw_surface=row.raw_surface,
+        surfaces=row.surfaces,
+        code_id=row.code_id,
+        code_label=row.code_label,
+        normalized_label=row.normalized_label,
+        is_real_domain=row.is_real_domain,
+        is_proxy_domain=row.is_proxy_domain,
+    )
+
+
+def _clone_projected_tooth(tooth: ToothStateProjectedTooth) -> ToothStateProjectedTooth:
+    return ToothStateProjectedTooth(
+        restorations=list(tooth.restorations),
+        missing=tooth.missing,
+        extracted=tooth.extracted,
+    )
+
+
+def _record_suppressed_row(
+    explain: ToothStateProjectedToothExplain,
+    row: ToothStateExplainRow,
+    *,
+    reason: str,
+    blocking_row_source_id: str | None = None,
+) -> None:
+    explain.suppressed_rows.append(
+        ToothStateSuppressedRow(
+            row=row,
+            reason=reason,
+            blocking_row_source_id=blocking_row_source_id,
+        )
+    )
+
+
+def project_tooth_state(
     rows: Sequence[ToothStateEngineRow],
-) -> dict[str, ToothStateProjectedTooth]:
+) -> ToothStateProjectionResult:
     real_teeth = {row.tooth_key for row in rows if row.is_real_domain}
     ordered_rows = sorted(rows, key=_row_sort_key, reverse=True)
 
     teeth: dict[str, ToothStateProjectedTooth] = {}
-    seen_restorations: dict[str, set[str]] = {}
-    blocked_teeth_after_reset: set[str] = set()
+    explain: dict[str, ToothStateProjectedToothExplain] = {}
+    seen_restorations: dict[str, dict[str, ToothStateExplainRow]] = {}
+    blocked_teeth_after_reset: dict[str, ToothStateExplainRow] = {}
 
     for row in ordered_rows:
+        explain_row = _build_explain_row(row)
+        tooth_explain = explain.setdefault(row.tooth_key, ToothStateProjectedToothExplain())
+        tooth_explain.considered_rows.append(explain_row)
+
         if row.tooth_key in real_teeth and row.is_proxy_domain:
-            continue
-        if row.tooth_key in blocked_teeth_after_reset:
+            _record_suppressed_row(
+                tooth_explain,
+                explain_row,
+                reason="proxy_row_shadowed_by_real_domain",
+            )
             continue
         if row.normalized_label == "reset tooth":
-            blocked_teeth_after_reset.add(row.tooth_key)
+            blocked_teeth_after_reset[row.tooth_key] = explain_row
+            tooth_explain.latest_reset_boundary = explain_row
+            tooth_explain.surviving_rows.append(explain_row)
+            tooth_explain.effective_rows.append(explain_row)
+            _record_suppressed_row(
+                tooth_explain,
+                explain_row,
+                reason="control_row_reset_boundary",
+            )
+            continue
+        if row.tooth_key in blocked_teeth_after_reset:
+            _record_suppressed_row(
+                tooth_explain,
+                explain_row,
+                reason="pre_reset_row_blocked_by_latest_reset",
+                blocking_row_source_id=blocked_teeth_after_reset[row.tooth_key].source_id,
+            )
             continue
         if row.normalized_label == "tooth present":
+            _record_suppressed_row(
+                tooth_explain,
+                explain_row,
+                reason="control_row_tooth_present",
+            )
             continue
 
         entry = teeth.setdefault(row.tooth_key, ToothStateProjectedTooth())
@@ -268,10 +381,18 @@ def project_tooth_state_rows(
             entry.extracted = True
 
         dedupe_key = "|".join([row.restoration_type, ",".join(row.surfaces)])
-        seen = seen_restorations.setdefault(row.tooth_key, set())
+        seen = seen_restorations.setdefault(row.tooth_key, {})
         if dedupe_key in seen:
+            _record_suppressed_row(
+                tooth_explain,
+                explain_row,
+                reason="same_family_surface_replaced_by_newer_surviving_row",
+                blocking_row_source_id=seen[dedupe_key].source_id,
+            )
             continue
-        seen.add(dedupe_key)
+        seen[dedupe_key] = explain_row
+        tooth_explain.surviving_rows.append(explain_row)
+        tooth_explain.effective_rows.append(explain_row)
 
         restoration_meta: dict[str, object] = {
             "source_domain": row.domain,
@@ -295,4 +416,15 @@ def project_tooth_state_rows(
             )
         )
 
-    return teeth
+    for tooth_key, tooth_explain in explain.items():
+        tooth_explain.projected_tooth = _clone_projected_tooth(
+            teeth.get(tooth_key, ToothStateProjectedTooth())
+        )
+
+    return ToothStateProjectionResult(teeth=teeth, explain=explain)
+
+
+def project_tooth_state_rows(
+    rows: Sequence[ToothStateEngineRow],
+) -> dict[str, ToothStateProjectedTooth]:
+    return project_tooth_state(rows).teeth
