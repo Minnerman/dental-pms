@@ -8690,3 +8690,4 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Charting parity roadmap documented in `docs/r4/CHARTING_PARITY_ROADMAP.md` as a planning guide for future implementation. This is a roadmap/specification step only and does not itself justify immediate runtime or module changes.
 - Formal charting parity specification now documented in `docs/r4/CHARTING_PARITY_SPEC.md`. This is a docs/specification step for future implementation and does not itself create runtime or module changes.
 - Golden Patient Corpus planning now documented in `docs/r4/CHARTING_GOLDEN_CORPUS_PLAN.md`. This is Phase 2 planning/inventory work for future charting parity execution and does not itself create runtime or module changes.
+- First selected golden cases now documented in `docs/r4/CHARTING_GOLDEN_SELECTED_CASES_V1.md`. This is still docs/evidence curation work and does not create runtime or module changes.
