@@ -23,7 +23,7 @@ _ORDERED_RULES: tuple[tuple[ToothStateType, tuple[str, ...]], ...] = (
     ("veneer", ("veneer",)),
     ("inlay_onlay", ("inlay", "onlay")),
     ("post", ("post", "core")),
-    ("root_canal", ("root canal", "rct", "endodont")),
+    ("root_canal", ("root canal", "root filling", "rct", "endodont")),
     ("filling", ("filling", "restoration", "composite", "amalgam", "gic", "glass ionomer")),
     ("extraction", ("extract", "extraction", "xla")),
     ("denture", ("denture", "partial", "full upper", "full lower")),
@@ -40,4 +40,3 @@ def classify_tooth_state_type(code_label: str | None) -> ToothStateType:
             return mapped_type
 
     return "other"
-

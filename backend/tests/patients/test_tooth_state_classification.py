@@ -18,6 +18,7 @@ from app.services.tooth_state_classification import classify_tooth_state_type
         ("Post and core build-up", "post"),
         ("Core restoration", "post"),
         ("Root canal therapy", "root_canal"),
+        ("Root Filling", "root_canal"),
         ("RCT extirpation", "root_canal"),
         ("Endodontic treatment", "root_canal"),
         ("Composite filling", "filling"),
@@ -45,4 +46,3 @@ def test_classify_tooth_state_type_empty_to_other(label: str | None):
 
 def test_classify_tooth_state_type_unknown_to_other():
     assert classify_tooth_state_type("Hygiene Review") == "other"
-
