@@ -43,7 +43,10 @@ from app.services.charting_csv import (
     rows_for_csv,
 )
 from app.services.audit import log_event
-from app.services.tooth_state_classification import classify_tooth_state_type
+from app.services.r4_charting.tooth_state_engine import (
+    build_tooth_state_engine_row,
+    project_tooth_state_rows,
+)
 from app.schemas.r4_charting import (
     ChartingAuditIn,
     PaginatedR4PerioProbeOut,
@@ -807,101 +810,27 @@ def get_tooth_state(
             .limit(limit)
         )
 
-        teeth: dict[str, R4ToothStateEntryOut] = {}
-        seen_restorations: dict[str, set[str]] = {}
-        blocked_teeth_after_reset: set[str] = set()
-        real_domain_names = {"restorative_treatment", "restorative_treatments"}
-        proxy_domain_names = {"treatment_plan_item", "treatment_plan_items"}
-        candidate_rows: list[tuple[R4ChartingCanonicalRecord, dict[str, object], str | None, str]] = []
-        real_teeth: set[str] = set()
-
-        for record, code_label in db.execute(stmt).all():
-            payload = _canonical_payload(record)
-            completed = _coerce_optional_bool(payload.get("completed"))
-            domain = (record.domain or "").strip().lower()
-            if completed is None and domain in real_domain_names:
-                completed = _coerce_optional_bool(payload.get("complete"))
-            if completed is None and domain in real_domain_names:
-                completed = True
-            if completed is not True:
-                continue
-
-            tooth = _coerce_optional_int(payload.get("tooth"))
-            if tooth is None:
-                tooth = record.tooth
-            if tooth is None or tooth <= 0:
-                continue
-            tooth_key = str(tooth)
-            if domain in real_domain_names:
-                real_teeth.add(tooth_key)
-            candidate_rows.append((record, payload, code_label, tooth_key))
-
-        for record, payload, code_label, tooth_key in candidate_rows:
-            domain = (record.domain or "").strip().lower()
-            if tooth_key in real_teeth and domain in proxy_domain_names:
-                continue
-            if tooth_key in blocked_teeth_after_reset:
-                continue
-
-            resolved_code_id, resolved_code_label = _resolve_tooth_state_label(
-                record,
-                payload,
-                code_label,
+        engine_rows = [
+            row
+            for record, code_label in db.execute(stmt).all()
+            if (row := build_tooth_state_engine_row(record, code_label)) is not None
+        ]
+        projected_teeth = project_tooth_state_rows(engine_rows)
+        teeth = {
+            tooth_key: R4ToothStateEntryOut(
+                restorations=[
+                    R4ToothStateRestorationOut(
+                        type=restoration.type,
+                        surfaces=list(restoration.surfaces),
+                        meta=restoration.meta,
+                    )
+                    for restoration in projected.restorations
+                ],
+                missing=projected.missing,
+                extracted=projected.extracted,
             )
-            normalized_label = _normalize_tooth_state_label(resolved_code_label)
-            if normalized_label == "reset tooth":
-                blocked_teeth_after_reset.add(tooth_key)
-                continue
-            if normalized_label == "tooth present":
-                continue
-
-            entry = teeth.setdefault(
-                tooth_key,
-                R4ToothStateEntryOut(restorations=[], missing=False, extracted=False),
-            )
-
-            restoration_type = classify_tooth_state_type(resolved_code_label)
-            if restoration_type == "extraction":
-                entry.extracted = True
-
-            use_bitmask_surfaces = domain in real_domain_names
-            restoration_surfaces = _extract_surface_keys(
-                payload,
-                record.surface,
-                bitmask=use_bitmask_surfaces,
-            )
-
-            dedupe_key = "|".join(
-                [
-                    restoration_type,
-                    ",".join(restoration_surfaces),
-                ]
-            )
-            seen = seen_restorations.setdefault(tooth_key, set())
-            if dedupe_key in seen:
-                continue
-            seen.add(dedupe_key)
-
-            restoration_meta: dict[str, object] = {
-                "source_domain": record.domain,
-                "source_table": record.r4_source,
-                "source_id": record.r4_source_id,
-                "completed": True,
-                "raw_surface": payload.get("surface", record.surface),
-            }
-            if resolved_code_id is not None:
-                restoration_meta["code_id"] = resolved_code_id
-            if resolved_code_label:
-                restoration_meta["code_label"] = resolved_code_label
-            if restoration_surfaces:
-                restoration_meta["mapped_surfaces"] = restoration_surfaces
-            entry.restorations.append(
-                R4ToothStateRestorationOut(
-                    type=restoration_type,
-                    surfaces=restoration_surfaces,
-                    meta=restoration_meta,
-                )
-            )
+            for tooth_key, projected in projected_teeth.items()
+        }
 
         response = R4ToothStateOut(
             patient_id=patient_id,
