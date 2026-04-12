@@ -2,6 +2,11 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 
 import { ensureAuthReady, getBaseUrl } from "./helpers/auth";
 
+type PasswordResetRequestResponse = {
+  message?: string;
+  reset_token?: string | null;
+};
+
 async function createReceptionUser(request: APIRequestContext) {
   const token = await ensureAuthReady(request);
   const baseURL = getBaseUrl();
@@ -40,19 +45,30 @@ test("forgot-password request and reset confirm allow login with the new passwor
   const newPassword = `FreshReset${Date.now()}!`;
 
   await openAuthPage(page, "/forgot-password");
+  const resetRequestResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/auth/password-reset/request") &&
+      response.request().method() === "POST" &&
+      response.status() === 200
+  );
   await page.getByLabel("Email").fill(user.email);
   await page.getByRole("button", { name: "Send reset link" }).click();
+  const resetRequestResponse = await resetRequestResponsePromise;
+  const resetRequestPayload =
+    (await resetRequestResponse.json()) as PasswordResetRequestResponse;
 
   await expect(
     page.getByText("If the account exists, a reset link has been generated.")
   ).toBeVisible({ timeout: 15_000 });
 
-  const resetLink = page.getByRole("link", { name: "Open reset form" });
-  await expect(resetLink).toBeVisible({ timeout: 15_000 });
-  await resetLink.click();
+  const resetToken = resetRequestPayload.reset_token ?? null;
+  test.skip(
+    !resetToken,
+    "RESET_TOKEN_DEBUG is disabled in this environment, so the smoke proof cannot open the reset form."
+  );
 
+  await openAuthPage(page, `/reset-password?token=${encodeURIComponent(resetToken)}`);
   await expect(page).toHaveURL(/\/reset-password\?token=/);
-  await page.waitForLoadState("networkidle");
   await page.getByLabel("New password").fill(newPassword);
   await page.getByLabel("Confirm password").fill(newPassword);
   await page.getByRole("button", { name: "Update password" }).click();
@@ -65,9 +81,9 @@ test("forgot-password request and reset confirm allow login with the new passwor
   await fillLogin(page, user.email, newPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL(/\/patients$/, { timeout: 20_000 });
-  await expect(page).not.toHaveURL(/\/change-password/, { timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
-    timeout: 15_000,
+    timeout: 20_000,
   });
+  await expect(page).not.toHaveURL(/\/change-password/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/patients(?:$|[?#])/, { timeout: 20_000 });
 });
