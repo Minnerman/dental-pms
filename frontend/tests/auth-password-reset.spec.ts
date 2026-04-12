@@ -89,6 +89,9 @@ test("forgot-password request and reset confirm allow login with the new passwor
     !resetToken,
     "RESET_TOKEN_DEBUG is disabled in this environment, so the smoke proof cannot open the reset form."
   );
+  if (!resetToken) {
+    return;
+  }
 
   await openAuthPage(page, `/reset-password?token=${encodeURIComponent(resetToken)}`);
   await expect(page).toHaveURL(/\/reset-password\?token=/);
