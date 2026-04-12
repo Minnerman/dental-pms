@@ -250,6 +250,29 @@ test("appointments deep link jumps to requested date", async ({ page, request })
   await expect(jumpDateInput).toHaveValue(targetDate);
 });
 
+test("appointments deep link keeps persisted day-sheet mode active", async ({
+  page,
+  request,
+}) => {
+  const targetDate = "2026-01-14";
+
+  await primePageAuth(page, request);
+  await page.goto("/appointments", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("appointments-page")).toBeVisible({ timeout: 15_000 });
+  await page.evaluate(() => {
+    window.localStorage.setItem("dental_pms_appointments_view", "day_sheet");
+  });
+
+  await openAppointments(page, request, `/appointments?date=${targetDate}`);
+
+  const jumpDateInput = page.getByTestId("appointments-jump-date-input");
+  await expect(jumpDateInput).toHaveValue(targetDate);
+  await expect(page.getByTestId("appointments-view-day-sheet")).toHaveClass(/btn btn-primary/);
+  await expect(page.getByTestId("appointments-view-calendar")).toHaveClass(/btn btn-secondary/);
+  await expect(page.getByText("No appointments for this day.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("appointments-calendar-toolbar")).toHaveCount(0);
+});
+
 test("appointments deep link preserves week view in calendar mode", async ({
   page,
   request,
