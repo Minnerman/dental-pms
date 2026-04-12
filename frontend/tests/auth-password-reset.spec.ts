@@ -7,6 +7,13 @@ type PasswordResetRequestResponse = {
   reset_token?: string | null;
 };
 
+type LoginApiResponse = {
+  access_token?: string;
+  accessToken?: string;
+  must_change_password?: boolean;
+  mustChangePassword?: boolean;
+};
+
 async function createReceptionUser(request: APIRequestContext) {
   const token = await ensureAuthReady(request);
   const baseURL = getBaseUrl();
@@ -29,8 +36,24 @@ async function createReceptionUser(request: APIRequestContext) {
 }
 
 async function fillLogin(page: Page, email: string, password: string) {
-  await page.locator("#login-email").fill(email);
-  await page.locator("#login-password").fill(password);
+  const emailInput = page.locator("#login-email");
+  const passwordInput = page.locator("#login-password");
+  const passwordVisibilityToggle = page.getByRole("button", { name: "Show password" });
+
+  // The login form is a controlled client component with seeded defaults. Force one client-side
+  // state transition before filling so hydration cannot restore the default email mid-submit.
+  await expect(passwordVisibilityToggle).toBeVisible({ timeout: 15_000 });
+  await passwordVisibilityToggle.click();
+  await expect(
+    page.getByRole("button", { name: "Hide password" })
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Hide password" }).click();
+  await expect(passwordVisibilityToggle).toBeVisible({ timeout: 15_000 });
+
+  await emailInput.fill(email);
+  await expect(emailInput).toHaveValue(email);
+  await passwordInput.fill(password);
+  await expect(passwordInput).toHaveValue(password);
 }
 
 async function openAuthPage(page: Page, path: string) {
@@ -79,7 +102,18 @@ test("forgot-password request and reset confirm allow login with the new passwor
 
   await openAuthPage(page, "/login");
   await fillLogin(page, user.email, newPassword);
+  const loginResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/auth/login") &&
+      response.request().method() === "POST"
+  );
   await page.getByRole("button", { name: "Sign in" }).click();
+  const loginResponse = await loginResponsePromise;
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginPayload = (await loginResponse.json()) as LoginApiResponse;
+  expect(
+    Boolean(loginPayload.must_change_password ?? loginPayload.mustChangePassword)
+  ).toBe(false);
 
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
     timeout: 20_000,
