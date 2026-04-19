@@ -11,8 +11,28 @@ if [ "${SKIP_DOCKER_BUILD:-0}" != "1" ]; then
   docker compose build
 fi
 
-echo "Starting containers..."
-docker compose up -d
+echo "Starting database..."
+docker compose up -d db
+
+echo "Waiting for database..."
+db_ready=0
+for attempt in $(seq 1 30); do
+  if docker compose exec -T db sh -lc 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+    db_ready=1
+    break
+  fi
+  sleep 2
+done
+if [ "$db_ready" -ne 1 ]; then
+  echo "Database did not become ready in time"
+  exit 1
+fi
+
+echo "Applying migrations..."
+docker compose run --rm --no-deps backend sh -lc 'python -m alembic upgrade head'
+
+echo "Starting app containers..."
+docker compose up -d backend frontend
 
 echo
 echo "Frontend production build..."
