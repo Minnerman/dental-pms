@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The paused product / V1-closeout baseline is `master@eda8cd0bbd0488f0dbb37bc26fc91a8f4f47dfdd`.
-- Current repo `master` is `b498ae63cc4b0fff0b33acf0c3113d152be3bb73`; the difference from the paused product baseline is docs-only continuity work, not resumed product development.
-- There is no active implementation slice; PR #506 remains deferred to V1.1 and is not a V1 blocker.
+- The authoritative continuity baseline is `origin/master@d83f2e90978affd9a056f137842daa2ad2054346`.
+- Current repo `master` is `d83f2e90978affd9a056f137842daa2ad2054346`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment) and PR #534 (`ops/verify.sh` fresh isolated DB fix).
+- There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: sync `master`, confirm the current baseline/latest SHA, review this file, and choose the next smallest V1.1 item only.
+- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@d83f2e9`.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,11 +70,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
-- 2026-04-19: `ops/verify.sh` was hardened on `ops-verify-fresh-db` from `master@a1c4a8c` so a fresh isolated Postgres volume is migrated before backend startup without widening into product/runtime startup behavior.
+- 2026-04-19: PR #534 merged on `master` to harden `ops/verify.sh` so a fresh isolated Postgres volume is migrated before backend startup without widening into product/runtime startup behavior.
   - Root cause: `ops/verify.sh` previously started services before Alembic, while backend startup queries `users` immediately and a fresh isolated DB has no schema yet.
   - Exact fix: start only `db`, wait for `pg_isready`, run `python -m alembic upgrade head` via `docker compose run --rm --no-deps backend`, then start `backend` and `frontend` and continue the existing verify flow.
   - Validation: isolated fresh-volume `./ops/verify.sh` passed; a second rerun on the same isolated stack also passed; the isolated stack and volumes were removed afterward.
-- 2026-04-19: Stage 132 started on `stage132-notes-history-v2` from `master@ac9c964` to close the next narrow charting canonical/parity gap for tooth-history notes without widening into UI/viewer work, completed-procedure discovery, or any R4 write path.
+- 2026-04-19: PR #533 merged on `master` to close Stage 132, enriching treatment-note tooth/surface history via reliable existing `TreatmentPlanItems` linkage without widening into UI/viewer work, completed-procedure discovery, or any R4 write path.
   - What was inspected before implementation:
     - `docs/STATUS.md`
     - `docs/r4/R4_CHARTING_DISCOVERY.md`
@@ -89,6 +89,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
     - `TreatmentNotes` already flowed through cohort select/import/parity, but did not yet preserve tooth/surface addressability for tooth-history coverage.
   - Exact slice implemented:
     - enriched canonical `treatment_note` extraction by resolving existing `(patient_code, tp_number, tp_item)` links against existing `TreatmentPlanItems` tooth/surface data
+    - dropped ambiguous treatment-note site mappings rather than guessing
     - extended treatment-notes parity comparison to include tooth/surface in latest-row matching
     - added focused extractor, treatment-notes parity, and importer hash-semantics tests for that linkage
   - Files changed in this slice:
@@ -8270,7 +8271,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- Stage 132 (`stage132-notes-history`) — tooth history canonical import + parity for `treatment_notes,patient_notes`.
+- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@d83f2e9`, keeping any preserved local operational diffs separate from product development.
 
 ## Stage 132 definition — tooth history (`treatment_notes,patient_notes`)
 - Objective: implement canonical import + parity for `treatment_notes` and `patient_notes` to support tooth-history coverage.
