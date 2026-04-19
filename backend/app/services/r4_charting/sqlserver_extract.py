@@ -12,6 +12,9 @@ from app.services.r4_charting.appointment_notes_import import (
 from app.services.r4_charting.completed_treatment_findings_import import (
     collect_completed_treatment_finding_canonical_records,
 )
+from app.services.r4_charting.completed_questionnaire_notes_import import (
+    collect_completed_questionnaire_note_canonical_records,
+)
 from app.services.r4_charting.temporary_notes_import import (
     collect_temporary_note_canonical_records,
 )
@@ -360,6 +363,34 @@ class SqlServerChartingExtractor:
             report.accepted_nonblank_note += temporary_notes_report.accepted_nonblank_note
             report.accepted_blank_note += temporary_notes_report.accepted_blank_note
             report.included += temporary_notes_report.included
+
+        if _include(
+            "completed_questionnaire_notes", "completed_questionnaire_note"
+        ) and hasattr(self._source, "list_completed_questionnaire_notes"):
+            completed_questionnaire_note_rows = self._iter_completed_questionnaire_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            )
+            completed_questionnaire_note_records, completed_questionnaire_notes_report = (
+                collect_completed_questionnaire_note_canonical_records(
+                    completed_questionnaire_note_rows,
+                    date_from=date_from,
+                    date_to=date_to,
+                )
+            )
+            records.extend(completed_questionnaire_note_records)
+            report.missing_patient_code += completed_questionnaire_notes_report.missing_patient_code
+            report.missing_date += completed_questionnaire_notes_report.missing_date
+            report.out_of_window += completed_questionnaire_notes_report.out_of_window
+            report.blank_note += completed_questionnaire_notes_report.blank_note
+            report.duplicate_key += completed_questionnaire_notes_report.duplicate_key
+            report.accepted_nonblank_note += (
+                completed_questionnaire_notes_report.accepted_nonblank_note
+            )
+            report.accepted_blank_note += completed_questionnaire_notes_report.accepted_blank_note
+            report.included += completed_questionnaire_notes_report.included
 
         if _include("treatment_plans", "treatment_plan"):
             for item in self._iter_treatment_plans(
@@ -863,6 +894,41 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_appointment_notes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_completed_questionnaire_notes(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not patient_codes:
+            yield from self._source.list_completed_questionnaire_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_completed_questionnaire_notes(
                     patients_from=code,
                     patients_to=code,
                     limit=batch_limit,

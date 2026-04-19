@@ -26,6 +26,7 @@ from app.services.r4_import.types import (
     R4NoteCategory,
     R4TreatmentNote,
     R4TemporaryNote,
+    R4CompletedQuestionnaireNote,
     R4OldPatientNote,
 )
 
@@ -191,6 +192,14 @@ class R4Source(Protocol):
         patients_to: int | None = None,
         limit: int | None = None,
     ) -> Iterable[R4AppointmentNote]:
+        raise NotImplementedError
+
+    def list_completed_questionnaire_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4CompletedQuestionnaireNote]:
         raise NotImplementedError
 
     def list_old_patient_notes(

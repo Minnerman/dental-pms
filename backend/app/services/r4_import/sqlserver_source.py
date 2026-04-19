@@ -33,6 +33,7 @@ from app.services.r4_import.types import (
     R4NoteCategory,
     R4TreatmentNote,
     R4TemporaryNote,
+    R4CompletedQuestionnaireNote,
     R4OldPatientNote,
 )
 
@@ -2532,6 +2533,78 @@ class R4SqlServerSource:
                 if row.get("cancelled") is not None
                 else None,
                 appt_flag=int(appt_flag) if appt_flag is not None else None,
+            )
+
+    def list_completed_questionnaire_notes(
+        self,
+        patients_from: int | None = None,
+        patients_to: int | None = None,
+        limit: int | None = None,
+    ) -> Iterable[R4CompletedQuestionnaireNote]:
+        patient_col = self._require_column("CompletedQuestionnaire", ["PatientCode", "patientcode"])
+        row_id_col = self._pick_column(
+            "CompletedQuestionnaire",
+            [
+                "CompletedQuestionnaireID",
+                "CompletedQuestionnaireId",
+                "QuestionnaireID",
+                "QuestionnaireId",
+                "ID",
+                "Id",
+                "RecordID",
+                "RowID",
+            ],
+        )
+        date_col = self._pick_column(
+            "CompletedQuestionnaire",
+            ["DateTime", "Date", "CompletedDate", "CreatedDate", "LastEditDate"],
+        )
+        note_col = self._pick_column("CompletedQuestionnaire", ["Notes", "Note", "NoteBody", "FreeText"])
+
+        where_parts: list[str] = []
+        params: list[Any] = []
+        range_clause, range_params = self._build_range_filter(patient_col, patients_from, patients_to)
+        if range_clause:
+            where_parts.append(range_clause.replace("WHERE", "").strip())
+            params.extend(range_params)
+        where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+        select_cols = [f"{patient_col} AS patient_code"]
+        if row_id_col:
+            select_cols.append(f"{row_id_col} AS source_row_id")
+        if date_col:
+            select_cols.append(f"{date_col} AS completed_at")
+        if note_col:
+            select_cols.append(f"{note_col} AS note")
+
+        order_cols = [patient_col]
+        if row_id_col:
+            order_cols.append(row_id_col)
+        elif date_col:
+            order_cols.append(date_col)
+
+        sql = (
+            f"SELECT {', '.join(select_cols)} FROM dbo.CompletedQuestionnaire WITH (NOLOCK) "
+            f"{where_sql} ORDER BY {', '.join(order_cols)} ASC"
+        )
+        if limit is not None:
+            sql = (
+                f"SELECT TOP (?) {', '.join(select_cols)} FROM dbo.CompletedQuestionnaire WITH (NOLOCK) "
+                f"{where_sql} ORDER BY {', '.join(order_cols)} ASC"
+            )
+            rows = self._query(sql, [limit, *params])
+        else:
+            rows = self._query(sql, params)
+
+        for row in rows:
+            patient_code = row.get("patient_code")
+            yield R4CompletedQuestionnaireNote(
+                patient_code=int(patient_code) if patient_code is not None else None,
+                source_row_id=(
+                    int(row["source_row_id"]) if row.get("source_row_id") is not None else None
+                ),
+                completed_at=row.get("completed_at"),
+                note=(row.get("note") or "").strip() or None,
             )
 
     def list_treatments(self, limit: int | None = None) -> Iterable[R4Treatment]:

@@ -312,6 +312,13 @@ class R4TemporaryNote(BaseModel):
     user_code: int | None = None
 
 
+class R4CompletedQuestionnaireNote(BaseModel):
+    patient_code: int | None = None
+    source_row_id: int | None = None
+    completed_at: datetime | None = None
+    note: str | None = None
+
+
 class R4OldPatientNote(BaseModel):
     patient_code: int | None = None
     note_number: int | None = None
