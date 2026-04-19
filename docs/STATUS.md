@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@d83f2e90978affd9a056f137842daa2ad2054346`.
-- Current repo `master` is `d83f2e90978affd9a056f137842daa2ad2054346`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment) and PR #534 (`ops/verify.sh` fresh isolated DB fix).
+- The authoritative continuity baseline is `origin/master@4bbe1e431ae53f8fdd15ad38a491b322251b3e89`.
+- Current repo `master` is `4bbe1e431ae53f8fdd15ad38a491b322251b3e89`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), and PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring).
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@d83f2e9`.
+- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@4bbe1e4`.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,6 +70,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-19: PR #536 merged on `master` to wire backend-only `completed_questionnaire_notes` into the charting canonical import/parity flow without widening into UI/API work or any R4 write path.
+  - Exact slice implemented:
+    - added typed source rows, SQL Server extraction, canonical mapping, and CLI domain registration for `completed_questionnaire_notes`
+    - added a dedicated parity pack plus focused extractor, CLI, parity-pack, and parity-run tests
+    - kept the implementation scoped to scout-discovered fields only, with conservative row identity fallback when SQL row IDs are absent
+- 2026-04-19: PR #535 merged on `master` as a docs-only continuity refresh so `docs/STATUS.md` matched the real post-PR-#533/#534 baseline and stopped presenting Stage 132 and the appointments UTC deep-link proof line as still pending.
 - 2026-04-19: PR #534 merged on `master` to harden `ops/verify.sh` so a fresh isolated Postgres volume is migrated before backend startup without widening into product/runtime startup behavior.
   - Root cause: `ops/verify.sh` previously started services before Alembic, while backend startup queries `users` immediately and a fresh isolated DB has no schema yet.
   - Exact fix: start only `db`, wait for `pg_isready`, run `python -m alembic upgrade head` via `docker compose run --rm --no-deps backend`, then start `backend` and `frontend` and continue the existing verify flow.
@@ -8271,7 +8277,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@d83f2e9`, keeping any preserved local operational diffs separate from product development.
+- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@4bbe1e4`, keeping any preserved local operational diffs separate from product development.
+- Historical stage definitions below are archived reference only. Stage 132 is already closed on `master` via PR #533 and is not the active next slice.
 
 ## Stage 132 definition — tooth history (`treatment_notes,patient_notes`)
 - Objective: implement canonical import + parity for `treatment_notes` and `patient_notes` to support tooth-history coverage.
