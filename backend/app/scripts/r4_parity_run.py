@@ -13,6 +13,7 @@ from app.scripts import (
     r4_chart_healing_actions_parity_pack,
     r4_completed_treatment_findings_parity_pack,
     r4_appointment_notes_parity_pack,
+    r4_completed_questionnaire_notes_parity_pack,
     r4_patient_notes_parity_pack,
     r4_perioprobe_parity_pack,
     r4_restorative_treatments_parity_pack,
@@ -30,6 +31,7 @@ ALL_DOMAINS = (
     "restorative_treatments",
     "completed_treatment_findings",
     "appointment_notes",
+    "completed_questionnaire_notes",
     "perioprobe",
     "patient_notes",
     "temporary_notes",
@@ -246,6 +248,17 @@ def run_parity(
                     row_limit=row_limit,
                     include_sqlserver=True,
                 )
+            elif domain == "completed_questionnaire_notes":
+                domain_report = (
+                    r4_completed_questionnaire_notes_parity_pack.build_parity_report(
+                        session,
+                        patient_codes=patient_codes,
+                        date_from=date_from,
+                        date_to=date_to,
+                        row_limit=row_limit,
+                        include_sqlserver=True,
+                    )
+                )
             elif domain == "patient_notes":
                 domain_report = r4_patient_notes_parity_pack.build_parity_report(
                     session,
@@ -335,8 +348,8 @@ def main() -> int:
         "--domains",
         help=(
             "Comma-separated subset: "
-            "bpe,bpe_furcation,chart_healing_actions,restorative_treatments,completed_treatment_findings,appointment_notes,perioprobe,"
-            "patient_notes,temporary_notes,treatment_plans,treatment_notes,treatment_plan_items "
+            "bpe,bpe_furcation,chart_healing_actions,restorative_treatments,completed_treatment_findings,appointment_notes,"
+            "completed_questionnaire_notes,perioprobe,patient_notes,temporary_notes,treatment_plans,treatment_notes,treatment_plan_items "
             "(default all)."
         ),
     )
