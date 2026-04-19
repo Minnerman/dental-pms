@@ -70,6 +70,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-19: `ops/verify.sh` was hardened on `ops-verify-fresh-db` from `master@a1c4a8c` so a fresh isolated Postgres volume is migrated before backend startup without widening into product/runtime startup behavior.
+  - Root cause: `ops/verify.sh` previously started services before Alembic, while backend startup queries `users` immediately and a fresh isolated DB has no schema yet.
+  - Exact fix: start only `db`, wait for `pg_isready`, run `python -m alembic upgrade head` via `docker compose run --rm --no-deps backend`, then start `backend` and `frontend` and continue the existing verify flow.
+  - Validation: isolated fresh-volume `./ops/verify.sh` passed; a second rerun on the same isolated stack also passed; the isolated stack and volumes were removed afterward.
 - 2026-04-19: Stage 132 started on `stage132-notes-history-v2` from `master@ac9c964` to close the next narrow charting canonical/parity gap for tooth-history notes without widening into UI/viewer work, completed-procedure discovery, or any R4 write path.
   - What was inspected before implementation:
     - `docs/STATUS.md`
