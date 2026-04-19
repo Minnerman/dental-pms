@@ -251,14 +251,20 @@ class SqlServerChartingExtractor:
                 )
 
         if _include("treatment_notes", "treatment_note"):
-            for item in self._iter_treatment_notes(
-                patients_from=patients_from,
-                patients_to=patients_to,
-                patient_codes=patient_codes,
-                date_from=date_from,
-                date_to=date_to,
-                limit=limit,
-            ):
+            treatment_note_rows = list(
+                self._iter_treatment_notes(
+                    patients_from=patients_from,
+                    patients_to=patients_to,
+                    patient_codes=patient_codes,
+                    date_from=date_from,
+                    date_to=date_to,
+                    limit=limit,
+                )
+            )
+            treatment_note_sites = self._build_treatment_note_site_lookup(
+                treatment_note_rows
+            )
+            for item in treatment_note_rows:
                 note_date = item.note_date
                 if not _date_in_range(note_date, date_from, date_to, report):
                     continue
@@ -267,6 +273,25 @@ class SqlServerChartingExtractor:
                 else:
                     note_digest = hashlib.sha1((item.note or "").encode("utf-8")).hexdigest()[:16]
                     source_id = f"{item.patient_code}:{note_date}:{note_digest}"
+
+                tooth = getattr(item, "tooth", None)
+                surface = getattr(item, "surface", None)
+                if tooth is None and surface is None:
+                    key = (
+                        item.patient_code,
+                        item.tp_number,
+                        item.tp_item,
+                    )
+                    linked_site = treatment_note_sites.get(key)
+                    if linked_site is not None:
+                        tooth, surface = linked_site
+
+                payload = item.model_dump() if hasattr(item, "model_dump") else item.dict()
+                if tooth is not None:
+                    payload["tooth"] = tooth
+                if surface is not None:
+                    payload["surface"] = surface
+
                 records.append(
                     CanonicalRecordInput(
                         domain="treatment_note",
@@ -275,11 +300,11 @@ class SqlServerChartingExtractor:
                         legacy_patient_code=item.patient_code,
                         recorded_at=note_date,
                         entered_at=None,
-                        tooth=None,
-                        surface=None,
+                        tooth=tooth,
+                        surface=surface,
                         code_id=None,
                         status=None,
-                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                        payload=payload,
                     )
                 )
 
@@ -724,6 +749,60 @@ class SqlServerChartingExtractor:
                         batch_limit = remaining
                         if remaining <= 0:
                             break
+
+    def _build_treatment_note_site_lookup(
+        self,
+        notes,
+    ) -> dict[tuple[int | None, int | None, int | None], tuple[int | None, int | None]]:
+        if not hasattr(self._source, "list_treatment_plan_items"):
+            return {}
+
+        needed_by_patient: dict[int, set[tuple[int, int]]] = {}
+        for item in notes:
+            if (
+                item.patient_code is None
+                or item.tp_number is None
+                or item.tp_item is None
+            ):
+                continue
+            needed_by_patient.setdefault(int(item.patient_code), set()).add(
+                (int(item.tp_number), int(item.tp_item))
+            )
+
+        lookup: dict[
+            tuple[int | None, int | None, int | None], tuple[int | None, int | None]
+        ] = {}
+        ambiguous: set[tuple[int | None, int | None, int | None]] = set()
+        for patient_code, needed_pairs in needed_by_patient.items():
+            tp_numbers = {tp_number for tp_number, _ in needed_pairs}
+            tp_from = min(tp_numbers) if tp_numbers else None
+            tp_to = max(tp_numbers) if tp_numbers else None
+            for item in self._source.list_treatment_plan_items(
+                patients_from=patient_code,
+                patients_to=patient_code,
+                tp_from=tp_from,
+                tp_to=tp_to,
+                limit=None,
+            ):
+                key = (item.patient_code, item.tp_number, item.tp_item)
+                if (
+                    item.patient_code is None
+                    or item.tp_number is None
+                    or item.tp_item is None
+                    or (int(item.tp_number), int(item.tp_item)) not in needed_pairs
+                ):
+                    continue
+                site = (item.tooth, item.surface)
+                previous = lookup.get(key)
+                if previous is None:
+                    lookup[key] = site
+                    continue
+                if previous != site:
+                    ambiguous.add(key)
+
+        for key in ambiguous:
+            lookup.pop(key, None)
+        return lookup
 
     def _iter_temporary_notes(
         self,

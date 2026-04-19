@@ -70,6 +70,30 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-19: Stage 132 started on `stage132-notes-history-v2` from `master@ac9c964` to close the next narrow charting canonical/parity gap for tooth-history notes without widening into UI/viewer work, completed-procedure discovery, or any R4 write path.
+  - What was inspected before implementation:
+    - `docs/STATUS.md`
+    - `docs/r4/R4_CHARTING_DISCOVERY.md`
+    - `backend/app/services/r4_charting/sqlserver_extract.py`
+    - `backend/app/services/r4_import/sqlserver_source.py`
+    - `backend/app/scripts/r4_treatment_notes_parity_pack.py`
+    - `backend/app/scripts/r4_patient_notes_parity_pack.py`
+    - `backend/tests/r4_import/test_sqlserver_extract.py`
+    - `backend/tests/r4_import/test_charting_canonical_importer.py`
+  - Confirmed narrow gap:
+    - `PatientNotes` already carried tooth/surface metadata into canonical rows.
+    - `TreatmentNotes` already flowed through cohort select/import/parity, but did not yet preserve tooth/surface addressability for tooth-history coverage.
+  - Exact slice implemented:
+    - enriched canonical `treatment_note` extraction by resolving existing `(patient_code, tp_number, tp_item)` links against existing `TreatmentPlanItems` tooth/surface data
+    - extended treatment-notes parity comparison to include tooth/surface in latest-row matching
+    - added focused extractor, treatment-notes parity, and importer hash-semantics tests for that linkage
+  - Files changed in this slice:
+    - `backend/app/services/r4_charting/sqlserver_extract.py`
+    - `backend/app/scripts/r4_treatment_notes_parity_pack.py`
+    - `backend/tests/r4_import/test_sqlserver_extract.py`
+    - `backend/tests/r4_import/test_charting_canonical_importer.py`
+    - `backend/tests/r4_import/test_r4_treatment_notes_parity_pack.py`
+    - `docs/STATUS.md`
 - 2026-03-28: V1 release-candidate signoff completed on `master@5e37681` with the V1 board frozen to the 9 finish-line conditions only, no product scope changes, PR #506 explicitly deferred to V1.1, and R4 kept read-only throughout.
   - Signoff evidence captured on the exact master commit:
     - GitHub check-runs on `5e37681f81b14039fa251294d4abbc23beb9c71b`: `backend` success, `frontend` success, `playwright-parity` success, `playwright-smoke` success, `recalls-api` success

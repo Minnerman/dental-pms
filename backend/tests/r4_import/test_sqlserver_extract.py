@@ -594,13 +594,26 @@ def test_collect_canonical_records_patient_note_source_id_fallback_when_note_num
 
 
 class DummyTreatmentNote:
-    def __init__(self, patient_code, note_id, note_date, note):
+    def __init__(
+        self,
+        patient_code,
+        note_id,
+        note_date,
+        note,
+        *,
+        tp_number=1,
+        tp_item=1,
+        tooth=None,
+        surface=None,
+    ):
         self.patient_code = patient_code
         self.note_id = note_id
         self.note_date = note_date
         self.note = note
-        self.tp_number = 1
-        self.tp_item = 1
+        self.tp_number = tp_number
+        self.tp_item = tp_item
+        self.tooth = tooth
+        self.surface = surface
         self.user_code = None
 
     def model_dump(self):
@@ -611,6 +624,8 @@ class DummyTreatmentNote:
             "note": self.note,
             "tp_number": self.tp_number,
             "tp_item": self.tp_item,
+            "tooth": self.tooth,
+            "surface": self.surface,
             "user_code": self.user_code,
         }
 
@@ -639,18 +654,46 @@ def test_collect_canonical_records_includes_treatment_notes_with_date_bounds():
                 ),
             ]
 
+        def list_treatment_plan_items(
+            self,
+            patients_from=None,
+            patients_to=None,
+            tp_from=None,
+            tp_to=None,
+            date_from=None,
+            date_to=None,
+            limit=None,
+        ):
+            class PlanItem:
+                patient_code = patients_from
+                tp_number = 1
+                tp_item = 1
+                tooth = 24
+                surface = 3
+
+            assert patients_from == patients_to
+            if tp_from is not None or tp_to is not None:
+                assert tp_from == 1
+                assert tp_to == 1
+            return [PlanItem()]
+
     extractor = object.__new__(extract.SqlServerChartingExtractor)
     extractor._source = TreatmentSource()
     records, dropped = extractor.collect_canonical_records(
         patient_codes=[1016312],
         date_from=date(2010, 1, 1),
         date_to=date(2026, 2, 1),
+        domains=["treatment_notes"],
         limit=10,
     )
     treatment = [r for r in records if r.r4_source == "dbo.TreatmentNotes"]
     assert len(treatment) == 1
     assert treatment[0].domain == "treatment_note"
     assert treatment[0].r4_source_id == "11"
+    assert treatment[0].tooth == 24
+    assert treatment[0].surface == 3
+    assert treatment[0].payload["tooth"] == 24
+    assert treatment[0].payload["surface"] == 3
     assert dropped["out_of_range"] == 0
 
 
