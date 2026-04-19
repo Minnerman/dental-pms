@@ -4,6 +4,7 @@ from sqlalchemy import delete, func, select
 from app.db.session import SessionLocal
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.services.r4_charting.canonical_importer import (
+    _compute_content_hash,
     import_r4_charting_canonical,
     import_r4_charting_canonical_report,
 )
@@ -376,3 +377,46 @@ def test_content_hash_updates_on_change():
         assert stats_second.updated == 1
     finally:
         session.close()
+
+
+def test_treatment_note_content_hash_includes_tooth_surface_metadata():
+    base = CanonicalRecordInput(
+        domain="treatment_note",
+        r4_source="dbo.TreatmentNotes",
+        r4_source_id="6001",
+        legacy_patient_code=1001,
+        recorded_at=datetime(2026, 1, 6, 12, 0, 0, tzinfo=timezone.utc),
+        entered_at=None,
+        tooth=11,
+        surface=1,
+        code_id=None,
+        status=None,
+        payload={
+            "patient_code": 1001,
+            "note_id": 6001,
+            "tp_number": 1,
+            "tp_item": 1,
+            "tooth": 11,
+            "surface": 1,
+            "note": "Treat note",
+        },
+    )
+    changed = CanonicalRecordInput(
+        domain=base.domain,
+        r4_source=base.r4_source,
+        r4_source_id=base.r4_source_id,
+        legacy_patient_code=base.legacy_patient_code,
+        recorded_at=base.recorded_at,
+        entered_at=base.entered_at,
+        tooth=12,
+        surface=2,
+        code_id=base.code_id,
+        status=base.status,
+        payload={
+            **(base.payload or {}),
+            "tooth": 12,
+            "surface": 2,
+        },
+    )
+
+    assert _compute_content_hash(base) != _compute_content_hash(changed)

@@ -93,8 +93,50 @@ def _latest_digest(row: dict[str, object] | None) -> dict[str, object] | None:
         "recorded_at": row.get("recorded_at"),
         "tp_number": row.get("tp_number"),
         "tp_item": row.get("tp_item"),
+        "tooth": row.get("tooth"),
+        "surface": row.get("surface"),
         "note_body": _normalize_note(row.get("note_body")),
     }
+
+
+def _build_plan_item_site_lookup(
+    source: R4SqlServerSource,
+    *,
+    patient_code: int,
+    notes: list[dict[str, object]],
+) -> dict[tuple[int, int], tuple[int | None, int | None]]:
+    needed_pairs = {
+        (int(row["tp_number"]), int(row["tp_item"]))
+        for row in notes
+        if row.get("tp_number") is not None and row.get("tp_item") is not None
+    }
+    if not needed_pairs:
+        return {}
+
+    tp_numbers = {tp_number for tp_number, _ in needed_pairs}
+    lookup: dict[tuple[int, int], tuple[int | None, int | None]] = {}
+    ambiguous: set[tuple[int, int]] = set()
+    for item in source.list_treatment_plan_items(
+        patients_from=patient_code,
+        patients_to=patient_code,
+        tp_from=min(tp_numbers),
+        tp_to=max(tp_numbers),
+        limit=None,
+    ):
+        key = (item.tp_number, item.tp_item)
+        if key not in needed_pairs:
+            continue
+        site = (item.tooth, item.surface)
+        previous = lookup.get(key)
+        if previous is None:
+            lookup[key] = site
+            continue
+        if previous != site:
+            ambiguous.add(key)
+
+    for key in ambiguous:
+        lookup.pop(key, None)
+    return lookup
 
 
 def _canonical_rows(
@@ -132,6 +174,8 @@ def _canonical_rows(
                 "recorded_at": _iso(row.recorded_at),
                 "tp_number": payload.get("tp_number"),
                 "tp_item": payload.get("tp_item"),
+                "tooth": payload.get("tooth", row.tooth),
+                "surface": payload.get("surface", row.surface),
                 "note_body": payload.get("note"),
             }
         )
@@ -147,15 +191,33 @@ def _sqlserver_rows(
     row_limit: int,
 ) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
-    for item in source.list_treatment_notes(
-        patients_from=patient_code,
-        patients_to=patient_code,
-        date_from=date_from,
-        date_to=date_to,
-        limit=row_limit,
-    ):
+    note_rows = list(
+        source.list_treatment_notes(
+            patients_from=patient_code,
+            patients_to=patient_code,
+            date_from=date_from,
+            date_to=date_to,
+            limit=row_limit,
+        )
+    )
+    plan_item_sites = _build_plan_item_site_lookup(
+        source,
+        patient_code=patient_code,
+        notes=[
+            {
+                "tp_number": item.tp_number,
+                "tp_item": item.tp_item,
+            }
+            for item in note_rows
+        ],
+    )
+    for item in note_rows:
         if not _in_date_window(item.note_date, date_from, date_to):
             continue
+        tooth = getattr(item, "tooth", None)
+        surface = getattr(item, "surface", None)
+        if tooth is None and surface is None and item.tp_number is not None and item.tp_item is not None:
+            tooth, surface = plan_item_sites.get((item.tp_number, item.tp_item), (None, None))
         out.append(
             {
                 "patient_code": item.patient_code,
@@ -163,6 +225,8 @@ def _sqlserver_rows(
                 "recorded_at": _iso(item.note_date),
                 "tp_number": item.tp_number,
                 "tp_item": item.tp_item,
+                "tooth": tooth,
+                "surface": surface,
                 "note_body": item.note,
             }
         )
