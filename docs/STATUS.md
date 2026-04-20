@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@4bbe1e431ae53f8fdd15ad38a491b322251b3e89`.
-- Current repo `master` is `4bbe1e431ae53f8fdd15ad38a491b322251b3e89`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), and PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring).
+- The authoritative continuity baseline is `origin/master@38c7469b6b9bee9c56d9c3e253925f1fb603fb90`.
+- Current repo `master` is `38c7469b6b9bee9c56d9c3e253925f1fb603fb90`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring), PR #537 (`docs/STATUS.md` continuity refresh after #535/#536), and PR #538 (proof-only `chart_healing_actions` parity-pack test).
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@4bbe1e4`.
+- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@38c7469`.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,6 +70,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-20: PR #538 merged on `master` as a one-file proof-only slice to close the `chart_healing_actions` parity-pack proof gap without widening into production code, frontend/runtime work, or any R4 write path.
+  - Exact slice implemented:
+    - added focused parity-pack tests proving the latest-key/latest-digest field sets, SQL-row mapping/date-window behavior, and `build_parity_report(...)` distinction between latest-key match and latest-digest mismatch
+    - kept the slice test-only and conservative against the existing production parity-pack logic
+- 2026-04-20: PR #537 merged on `master` as a docs-only continuity refresh so `docs/STATUS.md` matched the real post-PR-#535/#536 baseline and stopped pointing `## Next up` back to `master@4bbe1e4`.
 - 2026-04-19: PR #536 merged on `master` to wire backend-only `completed_questionnaire_notes` into the charting canonical import/parity flow without widening into UI/API work or any R4 write path.
   - Exact slice implemented:
     - added typed source rows, SQL Server extraction, canonical mapping, and CLI domain registration for `completed_questionnaire_notes`
@@ -8277,7 +8282,8 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@4bbe1e4`, keeping any preserved local operational diffs separate from product development.
+- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@38c7469`, keeping any preserved local operational diffs separate from product development.
+- `chart_healing_actions` parity-pack proof is already closed on current master via PR #538 and is not the active next gap.
 - Historical stage definitions below are archived reference only. Stage 132 is already closed on `master` via PR #533 and is not the active next slice.
 
 ## Stage 132 definition — tooth history (`treatment_notes,patient_notes`)
