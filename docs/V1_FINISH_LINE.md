@@ -15,7 +15,7 @@ Run a full working day using Dental PMS for:
 ### Appointments
 - Create / edit / cancel appointments
 - Reschedule via drag/resize with clear saving state
-- Conflict detection blocks overlapping bookings
+- Conflict detection surfaces warning-based overlap handling on create; same-clinician create conflicts remain non-blocking in the current accepted workflow
 - Booking modal UX: patient search focus, required fields validation
 - Keyboard shortcuts: N (new), / (search), Esc (close)
 
