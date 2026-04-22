@@ -14,6 +14,7 @@ from app.services.r4_charting.sqlserver_extract import (
     get_distinct_bpe_patient_codes,
     get_distinct_chart_healing_actions_patient_codes,
     get_distinct_patient_notes_patient_codes,
+    get_distinct_perio_plaque_patient_codes,
     get_distinct_perioprobe_patient_codes,
     get_distinct_restorative_treatments_patient_codes,
     get_distinct_treatment_plans_patient_codes,
@@ -24,6 +25,7 @@ from app.services.r4_charting.sqlserver_extract import (
 
 ALL_DOMAINS = (
     "perioprobe",
+    "perio_plaque",
     "bpe",
     "bpe_furcation",
     "chart_healing_actions",
@@ -62,6 +64,8 @@ def _build_domain_codes(
 ) -> list[int]:
     if domain == "perioprobe":
         return get_distinct_perioprobe_patient_codes(date_from, date_to, limit=limit)
+    if domain == "perio_plaque":
+        return get_distinct_perio_plaque_patient_codes(date_from, date_to, limit=limit)
     if domain == "bpe":
         return get_distinct_bpe_patient_codes(date_from, date_to, limit=limit)
     if domain == "bpe_furcation":
@@ -233,12 +237,12 @@ def main() -> int:
     parser.add_argument(
         "--domains",
         default=(
-            "perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
+            "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
             "treatment_plans,treatment_notes,treatment_plan_items"
         ),
         help=(
             "Comma-separated subset: "
-            "perioprobe,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
+            "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
             "treatment_plans,treatment_notes,treatment_plan_items."
         ),
     )

@@ -4,6 +4,7 @@ from app.scripts import r4_cohort_select
 def test_parse_domains_csv_defaults_include_treatment_plan_items():
     assert r4_cohort_select._parse_domains_csv(None) == [
         "perioprobe",
+        "perio_plaque",
         "bpe",
         "bpe_furcation",
         "chart_healing_actions",
@@ -163,6 +164,10 @@ def test_parse_domains_csv_accepts_treatment_notes():
     assert r4_cohort_select._parse_domains_csv("treatment_notes") == ["treatment_notes"]
 
 
+def test_parse_domains_csv_accepts_perio_plaque():
+    assert r4_cohort_select._parse_domains_csv("perio_plaque") == ["perio_plaque"]
+
+
 def test_parse_domains_csv_accepts_treatment_plans():
     assert r4_cohort_select._parse_domains_csv("treatment_plans") == ["treatment_plans"]
 
@@ -181,6 +186,20 @@ def test_parse_domains_csv_accepts_restorative_treatments():
     assert r4_cohort_select._parse_domains_csv("restorative_treatments") == [
         "restorative_treatments"
     ]
+
+
+def test_build_domain_codes_perio_plaque(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "get_distinct_perio_plaque_patient_codes",
+        lambda date_from, date_to, limit: [4001, 4002],
+    )
+    assert r4_cohort_select._build_domain_codes(
+        "perio_plaque",
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+    ) == [4001, 4002]
 
 
 def test_select_cohort_active_patients_mode_applies_exclusions_and_limit(monkeypatch):

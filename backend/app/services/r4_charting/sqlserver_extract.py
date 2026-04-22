@@ -222,6 +222,40 @@ class SqlServerChartingExtractor:
                     )
                 )
 
+        if _include("perio_plaque") and hasattr(self._source, "list_perio_plaque"):
+            for item in self._iter_perio_plaque(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                recorded_at = item.recorded_at
+                if date_from or date_to:
+                    if recorded_at is None:
+                        report.undated_included += 1
+                    else:
+                        if not _date_in_range(recorded_at, date_from, date_to, report):
+                            continue
+                if item.trans_id is not None:
+                    source_id = f"{item.trans_id}:{item.tooth}"
+                else:
+                    source_id = f"{item.patient_code}:{item.tooth}:{recorded_at}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="perio_plaque",
+                        r4_source="dbo.PerioPlaque",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=recorded_at,
+                        entered_at=None,
+                        tooth=item.tooth,
+                        surface=None,
+                        code_id=None,
+                        status=None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
         if _include("patient_notes", "patient_note"):
             for item in self._iter_patient_notes(
                 patients_from=patients_from,
@@ -657,6 +691,43 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_perio_probes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_perio_plaque(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not hasattr(self._source, "list_perio_plaque"):
+            return
+        if not patient_codes:
+            yield from self._source.list_perio_plaque(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_perio_plaque(
                     patients_from=code,
                     patients_to=code,
                     limit=batch_limit,
@@ -1369,6 +1440,46 @@ def get_distinct_perioprobe_patient_codes(
             continue
         # Keep selector semantics aligned with canonical importer:
         # when bounds are set, undated perio rows are still eligible.
+        recorded_at = row.recorded_at
+        if recorded_at is not None:
+            day = recorded_at.date()
+            if day < date_from or day > date_to:
+                continue
+        seen.add(code)
+        codes.append(code)
+        if len(codes) >= limit:
+            break
+    codes.sort()
+    return codes
+
+
+def get_distinct_perio_plaque_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    extractor = SqlServerChartingExtractor(config)
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in extractor._iter_perio_plaque(  # noqa: SLF001
+        patients_from=None,
+        patients_to=None,
+        patient_codes=None,
+        limit=None,
+    ):
+        code = row.patient_code
+        if code is None or code in seen:
+            continue
         recorded_at = row.recorded_at
         if recorded_at is not None:
             day = recorded_at.date()
