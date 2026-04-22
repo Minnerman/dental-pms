@@ -117,6 +117,50 @@ def test_get_distinct_perioprobe_patient_codes_dedupes_and_orders(monkeypatch):
     assert result == [1000000, 1000001]
 
 
+def test_get_distinct_perio_plaque_patient_codes_dedupes_and_orders(monkeypatch):
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummyPlaque:
+        def __init__(self, patient_code, recorded_at):
+            self.patient_code = patient_code
+            self.recorded_at = recorded_at
+
+    class DummyExtractor:
+        def __init__(self, _config):
+            self._config = _config
+
+        def _iter_perio_plaque(
+            self,
+            *,
+            patients_from,
+            patients_to,
+            patient_codes,
+            limit,
+        ):
+            assert patients_from is None
+            assert patients_to is None
+            assert patient_codes is None
+            assert limit is None
+            return [
+                DummyPlaque(1000003, datetime(2016, 12, 31, 10, 0, 0)),
+                DummyPlaque(1000000, datetime(2025, 1, 1, 10, 0, 0)),
+                DummyPlaque(1000001, None),
+                DummyPlaque(1000000, datetime(2025, 1, 2, 10, 0, 0)),
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "SqlServerChartingExtractor", DummyExtractor)
+
+    result = extract.get_distinct_perio_plaque_patient_codes("2017-01-01", "2026-02-01", limit=5)
+
+    assert result == [1000000, 1000001]
+
+
 def test_get_distinct_patient_notes_patient_codes_dedupes_and_orders(monkeypatch):
     captured = {}
 
@@ -409,6 +453,9 @@ class DummySourceForNotes:
     def list_perio_probes(self, patients_from=None, patients_to=None, limit=None):
         return []
 
+    def list_perio_plaque(self, patients_from=None, patients_to=None, limit=None):
+        return []
+
     def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
         assert patients_from is not None
         assert patients_to is not None
@@ -549,6 +596,82 @@ def test_collect_canonical_records_treatment_plan_items_use_plan_creation_date()
     assert len(items) == 1
     assert items[0].recorded_at == datetime(2025, 5, 1, 9, 0, 0)
     assert dropped["out_of_range"] == 0
+
+
+def test_collect_canonical_records_includes_perio_plaque_with_date_bounds():
+    class DummyPlaque:
+        def __init__(self, patient_code, trans_id, tooth, recorded_at, plaque, bleeding):
+            self.patient_code = patient_code
+            self.trans_id = trans_id
+            self.tooth = tooth
+            self.recorded_at = recorded_at
+            self.plaque = plaque
+            self.bleeding = bleeding
+
+        def model_dump(self):
+            return {
+                "patient_code": self.patient_code,
+                "trans_id": self.trans_id,
+                "tooth": self.tooth,
+                "recorded_at": self.recorded_at,
+                "plaque": self.plaque,
+                "bleeding": self.bleeding,
+            }
+
+    class PlaqueSource(DummySourceForNotes):
+        def list_patient_notes(self, patients_from=None, patients_to=None, limit=None):
+            return []
+
+        def list_perio_plaque(self, patients_from=None, patients_to=None, limit=None):
+            assert patients_from is not None
+            assert patients_to is not None
+            return [
+                DummyPlaque(
+                    patients_from,
+                    91,
+                    14,
+                    datetime(2025, 1, 10, 10, 0, 0),
+                    1,
+                    0,
+                ),
+                DummyPlaque(
+                    patients_from,
+                    92,
+                    15,
+                    datetime(2001, 1, 1, 10, 0, 0),
+                    0,
+                    1,
+                ),
+                DummyPlaque(
+                    patients_from,
+                    93,
+                    16,
+                    None,
+                    1,
+                    1,
+                ),
+            ]
+
+    extractor = object.__new__(extract.SqlServerChartingExtractor)
+    extractor._source = PlaqueSource()
+    records, dropped = extractor.collect_canonical_records(
+        patient_codes=[1016312],
+        date_from=date(2010, 1, 1),
+        date_to=date(2026, 2, 1),
+        domains=["perio_plaque"],
+        limit=10,
+    )
+
+    assert len(records) == 2
+    in_range = [row for row in records if row.recorded_at is not None][0]
+    undated = [row for row in records if row.recorded_at is None][0]
+    assert in_range.domain == "perio_plaque"
+    assert in_range.r4_source == "dbo.PerioPlaque"
+    assert in_range.r4_source_id == "91:14"
+    assert in_range.payload["plaque"] == 1
+    assert undated.r4_source_id == "93:16"
+    assert dropped["out_of_range"] == 1
+    assert dropped["undated_included"] == 1
 
 
 def test_collect_canonical_records_includes_patient_notes_with_date_bounds():
