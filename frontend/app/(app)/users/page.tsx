@@ -17,6 +17,13 @@ type Me = {
   role: string;
 };
 
+type Capability = {
+  id: number;
+  code: string;
+  description: string;
+  created_at: string;
+};
+
 const fallbackRoles = [
   "superadmin",
   "dentist",
@@ -43,6 +50,13 @@ export default function UsersPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [statusTarget, setStatusTarget] = useState<User | null>(null);
   const [me, setMe] = useState<Me | null>(null);
+  const [capabilities, setCapabilities] = useState<Capability[]>([]);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const [capabilityNotice, setCapabilityNotice] = useState<string | null>(null);
+  const [capabilitySaving, setCapabilitySaving] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [userCapabilityCodes, setUserCapabilityCodes] = useState<string[]>([]);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -62,6 +76,22 @@ export default function UsersPage() {
       ].includes(me.role)
     : false;
   const isSuperadmin = me?.role === "superadmin";
+  const capabilitySet = useMemo(
+    () => new Set(userCapabilityCodes),
+    [userCapabilityCodes]
+  );
+  const capabilityGroups = useMemo(
+    () => [
+      { label: "Appointments", prefix: "appointments." },
+      { label: "Patients", prefix: "patients." },
+      { label: "Notes", prefix: "notes." },
+      { label: "Documents", prefix: "documents." },
+      { label: "Billing", prefix: "billing." },
+      { label: "Recalls", prefix: "recalls." },
+      { label: "Admin", prefix: "admin." },
+    ],
+    []
+  );
 
   const createRoles = useMemo(() => {
     const allowed = roles.filter((r) => ["dentist", "nurse", "receptionist"].includes(r));
@@ -132,11 +162,85 @@ export default function UsersPage() {
     }
   }, []);
 
+  const loadCapabilities = useCallback(async () => {
+    if (!isSuperadmin) return;
+    setCapabilitiesLoading(true);
+    setCapabilityError(null);
+    try {
+      const res = await apiFetch("/api/capabilities");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setCapabilityError("Not authorized to manage permissions.");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to load capabilities (HTTP ${res.status})`);
+      }
+      const data = (await res.json()) as Capability[];
+      setCapabilities(data);
+    } catch (err) {
+      setCapabilityError(
+        err instanceof Error ? err.message : "Failed to load capabilities"
+      );
+    } finally {
+      setCapabilitiesLoading(false);
+    }
+  }, [isSuperadmin, router]);
+
+  const loadUserCapabilities = useCallback(
+    async (userId: number) => {
+      if (!isSuperadmin) return;
+      setCapabilityError(null);
+      setCapabilityNotice(null);
+      try {
+        const res = await apiFetch(`/api/users/${userId}/capabilities`);
+        if (res.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (res.status === 403) {
+          setCapabilityError("Not authorized to manage permissions.");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Failed to load user permissions (HTTP ${res.status})`);
+        }
+        const data = (await res.json()) as Capability[];
+        const codes = data.map((cap) => cap.code).sort();
+        setUserCapabilityCodes(codes);
+      } catch (err) {
+        setCapabilityError(
+          err instanceof Error ? err.message : "Failed to load user permissions"
+        );
+      }
+    },
+    [isSuperadmin, router]
+  );
+
   useEffect(() => {
     void loadUsers();
     void loadRoles();
     void loadMe();
   }, [loadUsers, loadRoles, loadMe]);
+
+  useEffect(() => {
+    void loadCapabilities();
+  }, [loadCapabilities]);
+
+  useEffect(() => {
+    if (!isSuperadmin || selectedUserId !== null || users.length === 0) return;
+    setSelectedUserId(users[0].id);
+  }, [isSuperadmin, selectedUserId, users]);
+
+  useEffect(() => {
+    if (!isSuperadmin || selectedUserId === null) return;
+    void loadUserCapabilities(selectedUserId);
+  }, [isSuperadmin, loadUserCapabilities, selectedUserId]);
 
   async function onCreateUser(e: React.FormEvent) {
     e.preventDefault();
@@ -367,6 +471,80 @@ export default function UsersPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update role");
     }
+  }
+
+  async function saveCapabilities() {
+    if (selectedUserId === null) return;
+    setCapabilitySaving(true);
+    setCapabilityError(null);
+    setCapabilityNotice(null);
+    try {
+      const res = await apiFetch(`/api/users/${selectedUserId}/capabilities`, {
+        method: "PUT",
+        body: JSON.stringify({ capability_codes: userCapabilityCodes }),
+      });
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (res.status === 403) {
+        setCapabilityError("Not authorized to manage permissions.");
+        return;
+      }
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text();
+      let data: unknown = null;
+      if (contentType.includes("application/json") && text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      }
+      if (!res.ok) {
+        const detail =
+          data && typeof data === "object" && "detail" in data
+            ? String((data as { detail?: string }).detail ?? "")
+            : "";
+        throw new Error(detail || text || `Failed to save permissions (HTTP ${res.status})`);
+      }
+      if (Array.isArray(data)) {
+        setUserCapabilityCodes(
+          data
+            .map((cap) => (cap as Capability).code)
+            .filter(Boolean)
+            .sort()
+        );
+      }
+      setCapabilityNotice("Permissions saved.");
+    } catch (err) {
+      setCapabilityError(
+        err instanceof Error ? err.message : "Failed to save permissions"
+      );
+    } finally {
+      setCapabilitySaving(false);
+    }
+  }
+
+  function toggleCapability(code: string) {
+    setUserCapabilityCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+      } else {
+        next.add(code);
+      }
+      return Array.from(next).sort();
+    });
+  }
+
+  function selectAllCapabilities() {
+    setUserCapabilityCodes(capabilities.map((cap) => cap.code).sort());
+  }
+
+  function clearAllCapabilities() {
+    setUserCapabilityCodes([]);
   }
 
   return (
@@ -706,6 +884,130 @@ export default function UsersPage() {
             </table>
           )}
         </div>
+
+        {isSuperadmin && (
+          <div className="card" style={{ margin: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+              <div>
+                <h3 style={{ marginTop: 0 }}>Permissions</h3>
+                <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                  Grant or revoke capability access for individual users.
+                </p>
+              </div>
+            </div>
+
+            {capabilityError && (
+              <div className="notice" data-testid="capabilities-error-banner">
+                {capabilityError}
+              </div>
+            )}
+            {capabilityNotice && <div className="notice">{capabilityNotice}</div>}
+
+            <div className="stack" style={{ gap: 12 }}>
+              <div className="row" style={{ alignItems: "center" }}>
+                <label className="label" style={{ minWidth: 120 }}>
+                  User
+                </label>
+                <select
+                  className="input"
+                  value={selectedUserId ?? ""}
+                  data-testid="capabilities-user-select"
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setSelectedUserId(Number.isNaN(value) ? null : value);
+                  }}
+                  disabled={capabilitiesLoading || users.length === 0}
+                >
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.full_name || user.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  data-testid="capabilities-select-all"
+                  onClick={selectAllCapabilities}
+                  disabled={capabilitySaving || capabilitiesLoading}
+                >
+                  Select all
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  data-testid="capabilities-clear-all"
+                  onClick={clearAllCapabilities}
+                  disabled={capabilitySaving || capabilitiesLoading}
+                >
+                  Clear all
+                </button>
+              </div>
+
+              {capabilitiesLoading ? (
+                <div className="badge">Loading permissions…</div>
+              ) : (
+                <div style={{ display: "grid", gap: 16 }}>
+                  {capabilityGroups.map((group) => {
+                    const groupCaps = capabilities.filter((cap) =>
+                      cap.code.startsWith(group.prefix)
+                    );
+                    if (groupCaps.length === 0) return null;
+                    return (
+                      <div key={group.label} className="card" style={{ margin: 0 }}>
+                        <h4 style={{ marginTop: 0 }}>{group.label}</h4>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                            gap: 10,
+                          }}
+                        >
+                          {groupCaps.map((cap) => (
+                            <label
+                              key={cap.code}
+                              style={{ display: "flex", gap: 8, alignItems: "flex-start" }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={capabilitySet.has(cap.code)}
+                                data-testid={`capability-checkbox-${cap.code}`}
+                                onChange={() => toggleCapability(cap.code)}
+                              />
+                              <span>
+                                <span style={{ display: "block", fontWeight: 600 }}>
+                                  {cap.description}
+                                </span>
+                                <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                                  {cap.code}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  data-testid="capabilities-save"
+                  onClick={() => void saveCapabilities()}
+                  disabled={capabilitySaving || selectedUserId === null || capabilitiesLoading}
+                >
+                  {capabilitySaving ? "Saving..." : "Save permissions"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
