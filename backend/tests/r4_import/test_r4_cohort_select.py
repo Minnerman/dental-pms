@@ -10,6 +10,7 @@ def test_parse_domains_csv_defaults_include_treatment_plan_items():
         "chart_healing_actions",
         "restorative_treatments",
         "patient_notes",
+        "old_patient_notes",
         "treatment_plans",
         "treatment_notes",
         "treatment_plan_items",
@@ -176,6 +177,10 @@ def test_parse_domains_csv_accepts_patient_notes():
     assert r4_cohort_select._parse_domains_csv("patient_notes") == ["patient_notes"]
 
 
+def test_parse_domains_csv_accepts_old_patient_notes():
+    assert r4_cohort_select._parse_domains_csv("old_patient_notes") == ["old_patient_notes"]
+
+
 def test_parse_domains_csv_accepts_chart_healing_actions():
     assert r4_cohort_select._parse_domains_csv("chart_healing_actions") == [
         "chart_healing_actions"
@@ -200,6 +205,20 @@ def test_build_domain_codes_perio_plaque(monkeypatch):
         date_to="2026-02-01",
         limit=10,
     ) == [4001, 4002]
+
+
+def test_build_domain_codes_old_patient_notes(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "get_distinct_old_patient_notes_patient_codes",
+        lambda date_from, date_to, limit: [5001, 5002],
+    )
+    assert r4_cohort_select._build_domain_codes(
+        "old_patient_notes",
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+    ) == [5001, 5002]
 
 
 def test_select_cohort_active_patients_mode_applies_exclusions_and_limit(monkeypatch):

@@ -287,6 +287,39 @@ class SqlServerChartingExtractor:
                     )
                 )
 
+        if _include("old_patient_notes", "old_patient_note") and hasattr(
+            self._source, "list_old_patient_notes"
+        ):
+            for item in self._iter_old_patient_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                patient_codes=patient_codes,
+                limit=limit,
+            ):
+                note_date = item.note_date
+                if not _date_in_range(note_date, date_from, date_to, report):
+                    continue
+                if item.note_number is not None:
+                    source_id = str(item.note_number)
+                else:
+                    note_digest = hashlib.sha1((item.note or "").encode("utf-8")).hexdigest()[:16]
+                    source_id = f"{item.patient_code}:{note_date}:{note_digest}"
+                records.append(
+                    CanonicalRecordInput(
+                        domain="old_patient_note",
+                        r4_source="dbo.OldPatientNotes",
+                        r4_source_id=source_id,
+                        legacy_patient_code=item.patient_code,
+                        recorded_at=note_date,
+                        entered_at=None,
+                        tooth=item.tooth,
+                        surface=item.surface,
+                        code_id=item.fixed_note_code,
+                        status=None,
+                        payload=item.model_dump() if hasattr(item, "model_dump") else item.dict(),
+                    )
+                )
+
         if _include("treatment_notes", "treatment_note"):
             treatment_note_rows = list(
                 self._iter_treatment_notes(
@@ -800,6 +833,43 @@ class SqlServerChartingExtractor:
                 if remaining is not None and remaining <= 0:
                     break
                 for item in self._source.list_patient_notes(
+                    patients_from=code,
+                    patients_to=code,
+                    limit=batch_limit,
+                ):
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        batch_limit = remaining
+                        if remaining <= 0:
+                            break
+
+    def _iter_old_patient_notes(
+        self,
+        *,
+        patients_from: int | None,
+        patients_to: int | None,
+        patient_codes: list[int] | None,
+        limit: int | None,
+    ):
+        if not hasattr(self._source, "list_old_patient_notes"):
+            return
+        if not patient_codes:
+            yield from self._source.list_old_patient_notes(
+                patients_from=patients_from,
+                patients_to=patients_to,
+                limit=limit,
+            )
+            return
+        remaining = limit
+        for batch in _chunk_codes(patient_codes, size=100):
+            if remaining is not None and remaining <= 0:
+                break
+            batch_limit = remaining if remaining is not None else None
+            for code in batch:
+                if remaining is not None and remaining <= 0:
+                    break
+                for item in self._source.list_old_patient_notes(
                     patients_from=code,
                     patients_to=code,
                     limit=batch_limit,
@@ -1580,6 +1650,58 @@ def get_distinct_patient_notes_patient_codes(
             "SELECT TOP (?) "
             f"{patient_col} AS patient_code "
             "FROM dbo.PatientNotes WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
+def get_distinct_old_patient_notes_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    patient_col = source._pick_column("OldPatientNotes", ["PatientCode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        "OldPatientNotes", ["Date", "NoteDate", "CreatedDate", "CreatedOn"]
+    )
+    if not patient_col or not date_col:
+        raise RuntimeError(
+            "OldPatientNotes missing PatientCode/Date columns; cannot fetch distinct codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.OldPatientNotes WITH (NOLOCK) "
             f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
             f"GROUP BY {patient_col} "
             f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
