@@ -2,7 +2,7 @@
 
 Status date: 2026-04-27
 
-Baseline: `master@94d50bfa5f39a62cb0ec3893ab672102396ca2db`
+Baseline: `master@cf05a146f0b89ed2ce80094c8a7563fd1ea8460d`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -22,7 +22,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 | Patients | Yes: `dbo.Patients` via `R4SqlServerSource.stream_patients`. | Yes: `r4_import --entity patients`. | Partial: mapping-quality reports, Postgres window verify, patient mapping/admin tooling. | Partial: 5,000-patient windows and many charting cohorts proven; full all-patient cutover dry-run not recorded. | Yes: core patient record, search, demographics, recalls, ledger, documents. | Full all-patient dry-run in isolated target DB, final mapping-quality report, duplicate/contact-data policy. | Medium | Medium |
 | Past appointments | Yes: `dbo.vwAppointmentDetails`; discovery records 100,812 appointments from 2001-10-27 to 2026-11-18. | Yes: `r4_import --entity appointments` into `r4_appointments`. | Partial: linkage report/queue, manual mappings, unmapped appointments admin. | Partial: Jan 2025 pilot and R4 calendar proof; full historical diary not proven. | Partial: read-only R4 calendar/admin linking plus core appointments UI. | Full historical import dry-run, status/cancelled semantics, patient-linkage closeout, decision on R4 read-only table vs core appointment migration. | High | Large |
 | Future appointments | Yes: same `dbo.vwAppointmentDetails`; source has future rows through 2026-11-18 in documented discovery. | Yes: same appointment importer. | Partial: linkage report and R4 calendar filtering. | No full future diary/cutover proof recorded. | Partial: core diary, booking, R4 calendar read-only. | Future diary conflict/status proof, active appointment cutover policy, recall-linked booking behaviour after migration. | High | Large |
-| Clinical notes | Yes: `PatientNotes`, `TreatmentNotes`, `TemporaryNotes`, `OldPatientNotes`, `vwAppointmentDetails.notes`, `CompletedQuestionnaire.Notes`. | Yes for active canonical domains including patient, treatment, temporary, appointment, completed questionnaire, and old patient notes. | Yes for import/parity packs; active cohort selector is still missing some domains. | Mixed: patient/treatment/temporary notes have full/near-full evidence; appointment notes only chunk 1 of 1,136; completed questionnaire and old patient notes need scale-out proof after recent wiring. | Partial: charting notes/history surfaces exist, but not every note style has direct UI affordance. | Add missing cohort-selector support for `appointment_notes`, `temporary_notes`, `completed_treatment_findings`; then scale `completed_questionnaire_notes`, `old_patient_notes`, and appointment notes. | Medium | Medium |
+| Clinical notes | Yes: `PatientNotes`, `TreatmentNotes`, `TemporaryNotes`, `OldPatientNotes`, `vwAppointmentDetails.notes`, `CompletedQuestionnaire.Notes`. | Yes for active canonical domains including patient, treatment, temporary, appointment, completed questionnaire, and old patient notes. | Yes for import/parity packs and deterministic cohort selectors for active note/finding domains, including PR #551 support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`. | Mixed: patient/treatment/temporary notes have full/near-full evidence; appointment notes only chunk 1 of 1,136; completed questionnaire and old patient notes need scale-out proof after recent wiring. | Partial: charting notes/history surfaces exist, but not every note style has direct UI affordance. | Scale `completed_questionnaire_notes`, `old_patient_notes`, and appointment notes; keep UI affordance gaps separate unless a proof shows they block migration readiness. | Medium | Medium |
 | Odontogram/charting | Yes: treatment plans/items, treatments, BPE/BPEFurcation, PerioProbe, PerioPlaque, restorative treatments, completed treatment findings, chart healing actions, tooth systems/surfaces, notes. | Yes: `charting_canonical`, legacy charting tables, and raw support for charting foundations. | Yes: domain parity packs, consolidated parity runner, spotcheck/export tests, golden-corpus docs. | Strong but mixed: full cohort proven for treatment plans/items, BPE, furcations, perioprobe, restorative treatments, completed treatment findings, temporary notes; newer lanes still need broader proof. | Yes: charting API, odontogram, perio/BPE, treatment-plan overlays, charting viewer/export proofs. | All-domain dry-run/parity summary for current master; charting engine rule maturity/golden corpus still high importance before broad historic cutover. | High | Large |
 | Treatment plans | Yes: `TreatmentPlans`, `TreatmentPlanItems`, `TreatmentPlanReviews`, `Treatments/Codes`. | Yes: raw `treatment_plans`, `treatments`; canonical `treatment_plans` and `treatment_plan_items`. | Yes for plans/items; reviews are imported in raw plan model but not a first-class canonical parity domain. | Partial/strong: Stage 105 raw full import, Stage 135/136 canonical cohorts exhausted; raw plan patient-id backfill/mapping still needs cutover proof. | Partial: admin R4 treatment-plan viewer and patient clinical treatment planning. | Decide whether `treatment_plan_reviews` needs canonical/parity lane; reconcile raw R4 plan tables against canonical display path. | Medium | Medium |
 | Treatment transactions/history | Yes: `dbo.Transactions`. | Yes: `r4_import --entity treatment_transactions`. | Partial: idempotency/statistics; patient transaction API/UI proofs. | Partial: 184,505 transactions proven for 5,000-patient window, not full all-patient cutover. | Yes: read-only patient transactions tab. | Full-range import/reconcile, fee/cost semantics review before using as financial truth. | Medium | Medium |
@@ -39,7 +39,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 
 ### Small Gaps Safe To Batch
 
-- Batch `r4_cohort_select` parity with active import/parity domains for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`. These are adjacent backend-only selector/helper/test gaps and do not require frontend or R4 writes.
+- PR #551 completed the safe `r4_cohort_select` batch for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`; future batching should focus on guard tests or proof-only scale-out, not more selector plumbing for these domains.
 - Batch lightweight domain-set guard tests that compare `r4_import`, `r4_parity_run`, and `r4_cohort_select` allowlists so future canonical domains do not drift silently.
 - Batch docs/runbook alignment for canonical charting dry-run commands after the selector set is complete, if kept docs-only.
 
@@ -72,15 +72,7 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. Cohort selector completion pack.
-   - Target: add deterministic `r4_cohort_select` support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`.
-   - Why next: this closes active-flow asymmetry left by already-merged import/parity lanes and enables consistent cohort scaling.
-   - Likely files: `backend/app/scripts/r4_cohort_select.py`, `backend/app/services/r4_charting/sqlserver_extract.py`, `backend/tests/r4_import/test_r4_cohort_select.py`, focused SQL extractor tests.
-   - Likely validation: `git diff --check`, `pytest backend/tests/r4_import/test_r4_cohort_select.py` plus focused extractor/import/parity CLI tests for the touched domains.
-   - Backend-only: yes.
-   - Risk: low-medium.
-
-2. Completed questionnaire / old patient notes first scale-out proof.
+1. Completed questionnaire / old patient notes first scale-out proof.
    - Target: run bounded deterministic cohorts for `completed_questionnaire_notes` and `old_patient_notes` using the now-current selector/import/parity flow.
    - Why next: recent wiring is complete, but scale-out proof is not yet recorded at the same maturity as older charting lanes.
    - Likely files: no production files if proof-only; possibly focused docs/status follow-up after proof.
@@ -88,7 +80,7 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only: likely yes.
    - Risk: medium.
 
-3. Appointment notes scale-out continuation.
+2. Appointment notes scale-out continuation.
    - Target: continue from Stage 163H chunk 1 toward full `appointment_notes` accepted cohort closure.
    - Why next: appointment notes are high workflow value and currently have only `200/1136` accepted patients recorded.
    - Likely files: no production files if selector support exists; possibly proof artefact docs only.
@@ -96,7 +88,7 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only: likely yes unless a separate UI proof is explicitly chosen.
    - Risk: medium.
 
-4. Appointments cutover readiness proof.
+3. Appointments cutover readiness proof.
    - Target: SELECT-only/read-only proof pack for past vs future R4 appointment windows, status/cancelled distributions, null-patient counts, and linkage/manual-mapping backlog.
    - Why next: future diary migration is operationally high-risk and needs evidence before implementation.
    - Likely files: `backend/app/services/r4_import/sqlserver_source.py`, `backend/app/scripts/r4_linkage_report.py`, `backend/tests/appointments/test_r4_calendar.py`, docs/runbook if proof-only.
@@ -104,13 +96,21 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only: probably, with optional docs-only output.
    - Risk: high.
 
-5. Finance/payment/balance source discovery.
+4. Finance/payment/balance source discovery.
    - Target: SELECT-only inventory of R4 finance, invoice, payment, allocation, balance, and cash-up candidate tables.
    - Why next: finance is the largest unknown and should not wait until late cutover; discovery is proof-only and does not force importer design yet.
    - Likely files: new discovery script or docs under `docs/r4/`, no importer initially.
    - Likely validation: command transcript, table/column/count report, no R4 writes.
    - Backend-only/docs-only: yes for discovery.
    - Risk: high.
+
+5. All-domain charting canonical readiness report.
+   - Target: produce a current-master proof summary across active charting canonical domains after selector completion.
+   - Why next: PR #551 makes deterministic selector coverage consistent enough to start summarising charting readiness without hand-built selector exceptions.
+   - Likely files: no production files if proof-only; possibly docs/status follow-up after proof.
+   - Likely validation: deterministic cohort selection, `r4_import --entity charting_canonical` dry-run/apply/rerun stats in an isolated target, consolidated `r4_parity_run`, drop/explain samples for failed rows.
+   - Backend-only/docs-only: likely yes.
+   - Risk: medium-high.
 
 ## Cutover Readiness Gaps
 
