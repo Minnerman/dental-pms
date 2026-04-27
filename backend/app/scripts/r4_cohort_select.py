@@ -13,6 +13,7 @@ from app.services.r4_charting.sqlserver_extract import (
     get_distinct_bpe_furcation_patient_codes,
     get_distinct_bpe_patient_codes,
     get_distinct_chart_healing_actions_patient_codes,
+    get_distinct_completed_questionnaire_notes_patient_codes,
     get_distinct_old_patient_notes_patient_codes,
     get_distinct_patient_notes_patient_codes,
     get_distinct_perio_plaque_patient_codes,
@@ -31,6 +32,7 @@ ALL_DOMAINS = (
     "bpe_furcation",
     "chart_healing_actions",
     "restorative_treatments",
+    "completed_questionnaire_notes",
     "patient_notes",
     "old_patient_notes",
     "treatment_plans",
@@ -76,6 +78,10 @@ def _build_domain_codes(
         return get_distinct_chart_healing_actions_patient_codes(date_from, date_to, limit=limit)
     if domain == "restorative_treatments":
         return get_distinct_restorative_treatments_patient_codes(date_from, date_to, limit=limit)
+    if domain == "completed_questionnaire_notes":
+        return get_distinct_completed_questionnaire_notes_patient_codes(
+            date_from, date_to, limit=limit
+        )
     if domain == "patient_notes":
         return get_distinct_patient_notes_patient_codes(date_from, date_to, limit=limit)
     if domain == "old_patient_notes":
@@ -241,12 +247,14 @@ def main() -> int:
     parser.add_argument(
         "--domains",
         default=(
-            "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
+            "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,"
+            "completed_questionnaire_notes,patient_notes,"
             "old_patient_notes,treatment_plans,treatment_notes,treatment_plan_items"
         ),
         help=(
             "Comma-separated subset: "
-            "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,patient_notes,"
+            "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,"
+            "completed_questionnaire_notes,patient_notes,"
             "old_patient_notes,treatment_plans,treatment_notes,treatment_plan_items."
         ),
     )
