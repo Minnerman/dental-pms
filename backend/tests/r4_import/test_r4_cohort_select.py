@@ -9,6 +9,7 @@ def test_parse_domains_csv_defaults_include_treatment_plan_items():
         "bpe_furcation",
         "chart_healing_actions",
         "restorative_treatments",
+        "completed_questionnaire_notes",
         "patient_notes",
         "old_patient_notes",
         "treatment_plans",
@@ -193,6 +194,12 @@ def test_parse_domains_csv_accepts_restorative_treatments():
     ]
 
 
+def test_parse_domains_csv_accepts_completed_questionnaire_notes():
+    assert r4_cohort_select._parse_domains_csv("completed_questionnaire_notes") == [
+        "completed_questionnaire_notes"
+    ]
+
+
 def test_build_domain_codes_perio_plaque(monkeypatch):
     monkeypatch.setattr(
         r4_cohort_select,
@@ -205,6 +212,20 @@ def test_build_domain_codes_perio_plaque(monkeypatch):
         date_to="2026-02-01",
         limit=10,
     ) == [4001, 4002]
+
+
+def test_build_domain_codes_completed_questionnaire_notes(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "get_distinct_completed_questionnaire_notes_patient_codes",
+        lambda date_from, date_to, limit: [4501, 4502],
+    )
+    assert r4_cohort_select._build_domain_codes(
+        "completed_questionnaire_notes",
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+    ) == [4501, 4502]
 
 
 def test_build_domain_codes_old_patient_notes(monkeypatch):

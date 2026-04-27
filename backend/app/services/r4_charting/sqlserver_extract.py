@@ -1670,6 +1670,64 @@ def get_distinct_patient_notes_patient_codes(
     return codes
 
 
+def get_distinct_completed_questionnaire_notes_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    table = "CompletedQuestionnaire"
+    patient_col = source._pick_column(table, ["PatientCode", "patientcode"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        table,
+        ["DateTime", "Date", "CompletedDate", "CreatedDate", "LastEditDate"],
+    )
+    note_col = source._pick_column(table, ["Notes", "Note", "NoteBody", "FreeText"])  # noqa: SLF001
+    if not patient_col or not date_col or not note_col:
+        raise RuntimeError(
+            "CompletedQuestionnaire missing PatientCode/DateTime/Notes columns; "
+            "cannot fetch distinct codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.CompletedQuestionnaire WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+            f"AND {note_col} IS NOT NULL "
+            f"AND LEN(LTRIM(RTRIM(CAST({note_col} AS NVARCHAR(MAX))))) > 0 "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
 def get_distinct_old_patient_notes_patient_codes(
     charting_from: date | str,
     charting_to: date | str,

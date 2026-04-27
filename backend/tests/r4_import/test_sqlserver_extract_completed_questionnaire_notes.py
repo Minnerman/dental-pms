@@ -133,3 +133,56 @@ def test_collect_canonical_records_completed_questionnaire_notes_domain_alias():
     assert len(records) == 1
     assert records[0].domain == "completed_questionnaire_note"
     assert dropped["included"] == 1
+
+
+def test_get_distinct_completed_questionnaire_notes_patient_codes_filters_nonblank(
+    monkeypatch,
+):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def _pick_column(self, table, candidates):
+            if table != "CompletedQuestionnaire":
+                return None
+            for candidate in candidates:
+                if candidate in {"PatientCode", "patientcode"}:
+                    return "PatientCode"
+                if candidate in {"DateTime", "Date"}:
+                    return "DateTime"
+                if candidate in {"Notes", "Note"}:
+                    return "Notes"
+            return None
+
+        def _query(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return [
+                {"patient_code": 3001},
+                {"patient_code": 3002},
+                {"patient_code": 3001},
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_completed_questionnaire_notes_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [3001, 3002]
+    assert "FROM dbo.CompletedQuestionnaire" in captured["query"]
+    assert "LEN(LTRIM(RTRIM(CAST(Notes AS NVARCHAR(MAX))))) > 0" in captured["query"]
+    assert captured["params"][0] == 5
