@@ -146,3 +146,61 @@ def test_collect_canonical_records_appointment_notes_domain_alias():
     assert records[0].domain == "appointment_note"
     assert dropped["included"] == 1
 
+
+def test_get_distinct_appointment_notes_patient_codes_filters_valid_nonblank(
+    monkeypatch,
+):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def _pick_column(self, table, candidates):
+            if table != "vwAppointmentDetails":
+                return None
+            for candidate in candidates:
+                if candidate in {"patientcode", "PatientCode"}:
+                    return "patientcode"
+                if candidate in {"apptid", "ApptID"}:
+                    return "apptid"
+                if candidate in {"appointmentDateTimevalue", "AppointmentDateTimeValue"}:
+                    return "appointmentDateTimevalue"
+                if candidate in {"notes", "Notes"}:
+                    return "notes"
+            return None
+
+        def _query(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return [
+                {"patient_code": 6101},
+                {"patient_code": 6102},
+                {"patient_code": 6101},
+                {"patient_code": None},
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_appointment_notes_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [6101, 6102]
+    assert "FROM dbo.vwAppointmentDetails" in captured["query"]
+    assert "apptid IS NOT NULL AND apptid > 0" in captured["query"]
+    assert "LEN(LTRIM(RTRIM(CAST(notes AS NVARCHAR(MAX))))) > 0" in captured["query"]
+    assert captured["params"][0] == 5
+    assert captured["params"][1] == date(2017, 1, 1)
+    assert captured["params"][2] == date(2026, 2, 1)
