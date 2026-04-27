@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@aa3b6665653b096b4a88538da52313d27ae5c38f`.
-- Current repo `master` is `aa3b6665653b096b4a88538da52313d27ae5c38f`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring), PR #537 (`docs/STATUS.md` continuity refresh after #535/#536), PR #538 (proof-only `chart_healing_actions` parity-pack test), PR #539 (`docs/STATUS.md` continuity refresh after #537/#538), PR #540 (docs-only alignment of `docs/STATUS.md` and `docs/V1_FINISH_LINE.md` with current master), PR #541 (`docs/STATUS.md` continuity refresh after PR #540), PR #542 (`docs/STATUS.md` continuity refresh after PR #541), PR #543 (`docs/STATUS.md` continuity refresh after PR #542), PR #544 (`docs/STATUS.md` continuity refresh after PR #543), PR #545 (backend-only `perio_plaque` canonical/parity wiring), and PR #546 (backend-only `old_patient_notes` canonical/parity wiring).
+- The authoritative continuity baseline is `origin/master@2cf51a23618a2d190c71c2b404ea498145669d5d`.
+- Current repo `master` is `2cf51a23618a2d190c71c2b404ea498145669d5d`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring), PR #537 (`docs/STATUS.md` continuity refresh after #535/#536), PR #538 (proof-only `chart_healing_actions` parity-pack test), PR #539 (`docs/STATUS.md` continuity refresh after #537/#538), PR #540 (docs-only alignment of `docs/STATUS.md` and `docs/V1_FINISH_LINE.md` with current master), PR #541 (`docs/STATUS.md` continuity refresh after PR #540), PR #542 (`docs/STATUS.md` continuity refresh after PR #541), PR #543 (`docs/STATUS.md` continuity refresh after PR #542), PR #544 (`docs/STATUS.md` continuity refresh after PR #543), PR #545 (backend-only `perio_plaque` canonical/parity wiring), PR #546 (backend-only `old_patient_notes` canonical/parity wiring), PR #547 (`docs/STATUS.md` continuity refresh after PR #546), and PR #548 (backend-only `completed_questionnaire_notes` deterministic cohort selector support).
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@aa3b666`.
+- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@2cf51a2`.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,6 +70,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-27: PR #548 merged on `master` to complete backend-only deterministic `r4_cohort_select` support for `completed_questionnaire_notes` without widening into frontend, runtime, Docker, compose, ops, docs, or R4 write paths.
+  - Exact slice implemented:
+    - added a SELECT-only distinct-patient helper for `dbo.CompletedQuestionnaire`
+    - registered `completed_questionnaire_notes` in `r4_cohort_select`
+    - added focused cohort-selector and completed-questionnaire SQL extraction tests
+- 2026-04-27: PR #547 merged on `master` as a one-file docs-only continuity refresh so `docs/STATUS.md` matched the real post-PR-#546 baseline.
 - 2026-04-27: PR #546 merged on `master` to wire backend-only `old_patient_notes` into the active R4 charting canonical import/cohort/parity flow without widening into frontend, runtime, Docker, compose, ops, or R4 write paths.
   - Exact slice implemented:
     - added SQL Server extraction, cohort selection, import CLI registration, parity-run registration, and a dedicated parity pack for `old_patient_notes`
@@ -8294,7 +8300,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Re-run failing workflow via `workflow_dispatch` after patch and compare first failing step (or green run).
 
 ## Next up
-- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@aa3b666`, keeping any preserved local operational diffs separate from product development.
+- No active implementation slice is selected on current master. Choose the next smallest truthful slice from `master@2cf51a2`, keeping any preserved local operational diffs separate from product development.
 - `chart_healing_actions` parity-pack proof is already closed on current master via PR #538 and is not the active next gap.
 - Historical stage definitions below are archived reference only. Stage 132 is already closed on `master` via PR #533 and is not the active next slice.
 
