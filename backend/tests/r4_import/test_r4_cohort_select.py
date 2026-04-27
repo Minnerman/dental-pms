@@ -9,9 +9,12 @@ def test_parse_domains_csv_defaults_include_treatment_plan_items():
         "bpe_furcation",
         "chart_healing_actions",
         "restorative_treatments",
+        "completed_treatment_findings",
+        "appointment_notes",
         "completed_questionnaire_notes",
         "patient_notes",
         "old_patient_notes",
+        "temporary_notes",
         "treatment_plans",
         "treatment_notes",
         "treatment_plan_items",
@@ -200,6 +203,20 @@ def test_parse_domains_csv_accepts_completed_questionnaire_notes():
     ]
 
 
+def test_parse_domains_csv_accepts_appointment_notes():
+    assert r4_cohort_select._parse_domains_csv("appointment_notes") == ["appointment_notes"]
+
+
+def test_parse_domains_csv_accepts_temporary_notes():
+    assert r4_cohort_select._parse_domains_csv("temporary_notes") == ["temporary_notes"]
+
+
+def test_parse_domains_csv_accepts_completed_treatment_findings():
+    assert r4_cohort_select._parse_domains_csv("completed_treatment_findings") == [
+        "completed_treatment_findings"
+    ]
+
+
 def test_build_domain_codes_perio_plaque(monkeypatch):
     monkeypatch.setattr(
         r4_cohort_select,
@@ -226,6 +243,48 @@ def test_build_domain_codes_completed_questionnaire_notes(monkeypatch):
         date_to="2026-02-01",
         limit=10,
     ) == [4501, 4502]
+
+
+def test_build_domain_codes_appointment_notes(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "get_distinct_appointment_notes_patient_codes",
+        lambda date_from, date_to, limit: [4601, 4602],
+    )
+    assert r4_cohort_select._build_domain_codes(
+        "appointment_notes",
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+    ) == [4601, 4602]
+
+
+def test_build_domain_codes_temporary_notes(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "get_distinct_temporary_notes_patient_codes",
+        lambda date_from, date_to, limit: [4701, 4702],
+    )
+    assert r4_cohort_select._build_domain_codes(
+        "temporary_notes",
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+    ) == [4701, 4702]
+
+
+def test_build_domain_codes_completed_treatment_findings(monkeypatch):
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "get_distinct_completed_treatment_findings_patient_codes",
+        lambda date_from, date_to, limit: [4801, 4802],
+    )
+    assert r4_cohort_select._build_domain_codes(
+        "completed_treatment_findings",
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=10,
+    ) == [4801, 4802]
 
 
 def test_build_domain_codes_old_patient_notes(monkeypatch):

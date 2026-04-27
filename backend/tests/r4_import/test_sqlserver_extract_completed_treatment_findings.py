@@ -168,3 +168,97 @@ def test_collect_canonical_records_completed_treatment_findings_domain_alias():
     assert len(records) == 1
     assert records[0].domain == "completed_treatment_finding"
     assert dropped["included"] == 1
+
+
+def test_get_distinct_completed_treatment_findings_patient_codes_uses_canonical_filter(
+    monkeypatch,
+):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def list_completed_treatment_findings(
+            self,
+            *,
+            date_from=None,
+            date_to=None,
+            limit=None,
+            **_kwargs,
+        ):
+            captured["date_from"] = date_from
+            captured["date_to"] = date_to
+            captured["limit"] = limit
+            return [
+                R4CompletedTreatmentFinding(
+                    patient_code=None,
+                    completed_date=datetime(2025, 1, 2, 9, 0, 0),
+                    tooth=11,
+                    code_id=200,
+                    treatment_label="Soft Tissue Examination",
+                    ref_id=1,
+                ),
+                R4CompletedTreatmentFinding(
+                    patient_code=6301,
+                    completed_date=datetime(2025, 1, 3, 9, 0, 0),
+                    tooth=11,
+                    code_id=201,
+                    treatment_label="Crown",
+                    ref_id=2,
+                ),
+                R4CompletedTreatmentFinding(
+                    patient_code=6301,
+                    completed_date=datetime(2025, 1, 4, 9, 0, 0),
+                    tooth=None,
+                    code_id=202,
+                    treatment_label="Soft Tissue Examination",
+                    ref_id=3,
+                ),
+                R4CompletedTreatmentFinding(
+                    patient_code=6301,
+                    completed_date=datetime(2025, 1, 5, 9, 0, 0),
+                    tooth=11,
+                    code_id=203,
+                    treatment_label="Soft Tissue Examination",
+                    ref_id=4,
+                ),
+                R4CompletedTreatmentFinding(
+                    patient_code=6301,
+                    completed_date=datetime(2025, 1, 6, 9, 0, 0),
+                    tooth=12,
+                    code_id=204,
+                    treatment_label="Soft Tissue Examination",
+                    ref_id=5,
+                ),
+                R4CompletedTreatmentFinding(
+                    patient_code=6302,
+                    completed_date=datetime(2025, 1, 7, 9, 0, 0),
+                    tooth=21,
+                    code_id=300,
+                    treatment_label="Soft Tissue Examination",
+                    ref_id=6,
+                ),
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_completed_treatment_findings_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [6301, 6302]
+    assert captured["date_from"] == date(2017, 1, 1)
+    assert captured["date_to"] == date(2026, 2, 1)
+    assert captured["limit"] == 1000

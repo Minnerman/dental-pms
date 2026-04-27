@@ -137,3 +137,59 @@ def test_collect_canonical_records_temporary_notes_domain_alias():
     assert len(records) == 1
     assert records[0].domain == "temporary_note"
     assert dropped["included"] == 1
+
+
+def test_get_distinct_temporary_notes_patient_codes_filters_nonblank(
+    monkeypatch,
+):
+    captured = {}
+
+    class DummyConfig:
+        def require_enabled(self):
+            return None
+
+        def require_readonly(self):
+            return None
+
+    class DummySource:
+        def __init__(self, _config):
+            self._config = _config
+
+        def ensure_select_only(self):
+            return None
+
+        def _pick_column(self, table, candidates):
+            if table != "TemporaryNotes":
+                return None
+            for candidate in candidates:
+                if candidate in {"PatientCode", "patientcode"}:
+                    return "PatientCode"
+                if candidate in {"UpdatedAt", "LastEditDate"}:
+                    return "UpdatedAt"
+                if candidate in {"NoteBody", "Note"}:
+                    return "NoteBody"
+            return None
+
+        def _query(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return [
+                {"patient_code": 6201},
+                {"patient_code": 6202},
+                {"patient_code": 6201},
+                {"patient_code": None},
+            ]
+
+    monkeypatch.setattr(extract.R4SqlServerConfig, "from_env", lambda: DummyConfig())
+    monkeypatch.setattr(extract, "R4SqlServerSource", DummySource)
+
+    result = extract.get_distinct_temporary_notes_patient_codes(
+        "2017-01-01", "2026-02-01", limit=5
+    )
+
+    assert result == [6201, 6202]
+    assert "FROM dbo.TemporaryNotes" in captured["query"]
+    assert "LEN(LTRIM(RTRIM(CAST(NoteBody AS NVARCHAR(MAX))))) > 0" in captured["query"]
+    assert captured["params"][0] == 5
+    assert captured["params"][1] == date(2017, 1, 1)
+    assert captured["params"][2] == date(2026, 2, 1)

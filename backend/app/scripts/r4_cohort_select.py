@@ -10,15 +10,18 @@ from pathlib import Path
 from app.scripts import r4_import as r4_import_script
 from app.services.r4_charting.sqlserver_extract import (
     get_distinct_active_patient_codes,
+    get_distinct_appointment_notes_patient_codes,
     get_distinct_bpe_furcation_patient_codes,
     get_distinct_bpe_patient_codes,
     get_distinct_chart_healing_actions_patient_codes,
     get_distinct_completed_questionnaire_notes_patient_codes,
+    get_distinct_completed_treatment_findings_patient_codes,
     get_distinct_old_patient_notes_patient_codes,
     get_distinct_patient_notes_patient_codes,
     get_distinct_perio_plaque_patient_codes,
     get_distinct_perioprobe_patient_codes,
     get_distinct_restorative_treatments_patient_codes,
+    get_distinct_temporary_notes_patient_codes,
     get_distinct_treatment_plans_patient_codes,
     get_distinct_treatment_notes_patient_codes,
     get_distinct_treatment_plan_items_patient_codes,
@@ -32,9 +35,12 @@ ALL_DOMAINS = (
     "bpe_furcation",
     "chart_healing_actions",
     "restorative_treatments",
+    "completed_treatment_findings",
+    "appointment_notes",
     "completed_questionnaire_notes",
     "patient_notes",
     "old_patient_notes",
+    "temporary_notes",
     "treatment_plans",
     "treatment_notes",
     "treatment_plan_items",
@@ -78,6 +84,12 @@ def _build_domain_codes(
         return get_distinct_chart_healing_actions_patient_codes(date_from, date_to, limit=limit)
     if domain == "restorative_treatments":
         return get_distinct_restorative_treatments_patient_codes(date_from, date_to, limit=limit)
+    if domain == "completed_treatment_findings":
+        return get_distinct_completed_treatment_findings_patient_codes(
+            date_from, date_to, limit=limit
+        )
+    if domain == "appointment_notes":
+        return get_distinct_appointment_notes_patient_codes(date_from, date_to, limit=limit)
     if domain == "completed_questionnaire_notes":
         return get_distinct_completed_questionnaire_notes_patient_codes(
             date_from, date_to, limit=limit
@@ -86,6 +98,8 @@ def _build_domain_codes(
         return get_distinct_patient_notes_patient_codes(date_from, date_to, limit=limit)
     if domain == "old_patient_notes":
         return get_distinct_old_patient_notes_patient_codes(date_from, date_to, limit=limit)
+    if domain == "temporary_notes":
+        return get_distinct_temporary_notes_patient_codes(date_from, date_to, limit=limit)
     if domain == "treatment_notes":
         return get_distinct_treatment_notes_patient_codes(date_from, date_to, limit=limit)
     if domain == "treatment_plans":
@@ -248,14 +262,16 @@ def main() -> int:
         "--domains",
         default=(
             "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,"
-            "completed_questionnaire_notes,patient_notes,"
-            "old_patient_notes,treatment_plans,treatment_notes,treatment_plan_items"
+            "completed_treatment_findings,appointment_notes,completed_questionnaire_notes,"
+            "patient_notes,old_patient_notes,temporary_notes,"
+            "treatment_plans,treatment_notes,treatment_plan_items"
         ),
         help=(
             "Comma-separated subset: "
             "perioprobe,perio_plaque,bpe,bpe_furcation,chart_healing_actions,restorative_treatments,"
-            "completed_questionnaire_notes,patient_notes,"
-            "old_patient_notes,treatment_plans,treatment_notes,treatment_plan_items."
+            "completed_treatment_findings,appointment_notes,completed_questionnaire_notes,"
+            "patient_notes,old_patient_notes,temporary_notes,"
+            "treatment_plans,treatment_notes,treatment_plan_items."
         ),
     )
     parser.add_argument("--date-from", help="Inclusive start date (YYYY-MM-DD).")

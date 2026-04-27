@@ -11,6 +11,7 @@ from app.services.r4_charting.appointment_notes_import import (
 )
 from app.services.r4_charting.completed_treatment_findings_import import (
     collect_completed_treatment_finding_canonical_records,
+    filter_completed_treatment_findings,
 )
 from app.services.r4_charting.completed_questionnaire_notes_import import (
     collect_completed_questionnaire_note_canonical_records,
@@ -1780,6 +1781,122 @@ def get_distinct_old_patient_notes_patient_codes(
     return codes
 
 
+def get_distinct_appointment_notes_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    table = "vwAppointmentDetails"
+    patient_col = source._pick_column(table, ["patientcode", "PatientCode"])  # noqa: SLF001
+    appt_id_col = source._pick_column(table, ["apptid", "ApptID", "AppointmentID"])  # noqa: SLF001
+    date_col = source._pick_column(  # noqa: SLF001
+        table,
+        ["appointmentDateTimevalue", "AppointmentDateTimeValue", "AppointmentDateTime"],
+    )
+    note_col = source._pick_column(table, ["notes", "Notes", "note", "Note"])  # noqa: SLF001
+    if not patient_col or not appt_id_col or not date_col or not note_col:
+        raise RuntimeError(
+            "vwAppointmentDetails missing patient/appt/date/notes columns; "
+            "cannot fetch distinct appointment note codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.vwAppointmentDetails WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL "
+            f"AND {appt_id_col} IS NOT NULL AND {appt_id_col} > 0 "
+            f"AND {date_col} >= ? AND {date_col} < ? "
+            f"AND {note_col} IS NOT NULL "
+            f"AND LEN(LTRIM(RTRIM(CAST({note_col} AS NVARCHAR(MAX))))) > 0 "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
+def get_distinct_temporary_notes_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    table = "TemporaryNotes"
+    patient_col = source._pick_column(table, ["PatientCode", "patientcode"])  # noqa: SLF001
+    date_col = source._pick_column(table, ["UpdatedAt", "LastEditDate", "Date"])  # noqa: SLF001
+    note_col = source._pick_column(table, ["NoteBody", "Note", "Notes", "NoteText"])  # noqa: SLF001
+    if not patient_col or not date_col or not note_col:
+        raise RuntimeError(
+            "TemporaryNotes missing PatientCode/date/note columns; "
+            "cannot fetch distinct temporary note codes."
+        )
+
+    rows = source._query(  # noqa: SLF001
+        (
+            "SELECT TOP (?) "
+            f"{patient_col} AS patient_code "
+            "FROM dbo.TemporaryNotes WITH (NOLOCK) "
+            f"WHERE {patient_col} IS NOT NULL AND {date_col} >= ? AND {date_col} < ? "
+            f"AND {note_col} IS NOT NULL "
+            f"AND LEN(LTRIM(RTRIM(CAST({note_col} AS NVARCHAR(MAX))))) > 0 "
+            f"GROUP BY {patient_col} "
+            f"ORDER BY MAX({date_col}) DESC, {patient_col} ASC"
+        ),
+        [limit, date_from, date_to],
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in rows:
+        value = row.get("patient_code")
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    return codes
+
+
 def get_distinct_treatment_notes_patient_codes(
     charting_from: date | str,
     charting_to: date | str,
@@ -2008,6 +2125,50 @@ def get_distinct_restorative_treatments_patient_codes(
             continue
         seen.add(code)
         codes.append(code)
+    return codes
+
+
+def get_distinct_completed_treatment_findings_patient_codes(
+    charting_from: date | str,
+    charting_to: date | str,
+    limit: int = 50,
+) -> list[int]:
+    if limit <= 0:
+        return []
+    date_from = _coerce_date(charting_from)
+    date_to = _coerce_date(charting_to)
+    if date_to < date_from:
+        raise ValueError("charting_to must be on or after charting_from")
+
+    config = R4SqlServerConfig.from_env()
+    config.require_enabled()
+    config.require_readonly()
+    source = R4SqlServerSource(config)
+    source.ensure_select_only()
+
+    scan_limit = max(limit * 20, 1000)
+    accepted, _report = filter_completed_treatment_findings(
+        source.list_completed_treatment_findings(
+            date_from=date_from,
+            date_to=date_to,
+            limit=scan_limit,
+        ),
+        date_from=date_from,
+        date_to=date_to,
+    )
+    seen: set[int] = set()
+    codes: list[int] = []
+    for row in accepted:
+        value = row.patient_code
+        if value is None:
+            continue
+        code = int(value)
+        if code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+        if len(codes) >= limit:
+            break
     return codes
 
 
