@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@2cf51a23618a2d190c71c2b404ea498145669d5d`.
-- Current repo `master` is `2cf51a23618a2d190c71c2b404ea498145669d5d`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring), PR #537 (`docs/STATUS.md` continuity refresh after #535/#536), PR #538 (proof-only `chart_healing_actions` parity-pack test), PR #539 (`docs/STATUS.md` continuity refresh after #537/#538), PR #540 (docs-only alignment of `docs/STATUS.md` and `docs/V1_FINISH_LINE.md` with current master), PR #541 (`docs/STATUS.md` continuity refresh after PR #540), PR #542 (`docs/STATUS.md` continuity refresh after PR #541), PR #543 (`docs/STATUS.md` continuity refresh after PR #542), PR #544 (`docs/STATUS.md` continuity refresh after PR #543), PR #545 (backend-only `perio_plaque` canonical/parity wiring), PR #546 (backend-only `old_patient_notes` canonical/parity wiring), PR #547 (`docs/STATUS.md` continuity refresh after PR #546), and PR #548 (backend-only `completed_questionnaire_notes` deterministic cohort selector support).
+- The authoritative continuity baseline is `origin/master@cf05a146f0b89ed2ce80094c8a7563fd1ea8460d`.
+- Current repo `master` is `cf05a146f0b89ed2ce80094c8a7563fd1ea8460d`; it includes merged PR #533 (Stage 132 treatment-note tooth/surface enrichment), PR #534 (`ops/verify.sh` fresh isolated DB fix), PR #535 (`docs/STATUS.md` continuity refresh after #533/#534), PR #536 (backend-only `completed_questionnaire_notes` pipeline/parity wiring), PR #537 (`docs/STATUS.md` continuity refresh after #535/#536), PR #538 (proof-only `chart_healing_actions` parity-pack test), PR #539 (`docs/STATUS.md` continuity refresh after #537/#538), PR #540 (docs-only alignment of `docs/STATUS.md` and `docs/V1_FINISH_LINE.md` with current master), PR #541 (`docs/STATUS.md` continuity refresh after PR #540), PR #542 (`docs/STATUS.md` continuity refresh after PR #541), PR #543 (`docs/STATUS.md` continuity refresh after PR #542), PR #544 (`docs/STATUS.md` continuity refresh after PR #543), PR #545 (backend-only `perio_plaque` canonical/parity wiring), PR #546 (backend-only `old_patient_notes` canonical/parity wiring), PR #547 (`docs/STATUS.md` continuity refresh after PR #546), PR #548 (backend-only `completed_questionnaire_notes` deterministic cohort selector support), PR #549 (`docs/STATUS.md` continuity refresh after PR #548), PR #550 (`docs/R4_MIGRATION_READINESS.md` migration readiness plan), and PR #551 (backend-only cohort selector completion pack for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`).
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, and choose the next smallest truthful slice from `master@2cf51a2`.
+- When development resumes: keep any preserved local operational diffs separate, review this file and `docs/R4_MIGRATION_READINESS.md`, and choose the next smallest truthful slice from `master@cf05a14`; current next implementation slice is completed questionnaire / old patient notes first scale-out proof.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,6 +70,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-27: PR #551 merged on `master` to complete backend-only deterministic `r4_cohort_select` support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings` without widening into frontend, runtime, Docker, compose, ops, docs, finance, appointments cutover, or R4 write paths.
+  - Exact slice implemented:
+    - added distinct-patient selector helpers for the three domains
+    - registered the domains in `r4_cohort_select`
+    - added focused cohort-selector and SQL extraction tests plus adjacent import/parity validation
+  - Next implementation slice remains completed questionnaire / old patient notes first scale-out proof.
 - 2026-04-27: PR #548 merged on `master` to complete backend-only deterministic `r4_cohort_select` support for `completed_questionnaire_notes` without widening into frontend, runtime, Docker, compose, ops, docs, or R4 write paths.
   - Exact slice implemented:
     - added a SELECT-only distinct-patient helper for `dbo.CompletedQuestionnaire`
