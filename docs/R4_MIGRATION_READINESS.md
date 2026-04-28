@@ -1,8 +1,8 @@
 # R4 Migration Readiness
 
-Status date: 2026-04-27
+Status date: 2026-04-28
 
-Baseline: `master@d8dfeedb510939bf5955e77fb6c2335915cf1369`
+Baseline: `master@452d725ae56ecac19374ccb0cf06b221eabf12b2`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -42,7 +42,8 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 - PR #551 completed the safe `r4_cohort_select` batch for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`; future batching should focus on guard tests or proof-only scale-out, not more selector plumbing for these domains.
 - PR #553 completed the first combined proof for `completed_questionnaire_notes` and `old_patient_notes`; future work should treat those domains as ready for all-domain charting summary rather than repeating first-proof wiring.
 - PR #555 completed the `appointment_notes` scale-out continuation proof; future appointment-note work should be driven by all-domain readiness evidence rather than another isolated continuation slice by default.
-- Batch lightweight domain-set guard tests that compare `r4_import`, `r4_parity_run`, and `r4_cohort_select` allowlists so future canonical domains do not drift silently.
+- PR #557 completed the all-domain charting canonical readiness report, and PR #558 completed the lightweight domain-set guard test comparing `r4_import`, `r4_parity_run`, and `r4_cohort_select` allowlists.
+- Next charting work should follow `docs/r4/CHARTING_CANONICAL_READINESS.md`: run live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
 - Batch docs/runbook alignment for canonical charting dry-run commands after the selector set is complete, if kept docs-only.
 
 ### Areas That Must Stay Separate
@@ -57,7 +58,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 - SELECT-only finance source inventory: table names, row counts, date ranges, keys, payment methods, allocation model.
 - SELECT-only recall source inventory: due-date/status/contact-history tables and patient linkage.
 - Appointment future-diary proof: date-window counts, status/cancelled distribution, patient-null distribution, conflict-risk sample.
-- All-domain charting canonical readiness report on current master after selector completion.
+- Live deterministic charting scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
 - Isolated full dry-run plan for patients, users, treatments, treatment plans, appointments, treatment transactions, and charting canonical domains before any live cutover discussion.
 
 ### Where Full Dry-Run Import Work Should Start
@@ -74,13 +75,13 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. All-domain charting canonical readiness report.
-   - Target: produce a current-master proof summary across active charting canonical domains after selector completion and the note scale-out proofs.
-   - Why next: PR #551, PR #553, and PR #555 make deterministic selector/proof coverage consistent enough to summarise charting readiness without another isolated note-lane continuation by default.
-   - Likely files: no production files if proof-only; possibly docs/status follow-up after proof.
-   - Likely validation: deterministic cohort selection, `r4_import --entity charting_canonical` dry-run/apply/rerun stats in an isolated target, consolidated `r4_parity_run`, drop/explain samples for failed rows.
+1. Live deterministic charting scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
+   - Target: run one small union cohort if selector output is safe, otherwise split `perio_plaque` from the two note domains.
+   - Why next: PR #557 established the active-domain readiness map and PR #558 now guards the active 15-domain scope; these three domains are active-flow complete but still lack recorded live scale-out closure.
+   - Likely files: proof test or docs/evidence report only unless a real blocker appears.
+   - Likely validation: cohort select, patients import, `charting_canonical` dry-run/apply/rerun in an isolated target, consolidated parity.
    - Backend-only: likely yes unless a separate UI proof is explicitly chosen.
-   - Risk: medium-high.
+   - Risk: medium.
 
 2. Appointments cutover readiness proof.
    - Target: SELECT-only/read-only proof pack for past vs future R4 appointment windows, status/cancelled distributions, null-patient counts, and linkage/manual-mapping backlog.
@@ -175,9 +176,9 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ### Track 1: Finish Small R4 Charting / Clinical Lanes
 
-- Close selector/import/parity allowlist asymmetries first.
+- Keep the PR #558 selector/import/parity allowlist guard green before widening active charting domains.
 - Batch adjacent selector-only domains where code paths are identical.
-- Use the completed note-lane proofs to drive an all-domain charting canonical readiness report; keep future note chunks proof-only if that report exposes a real gap.
+- Use the PR #557 all-domain charting canonical readiness report to drive proof-only scale-out; keep future note chunks proof-only unless the report exposes a real implementation gap.
 - Keep frontend work out unless a proof shows a visible workflow gap.
 
 ### Track 2: Finance / Payment / Balance
