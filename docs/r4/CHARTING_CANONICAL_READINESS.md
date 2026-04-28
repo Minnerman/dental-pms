@@ -1,8 +1,8 @@
 # R4 Charting Canonical Readiness
 
-Status date: 2026-04-27
+Status date: 2026-04-28
 
-Baseline: `master@dc595573852c6ac5cc087d484e917b8db0f523c9`
+Baseline: `master@452d725ae56ecac19374ccb0cf06b221eabf12b2`
 
 R4 policy: strictly read-only / SELECT-only. This report is a repo-evidence readiness map only. No live R4 query was run for this report.
 
@@ -20,11 +20,12 @@ Scope is the charting canonical path centered on:
 
 ## Summary
 
-- Active CLI domains are aligned across `r4_import`, `r4_cohort_select`, and `r4_parity_run`: 15 domains.
+- Active CLI domains are aligned and guarded across `r4_import`, `r4_cohort_select`, and `r4_parity_run`: 15 domains.
 - Active extraction/import/parity gaps found in the 15-domain CLI set: none.
 - Remaining active-flow work is scale/proof work, not basic wiring.
 - Reference-only charting rows exist outside the active CLI set; they should not be mixed into scale-out work unless they are deliberately promoted to first-class parity domains.
 - Highest-risk charting gap is still historic odontogram rendering rule confidence, not the canonical importer plumbing.
+- PR #558 completed the backend test-only active-domain allowlist guard in `backend/tests/r4_import/test_r4_domain_allowlists.py`.
 
 ## Active Canonical Domain Matrix
 
@@ -104,23 +105,21 @@ These have active extraction/import/cohort/parity support, but current repo evid
 - Perio plaque is wired but still lacks recorded live scale-out closure.
 - Reference rows are not dangerous by themselves, but promoting them into active parity domains without a clear cutover need would broaden scope.
 
-## Recommended Next 3 Charting Slices
+## Completed Follow-Up
 
-1. Add an active-domain allowlist guard test.
-   - Target: compare `r4_import._CHARTING_CANONICAL_DOMAINS`, `r4_cohort_select.ALL_DOMAINS`, and `r4_parity_run.ALL_DOMAINS`.
-   - Why: the current active set is aligned, but there is no single guard preventing future drift.
-   - Likely files: `backend/tests/r4_import/test_r4_domain_allowlists.py` or existing adjacent CLI/cohort tests.
-   - Validation: focused pytest only.
-   - Risk: low, backend test-only.
+- PR #558 added the active-domain allowlist guard test for `r4_import._CHARTING_CANONICAL_DOMAINS`, `r4_cohort_select.ALL_DOMAINS`, and `r4_parity_run.ALL_DOMAINS`.
+- The guard pins the active 15-domain charting canonical scope and keeps reference-only charting domains out of broad active parity scope.
 
-2. Run a live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
+## Recommended Next Charting Slices
+
+1. Run a live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
    - Target: one small union cohort if selector output is safe, otherwise split `perio_plaque` from the note domains.
    - Why: these are active-flow complete but lack recorded live scale-out closure.
    - Likely files: proof test or docs/evidence report only unless a real blocker appears.
    - Validation: cohort select, patients import, `charting_canonical` dry-run/apply/rerun in isolated target, consolidated parity.
    - Risk: medium, backend/proof-only if no blocker appears.
 
-3. Continue live `appointment_notes` accepted-cohort closure.
+2. Continue live `appointment_notes` accepted-cohort closure.
    - Target: continue beyond the recorded `200/1136` live chunk using the existing deterministic cohort and parity pattern.
    - Why: appointment notes are workflow-visible and remain the largest note-lane live scale-out remainder.
    - Likely files: proof/evidence only unless a real importer/parity blocker appears.
