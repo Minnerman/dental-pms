@@ -222,3 +222,186 @@ def test_appointment_notes_scaleout_continuation_path(monkeypatch, tmp_path):
         "total": 200,
     }
     assert (parity_dir / "appointment_notes.json").exists()
+
+
+def test_appointment_notes_accepted_cohort_closure_tail_path(monkeypatch, tmp_path):
+    accepted_pool = list(range(700001, 701137))
+
+    monkeypatch.setattr(
+        r4_cohort_select,
+        "_build_domain_codes",
+        lambda domain, **_kwargs: accepted_pool if domain == "appointment_notes" else [],
+    )
+
+    first_chunk = r4_cohort_select.select_cohort(
+        domains=["appointment_notes"],
+        date_from="2017-01-01",
+        date_to="2026-02-01",
+        limit=200,
+        mode="union",
+        excluded_patient_codes=set(),
+        order="hashed",
+        seed=17,
+    )
+
+    seen_codes = set(first_chunk["patient_codes"])
+    tail_chunks: list[list[int]] = []
+    while len(seen_codes) < len(accepted_pool):
+        chunk = r4_cohort_select.select_cohort(
+            domains=["appointment_notes"],
+            date_from="2017-01-01",
+            date_to="2026-02-01",
+            limit=200,
+            mode="union",
+            excluded_patient_codes=seen_codes,
+            order="hashed",
+            seed=17,
+        )
+        selected_codes = list(chunk["patient_codes"])
+        assert selected_codes
+        assert seen_codes.isdisjoint(selected_codes)
+        assert chunk["domain_counts"] == {"appointment_notes": 1136}
+        assert chunk["candidates_before_exclude"] == 1136
+        assert chunk["exclude_input_count"] == len(seen_codes)
+        assert chunk["excluded_candidates_count"] == len(seen_codes)
+        assert chunk["remaining_after_exclude"] == 1136 - len(seen_codes)
+        assert chunk["selected_count"] == min(200, 1136 - len(seen_codes))
+        tail_chunks.append(selected_codes)
+        seen_codes.update(selected_codes)
+
+    assert [len(chunk) for chunk in tail_chunks] == [200, 200, 200, 200, 136]
+    assert seen_codes == set(accepted_pool)
+
+    try:
+        r4_cohort_select.select_cohort(
+            domains=["appointment_notes"],
+            date_from="2017-01-01",
+            date_to="2026-02-01",
+            limit=200,
+            mode="union",
+            excluded_patient_codes=seen_codes,
+            order="hashed",
+            seed=17,
+        )
+    except RuntimeError as exc:
+        assert "Exclusion removed all candidate patient codes" in str(exc)
+    else:  # pragma: no cover - defensive assertion for the exhaustion guard
+        raise AssertionError("expected exhausted accepted cohort selection to fail")
+
+    tail_codes = [code for chunk in tail_chunks for code in chunk]
+    codes_file = tmp_path / "stage163h_appointment_notes_tail_codes.txt"
+    codes_file.write_text("\n".join(str(code) for code in tail_codes), encoding="utf-8")
+
+    import_calls: list[dict[str, object]] = []
+
+    def fake_import(*_args, **kwargs):
+        batch_codes = list(kwargs["patient_codes"])
+        import_calls.append(
+            {
+                "patient_codes": batch_codes,
+                "domains": kwargs.get("domains"),
+                "date_from": kwargs.get("date_from"),
+                "date_to": kwargs.get("date_to"),
+            }
+        )
+        count = len(batch_codes) * 2
+        return _DummyStats(count=count), {
+            "total_records": count,
+            "distinct_patients": len(batch_codes),
+            "missing_source_id": 0,
+            "missing_patient_code": 0,
+            "by_source": {
+                "dbo.vwAppointmentDetails": {"fetched": count + len(batch_codes)}
+            },
+            "stats": _DummyStats(count=count).as_dict(),
+            "dropped": {
+                "accepted_nonblank_note": count,
+                "included": count,
+            },
+        }
+
+    stats_path = tmp_path / "tail_import_stats.json"
+    summary_path = tmp_path / "tail_import_summary.json"
+    monkeypatch.setattr(r4_import_script, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(r4_import_script, "resolve_actor_id", lambda _session: 1)
+    monkeypatch.setattr(r4_import_script, "FixtureSource", lambda: object())
+    monkeypatch.setattr(r4_import_script, "import_r4_charting_canonical_report", fake_import)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "r4_import.py",
+            "--entity",
+            "charting_canonical",
+            "--patient-codes-file",
+            str(codes_file),
+            "--domains",
+            "appointment_notes",
+            "--charting-from",
+            "2017-01-01",
+            "--charting-to",
+            "2026-02-01",
+            "--batch-size",
+            "200",
+            "--stats-out",
+            str(stats_path),
+            "--run-summary-out",
+            str(summary_path),
+        ],
+    )
+
+    assert r4_import_script.main() == 0
+    assert [len(call["patient_codes"]) for call in import_calls] == [
+        200,
+        200,
+        200,
+        200,
+        136,
+    ]
+    assert all(call["domains"] == ["appointment_notes"] for call in import_calls)
+    assert all(call["date_from"] == date(2017, 1, 1) for call in import_calls)
+    assert all(call["date_to"] == date(2026, 2, 1) for call in import_calls)
+
+    stats_payload = json.loads(stats_path.read_text(encoding="utf-8"))
+    assert stats_payload["stats"]["batches_total"] == 5
+    assert stats_payload["stats"]["batches_completed"] == 5
+    assert stats_payload["stats"]["imported_created_total"] == 1872
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary_payload["domains"] == ["appointment_notes"]
+    assert summary_payload["patient_filter_mode"] == "codes"
+    assert summary_payload["patient_codes_count"] == 936
+    assert summary_payload["totals"]["candidates_total"] == 1872
+
+    monkeypatch.setattr(r4_parity_run, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(
+        r4_parity_run.r4_appointment_notes_parity_pack,
+        "build_parity_report",
+        lambda session, *, patient_codes, **_kwargs: _appointment_notes_report_for(
+            patient_codes
+        ),
+    )
+
+    parity_dir = tmp_path / "closed_parity"
+    parity_report = r4_parity_run.run_parity(
+        patient_codes=accepted_pool,
+        domains=["appointment_notes"],
+        date_from=date(2017, 1, 1),
+        date_to=date(2026, 2, 1),
+        row_limit=100,
+        output_dir=str(parity_dir),
+    )
+
+    assert parity_report["overall"] == {
+        "status": "pass",
+        "has_data": True,
+        "domains_requested": 1,
+        "domains_failed": 0,
+        "domains_no_data": 0,
+    }
+    assert parity_report["domain_summaries"]["appointment_notes"]["patients_total"] == 1136
+    assert parity_report["domain_summaries"]["appointment_notes"]["patients_with_data"] == 1136
+    assert parity_report["domain_summaries"]["appointment_notes"]["latest_match"] == {
+        "matched": 1136,
+        "total": 1136,
+    }
+    assert (parity_dir / "appointment_notes.json").exists()
