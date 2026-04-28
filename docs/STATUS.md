@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@94cc95c1529ff4780fbd9e73d746966d31955489`.
-- Current repo `master` is `94cc95c1529ff4780fbd9e73d746966d31955489`; it includes merged R4 charting continuity through PR #560, including PR #557's all-domain charting canonical readiness report, PR #558's backend test-only active-domain allowlist guard, and PR #560's backend proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
+- The authoritative continuity baseline is `origin/master@3effe87b52229461dd4751c02a60faacb4ab2f4c`.
+- Current repo `master` is `3effe87b52229461dd4751c02a60faacb4ab2f4c`; it includes merged R4 charting continuity through PR #562, including PR #557's all-domain charting canonical readiness report, PR #558's backend test-only active-domain allowlist guard, PR #560's backend proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`, and PR #562's backend proof-only `appointment_notes` accepted-cohort closure.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_READINESS.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, and the next implementation slice should remain aligned with the current readiness docs.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_READINESS.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, and the next implementation/planning slice is a current-master all-domain charting canonical dry-run/parity summary.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,6 +70,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-28: PR #562 merged on `master` as a backend-only/proof-only `appointment_notes` accepted-cohort closure.
+  - Exact slice implemented:
+    - added `backend/tests/r4_import/test_appointment_notes_scaleout_proof.py`
+    - proved the remaining accepted-cohort tail can be selected to exhaustion, imported in deterministic batches, and parity-summarised across the full accepted pool
+    - kept the slice out of frontend, runtime, Docker, compose, ops, docs, unrelated domains, appointment cutover work, and live R4 access
+  - Next implementation/planning slice: current-master all-domain charting canonical dry-run/parity summary.
 - 2026-04-28: PR #560 merged on `master` as a backend-only/proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
   - Exact slice implemented:
     - added `backend/tests/r4_import/test_live_charting_scaleout_proof.py`

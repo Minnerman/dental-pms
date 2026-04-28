@@ -2,7 +2,7 @@
 
 Status date: 2026-04-28
 
-Baseline: `master@94cc95c1529ff4780fbd9e73d746966d31955489`
+Baseline: `master@3effe87b52229461dd4751c02a60faacb4ab2f4c`
 
 R4 policy: strictly read-only / SELECT-only. This report is a repo-evidence readiness map only. No live R4 query was run for this report.
 
@@ -27,6 +27,7 @@ Scope is the charting canonical path centered on:
 - Highest-risk charting gap is still historic odontogram rendering rule confidence, not the canonical importer plumbing.
 - PR #558 completed the backend test-only active-domain allowlist guard in `backend/tests/r4_import/test_r4_domain_allowlists.py`.
 - PR #560 completed the backend proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes` in `backend/tests/r4_import/test_live_charting_scaleout_proof.py`.
+- PR #562 completed the backend proof-only `appointment_notes` accepted-cohort closure in `backend/tests/r4_import/test_appointment_notes_scaleout_proof.py`.
 
 ## Active Canonical Domain Matrix
 
@@ -46,7 +47,7 @@ Legend:
 | `chart_healing_actions` | `chart_healing_action` | `dbo.ChartHealingActions` | Yes | Fixture + SQL source | Yes | Yes | Yes | Yes | Yes | No-data/exhausted for prior in-window evidence; PR #538 added parity-pack proof. | Undated rows are included when bounded; selector can fall back to ID ordering when no date column is present. | Decide whether a different window has meaningful rows before more work. | Keep out of isolated scale-out unless inventory finds data. | Low-medium |
 | `restorative_treatments` | `restorative_treatment` | `dbo.vwTreatments` | Yes | SQL source; no `FixtureSource` fixture. | Yes | Yes | Yes | Yes | Yes | Full: Stage 163C closed `974` accepted patients, full-cohort parity pass. | Completed rows only; status description allowlist; requires tooth, code id, valid surface; drops non-restorative statuses and not-completed rows. | None for importer/parity; rendering rules remain separate risk. | Include in future live all-domain parity run and odontogram rule confidence review. | Medium-high |
 | `completed_treatment_findings` | `completed_treatment_finding` | `dbo.vwCompletedTreatmentTransactions` | Yes | SQL source; no `FixtureSource` fixture. | Yes | Yes | Yes | Yes | Yes | Full: Stage 163F closed `2886` accepted patients, full-cohort parity pass. | Drops missing patient/tooth/code, out-of-window rows, duplicate keys, and rows classified as already-covered restorative treatments. | None for active flow. | Include in future live all-domain parity run; no new isolated slice. | Medium |
-| `appointment_notes` | `appointment_note` | `dbo.vwAppointmentDetails.notes` | Yes | SQL source; no `FixtureSource` fixture. | Yes | Yes | Yes | Yes | Yes | Partial: Stage 163H chunk 1 proved `200/1136`; PR #555 added proof-only continuation test. | Requires patient code, appointment id, date, nonblank notes; drops missing patient/appt/date, out-of-window, blank notes, duplicate keys. | Live accepted-cohort closure still not recorded. | Run live deterministic continuation/tail after active-domain guard coverage. | Medium |
+| `appointment_notes` | `appointment_note` | `dbo.vwAppointmentDetails.notes` | Yes | SQL source; no `FixtureSource` fixture. | Yes | Yes | Yes | Yes | Yes | Proof complete: Stage 163H chunk 1 proved `200/1136`; PR #555 added proof-only continuation coverage; PR #562 completed accepted-cohort closure for the full `1136` accepted pool. | Requires patient code, appointment id, date, nonblank notes; drops missing patient/appt/date, out-of-window, blank notes, duplicate keys. | None for the PR #562 proof path; broader cutover still needs all-domain dry-run/parity evidence. | Include in future live all-domain parity run; no new isolated appointment-note scale-out slice by default. | Medium |
 | `completed_questionnaire_notes` | `completed_questionnaire_note` | `dbo.CompletedQuestionnaire.Notes` | Yes | SQL source; no `FixtureSource` fixture. | Yes | Yes | Yes | Yes | Yes | Proof complete: PR #553 added the first combined proof with old patient notes; PR #560 added the combined live deterministic scale-out proof with `perio_plaque`. | Requires patient/date/note; drops missing patient/date, out-of-window, blank notes, duplicate keys. | None for the PR #560 proof path; broader cutover still needs all-domain dry-run/parity evidence. | Include in future live all-domain parity run; no new isolated scale-out slice by default. | Medium |
 | `patient_notes` | `patient_note` | `dbo.PatientNotes` | Yes | Fixture + SQL source | Yes | Yes | Yes | Yes | Yes | Full/exhausted for current window: Stage 142 completed `4` patient cohort. | Requires note date under bounded runs; source id uses note number or note digest fallback. | Tiny eligible population only; no active wiring gap. | Include in future live all-domain parity run; expand only if a wider window is selected. | Low-medium |
 | `old_patient_notes` | `old_patient_note` | `dbo.OldPatientNotes` | Yes | Fixture + SQL source | Yes | Yes | Yes | Yes | Yes | Proof complete: PR #546 wired active flow; PR #553 added the first combined proof with completed questionnaire notes; PR #560 added the combined live deterministic scale-out proof with `perio_plaque`. | Requires note date under bounded runs; source id uses note number or note digest fallback; preserves tooth/surface/fixed note metadata. | None for the PR #560 proof path; broader cutover still needs all-domain dry-run/parity evidence. | Include in future live all-domain parity run; no new isolated scale-out slice by default. | Medium |
@@ -83,6 +84,7 @@ These have end-to-end active-flow support and recorded full/exhaustion evidence 
 - `treatment_plans`
 - `treatment_plan_items`
 - `treatment_notes`
+- `appointment_notes`
 
 These have end-to-end active-flow support and recorded deterministic scale-out proof closure, but still belong in future all-domain dry-run/parity evidence before broad historic cutover:
 
@@ -92,9 +94,7 @@ These have end-to-end active-flow support and recorded deterministic scale-out p
 
 ### Domains Needing Scale-Out Only
 
-These have active extraction/import/cohort/parity support, but current repo evidence does not show full live accepted-cohort closure:
-
-- `appointment_notes`: live chunk 1 covered `200/1136`; PR #555 added proof-only continuation coverage.
+None in the active 15-domain CLI set after PR #562.
 
 ### Domains Needing Extraction / Import / Parity Work
 
@@ -104,7 +104,7 @@ These have active extraction/import/cohort/parity support, but current repo evid
 ### Highest-Risk Charting Gaps
 
 - Odontogram rendering/rule confidence remains the main clinical risk. `restorative_treatments` and `completed_treatment_findings` are imported/parity-covered, but visible tooth-state interpretation still depends on evidence-backed rule maturity.
-- Appointment-note live scale-out is incomplete in repo evidence even though active wiring and proof-only continuation are present.
+- Appointment-note accepted-cohort closure is complete as of PR #562; remaining appointment-note risk belongs to broader all-domain dry-run/parity and cutover evidence, not another isolated scale-out slice.
 - PR #560 closes the prior live deterministic scale-out proof gap for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`; those domains still need inclusion in future all-domain dry-run/parity evidence before broad historic cutover.
 - Reference rows are not dangerous by themselves, but promoting them into active parity domains without a clear cutover need would broaden scope.
 
@@ -113,19 +113,13 @@ These have active extraction/import/cohort/parity support, but current repo evid
 - PR #558 added the active-domain allowlist guard test for `r4_import._CHARTING_CANONICAL_DOMAINS`, `r4_cohort_select.ALL_DOMAINS`, and `r4_parity_run.ALL_DOMAINS`.
 - The guard pins the active 15-domain charting canonical scope and keeps reference-only charting domains out of broad active parity scope.
 - PR #560 added `backend/tests/r4_import/test_live_charting_scaleout_proof.py`, proving combined deterministic union cohort selection, batched `charting_canonical` import CLI wiring, and consolidated parity for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
+- PR #562 added `backend/tests/r4_import/test_appointment_notes_scaleout_proof.py`, proving `appointment_notes` accepted-cohort closure across the remaining tail, deterministic import batching, and consolidated parity over the full accepted pool.
 
 ## Recommended Next Charting Slices
 
-1. Continue live `appointment_notes` accepted-cohort closure.
-   - Target: continue beyond the recorded `200/1136` live chunk using the existing deterministic cohort and parity pattern.
-   - Why: appointment notes are workflow-visible and remain the largest note-lane live scale-out remainder.
-   - Likely files: proof/evidence only unless a real importer/parity blocker appears.
-   - Validation: cohort selection with seen-ledger exclusion, patients import, `charting_canonical` apply/rerun, appointment-notes parity pack and consolidated parity.
-   - Risk: medium.
-
-2. Run a current-master all-domain charting canonical dry-run/parity summary after the PR #560 proof is included.
+1. Run a current-master all-domain charting canonical dry-run/parity summary after the PR #562 proof is included.
    - Target: summarize active 15-domain charting canonical readiness from current master before broader migration dry-run work.
-   - Why: PR #558 pins the active domain set and PR #560 closes the prior three-domain scale-out proof gap.
+   - Why: PR #558 pins the active domain set, PR #560 closes the prior three-domain scale-out proof gap, and PR #562 closes the `appointment_notes` accepted-cohort gap.
    - Likely files: proof/evidence report unless the dry-run exposes a real blocker.
    - Validation: deterministic cohort selection, `charting_canonical` import/rerun, consolidated parity over the selected active-domain scope.
    - Risk: medium-high because all-domain evidence can expose cross-domain assumptions.
