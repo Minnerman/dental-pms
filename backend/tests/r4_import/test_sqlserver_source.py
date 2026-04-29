@@ -115,3 +115,70 @@ def test_treatment_transactions_date_range_date_floor(monkeypatch):
 
     assert raw["min"].startswith("1929")
     assert sane["min"].startswith("2000")
+
+
+def test_treatment_plan_tp_range_filters_preserve_internal_and(monkeypatch):
+    config = R4SqlServerConfig(
+        enabled=True,
+        host="sql.example.local",
+        port=1433,
+        database="sys2000",
+        user="readonly",
+        password="secret",
+        driver=None,
+        encrypt=True,
+        trust_cert=False,
+        timeout_seconds=5,
+    )
+    source = R4SqlServerSource(config)
+    captured_sql: list[str] = []
+
+    def fake_require_column(_table, candidates):
+        return candidates[0]
+
+    def fake_pick_column(_table, candidates):
+        return candidates[0]
+
+    def fake_get_columns(_table):
+        return {"PatientCode", "TPNumber"}
+
+    def fake_query(sql, _params=None):
+        captured_sql.append(sql)
+        return []
+
+    monkeypatch.setattr(source, "_require_column", fake_require_column)
+    monkeypatch.setattr(source, "_pick_column", fake_pick_column)
+    monkeypatch.setattr(source, "_get_columns", fake_get_columns)
+    monkeypatch.setattr(source, "_query", fake_query)
+
+    list(
+        source.list_treatment_plans(
+            patients_from=1015180,
+            patients_to=1015180,
+            tp_from=1,
+            tp_to=1,
+            limit=1,
+        )
+    )
+    list(
+        source.list_treatment_plan_items(
+            patients_from=1015180,
+            patients_to=1015180,
+            tp_from=1,
+            tp_to=1,
+            limit=1,
+        )
+    )
+    list(
+        source.list_treatment_plan_reviews(
+            patients_from=1015180,
+            patients_to=1015180,
+            tp_from=1,
+            tp_to=1,
+            limit=1,
+        )
+    )
+
+    assert len(captured_sql) == 3
+    assert all("TPNumber >= ? AND" in sql for sql in captured_sql)
+    assert all("TPNumber >= ?  " not in sql for sql in captured_sql)
