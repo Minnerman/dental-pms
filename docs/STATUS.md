@@ -3,11 +3,12 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@a89c2ee59aba469e37939dc287fc557dee63842e`.
-- Current repo `master` is `a89c2ee59aba469e37939dc287fc557dee63842e`; it includes merged R4 charting continuity through PR #566, including PR #557's all-domain charting canonical readiness report, PR #558's backend test-only active-domain allowlist guard, PR #560's backend proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`, PR #562's backend proof-only `appointment_notes` accepted-cohort closure, PR #564's charting dry-run/parity summary, PR #565's scratch runbook, and PR #566's SQL Server treatment-plan TP range fix plus successful all-domain scratch transcript.
+- The authoritative continuity baseline is `origin/master@f7670d1b4d2de9d256250af513d0d43b391abe6f`.
+- Current repo `master` is `f7670d1b4d2de9d256250af513d0d43b391abe6f`; it includes merged R4 charting continuity through PR #567 and PR #568's backend-only, SELECT-only appointment cutover inventory tooling.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, and the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, and appointment cutover inventory tooling is merged as of PR #568.
+- The live SELECT-only appointment inventory has not yet been run. Next action: run `python -m app.scripts.r4_appointment_cutover_inventory` only in an environment with complete R4 SQL Server env and `R4_SQLSERVER_READONLY=true`.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,6 +71,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-29: PR #568 merged on `master` as backend-only, SELECT-only appointment cutover inventory tooling.
+  - Exact slice implemented:
+    - added `backend/app/scripts/r4_appointment_cutover_inventory.py`
+    - added `backend/tests/r4_import/test_appointment_cutover_inventory.py`
+  - The command reports past/future appointment counts, min/max dates, status/cancelled/appt-flag distributions, null/blank patient-code counts, clinician/clinic distributions, cutover boundary counts, and edge samples.
+  - Live R4 inventory has not yet been run; next action is to run the command in an environment with complete R4 env and `R4_SQLSERVER_READONLY=true`.
+  - No R4 access occurred during PR finalisation.
 - 2026-04-29: PR #566 merged on `master` as a narrow backend-only SQL Server treatment-plan TP range fix and completed the all-domain charting canonical scratch transcript.
   - Exact slice implemented:
     - updated `backend/app/services/r4_import/sqlserver_source.py` so treatment-plan TP range filters preserve their internal `AND` with `removeprefix("AND")`
