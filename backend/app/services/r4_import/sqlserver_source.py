@@ -2993,7 +2993,7 @@ class R4SqlServerSource:
                 params.extend(range_params)
             tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix="AND")
             if tp_clause:
-                where_parts.append(tp_clause.replace("AND", "").strip())
+                where_parts.append(tp_clause.removeprefix("AND").strip())
                 params.extend(tp_params)
             if creation_col and (date_from is not None or date_to is not None):
                 date_predicates: list[str] = []
@@ -3152,7 +3152,7 @@ class R4SqlServerSource:
                 prefix="AND",
             )
             if tp_clause:
-                where_parts.append(tp_clause.replace("AND", "").strip())
+                where_parts.append(tp_clause.removeprefix("AND").strip())
                 params.extend(tp_params)
             if plan_creation_col:
                 date_clause, date_params = self._build_date_filter(
@@ -3616,7 +3616,7 @@ class R4SqlServerSource:
                 params.extend(range_params)
             tp_clause, tp_params = self._build_range_filter(tp_col, tp_from, tp_to, prefix="AND")
             if tp_clause:
-                where_parts.append(tp_clause.replace("AND", "").strip())
+                where_parts.append(tp_clause.removeprefix("AND").strip())
                 params.extend(tp_params)
             if last_patient is not None and last_tp is not None:
                 where_parts.append(
