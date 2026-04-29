@@ -3,11 +3,11 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@3effe87b52229461dd4751c02a60faacb4ab2f4c`.
-- Current repo `master` is `3effe87b52229461dd4751c02a60faacb4ab2f4c`; it includes merged R4 charting continuity through PR #562, including PR #557's all-domain charting canonical readiness report, PR #558's backend test-only active-domain allowlist guard, PR #560's backend proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`, and PR #562's backend proof-only `appointment_notes` accepted-cohort closure.
+- The authoritative continuity baseline is `origin/master@a89c2ee59aba469e37939dc287fc557dee63842e`.
+- Current repo `master` is `a89c2ee59aba469e37939dc287fc557dee63842e`; it includes merged R4 charting continuity through PR #566, including PR #557's all-domain charting canonical readiness report, PR #558's backend test-only active-domain allowlist guard, PR #560's backend proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`, PR #562's backend proof-only `appointment_notes` accepted-cohort closure, PR #564's charting dry-run/parity summary, PR #565's scratch runbook, and PR #566's SQL Server treatment-plan TP range fix plus successful all-domain scratch transcript.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_READINESS.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, and the next implementation/planning slice is a current-master all-domain charting canonical dry-run/parity summary.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, and the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -70,12 +70,24 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-29: PR #566 merged on `master` as a narrow backend-only SQL Server treatment-plan TP range fix and completed the all-domain charting canonical scratch transcript.
+  - Exact slice implemented:
+    - updated `backend/app/services/r4_import/sqlserver_source.py` so treatment-plan TP range filters preserve their internal `AND` with `removeprefix("AND")`
+    - added `backend/tests/r4_import/test_sqlserver_source.py` coverage for the SQL shape that previously generated `ti.TPNumber >= ?  ti.TPNumber <= ?`
+    - completed the scratch all-domain charting canonical sequence against `dental_pms_charting_scratch`
+  - Evidence recorded:
+    - dry-run `total_records=70140`, `unmapped_patients=0`
+    - scratch apply `created=70140`, `updated=0`, `unmapped_patients_total=0`
+    - idempotency rerun `created=0`, `skipped=70140`
+    - consolidated parity `overall.status=pass`, `domains_failed=0`, `domains_no_data=3` for `chart_healing_actions`, `old_patient_notes`, and `perio_plaque`
+    - R4 remained SELECT-only with no R4 writes; PMS writes were scratch-only
+  - Next major readiness area should come from `docs/R4_MIGRATION_READINESS.md` after this docs/evidence refresh.
 - 2026-04-28: PR #562 merged on `master` as a backend-only/proof-only `appointment_notes` accepted-cohort closure.
   - Exact slice implemented:
     - added `backend/tests/r4_import/test_appointment_notes_scaleout_proof.py`
     - proved the remaining accepted-cohort tail can be selected to exhaustion, imported in deterministic batches, and parity-summarised across the full accepted pool
     - kept the slice out of frontend, runtime, Docker, compose, ops, docs, unrelated domains, appointment cutover work, and live R4 access
-  - Next implementation/planning slice: current-master all-domain charting canonical dry-run/parity summary.
+  - Superseded by PR #566's completed all-domain charting canonical scratch transcript.
 - 2026-04-28: PR #560 merged on `master` as a backend-only/proof-only live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`.
   - Exact slice implemented:
     - added `backend/tests/r4_import/test_live_charting_scaleout_proof.py`

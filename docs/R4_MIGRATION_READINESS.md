@@ -1,8 +1,8 @@
 # R4 Migration Readiness
 
-Status date: 2026-04-28
+Status date: 2026-04-29
 
-Baseline: `master@3effe87b52229461dd4751c02a60faacb4ab2f4c`
+Baseline: `master@a89c2ee59aba469e37939dc287fc557dee63842e`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -22,8 +22,8 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 | Patients | Yes: `dbo.Patients` via `R4SqlServerSource.stream_patients`. | Yes: `r4_import --entity patients`. | Partial: mapping-quality reports, Postgres window verify, patient mapping/admin tooling. | Partial: 5,000-patient windows and many charting cohorts proven; full all-patient cutover dry-run not recorded. | Yes: core patient record, search, demographics, recalls, ledger, documents. | Full all-patient dry-run in isolated target DB, final mapping-quality report, duplicate/contact-data policy. | Medium | Medium |
 | Past appointments | Yes: `dbo.vwAppointmentDetails`; discovery records 100,812 appointments from 2001-10-27 to 2026-11-18. | Yes: `r4_import --entity appointments` into `r4_appointments`. | Partial: linkage report/queue, manual mappings, unmapped appointments admin. | Partial: Jan 2025 pilot and R4 calendar proof; full historical diary not proven. | Partial: read-only R4 calendar/admin linking plus core appointments UI. | Full historical import dry-run, status/cancelled semantics, patient-linkage closeout, decision on R4 read-only table vs core appointment migration. | High | Large |
 | Future appointments | Yes: same `dbo.vwAppointmentDetails`; source has future rows through 2026-11-18 in documented discovery. | Yes: same appointment importer. | Partial: linkage report and R4 calendar filtering. | No full future diary/cutover proof recorded. | Partial: core diary, booking, R4 calendar read-only. | Future diary conflict/status proof, active appointment cutover policy, recall-linked booking behaviour after migration. | High | Large |
-| Clinical notes | Yes: `PatientNotes`, `TreatmentNotes`, `TemporaryNotes`, `OldPatientNotes`, `vwAppointmentDetails.notes`, `CompletedQuestionnaire.Notes`. | Yes for active canonical domains including patient, treatment, temporary, appointment, completed questionnaire, and old patient notes. | Yes for import/parity packs and deterministic cohort selectors for active note/finding domains, including PR #551 support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`. | Mixed/strong: patient/treatment/temporary notes have full/near-full evidence; PR #553 added the first combined proof for completed questionnaire and old patient notes; PR #555 completed the next `appointment_notes` scale-out continuation proof; PR #560 completed the live deterministic scale-out proof covering completed questionnaire notes and old patient notes with `perio_plaque`; PR #562 completed `appointment_notes` accepted-cohort closure. | Partial: charting notes/history surfaces exist, but not every note style has direct UI affordance. | Include active note domains in the future all-domain charting readiness summary; avoid repeating first-proof/continuation proof work unless a real failure appears. | Medium | Medium |
-| Odontogram/charting | Yes: treatment plans/items, treatments, BPE/BPEFurcation, PerioProbe, PerioPlaque, restorative treatments, completed treatment findings, chart healing actions, tooth systems/surfaces, notes. | Yes: `charting_canonical`, legacy charting tables, and raw support for charting foundations. | Yes: domain parity packs, consolidated parity runner, spotcheck/export tests, golden-corpus docs. | Strong but mixed: full cohort proven for treatment plans/items, BPE, furcations, perioprobe, restorative treatments, completed treatment findings, temporary notes; PR #560 completed the live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`; PR #562 completed `appointment_notes` accepted-cohort closure. | Yes: charting API, odontogram, perio/BPE, treatment-plan overlays, charting viewer/export proofs. | All-domain dry-run/parity summary for current master; charting engine rule maturity/golden corpus still high importance before broad historic cutover. | High | Large |
+| Clinical notes | Yes: `PatientNotes`, `TreatmentNotes`, `TemporaryNotes`, `OldPatientNotes`, `vwAppointmentDetails.notes`, `CompletedQuestionnaire.Notes`. | Yes for active canonical domains including patient, treatment, temporary, appointment, completed questionnaire, and old patient notes. | Yes for import/parity packs and deterministic cohort selectors for active note/finding domains, including PR #551 support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`. | Strong for the active charting path: PR #560 completed the live deterministic scale-out proof covering completed questionnaire notes and old patient notes with `perio_plaque`; PR #562 completed `appointment_notes` accepted-cohort closure; PR #566 included the active note domains in the successful all-domain scratch dry-run/apply/idempotency/parity transcript. | Partial: charting notes/history surfaces exist, but not every note style has direct UI affordance. | No active canonical transcript gap; remaining note risk belongs to broader cutover policy/UI affordance review. | Medium | Medium |
+| Odontogram/charting | Yes: treatment plans/items, treatments, BPE/BPEFurcation, PerioProbe, PerioPlaque, restorative treatments, completed treatment findings, chart healing actions, tooth systems/surfaces, notes. | Yes: `charting_canonical`, legacy charting tables, and raw support for charting foundations. | Yes: domain parity packs, consolidated parity runner, spotcheck/export tests, golden-corpus docs. | Strong: full cohort proven for treatment plans/items, BPE, furcations, perioprobe, restorative treatments, completed treatment findings, temporary notes; PR #560 completed the live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`; PR #562 completed `appointment_notes` accepted-cohort closure; PR #566 completed the current-master all-domain scratch dry-run/apply/idempotency/parity transcript. | Yes: charting API, odontogram, perio/BPE, treatment-plan overlays, charting viewer/export proofs. | Combined charting canonical transcript is complete; charting engine rule maturity/golden corpus remains high importance before broad historic cutover. | Medium-high | Medium |
 | Treatment plans | Yes: `TreatmentPlans`, `TreatmentPlanItems`, `TreatmentPlanReviews`, `Treatments/Codes`. | Yes: raw `treatment_plans`, `treatments`; canonical `treatment_plans` and `treatment_plan_items`. | Yes for plans/items; reviews are imported in raw plan model but not a first-class canonical parity domain. | Partial/strong: Stage 105 raw full import, Stage 135/136 canonical cohorts exhausted; raw plan patient-id backfill/mapping still needs cutover proof. | Partial: admin R4 treatment-plan viewer and patient clinical treatment planning. | Decide whether `treatment_plan_reviews` needs canonical/parity lane; reconcile raw R4 plan tables against canonical display path. | Medium | Medium |
 | Treatment transactions/history | Yes: `dbo.Transactions`. | Yes: `r4_import --entity treatment_transactions`. | Partial: idempotency/statistics; patient transaction API/UI proofs. | Partial: 184,505 transactions proven for 5,000-patient window, not full all-patient cutover. | Yes: read-only patient transactions tab. | Full-range import/reconcile, fee/cost semantics review before using as financial truth. | Medium | Medium |
 | Users/clinicians | Yes: `dbo.Users`. | Yes: `r4_import --entity users`. | Basic idempotency and display-name usage in transaction/calendar views. | Partial: user import pilot recorded 77 users. | Partial: clinician names in R4 calendar/transactions; core PMS user/RBAC remains separate. | Cutover policy for R4 clinician identity vs PMS login accounts. | Low | Small |
@@ -44,6 +44,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 - PR #555 completed the `appointment_notes` scale-out continuation proof, and PR #562 completed `appointment_notes` accepted-cohort closure; future appointment-note work should be driven by all-domain readiness evidence rather than another isolated continuation slice by default.
 - PR #557 completed the all-domain charting canonical readiness report, and PR #558 completed the lightweight domain-set guard test comparing `r4_import`, `r4_parity_run`, and `r4_cohort_select` allowlists.
 - PR #560 completed the live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`; next charting work should continue to follow `docs/r4/CHARTING_CANONICAL_READINESS.md`.
+- PR #566 fixed the SQL Server treatment-plan TP range blocker and completed the all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript with parity passing across the active 15-domain set.
 - Batch docs/runbook alignment for canonical charting dry-run commands after the selector set is complete, if kept docs-only.
 
 ### Areas That Must Stay Separate
@@ -58,7 +59,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 - SELECT-only finance source inventory: table names, row counts, date ranges, keys, payment methods, allocation model.
 - SELECT-only recall source inventory: due-date/status/contact-history tables and patient linkage.
 - Appointment future-diary proof: date-window counts, status/cancelled distribution, patient-null distribution, conflict-risk sample.
-- Current-master all-domain charting canonical dry-run/parity summary from `docs/r4/CHARTING_CANONICAL_READINESS.md` after PR #562.
+- Current-master all-domain charting canonical scratch dry-run/parity transcript is complete as of PR #566; do not repeat it unless a later code change invalidates the evidence.
 - Isolated full dry-run plan for patients, users, treatments, treatment plans, appointments, treatment transactions, and charting canonical domains before any live cutover discussion.
 
 ### Where Full Dry-Run Import Work Should Start
@@ -67,7 +68,7 @@ Start with an isolated target DB and non-financial domains:
 
 1. Patients, users, treatment/code catalog.
 2. Treatment plans/items and treatment transactions.
-3. Charting canonical domains using deterministic cohorts and all-domain parity summaries.
+3. Charting canonical domains using the PR #566 all-domain scratch transcript as the current baseline.
 4. R4 appointments into the read-only R4 appointment table, split into past and future date windows.
 5. Only after the above is stable, start finance source discovery/import prototypes in isolation.
 
@@ -75,23 +76,15 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. Current-master all-domain charting canonical dry-run/parity summary.
-   - Target: summarize active 15-domain charting canonical readiness from current master before broader migration dry-run work.
-   - Why next: PR #557 established the active-domain readiness map, PR #558 guards the active 15-domain scope, PR #560 closes the combined deterministic scale-out proof for `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes`, and PR #562 closes `appointment_notes` accepted-cohort proof work.
-   - Likely files: proof/evidence report only unless the dry-run exposes a real blocker.
-   - Likely validation: deterministic cohort selection, `charting_canonical` import/rerun, consolidated parity over the selected active-domain scope.
-   - Backend-only: likely yes unless a separate UI proof is explicitly chosen.
-   - Risk: medium.
-
-2. Appointments cutover readiness proof.
+1. Appointments cutover readiness proof.
    - Target: SELECT-only/read-only proof pack for past vs future R4 appointment windows, status/cancelled distributions, null-patient counts, and linkage/manual-mapping backlog.
-   - Why next: future diary migration is operationally high-risk and needs evidence before implementation.
+   - Why next: PR #566 completes the combined charting canonical scratch transcript; future diary migration is operationally high-risk and needs evidence before implementation.
    - Likely files: `backend/app/services/r4_import/sqlserver_source.py`, `backend/app/scripts/r4_linkage_report.py`, `backend/tests/appointments/test_r4_calendar.py`, docs/runbook if proof-only.
    - Likely validation: targeted appointment importer/linkage tests, R4 calendar tests, no broad frontend implementation unless proof reveals a required gap.
    - Backend-only: probably, with optional docs-only output.
    - Risk: high.
 
-3. Finance/payment/balance source discovery.
+2. Finance/payment/balance source discovery.
    - Target: SELECT-only inventory of R4 finance, invoice, payment, allocation, balance, and cash-up candidate tables.
    - Why next: finance is the largest unknown and should not wait until late cutover; discovery is proof-only and does not force importer design yet.
    - Likely files: new discovery script or docs under `docs/r4/`, no importer initially.
@@ -99,7 +92,7 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only/docs-only: yes for discovery.
    - Risk: high.
 
-4. Recall source discovery.
+3. Recall source discovery.
    - Target: SELECT-only inventory of R4 recall due-date/status/contact-history candidates and patient linkage.
    - Why next: recalls remain a high-risk unmapped domain in the readiness table, but discovery can be kept proof-only before importer design.
    - Likely files: new discovery script or docs under `docs/r4/`, no importer initially.
@@ -107,13 +100,21 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only/docs-only: yes for discovery.
    - Risk: high.
 
-5. Patients/users/treatment-code dry-run manifest.
+4. Patients/users/treatment-code dry-run manifest.
    - Target: define the first isolated non-financial full-dry-run manifest for patients, users, and treatment/code catalog before broad cutover rehearsal.
    - Why next: these are the recommended starting domains for dry-run import work and avoid the higher-risk finance and future-diary write paths.
    - Likely files: docs/runbook or proof manifest only unless inspection finds a missing importer guard.
    - Likely validation: manifest review, existing importer tests for the listed domains, no R4 writes.
    - Backend-only/docs-only: likely yes.
    - Risk: medium.
+
+5. Odontogram golden-corpus/rule-confidence review.
+   - Target: review visible charting rule confidence now that canonical importer/parity evidence is stable.
+   - Why next: PR #566 reduces canonical plumbing risk; clinical display interpretation remains a higher charting risk before broad historic cutover.
+   - Likely files: docs/golden-corpus evidence or narrowly scoped frontend/backend charting tests if inspection finds a real rule gap.
+   - Likely validation: existing charting parity/export tests plus any focused golden-corpus proof.
+   - Backend/frontend: only if a visible rule gap is chosen deliberately.
+   - Risk: medium-high.
 
 ## Cutover Readiness Gaps
 
@@ -170,7 +171,7 @@ Do not start with finance or future diary writes into core live workflow tables.
 - Rule errors can produce clinically misleading history.
 - Full historic charting import should not outrun golden-corpus/rule confidence.
 - Appointment notes have accepted-cohort closure recorded in PR #562; completed questionnaire notes, old patient notes, and perio plaque have live deterministic scale-out proof recorded in PR #560.
-- All-domain charting parity should be run after selector completion and recent note-lane proofs, before broad dry-run migration.
+- The PR #566 all-domain scratch transcript passed; future charting work should focus on golden-corpus/rule confidence or broader cutover reconciliation rather than repeating canonical importer/parity plumbing.
 
 ## Practical Speed-Up Strategy
 
