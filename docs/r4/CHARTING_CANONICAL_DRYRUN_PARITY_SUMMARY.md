@@ -1,14 +1,14 @@
 # R4 Charting Canonical Dry-Run / Parity Summary
 
-Status date: 2026-04-28
+Status date: 2026-04-29
 
-Baseline: `master@84cb70c994656281a44c87ed8af2bf365c1dd636`
+Baseline: `master@a89c2ee59aba469e37939dc287fc557dee63842e`
 
-R4 policy: strictly read-only / SELECT-only. No live R4 query, dry-run, import, or parity command was run for this report.
+R4 policy: strictly read-only / SELECT-only. The completed scratch transcript used SELECT-only R4 access, performed no R4 writes, and limited PMS writes to the isolated scratch database.
 
 ## Scope
 
-This report summarizes the current active `charting_canonical` state after PR #562 and PR #563. It is based on repo evidence in:
+This report summarizes the current active `charting_canonical` state after PR #566. It is based on repo evidence in:
 
 - `docs/STATUS.md`
 - `docs/R4_MIGRATION_READINESS.md`
@@ -20,6 +20,31 @@ This report summarizes the current active `charting_canonical` state after PR #5
 - `backend/tests/r4_import/`
 
 This is a report-only slice. It does not change importer, extractor, parity, runtime, Docker, compose, ops, frontend, finance, appointments cutover, recalls, or document code.
+
+## Completed Scratch Transcript
+
+PR #566 fixed the SQL Server treatment-plan TP range blocker that had generated
+invalid SQL of the form `ti.TPNumber >= ?  ti.TPNumber <= ?`. The fix preserves
+the internal range `AND` with `removeprefix("AND")`.
+
+The all-domain scratch transcript then completed successfully against:
+
+- scratch project: `dentalpms_charting_scratch_20260428_220858`
+- scratch DB: `dental_pms_charting_scratch`
+- artefacts: `/home/amir/dental-pms-charting-scratch-execution/.run/charting_canonical_all_domain_dentalpms_charting_scratch_20260428_220858/`
+
+Key results:
+
+- dry-run: `total_records=70140`, `unmapped_patients=0`
+- scratch apply: `created=70140`, `updated=0`, `unmapped_patients_total=0`
+- idempotency rerun: `created=0`, `skipped=70140`
+- consolidated parity: `overall.status=pass`, `domains_failed=0`,
+  `domains_no_data=3`
+- no-data domains: `chart_healing_actions`, `old_patient_notes`,
+  `perio_plaque`
+- final scratch counts: `r4_patient_mappings=3367`,
+  `r4_charting_canonical_records=70140`
+- data safety: no R4 writes; PMS writes were scratch-only
 
 ## Current Active Domain Set
 
@@ -73,7 +98,7 @@ Domains with recorded full, exhaustion, or accepted-cohort closure evidence for 
 - `treatment_plan_items`
 - `treatment_plans`
 
-Domains with recorded deterministic proof closure that still need inclusion in a future live all-domain dry-run/parity transcript before broad historic cutover:
+Domains with recorded deterministic proof closure that were included in the PR #566 all-domain scratch transcript:
 
 - `completed_questionnaire_notes`
 - `old_patient_notes`
@@ -87,7 +112,7 @@ No active 15-domain CLI member currently needs first wiring, first parity-pack s
 
 ## Dry-Run / Parity Execution Shape
 
-A future live all-domain run should be done against an isolated PMS target database. R4 access remains SELECT-only; any `--apply --confirm APPLY` command below writes only to the isolated PMS database, not to R4.
+The completed PR #566 run followed the isolated scratch approach below. R4 access remains SELECT-only; any `--apply --confirm APPLY` command below writes only to the isolated PMS database, not to R4.
 
 Use the explicit domain list for auditability:
 
@@ -102,10 +127,10 @@ docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scrip
   --domains "$DOMAINS" \
   --date-from 2017-01-01 \
   --date-to 2026-02-01 \
-  --limit 5000 \
+  --limit 50000 \
   --mode union \
   --order hashed \
-  --seed 562 \
+  --seed 564 \
   --output /tmp/charting_all_domain_codes.csv
 ```
 
@@ -145,7 +170,7 @@ docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scrip
   --charting-from 2017-01-01 \
   --charting-to 2026-02-01 \
   --domains "$DOMAINS" \
-  --batch-size 200 \
+  --batch-size 50 \
   --state-file /tmp/charting_all_domain_state.json \
   --run-summary-out /tmp/charting_all_domain_apply_summary.json \
   --apply \
@@ -160,7 +185,7 @@ docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scrip
   --charting-from 2017-01-01 \
   --charting-to 2026-02-01 \
   --domains "$DOMAINS" \
-  --batch-size 200 \
+  --batch-size 50 \
   --state-file /tmp/charting_all_domain_rerun_state.json \
   --run-summary-out /tmp/charting_all_domain_rerun_summary.json \
   --apply \
@@ -173,22 +198,21 @@ docker compose exec -T -e R4_SQLSERVER_READONLY=true backend python -m app.scrip
   --domains "$DOMAINS" \
   --date-from 2017-01-01 \
   --date-to 2026-02-01 \
-  --row-limit 1000 \
   --output-json /tmp/charting_all_domain_parity.json \
   --output-dir /tmp/charting_all_domain_parity_domains
 ```
 
 ## Remaining Charting Risks
 
-- A combined all-domain live transcript is still missing; isolated domain proofs do not prove cross-domain dry-run behavior in one run.
+- The combined current-master all-domain scratch transcript is complete as of PR #566.
 - `chart_healing_actions` has prior no-data/exhaustion evidence, so a different window may be needed if cutover inventory expects rows.
-- `perio_plaque`, `completed_questionnaire_notes`, `old_patient_notes`, and `appointment_notes` have recent proof/closure coverage, but they still need inclusion in the all-domain transcript.
+- `perio_plaque`, `completed_questionnaire_notes`, `old_patient_notes`, and `appointment_notes` have recent proof/closure coverage and are now included in the all-domain transcript.
 - Historic odontogram rendering/rule confidence remains higher risk than canonical importer plumbing.
 - Reference-only rows should stay out of active patient-cohort parity unless a cutover proof requires promotion.
 - Patient mapping and unmapped-patient thresholds must be recorded before broad dry-run migration.
 
 ## Recommended Next 3 Slices
 
-1. Execute the all-domain charting canonical run above against an isolated PMS target database, recording cohort counts, dry-run report, apply/rerun idempotency, and consolidated parity.
-2. Triage the all-domain evidence: document pass/fail by domain, unmapped-patient counts, no-data expectations, drop reasons, and any narrow importer/parity blocker if one appears.
-3. Resume broader migration readiness only after charting evidence is stable: either odontogram golden-corpus/rule-confidence work if charting remains the risk, or the next non-charting proof from `docs/R4_MIGRATION_READINESS.md`.
+1. Merge this docs/evidence continuity refresh so the PR #566 transcript is the current charting canonical evidence baseline.
+2. Clean up the scratch stack and project-scoped volume when the artefacts are no longer needed for inspection.
+3. Resume broader migration readiness from `docs/R4_MIGRATION_READINESS.md`; the next major readiness area is appointments cutover readiness proof unless a charting rule-confidence review is deliberately chosen first.
