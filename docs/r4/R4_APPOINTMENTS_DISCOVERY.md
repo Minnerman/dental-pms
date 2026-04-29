@@ -2,6 +2,11 @@
 
 Safety reminder: R4 SQL Server is STRICTLY READ-ONLY (SELECT-only; read-only creds).
 
+Current tooling note: PR #568 added the SELECT-only appointment cutover
+inventory command `python -m app.scripts.r4_appointment_cutover_inventory`.
+The live inventory has not yet been run. Run it only with complete R4 SQL
+Server environment variables and `R4_SQLSERVER_READONLY=true`.
+
 ## Candidate tables/views
 
 Base tables (by name):
