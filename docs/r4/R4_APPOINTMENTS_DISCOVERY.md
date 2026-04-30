@@ -8,7 +8,9 @@ The live inventory ran successfully on 2026-04-29 with complete R4 SQL Server
 environment variables and `R4_SQLSERVER_READONLY=true`. It was SELECT-only,
 made no R4 writes, made no PMS DB writes, and changed no tracked repo files.
 The status/null-patient/clinician policy is now documented in
-`docs/r4/R4_APPOINTMENT_STATUS_POLICY.md`.
+`docs/r4/R4_APPOINTMENT_STATUS_POLICY.md`. PR #571 added the pure backend helper
+and unit tests for that policy without wiring importer behaviour or starting any
+appointment import/core diary promotion.
 
 ## Candidate tables/views
 

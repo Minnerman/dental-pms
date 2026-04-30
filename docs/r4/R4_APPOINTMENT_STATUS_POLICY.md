@@ -3,7 +3,13 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@6cf47ed60d81bd9c77a9cedd991854d65f8320be`
+Baseline: `master@7456e8fb91d710484fcb7ea046202c09db42a804`
+
+Implementation status: PR #571 added the pure backend helper
+`backend/app/services/r4_import/appointment_status_policy.py` and focused unit
+tests in `backend/tests/r4_import/test_appointment_status_policy.py`. The helper
+is not wired into importer behaviour, and no appointment import, core diary
+promotion, PMS DB write, or R4 access occurred in that slice.
 
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
@@ -137,7 +143,8 @@ Before R4 appointments can be promoted into the core diary, prove:
 1. A SELECT-only cross-tab of `status x cancelled x apptflag` for the full source
    set, including the `57` future rows.
 2. A pure backend status-mapping function with fixtures for all 11 observed
-   status/flag values and fail-closed coverage for unknown combinations.
+   status/flag values and fail-closed coverage for unknown combinations
+   (complete as of PR #571).
 3. An isolated scratch import/idempotency/linkage transcript into
    `r4_appointments`, not core `appointments`.
 4. A promotion dry-run report showing how many rows would be excluded, mapped to
@@ -164,18 +171,17 @@ Before R4 appointments can be promoted into the core diary, prove:
 
 ## Recommended Next Slice
 
-Implement and test a backend pure status/null-patient/clinician policy proof.
-Keep it backend-only and non-importing:
+The PR #571 backend helper/proof is complete. The next safe execution slice is an
+isolated scratch `r4_appointments` import/idempotency/linkage transcript.
 
-- add a mapping helper that consumes raw R4 `status`, `cancelled`, `appt_flag`,
-  `patient_code`, `clinician_code`, and `clinic_code`;
-- return a promotion decision such as `promote`, `read_only_only`, `exclude`, or
-  `manual_review`, plus a candidate core status only when safe;
-- cover all observed inventory values and unknown/fail-closed cases with unit
-  tests;
-- do not write to R4 or PMS databases.
+Keep the next slice out of core diary promotion:
 
-After that proof is in place, the next safe execution slice is an isolated
-scratch `r4_appointments` import/idempotency/linkage transcript. Core diary
-promotion should remain out of scope until the mapping proof and scratch
-transcript both pass.
+- preflight an isolated scratch PMS target before any PMS writes;
+- import R4 appointments only into `r4_appointments`;
+- prove idempotency with a rerun;
+- report linkage/null-patient outcomes and clinician/clinic preservation;
+- do not promote rows into core `appointments`;
+- do not write to R4.
+
+Core diary promotion should remain out of scope until the mapping proof and
+scratch transcript both pass.
