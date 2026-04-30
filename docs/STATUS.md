@@ -3,12 +3,12 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@7456e8fb91d710484fcb7ea046202c09db42a804`.
-- Current repo `master` is `7456e8fb91d710484fcb7ea046202c09db42a804`; it includes merged R4 charting continuity through PR #567, PR #568's backend-only SELECT-only appointment cutover inventory tooling, PR #569's docs refresh after #568, PR #570's appointment status/null-patient/clinician mapping policy, and PR #571's backend-only pure appointment status-mapping helper/proof.
+- The authoritative continuity baseline is `origin/master@4f15947c5324bae6df27e2a316958d557fa43a69`.
+- Current repo `master` is `4f15947c5324bae6df27e2a316958d557fa43a69`; it includes merged R4 charting continuity through PR #567, PR #568's backend-only SELECT-only appointment cutover inventory tooling, PR #569's docs refresh after #568, PR #570's appointment status/null-patient/clinician mapping policy, PR #571's backend-only pure appointment status-mapping helper/proof, and PR #572's docs refresh after #571.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment cutover inventory tooling is merged as of PR #568, appointment status policy is merged as of PR #570, and the backend status helper/proof is merged as of PR #571.
-- The live SELECT-only appointment inventory has run successfully with no R4 writes and no PMS DB writes, and PR #571 has merged the backend status helper/proof without wiring importer behaviour. Next action: isolated scratch appointment import/idempotency/linkage transcript; do not start core diary promotion.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment cutover inventory tooling is merged as of PR #568, appointment status policy is merged as of PR #570, the backend status helper/proof is merged as of PR #571, and the isolated scratch appointment import/idempotency/linkage transcript is complete.
+- The live SELECT-only appointment inventory and isolated scratch appointment import/idempotency/linkage transcript have both run successfully with no R4 writes. The scratch transcript wrote only to `dental_pms_appointments_scratch`, left core `appointments` at `0`, and proved `r4_appointments` import/idempotency/linkage. Next action: no-core-write appointment promotion dry-run/report before any core diary promotion.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -71,6 +71,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-30: Isolated scratch appointment import/idempotency/linkage transcript completed with no tracked repo changes.
+  - Evidence path: `/home/amir/dental-pms-appointments-scratch-import/.run/appointment_import_idempotency_linkage_dentalpms_appts_scratch_20260430_033056/`
+  - Scratch target: Compose project `dentalpms_appts_scratch_20260430_033056`, DB `dental_pms_appointments_scratch`, Postgres port `5552`, backend port `8212`; frontend port `3212` was reserved but not started.
+  - Safety: R4 access was SELECT-only, no R4 writes occurred, PMS writes were scratch-only, and core `appointments` remained `0`.
+  - Results: appointment dry-run exited `0`; scratch patient import created `17010` patients and `17010` `r4_patient_mappings`; scratch appointment import created `101051`, updated `0`, skipped `0`, with `1752` null-patient rows.
+  - Idempotency rerun: created `0`, updated `0`, skipped `101051`.
+  - Linkage report: `appointments_total=101051`, `appointments_imported=101051`, `appointments_not_imported=0`, `mapped=99299`, `unmapped=1752`, `actionable_unmapped=0`.
+  - The scratch stack remains running for inspection; next slice should be a no-core-write appointment promotion dry-run/report before any core diary promotion.
 - 2026-04-30: PR #571 merged on `master` as backend-only, pure-helper/test-only appointment status-mapping proof.
   - Exact slice implemented:
     - added `backend/app/services/r4_import/appointment_status_policy.py`
@@ -78,7 +86,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - The helper converts the PR #570 policy into deterministic promotion decisions/categories for R4 appointment `status`, `cancelled`, `apptflag`, null/blank patient-code, clinician, and clinic inputs.
   - Unknown, ambiguous, conflicting, null-patient, deleted, standby/waiting, and stale in-surgery cases fail closed or require manual review.
   - Importer behaviour remains unchanged; no appointment import, scratch import, core diary promotion, PMS DB write, or R4 access occurred in the slice.
-  - Next implementation slice: isolated scratch appointment import/idempotency/linkage transcript.
+  - Superseded by the isolated scratch appointment import/idempotency/linkage transcript recorded above; next implementation slice is a no-core-write appointment promotion dry-run/report.
 - 2026-04-29: Live SELECT-only appointment cutover inventory completed against R4 with no R4 writes, no PMS DB writes, and no tracked repo changes.
   - Evidence path: `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/`
   - Key results: total appointments `101051`, date range `2001-10-27T11:15:00` to `2027-02-01T09:00:00`, future count `57`, past count `100994`, null/blank patient-code count `1752`, clinician/provider codes `20`, clinic code `1=101051`.

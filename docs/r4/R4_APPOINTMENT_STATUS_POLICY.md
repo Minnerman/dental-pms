@@ -3,7 +3,7 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@7456e8fb91d710484fcb7ea046202c09db42a804`
+Baseline: `master@4f15947c5324bae6df27e2a316958d557fa43a69`
 
 Implementation status: PR #571 added the pure backend helper
 `backend/app/services/r4_import/appointment_status_policy.py` and focused unit
@@ -14,9 +14,16 @@ promotion, PMS DB write, or R4 access occurred in that slice.
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
 
+Scratch transcript evidence:
+`/home/amir/dental-pms-appointments-scratch-import/.run/appointment_import_idempotency_linkage_dentalpms_appts_scratch_20260430_033056/`
+
 The inventory command queried `dbo.vwAppointmentDetails WITH (NOLOCK)` under
 `R4_SQLSERVER_READONLY=true`. It was SELECT-only, made no R4 writes, made no PMS
 database writes, and changed no tracked repo files.
+
+The scratch transcript queried R4 under `R4_SQLSERVER_READONLY=true` and wrote
+only to scratch DB `dental_pms_appointments_scratch`. It imported raw R4
+appointments into `r4_appointments` only; core `appointments` stayed at `0`.
 
 ## Inventory Evidence
 
@@ -61,6 +68,25 @@ complete `status x cancelled x apptflag` combinations before promotion.
   or `in_progress`.
 - The R4 calendar already treats R4 appointments as read-only source rows,
   hides non-active statuses by default, and hides unlinked rows unless requested.
+
+## Scratch Import Evidence
+
+The 2026-04-30 isolated scratch transcript completed the raw appointment
+staging proof without starting core diary promotion:
+
+- Appointment dry-run exited `0`.
+- Scratch patient import created `17010` patients and `17010`
+  `r4_patient_mappings`.
+- Scratch appointment import created `101051`, updated `0`, skipped `0`, and
+  preserved `1752` null-patient rows.
+- Idempotency rerun created `0`, updated `0`, and skipped `101051`.
+- Linkage report showed `appointments_total=101051`,
+  `appointments_imported=101051`, `appointments_not_imported=0`,
+  `mapped=99299`, `unmapped=1752`, and `actionable_unmapped=0`.
+- Final scratch counts were `patients=17010`, `r4_patient_mappings=17010`,
+  `r4_appointments=101051`, and core `appointments=0`.
+- R4 access was SELECT-only; no R4 writes occurred; PMS writes were
+  scratch-only. The scratch stack remains running for inspection.
 
 ## Mapping Policy
 
@@ -146,7 +172,8 @@ Before R4 appointments can be promoted into the core diary, prove:
    status/flag values and fail-closed coverage for unknown combinations
    (complete as of PR #571).
 3. An isolated scratch import/idempotency/linkage transcript into
-   `r4_appointments`, not core `appointments`.
+   `r4_appointments`, not core `appointments` (complete as of the 2026-04-30
+   scratch transcript).
 4. A promotion dry-run report showing how many rows would be excluded, mapped to
    inactive states, mapped to active bookings, and left for manual review.
 5. Patient linkage thresholds, including explicit handling for the `1752`
@@ -171,17 +198,20 @@ Before R4 appointments can be promoted into the core diary, prove:
 
 ## Recommended Next Slice
 
-The PR #571 backend helper/proof is complete. The next safe execution slice is an
-isolated scratch `r4_appointments` import/idempotency/linkage transcript.
+The PR #571 backend helper/proof and the 2026-04-30 isolated scratch
+`r4_appointments` import/idempotency/linkage transcript are complete. The next
+safe execution slice is a no-core-write appointment promotion dry-run/report.
 
-Keep the next slice out of core diary promotion:
+Keep the next slice out of core diary writes:
 
-- preflight an isolated scratch PMS target before any PMS writes;
-- import R4 appointments only into `r4_appointments`;
-- prove idempotency with a rerun;
-- report linkage/null-patient outcomes and clinician/clinic preservation;
+- classify the imported scratch `r4_appointments` rows through the PR #571
+  helper without inserting into core `appointments`;
+- report excluded/deleted, inactive, active-booking, manual-review, and
+  null-patient counts;
+- report clinician/clinic preservation, timezone/local-time assumptions, and
+  conflict outcomes;
 - do not promote rows into core `appointments`;
 - do not write to R4.
 
 Core diary promotion should remain out of scope until the mapping proof and
-scratch transcript both pass.
+scratch transcript both pass and the no-core-write promotion report is reviewed.
