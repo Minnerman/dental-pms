@@ -12,6 +12,14 @@ The status/null-patient/clinician policy is now documented in
 and unit tests for that policy without wiring importer behaviour or starting any
 appointment import/core diary promotion.
 
+2026-04-30 scratch update: isolated scratch `r4_appointments`
+import/idempotency/linkage completed under scratch Compose project
+`dentalpms_appts_scratch_20260430_033056` and scratch DB
+`dental_pms_appointments_scratch`. R4 access was SELECT-only, no R4 writes
+occurred, PMS writes were scratch-only, and core `appointments` remained `0`.
+Evidence path:
+`/home/amir/dental-pms-appointments-scratch-import/.run/appointment_import_idempotency_linkage_dentalpms_appts_scratch_20260430_033056/`.
+
 ## Candidate tables/views
 
 Base tables (by name):
@@ -94,6 +102,22 @@ Cancelled distribution: `0=91872`, `1=9179`. Future samples include
 `Cancelled`, `Pending`, and `Deleted` rows. Null-patient samples are historic
 `Pending` miscellaneous rows.
 
+2026-04-30 scratch import/idempotency/linkage update:
+- Appointment dry-run exited `0`.
+- Scratch patient import created `17010` patients and `17010`
+  `r4_patient_mappings`.
+- Scratch appointment import into `r4_appointments` created `101051`, updated
+  `0`, skipped `0`, and preserved `1752` null-patient rows.
+- Idempotency rerun created `0`, updated `0`, and skipped `101051`.
+- Linkage report: `appointments_total=101051`, `appointments_imported=101051`,
+  `appointments_not_imported=0`, `mapped=99299`, `unmapped=1752`,
+  `actionable_unmapped=0`.
+- Final scratch counts: `patients=17010`, `r4_patient_mappings=17010`,
+  `r4_appointments=101051`, core `appointments=0`.
+- The scratch stack remains running for inspection. The next appointment slice
+  should be a no-core-write promotion dry-run/report before any core diary
+  promotion.
+
 ## Column mapping (vwAppointmentDetails)
 
 - unique key: `apptid`
@@ -137,7 +161,10 @@ Notes:
 
 ## Open questions / oddities
 
-- Prove the full `status x cancelled x apptflag` cross-tab before promotion.
+- Produce a no-core-write promotion dry-run/report before any core diary
+  promotion, including excluded/inactive/active/manual-review/null-patient
+  counts, clinician handling, timezone/local-time handling, and conflict
+  outcomes.
 - Validate `Left Surgery`, `Waiting`, and `On Standby` semantics with operator review or focused evidence.
 - Decide whether R4 clinician codes map to PMS login users, imported `r4_users`, or a separate resource mapping.
 - Keep `Deleted` rows read-only/excluded by default unless a later audit projection requires otherwise.
