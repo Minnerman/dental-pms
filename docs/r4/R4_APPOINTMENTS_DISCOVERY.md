@@ -12,7 +12,10 @@ The status/null-patient/clinician policy is now documented in
 and unit tests for that policy without wiring importer behaviour or starting any
 appointment import/core diary promotion. PR #574 added backend-only/report-only
 no-core-write promotion dry-run tooling and completed the scratch promotion
-report without adding core appointment apply/promotion code.
+report without adding core appointment apply/promotion code. PR #576 added the
+pure backend appointment promotion plan helper/proof without DB writes,
+importer/apply wiring, timezone conversion, conflict predicate extraction, or
+core appointment apply/promotion code.
 
 2026-04-30 scratch update: isolated scratch `r4_appointments`
 import/idempotency/linkage completed under scratch Compose project
@@ -139,9 +142,12 @@ Cancelled distribution: `0=91872`, `1=9179`. Future samples include
   clinician_unresolved `0`, distinct clinician codes `20`, clinic code
   `1=101051`.
 - Core appointments were unchanged with `before=0` and `after=0`.
-- The scratch stack remains running for inspection. The next appointment slice
-  should be guarded core-promotion apply design/proof before any real core
-  diary promotion.
+- PR #576 then added the pure promotion plan helper/proof so these rows can be
+  classified into eligible candidates, excluded rows, manual-review rows,
+  null-patient read-only rows, unmapped-patient rows, and clinician-unresolved
+  rows without DB writes.
+- The next appointment slice should be timezone/local-time proof before
+  conflict predicate extraction and before any real core diary promotion.
 
 ## Column mapping (vwAppointmentDetails)
 
@@ -186,9 +192,11 @@ Notes:
 
 ## Open questions / oddities
 
-- Design/prove guarded core-promotion apply before any real core diary
-  promotion, including conflict handling, timezone/local-time handling,
-  clinician/user mapping policy, and scratch-first/default-DB refusal.
+- Prove timezone/local-time handling before conflict predicate extraction and
+  before any guarded core-promotion apply path.
+- After timezone proof, design/prove guarded core-promotion apply before any
+  real core diary promotion, including conflict handling, clinician/user mapping
+  policy, and scratch-first/default-DB refusal.
 - Validate `Left Surgery`, `Waiting`, and `On Standby` semantics with operator review or focused evidence.
 - Decide whether R4 clinician codes map to PMS login users, imported `r4_users`, or a separate resource mapping.
 - Keep `Deleted` rows read-only/excluded by default unless a later audit projection requires otherwise.
