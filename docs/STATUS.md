@@ -3,12 +3,12 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@f7670d1b4d2de9d256250af513d0d43b391abe6f`.
-- Current repo `master` is `f7670d1b4d2de9d256250af513d0d43b391abe6f`; it includes merged R4 charting continuity through PR #567 and PR #568's backend-only, SELECT-only appointment cutover inventory tooling.
+- The authoritative continuity baseline is `origin/master@6cf47ed60d81bd9c77a9cedd991854d65f8320be`.
+- Current repo `master` is `6cf47ed60d81bd9c77a9cedd991854d65f8320be`; it includes merged R4 charting continuity through PR #567, PR #568's backend-only, SELECT-only appointment cutover inventory tooling, and PR #569's docs refresh after #568.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
 - When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, and appointment cutover inventory tooling is merged as of PR #568.
-- The live SELECT-only appointment inventory has not yet been run. Next action: run `python -m app.scripts.r4_appointment_cutover_inventory` only in an environment with complete R4 SQL Server env and `R4_SQLSERVER_READONLY=true`.
+- The live SELECT-only appointment inventory has run successfully with no R4 writes and no PMS DB writes. Next action: keep appointment work in design/proof mode by implementing a backend status/null-patient/clinician policy proof before any appointment import promotion into the core diary.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -71,12 +71,17 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-04-29: Live SELECT-only appointment cutover inventory completed against R4 with no R4 writes, no PMS DB writes, and no tracked repo changes.
+  - Evidence path: `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/`
+  - Key results: total appointments `101051`, date range `2001-10-27T11:15:00` to `2027-02-01T09:00:00`, future count `57`, past count `100994`, null/blank patient-code count `1752`, clinician/provider codes `20`, clinic code `1=101051`.
+  - Status evidence: `Complete=83836`, `Cancelled=4193`, `Deleted=3932`, `Did Not Attend=3833`, `Pending=2786`, `Left Surgery=1158`, `Postponed=751`, `Late Cancellation=296`, `In Surgery=139`, `Waiting=120`, `On Standby=7`.
+  - Follow-up policy is documented in `docs/r4/R4_APPOINTMENT_STATUS_POLICY.md`; appointment work should next prove the mapping policy in backend tests before any core diary promotion.
 - 2026-04-29: PR #568 merged on `master` as backend-only, SELECT-only appointment cutover inventory tooling.
   - Exact slice implemented:
     - added `backend/app/scripts/r4_appointment_cutover_inventory.py`
     - added `backend/tests/r4_import/test_appointment_cutover_inventory.py`
   - The command reports past/future appointment counts, min/max dates, status/cancelled/appt-flag distributions, null/blank patient-code counts, clinician/clinic distributions, cutover boundary counts, and edge samples.
-  - Live R4 inventory has not yet been run; next action is to run the command in an environment with complete R4 env and `R4_SQLSERVER_READONLY=true`.
+  - Superseded by the successful live SELECT-only appointment inventory run recorded above.
   - No R4 access occurred during PR finalisation.
 - 2026-04-29: PR #566 merged on `master` as a narrow backend-only SQL Server treatment-plan TP range fix and completed the all-domain charting canonical scratch transcript.
   - Exact slice implemented:

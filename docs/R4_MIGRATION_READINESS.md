@@ -2,7 +2,7 @@
 
 Status date: 2026-04-29
 
-Baseline: `master@f7670d1b4d2de9d256250af513d0d43b391abe6f`
+Baseline: `master@6cf47ed60d81bd9c77a9cedd991854d65f8320be`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -20,8 +20,8 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 | R4 data area | R4 source identified? | Importer exists? | Parity/reconciliation exists? | Scale-out/full cohort proven? | Frontend/workflow support exists? | Remaining gap | Risk | Size |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Patients | Yes: `dbo.Patients` via `R4SqlServerSource.stream_patients`. | Yes: `r4_import --entity patients`. | Partial: mapping-quality reports, Postgres window verify, patient mapping/admin tooling. | Partial: 5,000-patient windows and many charting cohorts proven; full all-patient cutover dry-run not recorded. | Yes: core patient record, search, demographics, recalls, ledger, documents. | Full all-patient dry-run in isolated target DB, final mapping-quality report, duplicate/contact-data policy. | Medium | Medium |
-| Past appointments | Yes: `dbo.vwAppointmentDetails`; discovery records 100,812 appointments from 2001-10-27 to 2026-11-18. | Yes: `r4_import --entity appointments` into `r4_appointments`. | Partial: linkage report/queue, manual mappings, unmapped appointments admin; PR #568 added SELECT-only inventory tooling, but the live inventory has not yet run. | Partial: Jan 2025 pilot and R4 calendar proof; full historical diary not proven. | Partial: read-only R4 calendar/admin linking plus core appointments UI. | Run the PR #568 live SELECT-only inventory, then use the results to scope full historical import dry-run, status/cancelled semantics, patient-linkage closeout, and read-only R4 table vs core appointment migration policy. | High | Large |
-| Future appointments | Yes: same `dbo.vwAppointmentDetails`; source has future rows through 2026-11-18 in documented discovery. | Yes: same appointment importer. | Partial: linkage report and R4 calendar filtering; PR #568 added SELECT-only inventory tooling, but the live inventory has not yet run. | No full future diary/cutover proof recorded. | Partial: core diary, booking, R4 calendar read-only. | Run the PR #568 live SELECT-only inventory before future diary conflict/status proof, active appointment cutover policy, and recall-linked booking behaviour work. | High | Large |
+| Past appointments | Yes: `dbo.vwAppointmentDetails`; live SELECT-only inventory records 101,051 appointments from 2001-10-27 to 2027-02-01, with 100,994 before the 2026-04-29 cutover date. | Yes: `r4_import --entity appointments` into `r4_appointments`. | Partial: linkage report/queue, manual mappings, unmapped appointments admin; PR #568 added SELECT-only inventory tooling and the live inventory has now run. | Partial: Jan 2025 pilot, R4 calendar proof, and live inventory evidence; full historical diary scratch import/idempotency is not proven. | Partial: read-only R4 calendar/admin linking plus core appointments UI. | Implement/prove the appointment status/null-patient/clinician policy, then run isolated scratch `r4_appointments` import/idempotency/linkage before any core diary promotion. | High | Medium-large |
+| Future appointments | Yes: same `dbo.vwAppointmentDetails`; live inventory records 57 rows on/after 2026-04-29, including `Cancelled`, `Pending`, and `Deleted` examples through 2027-02-01. | Yes: same appointment importer. | Partial: linkage report and R4 calendar filtering; live inventory evidence exists for date/status/cancelled/flag distributions. | No full future diary/cutover proof recorded. | Partial: core diary, booking, R4 calendar read-only. | Prove deterministic status/cancelled/appt-flag mapping, timezone/local-time handling, patient linkage, clinician mapping, and conflict behaviour in isolation before any active future diary promotion. | High | Medium-large |
 | Clinical notes | Yes: `PatientNotes`, `TreatmentNotes`, `TemporaryNotes`, `OldPatientNotes`, `vwAppointmentDetails.notes`, `CompletedQuestionnaire.Notes`. | Yes for active canonical domains including patient, treatment, temporary, appointment, completed questionnaire, and old patient notes. | Yes for import/parity packs and deterministic cohort selectors for active note/finding domains, including PR #551 support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`. | Strong for the active charting path: PR #560 completed the live deterministic scale-out proof covering completed questionnaire notes and old patient notes with `perio_plaque`; PR #562 completed `appointment_notes` accepted-cohort closure; PR #566 included the active note domains in the successful all-domain scratch dry-run/apply/idempotency/parity transcript. | Partial: charting notes/history surfaces exist, but not every note style has direct UI affordance. | No active canonical transcript gap; remaining note risk belongs to broader cutover policy/UI affordance review. | Medium | Medium |
 | Odontogram/charting | Yes: treatment plans/items, treatments, BPE/BPEFurcation, PerioProbe, PerioPlaque, restorative treatments, completed treatment findings, chart healing actions, tooth systems/surfaces, notes. | Yes: `charting_canonical`, legacy charting tables, and raw support for charting foundations. | Yes: domain parity packs, consolidated parity runner, spotcheck/export tests, golden-corpus docs. | Strong: full cohort proven for treatment plans/items, BPE, furcations, perioprobe, restorative treatments, completed treatment findings, temporary notes; PR #560 completed the live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`; PR #562 completed `appointment_notes` accepted-cohort closure; PR #566 completed the current-master all-domain scratch dry-run/apply/idempotency/parity transcript. | Yes: charting API, odontogram, perio/BPE, treatment-plan overlays, charting viewer/export proofs. | Combined charting canonical transcript is complete; charting engine rule maturity/golden corpus remains high importance before broad historic cutover. | Medium-high | Medium |
 | Treatment plans | Yes: `TreatmentPlans`, `TreatmentPlanItems`, `TreatmentPlanReviews`, `Treatments/Codes`. | Yes: raw `treatment_plans`, `treatments`; canonical `treatment_plans` and `treatment_plan_items`. | Yes for plans/items; reviews are imported in raw plan model but not a first-class canonical parity domain. | Partial/strong: Stage 105 raw full import, Stage 135/136 canonical cohorts exhausted; raw plan patient-id backfill/mapping still needs cutover proof. | Partial: admin R4 treatment-plan viewer and patient clinical treatment planning. | Decide whether `treatment_plan_reviews` needs canonical/parity lane; reconcile raw R4 plan tables against canonical display path. | Medium | Medium |
@@ -58,7 +58,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 
 - SELECT-only finance source inventory: table names, row counts, date ranges, keys, payment methods, allocation model.
 - SELECT-only recall source inventory: due-date/status/contact-history tables and patient linkage.
-- Run the PR #568 SELECT-only appointment cutover inventory command: date-window counts, status/cancelled/appt-flag distributions, patient-null distribution, clinician/clinic distribution, and conflict-risk samples.
+- Implement/test the appointment status/null-patient/clinician policy from `docs/r4/R4_APPOINTMENT_STATUS_POLICY.md`; the PR #568 SELECT-only inventory has already run and should not be repeated unless data freshness is required.
 - Current-master all-domain charting canonical scratch dry-run/parity transcript is complete as of PR #566; do not repeat it unless a later code change invalidates the evidence.
 - Isolated full dry-run plan for patients, users, treatments, treatment plans, appointments, treatment transactions, and charting canonical domains before any live cutover discussion.
 
@@ -76,13 +76,13 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. Run appointment cutover inventory.
-   - Target: run PR #568's SELECT-only `r4_appointment_cutover_inventory` command against R4 with complete SQL Server env and `R4_SQLSERVER_READONLY=true`.
-   - Why next: the tooling is now merged, but the live inventory has not yet been run; future diary migration is operationally high-risk and needs evidence before import or mapping work.
-   - Likely files: no code changes expected; optional docs/evidence file if the run records a transcript.
-   - Likely validation: command transcript, JSON report review, explicit no-R4-write confirmation, no PMS DB writes.
-   - Backend-only/docs-only: yes.
-   - Risk: high.
+1. Appointment status/null-patient/clinician mapping proof.
+   - Target: implement a backend pure mapping helper and tests for all observed R4 appointment `status`, `cancelled`, and `apptflag` values, plus null-patient and clinician/clinic handling decisions from `docs/r4/R4_APPOINTMENT_STATUS_POLICY.md`.
+   - Why next: the live inventory has run and shows future rows, 11 status/flag values, 1,752 null/blank patient-code rows, 20 clinician codes, and a single clinic code. The policy must be executable and fail closed before any appointment import promotion.
+   - Likely files: backend appointment mapping helper/test only; no importer behaviour change unless separately scoped.
+   - Likely validation: focused unit tests for all observed status/flag combinations, fail-closed unknown cases, git diff checks, no R4 or PMS DB writes.
+   - Backend-only/proof-only: yes.
+   - Risk: medium-high.
 
 2. Finance/payment/balance source discovery.
    - Target: SELECT-only inventory of R4 finance, invoice, payment, allocation, balance, and cash-up candidate tables.
@@ -160,9 +160,10 @@ Do not start with finance or future diary writes into core live workflow tables.
 ### Appointment Migration Risks
 
 - Future diary migration affects live operations; mistakes are immediately user-visible.
-- R4 status/cancelled/flag values need deterministic mapping to PMS appointment states.
-- Null-patient appointments are known and need an explicit handling policy.
+- R4 status/cancelled/flag values now have inventory evidence and a design policy in `docs/r4/R4_APPOINTMENT_STATUS_POLICY.md`, but still need executable backend mapping tests before promotion.
+- Null-patient appointments are known (`1752`) and must remain read-only/unlinked unless manually linked.
 - Timezone/local-time semantics must be proven for future appointments and daylight-saving boundaries.
+- R4 clinician codes (`20`) and clinic code `1` must not be inferred as PMS users/rooms without explicit mapping.
 - Recall-linked booking state must survive or be rebuilt deliberately.
 
 ### Clinical / Odontogram Parity Risks
