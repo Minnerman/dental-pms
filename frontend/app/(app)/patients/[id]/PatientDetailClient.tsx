@@ -4185,6 +4185,7 @@ export default function PatientDetailClient({
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [clinicalNotes]);
+  const showClinicalLoadingPlaceholder = clinicalLoading && !clinicalLastUpdated;
 
   const sortedClinicalProcedures = useMemo(() => {
     return [...clinicalProcedures].sort(
@@ -8244,7 +8245,7 @@ export default function PatientDetailClient({
                       </div>
                     </div>
                   )}
-                  {clinicalLoading ? (
+                  {showClinicalLoadingPlaceholder ? (
                     <div className="badge">Loading clinical…</div>
                   ) : clinicalTab === "chart" ? (
                 <div className="stack">
