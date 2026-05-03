@@ -2,7 +2,7 @@
 
 Status date: 2026-05-03
 
-Baseline: `master@adb15f34cbf65bb46b2e4528f5e996a921414168`
+Baseline: `master@d59e83b4c940cae6692919848fdb83e420127be5`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -224,16 +224,37 @@ Largest gaps before finance import design:
   fields into normal PMS payment records unless explicitly required.
 - Decide how NHS/private/Denplan/sundry categories map into PMS billing reports.
 
+## Policy Continuity
+
+The finance sign/cancellation/allocation policy is recorded in
+`docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`.
+
+That policy keeps finance fail-closed:
+
+- `PatientStats` is the current balance and aged-debt snapshot source, not a
+  row-level invoice/payment source.
+- `vwPayments` is the first payment/refund/credit/cancellation classification
+  source, with `Adjustments` used as the base-table cross-check.
+- `Transactions` remains treatment/clinical charge evidence and reconciliation
+  input only, not finance ledger truth by itself.
+- `PaymentAllocations` / `vwAllocatedPayments` are allocation/refund/advanced
+  payment reconciliation sources, not first import sources.
+- Unknown signs, ambiguous flags, cancellations/reversals, missing patient
+  codes, refund/allocation mismatches, and invoice-source gaps remain
+  manual-review or excluded until a proof settles them.
+
 ## Recommended Next Slice
 
-Define the finance sign/cancellation/allocation policy before any finance
-importer, finance staging model, or PMS finance write path.
+Add a pure finance classification/sign helper before any finance importer,
+finance staging model, or PMS finance write path.
 
-Suggested worktree: `/home/amir/dental-pms-finance-policy-proof`
+Suggested worktree: `/home/amir/dental-pms-finance-classification-proof`
 
 Suggested first inputs:
 
-- This document and the PR #587 inventory artefact.
+- This document.
+- `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
+- The PR #587 inventory artefact.
 - `backend/app/scripts/r4_finance_inventory.py`
 - Existing PMS finance models/routes:
   - `backend/app/models/invoice.py`
@@ -242,22 +263,20 @@ Suggested first inputs:
   - `backend/app/routers/patients.py`
   - `backend/app/routers/reports.py`
 
-Policy questions to settle:
+Expected helper proof:
 
-- balance sign convention for `PatientStats`
-- payment/refund/credit sign convention for `vwPayments` and `Adjustments`
-- cancellation/reversal handling using `IsCancelled`, `Status`, and
-  `CancellationOf`
-- allocation semantics for `PaymentAllocations` / `vwAllocatedPayments`
-- refund mismatch policy for `110` `vwPayments` refund rows versus `795`
-  allocation refund rows
-- opening balance reconciliation against `PatientStats` aged debt
-- NHS/private/Denplan classification boundaries
-- explicit rule that no finance importer or PMS finance write path starts until
-  the above policy is recorded and tested where possible
+- classify inventory-shaped rows into payment, refund, credit,
+  adjustment/write-off, cancellation/reversal, allocation, opening-balance, or
+  manual-review categories;
+- preserve raw R4 sign and amount;
+- produce deterministic reason codes;
+- fail closed for unknown flags/statuses/signs, missing patient code, cancelled
+  or reversed rows, allocation/refund mismatches, and invoice-source ambiguity;
+- avoid DB access, R4 access, finance staging models, and PMS finance writes.
 
 Expected validation:
 
-- Docs diff checks for a policy-only slice.
-- Optional pure helper/unit tests only if a no-DB-write proof is justified.
+- Focused unit tests for known/unknown flag combinations, cancellation handling,
+  sign preservation, patient-code requirement, and reason codes.
+- `git diff --check`.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.
