@@ -3,7 +3,7 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@7159adb970045acc569719c7af2daf6c1f5f32b5`
+Baseline: `master@55e46a08450e95da8b4029d9aa3c3616dbfddbd2`
 
 Implementation status: PR #571 added the pure backend helper
 `backend/app/services/r4_import/appointment_status_policy.py` and focused unit
@@ -25,6 +25,15 @@ rows, manual-review rows, null-patient read-only rows, unmapped-patient rows,
 and clinician-unresolved rows. It is not wired into importer/apply behaviour,
 does not implement timezone conversion or conflict detection, and performs no
 DB writes.
+
+Timezone/local-time status: PR #578 added the pure backend helper
+`backend/app/services/r4_import/appointment_datetime_policy.py` and focused unit
+tests in `backend/tests/r4_import/test_appointment_datetime_policy.py`. It
+proves the future convention that naive R4 appointment datetimes are
+Europe/London clinic-local wall times, valid local times convert to UTC-aware
+datetimes for PMS core storage, and invalid, missing, ambiguous fall-back, or
+non-existent spring-forward local times fail closed. The helper is not wired
+into importer or promotion behaviour.
 
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
@@ -224,12 +233,15 @@ Before R4 appointments can be promoted into the core diary, prove:
 5. A deterministic promotion plan helper that produces row-level actions,
    aggregate counts, and reason samples without DB writes or importer/apply
    wiring (complete as of PR #576).
-6. Patient linkage thresholds, including explicit handling for the `1752`
+6. A timezone/local-time proof for Europe/London clinic-local wall times,
+   UTC-aware core storage, and fail-closed daylight-saving edge cases
+   (complete as of PR #578).
+7. Patient linkage thresholds, including explicit handling for the `1752`
    null/blank patient-code rows.
-7. Clinician-code coverage against imported R4 users and any proposed PMS user
+8. Clinician-code coverage against imported R4 users and any proposed PMS user
    mapping.
-8. Local-time and daylight-saving behaviour for future rows before any live
-   future-diary cutover.
+9. Conflict predicate behaviour for future rows before any live future-diary
+   cutover.
 
 ## Open Questions
 
@@ -248,17 +260,19 @@ Before R4 appointments can be promoted into the core diary, prove:
 
 The PR #571 backend helper/proof, the 2026-04-30 isolated scratch
 `r4_appointments` import/idempotency/linkage transcript, PR #574's no-core-write
-appointment promotion dry-run/report, and PR #576's pure promotion plan
-helper/proof are complete. The next safe slice is timezone/local-time proof
-before conflict predicate extraction or any real core diary promotion.
+appointment promotion dry-run/report, PR #576's pure promotion plan
+helper/proof, and PR #578's timezone/local-time proof are complete. The next
+safe slice is conflict predicate extraction before any real core diary
+promotion.
 
 Keep the next slice proof-only:
 
-- prove how R4 local clinic appointment times should map to PMS
-  timezone-aware timestamps;
-- cover daylight-saving boundary fixtures before future diary writes;
+- extract the pure overlap/conflict predicate future guarded apply code must
+  use;
+- cover active/inactive statuses, adjacent boundaries, clinician presence, and
+  timezone-aware appointment inputs;
 - do not wire importer/apply behaviour;
-- leave conflict predicate extraction and guarded apply design for later slices;
+- leave guarded apply design for later slices;
 - keep R4 strictly SELECT-only;
-- keep real core diary promotion out of scope until timezone/local-time and
-  conflict proofs are reviewed.
+- keep real core diary promotion out of scope until conflict proofs are
+  reviewed.

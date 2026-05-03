@@ -13,9 +13,10 @@ and unit tests for that policy without wiring importer behaviour or starting any
 appointment import/core diary promotion. PR #574 added backend-only/report-only
 no-core-write promotion dry-run tooling and completed the scratch promotion
 report without adding core appointment apply/promotion code. PR #576 added the
-pure backend appointment promotion plan helper/proof without DB writes,
-importer/apply wiring, timezone conversion, conflict predicate extraction, or
-core appointment apply/promotion code.
+pure backend appointment promotion plan helper/proof without DB writes or
+importer/apply wiring. PR #578 added the pure backend appointment
+timezone/local-time proof without importer/promotion wiring, conflict predicate
+extraction, DB writes, R4 access, or core appointment apply/promotion code.
 
 2026-04-30 scratch update: isolated scratch `r4_appointments`
 import/idempotency/linkage completed under scratch Compose project
@@ -146,8 +147,13 @@ Cancelled distribution: `0=91872`, `1=9179`. Future samples include
   classified into eligible candidates, excluded rows, manual-review rows,
   null-patient read-only rows, unmapped-patient rows, and clinician-unresolved
   rows without DB writes.
-- The next appointment slice should be timezone/local-time proof before
-  conflict predicate extraction and before any real core diary promotion.
+- PR #578 then added the pure timezone/local-time proof: naive R4 appointment
+  datetimes are interpreted as Europe/London clinic-local wall times, valid
+  local times convert to UTC-aware datetimes for future PMS core storage, and
+  invalid, missing, ambiguous fall-back, or non-existent spring-forward times
+  fail closed. Importer and promotion behaviour remain unchanged.
+- The next appointment slice should be conflict predicate extraction before any
+  real core diary promotion.
 
 ## Column mapping (vwAppointmentDetails)
 
@@ -166,7 +172,12 @@ Cancelled distribution: `0=91872`, `1=9179`. Future samples include
 - flag: `apptflag`
 
 Notes:
-- Times appear to be local time values (no timezone offsets). Import should treat them as local clinic time and store with timezone awareness (likely UTC conversion later, or store as naive with clinic timezone handling).
+- Times appear to be local time values (no timezone offsets). PR #578 proves
+  the future promotion convention: treat naive R4 appointment datetimes as
+  Europe/London clinic-local wall times and convert valid values to UTC-aware
+  datetimes for PMS core storage. Ambiguous, non-existent, invalid, or missing
+  values fail closed. The importer still uses existing behaviour until a later
+  deliberate wiring slice.
 - `duration` is already minutes in the view; base table `Appts.Duration` is a datetime time span.
 
 ## Proposed minimal Postgres schema (draft)
@@ -192,11 +203,12 @@ Notes:
 
 ## Open questions / oddities
 
-- Prove timezone/local-time handling before conflict predicate extraction and
-  before any guarded core-promotion apply path.
-- After timezone proof, design/prove guarded core-promotion apply before any
-  real core diary promotion, including conflict handling, clinician/user mapping
-  policy, and scratch-first/default-DB refusal.
+- Extract/prove conflict predicate handling before any guarded core-promotion
+  apply path.
+- After conflict predicate extraction, design/prove guarded core-promotion
+  apply before any real core diary promotion, including clinician/user mapping
+  policy, scratch-first/default-DB refusal, and use of the PR #578
+  timezone/local-time convention.
 - Validate `Left Surgery`, `Waiting`, and `On Standby` semantics with operator review or focused evidence.
 - Decide whether R4 clinician codes map to PMS login users, imported `r4_users`, or a separate resource mapping.
 - Keep `Deleted` rows read-only/excluded by default unless a later audit projection requires otherwise.
