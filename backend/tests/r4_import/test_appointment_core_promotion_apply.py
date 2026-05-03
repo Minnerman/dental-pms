@@ -7,6 +7,7 @@ import pytest
 
 from app.models.appointment import AppointmentLocationType, AppointmentStatus
 from app.services.appointment_conflicts import ExistingAppointmentConflict
+from app.services.r4_import import appointment_core_promotion_apply as apply_module
 from app.services.r4_import.appointment_core_promotion_apply import (
     GUARDED_CORE_PROMOTION_CONFIRMATION,
     GuardedCoreAppointmentPromotionApplyError,
@@ -305,3 +306,36 @@ def test_guarded_apply_does_not_conflict_check_cancelled_or_no_show_candidates()
     assert plan.action_counts == {"create": 1}
     assert plan.create_rows[0].candidate is not None
     assert plan.create_rows[0].candidate.status == AppointmentStatus.cancelled
+
+
+def test_guarded_apply_skips_conflict_scan_for_unmapped_clinician_candidates(
+    monkeypatch,
+):
+    def fail_if_called(*_args, **_kwargs):  # pragma: no cover - assertion helper
+        raise AssertionError("missing clinician candidates cannot conflict")
+
+    monkeypatch.setattr(
+        apply_module,
+        "appointment_conflicts_with_existing",
+        fail_if_called,
+    )
+
+    plan = _build_plan(
+        [
+            _row(1),
+            _row(
+                2,
+                starts_at=datetime(2026, 1, 15, 9, 15),
+                ends_at=datetime(2026, 1, 15, 9, 45),
+            ),
+        ],
+        dryrun_report=_dryrun_report(status_candidates=2),
+        clinician_user_mapping=None,
+    )
+
+    assert plan.action_counts == {"create": 2}
+    assert plan.would_create_count == 2
+    assert [row.candidate.clinician_user_id for row in plan.create_rows] == [
+        None,
+        None,
+    ]
