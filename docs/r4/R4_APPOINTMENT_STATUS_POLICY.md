@@ -3,7 +3,7 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@55e46a08450e95da8b4029d9aa3c3616dbfddbd2`
+Baseline: `master@9bd01233703468d8b0910d9effe3e7b1d84fae50`
 
 Implementation status: PR #571 added the pure backend helper
 `backend/app/services/r4_import/appointment_status_policy.py` and focused unit
@@ -34,6 +34,19 @@ Europe/London clinic-local wall times, valid local times convert to UTC-aware
 datetimes for PMS core storage, and invalid, missing, ambiguous fall-back, or
 non-existent spring-forward local times fail closed. The helper is not wired
 into importer or promotion behaviour.
+
+Conflict predicate status: PR #580 added the pure backend helper
+`backend/app/services/appointment_conflicts.py` and focused unit tests in
+`backend/tests/appointments/test_appointment_conflict_predicate.py`. It proves
+the same-clinician conflict predicate future guarded apply code should use:
+`booked`, `arrived`, `in_progress`, and `completed` existing appointments
+block; `cancelled`, `no_show`, and soft-deleted existing appointments do not
+block; exact same and partial overlaps conflict; back-to-back intervals do not
+conflict; missing/different clinicians do not conflict to match current core
+semantics; patient identity is irrelevant; aware datetimes compare by instant;
+and invalid/missing datetimes or missing/unknown existing statuses fail closed.
+Route behaviour, importer behaviour, promotion behaviour, and core apply
+behaviour remain unchanged.
 
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
@@ -168,7 +181,7 @@ Mapping precedence:
    retained; do not make it an active booking.
 8. If the normalized status is `Pending` or `apptflag=6`, it is the default
    active-booking candidate and may map to core `booked` after linkage,
-   clinician, timezone, and conflict proofs pass.
+   clinician, timezone, conflict, and guarded apply proofs pass.
 9. If the normalized status is `Waiting` or `apptflag=7`, it is an active
    waiting candidate. It may map to core `booked` only with raw status retained
    and explicit operator acceptance.
@@ -236,12 +249,15 @@ Before R4 appointments can be promoted into the core diary, prove:
 6. A timezone/local-time proof for Europe/London clinic-local wall times,
    UTC-aware core storage, and fail-closed daylight-saving edge cases
    (complete as of PR #578).
-7. Patient linkage thresholds, including explicit handling for the `1752`
+7. A pure conflict predicate proof for same-clinician overlap semantics,
+   blocking/non-blocking existing statuses, adjacent boundaries, timezone-aware
+   inputs, and fail-closed invalid inputs (complete as of PR #580).
+8. Patient linkage thresholds, including explicit handling for the `1752`
    null/blank patient-code rows.
-8. Clinician-code coverage against imported R4 users and any proposed PMS user
+9. Clinician-code coverage against imported R4 users and any proposed PMS user
    mapping.
-9. Conflict predicate behaviour for future rows before any live future-diary
-   cutover.
+10. Guarded core-promotion apply design/proof in scratch only before any live
+    future-diary cutover.
 
 ## Open Questions
 
@@ -261,18 +277,18 @@ Before R4 appointments can be promoted into the core diary, prove:
 The PR #571 backend helper/proof, the 2026-04-30 isolated scratch
 `r4_appointments` import/idempotency/linkage transcript, PR #574's no-core-write
 appointment promotion dry-run/report, PR #576's pure promotion plan
-helper/proof, and PR #578's timezone/local-time proof are complete. The next
-safe slice is conflict predicate extraction before any real core diary
-promotion.
+helper/proof, PR #578's timezone/local-time proof, and PR #580's conflict
+predicate proof are complete. The next safe slice is guarded core-promotion
+apply design/prototype in scratch only before any real core diary promotion.
 
 Keep the next slice proof-only:
 
-- extract the pure overlap/conflict predicate future guarded apply code must
-  use;
-- cover active/inactive statuses, adjacent boundaries, clinician presence, and
-  timezone-aware appointment inputs;
-- do not wire importer/apply behaviour;
-- leave guarded apply design for later slices;
+- define scratch-first/default-DB refusal gates;
+- require the no-core-write promotion report to pass before apply;
+- require an explicit confirmation token before any scratch apply;
+- consume the promotion plan, timezone policy, and conflict predicate helpers;
+- do not wire importer or live/default-DB apply behaviour;
+- keep any apply prototype scratch-only;
 - keep R4 strictly SELECT-only;
-- keep real core diary promotion out of scope until conflict proofs are
+- keep real core diary promotion out of scope until scratch apply proofs are
   reviewed.
