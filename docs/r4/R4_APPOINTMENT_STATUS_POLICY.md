@@ -3,7 +3,7 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@9bd01233703468d8b0910d9effe3e7b1d84fae50`
+Baseline: `master@ac279c29ec701a61d700eebb02072436564c8384`
 
 Implementation status: PR #571 added the pure backend helper
 `backend/app/services/r4_import/appointment_status_policy.py` and focused unit
@@ -47,6 +47,18 @@ semantics; patient identity is irrelevant; aware datetimes compare by instant;
 and invalid/missing datetimes or missing/unknown existing statuses fail closed.
 Route behaviour, importer behaviour, promotion behaviour, and core apply
 behaviour remain unchanged.
+
+Guarded apply-plan status: PR #582 added the backend-only no-DB-write helper
+`backend/app/services/r4_import/appointment_core_promotion_apply.py` and
+focused unit tests in
+`backend/tests/r4_import/test_appointment_core_promotion_apply.py`. The helper
+requires a scratch/test DB URL, explicit `SCRATCH_APPLY` confirmation, prior
+no-core-write dry-run report validation, zero unmapped promote candidates, and
+optional zero unresolved clinicians. It refuses null-patient, deleted,
+manual-review, invalid/ambiguous/non-existent datetime, and conflicting rows,
+supports idempotency skip by legacy ID, and produces future scratch-apply
+appointment payloads without DB writes. Routes, importers, runtime, and CLI
+wiring remain unchanged.
 
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
@@ -252,11 +264,16 @@ Before R4 appointments can be promoted into the core diary, prove:
 7. A pure conflict predicate proof for same-clinician overlap semantics,
    blocking/non-blocking existing statuses, adjacent boundaries, timezone-aware
    inputs, and fail-closed invalid inputs (complete as of PR #580).
-8. Patient linkage thresholds, including explicit handling for the `1752`
+8. A guarded core-promotion apply-plan prototype that composes the status,
+   promotion plan, timezone, and conflict helpers behind scratch/test DB,
+   confirmation-token, dry-run, linkage, datetime, conflict, and idempotency
+   gates without DB writes (complete as of PR #582).
+9. Patient linkage thresholds, including explicit handling for the `1752`
    null/blank patient-code rows.
-9. Clinician-code coverage against imported R4 users and any proposed PMS user
+10. Clinician-code coverage against imported R4 users and any proposed PMS user
    mapping.
-10. Guarded core-promotion apply design/proof in scratch only before any live
+11. Scratch-only CLI/runbook wiring and transcript that writes core
+    appointments only inside an isolated scratch DB before any live
     future-diary cutover.
 
 ## Open Questions
@@ -277,13 +294,15 @@ Before R4 appointments can be promoted into the core diary, prove:
 The PR #571 backend helper/proof, the 2026-04-30 isolated scratch
 `r4_appointments` import/idempotency/linkage transcript, PR #574's no-core-write
 appointment promotion dry-run/report, PR #576's pure promotion plan
-helper/proof, PR #578's timezone/local-time proof, and PR #580's conflict
-predicate proof are complete. The next safe slice is guarded core-promotion
-apply design/prototype in scratch only before any real core diary promotion.
+helper/proof, PR #578's timezone/local-time proof, PR #580's conflict
+predicate proof, and PR #582's guarded no-DB-write apply-plan prototype are
+complete. The next safe slice is scratch-only CLI/runbook wiring and transcript
+that writes core appointments only inside an isolated scratch DB before any real
+core diary promotion.
 
 Keep the next slice proof-only:
 
-- define scratch-first/default-DB refusal gates;
+- reuse PR #582 scratch-first/default-DB refusal gates;
 - require the no-core-write promotion report to pass before apply;
 - require an explicit confirmation token before any scratch apply;
 - consume the promotion plan, timezone policy, and conflict predicate helpers;

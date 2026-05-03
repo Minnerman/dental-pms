@@ -19,7 +19,9 @@ timezone/local-time proof without importer/promotion wiring, conflict predicate
 extraction, DB writes, R4 access, or core appointment apply/promotion code. PR
 #580 added the pure backend conflict predicate proof without changing route
 behaviour, wiring promotion/import/apply behaviour, touching R4, or writing to
-the PMS DB.
+the PMS DB. PR #582 added the backend-only guarded core-promotion apply-plan
+prototype without DB writes, CLI/runtime wiring, route/importer changes, R4
+access, or real core diary promotion.
 
 2026-04-30 scratch update: isolated scratch `r4_appointments`
 import/idempotency/linkage completed under scratch Compose project
@@ -163,8 +165,15 @@ Cancelled distribution: `0=91872`, `1=9179`. Future samples include
   irrelevant; aware datetimes compare by instant; and invalid/missing
   datetimes or missing/unknown existing statuses fail closed. Route behaviour
   and promotion/import/apply behaviour remain unchanged.
-- The next appointment slice should be guarded core-promotion apply
-  design/prototype in scratch only before any real core diary promotion.
+- PR #582 then added the backend-only guarded apply-plan prototype: it requires
+  a scratch/test DB URL, explicit `SCRATCH_APPLY` confirmation, prior
+  no-core-write dry-run report validation, zero unmapped promote candidates,
+  optional zero unresolved clinicians, datetime/conflict refusal, row-level
+  refusal for non-promotable rows, and idempotency skip by legacy ID. It does
+  not write to a DB or change routes/importers/runtime.
+- The next appointment slice should be scratch-only CLI/runbook wiring and a
+  transcript that writes core appointments only inside an isolated scratch DB
+  before any real core diary promotion.
 
 ## Column mapping (vwAppointmentDetails)
 
@@ -214,10 +223,11 @@ Notes:
 
 ## Open questions / oddities
 
-- Design/prove guarded core-promotion apply before any real core diary
-  promotion, including clinician/user mapping policy,
+- Wire and execute guarded core-promotion apply in scratch only before any real
+  core diary promotion, including clinician/user mapping policy,
   scratch-first/default-DB refusal, use of the PR #578 timezone/local-time
-  convention, and use of the PR #580 conflict predicate.
+  convention, use of the PR #580 conflict predicate, and use of the PR #582
+  guarded apply-plan prototype.
 - Validate `Left Surgery`, `Waiting`, and `On Standby` semantics with operator review or focused evidence.
 - Decide whether R4 clinician codes map to PMS login users, imported `r4_users`, or a separate resource mapping.
 - Keep `Deleted` rows read-only/excluded by default unless a later audit projection requires otherwise.
