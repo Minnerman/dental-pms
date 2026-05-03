@@ -283,9 +283,13 @@ def build_guarded_core_appointment_promotion_apply_plan(
             clinician_user_id=row.clinician_user_id,
             patient_id=row.patient_id,
         )
-        if _candidate_status_needs_conflict_check(row.core_status):
+        needs_conflict_check = _candidate_status_needs_conflict_check(row.core_status)
+        if needs_conflict_check:
             _ensure_candidate_window(candidate, row.legacy_appointment_id)
-            if _conflicts_with_any(candidate, [*existing_conflicts, *created_conflicts]):
+            if candidate.clinician_user_id is not None and _conflicts_with_any(
+                candidate,
+                [*existing_conflicts, *created_conflicts],
+            ):
                 _append_row(
                     planned_rows,
                     action_counts,
@@ -331,7 +335,7 @@ def build_guarded_core_appointment_promotion_apply_plan(
             sample_limit=sample_limit,
         )
         batch_legacy_ids.add(legacy_id)
-        if _candidate_status_needs_conflict_check(row.core_status):
+        if needs_conflict_check and candidate.clinician_user_id is not None:
             created_conflicts.append(
                 ExistingAppointmentConflict(
                     starts_at=starts_at,
