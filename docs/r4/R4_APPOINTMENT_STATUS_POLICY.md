@@ -3,7 +3,7 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@01e83c721b760e7b56950cae6968052e7d6e2a46`
+Baseline: `master@7159adb970045acc569719c7af2daf6c1f5f32b5`
 
 Implementation status: PR #571 added the pure backend helper
 `backend/app/services/r4_import/appointment_status_policy.py` and focused unit
@@ -16,6 +16,15 @@ promotion dry-run tooling in
 `backend/app/services/r4_import/appointment_promotion_dryrun.py` and
 `backend/app/scripts/r4_appointment_promotion_dryrun.py`. It does not add core
 appointment apply/promotion code.
+
+Promotion plan status: PR #576 added the pure backend promotion plan helper in
+`backend/app/services/r4_import/appointment_promotion_plan.py` and focused unit
+tests in `backend/tests/r4_import/test_appointment_promotion_plan.py`. The
+helper classifies staging rows into eligible promotion candidates, excluded
+rows, manual-review rows, null-patient read-only rows, unmapped-patient rows,
+and clinician-unresolved rows. It is not wired into importer/apply behaviour,
+does not implement timezone conversion or conflict detection, and performs no
+DB writes.
 
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
@@ -212,11 +221,14 @@ Before R4 appointments can be promoted into the core diary, prove:
 4. A promotion dry-run report showing how many rows would be excluded, mapped to
    inactive states, mapped to active bookings, and left for manual review
    (complete as of PR #574).
-5. Patient linkage thresholds, including explicit handling for the `1752`
+5. A deterministic promotion plan helper that produces row-level actions,
+   aggregate counts, and reason samples without DB writes or importer/apply
+   wiring (complete as of PR #576).
+6. Patient linkage thresholds, including explicit handling for the `1752`
    null/blank patient-code rows.
-6. Clinician-code coverage against imported R4 users and any proposed PMS user
+7. Clinician-code coverage against imported R4 users and any proposed PMS user
    mapping.
-7. Local-time and daylight-saving behaviour for future rows before any live
+8. Local-time and daylight-saving behaviour for future rows before any live
    future-diary cutover.
 
 ## Open Questions
@@ -235,18 +247,18 @@ Before R4 appointments can be promoted into the core diary, prove:
 ## Recommended Next Slice
 
 The PR #571 backend helper/proof, the 2026-04-30 isolated scratch
-`r4_appointments` import/idempotency/linkage transcript, and PR #574's
-no-core-write appointment promotion dry-run/report are complete. The next safe
-slice is guarded core-promotion apply design/proof before any real core diary
-promotion.
+`r4_appointments` import/idempotency/linkage transcript, PR #574's no-core-write
+appointment promotion dry-run/report, and PR #576's pure promotion plan
+helper/proof are complete. The next safe slice is timezone/local-time proof
+before conflict predicate extraction or any real core diary promotion.
 
-Keep the next slice guarded and scratch-first:
+Keep the next slice proof-only:
 
-- design the future apply path without enabling default/live `dental_pms`
-  core appointment writes;
-- prove scratch-first/default-DB refusal;
-- cover conflict handling, timezone/local-time handling, clinician/user
-  mapping policy, and preservation of raw R4 audit fields;
+- prove how R4 local clinic appointment times should map to PMS
+  timezone-aware timestamps;
+- cover daylight-saving boundary fixtures before future diary writes;
+- do not wire importer/apply behaviour;
+- leave conflict predicate extraction and guarded apply design for later slices;
 - keep R4 strictly SELECT-only;
-- keep real core diary promotion out of scope until the guarded proof is
-  reviewed.
+- keep real core diary promotion out of scope until timezone/local-time and
+  conflict proofs are reviewed.
