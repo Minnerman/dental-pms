@@ -21,7 +21,9 @@ extraction, DB writes, R4 access, or core appointment apply/promotion code. PR
 behaviour, wiring promotion/import/apply behaviour, touching R4, or writing to
 the PMS DB. PR #582 added the backend-only guarded core-promotion apply-plan
 prototype without DB writes, CLI/runtime wiring, route/importer changes, R4
-access, or real core diary promotion.
+access, or real core diary promotion. PR #584 added the scratch-only guarded
+core-promotion CLI/prototype and completed a scratch-only apply/idempotency
+transcript without live/default core diary promotion.
 
 2026-04-30 scratch update: isolated scratch `r4_appointments`
 import/idempotency/linkage completed under scratch Compose project
@@ -171,9 +173,30 @@ Cancelled distribution: `0=91872`, `1=9179`. Future samples include
   optional zero unresolved clinicians, datetime/conflict refusal, row-level
   refusal for non-promotable rows, and idempotency skip by legacy ID. It does
   not write to a DB or change routes/importers/runtime.
-- The next appointment slice should be scratch-only CLI/runbook wiring and a
-  transcript that writes core appointments only inside an isolated scratch DB
-  before any real core diary promotion.
+
+2026-05-03 guarded scratch core-promotion apply update:
+- Scratch Compose project: `dentalpms_appt_core_apply_20260503_154718`.
+- Scratch DB: `dental_pms_appointment_core_promotion_scratch`.
+- Evidence path:
+  `/home/amir/dental-pms-appointment-core-promotion-scratch/.run/appointment_core_promotion_dentalpms_appt_core_apply_20260503_154718/`
+- The scratch transcript used newer R4 source data than the 2026-04-30
+  no-core-write dry-run: `101057` appointments instead of `101051`, with
+  `63` future rows instead of `57`; past rows stayed `100994`.
+- Current dry-run report candidate count used by apply: `94162`.
+- Guarded apply changed scratch core `appointments` from `0` to `94162`;
+  created `94162`, updated `0`, skipped `0`.
+- Idempotency rerun left scratch core `appointments` at `94162`; created `0`,
+  updated `0`, skipped `94162`.
+- Refused rows totalled `6895`: deleted/excluded `3726`, manual-review `1417`,
+  and null-patient read-only `1752`.
+- No deleted, null-patient, manual-review, or conflict rows were promoted; no
+  `existing_core_appointment_conflict` promotion/refusal reason appeared.
+- The default `dental_pms` refusal probe exited nonzero before session/open and
+  refused database `dental_pms`.
+- R4 access was SELECT-only, no R4 writes occurred, PMS writes were
+  scratch-only, and no live/default core diary promotion occurred.
+- The scratch stack remains running for inspection and should be cleaned up
+  after the docs/evidence refresh merges.
 
 ## Column mapping (vwAppointmentDetails)
 
@@ -223,11 +246,10 @@ Notes:
 
 ## Open questions / oddities
 
-- Wire and execute guarded core-promotion apply in scratch only before any real
-  core diary promotion, including clinician/user mapping policy,
-  scratch-first/default-DB refusal, use of the PR #578 timezone/local-time
-  convention, use of the PR #580 conflict predicate, and use of the PR #582
-  guarded apply-plan prototype.
+- Clean up the PR #584 guarded core-promotion scratch stack after preserving
+  the evidence artefacts.
+- Do not enable live/default core diary promotion without a separate explicit
+  cutover design, approval, and rehearsal.
 - Validate `Left Surgery`, `Waiting`, and `On Standby` semantics with operator review or focused evidence.
 - Decide whether R4 clinician codes map to PMS login users, imported `r4_users`, or a separate resource mapping.
 - Keep `Deleted` rows read-only/excluded by default unless a later audit projection requires otherwise.

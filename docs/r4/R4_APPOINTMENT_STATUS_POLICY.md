@@ -3,7 +3,7 @@
 Status: design policy only. This document does not authorise R4 writes, PMS
 database writes, appointment import, or promotion into the core diary.
 
-Baseline: `master@ac279c29ec701a61d700eebb02072436564c8384`
+Baseline: `master@45d6de8cdd11cf0b9f4889cb0914ca0a89f732a6`
 
 Implementation status: PR #571 added the pure backend helper
 `backend/app/services/r4_import/appointment_status_policy.py` and focused unit
@@ -60,6 +60,11 @@ supports idempotency skip by legacy ID, and produces future scratch-apply
 appointment payloads without DB writes. Routes, importers, runtime, and CLI
 wiring remain unchanged.
 
+Guarded scratch apply status: PR #584 added the scratch-only CLI/prototype and
+runbook for guarded core appointment promotion in an isolated scratch PMS DB.
+It leaves normal routes/importers/runtime unchanged, refuses default/live DB
+targets, and does not enable live/default core diary promotion.
+
 Evidence source:
 `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/appointment_cutover_inventory.json`
 
@@ -68,6 +73,9 @@ Scratch transcript evidence:
 
 Promotion dry-run evidence:
 `/home/amir/dental-pms-appointment-promotion-dryrun/.run/appointment_promotion_dryrun_dentalpms_appt_promo_dryrun_20260430_0835/`
+
+Guarded scratch core-promotion evidence:
+`/home/amir/dental-pms-appointment-core-promotion-scratch/.run/appointment_core_promotion_dentalpms_appt_core_apply_20260503_154718/`
 
 The inventory command queried `dbo.vwAppointmentDetails WITH (NOLOCK)` under
 `R4_SQLSERVER_READONLY=true`. It was SELECT-only, made no R4 writes, made no PMS
@@ -82,6 +90,12 @@ The promotion dry-run used scratch DB
 writes occurred, PMS writes were scratch-only, no core appointment writes
 occurred, and core `appointments` stayed unchanged with `before=0` and
 `after=0`.
+
+The guarded scratch core-promotion transcript used scratch DB
+`dental_pms_appointment_core_promotion_scratch`. R4 access was SELECT-only, no
+R4 writes occurred, PMS writes were scratch-only, and no live/default core
+diary promotion occurred. The default `dental_pms` refusal probe exited
+nonzero before session/open.
 
 ## Inventory Evidence
 
@@ -165,6 +179,33 @@ updating, or deleting core diary rows:
 - Core appointments were unchanged with `before=0` and `after=0`.
 - R4 access was SELECT-only; no R4 writes occurred; PMS writes were
   scratch-only; no core appointment writes occurred.
+
+## Guarded Scratch Core-Promotion Evidence
+
+The 2026-05-03 guarded scratch transcript completed core appointment writes
+inside scratch only:
+
+- Scratch Compose project: `dentalpms_appt_core_apply_20260503_154718`.
+- Scratch DB: `dental_pms_appointment_core_promotion_scratch`.
+- Evidence path:
+  `/home/amir/dental-pms-appointment-core-promotion-scratch/.run/appointment_core_promotion_dentalpms_appt_core_apply_20260503_154718/`
+- Current R4 source data drift note: this transcript saw `101057`
+  appointments and `63` future rows, compared with the earlier no-core-write
+  dry-run evidence of `101051` appointments, `57` future rows, and `94156`
+  promote candidates. Past rows remained `100994`.
+- Current dry-run report candidate count used by apply: `94162`.
+- Guarded apply changed scratch core `appointments` from `0` to `94162`;
+  created `94162`, updated `0`, skipped `0`.
+- Idempotency rerun left scratch core `appointments` unchanged at `94162`;
+  created `0`, updated `0`, skipped `94162`.
+- Refused rows totalled `6895`: deleted/excluded `3726`, manual-review `1417`,
+  and null-patient read-only `1752`.
+- No deleted, null-patient, manual-review, or conflict rows were promoted; no
+  `existing_core_appointment_conflict` reason appeared.
+- R4 access was SELECT-only, no R4 writes occurred, PMS writes were
+  scratch-only, and no live/default core diary promotion occurred.
+- The scratch stack remains running for inspection and should be cleaned up
+  after the docs/evidence refresh merges.
 
 ## Mapping Policy
 
@@ -274,7 +315,7 @@ Before R4 appointments can be promoted into the core diary, prove:
    mapping.
 11. Scratch-only CLI/runbook wiring and transcript that writes core
     appointments only inside an isolated scratch DB before any live
-    future-diary cutover.
+    future-diary cutover (complete as of PR #584).
 
 ## Open Questions
 
@@ -295,19 +336,16 @@ The PR #571 backend helper/proof, the 2026-04-30 isolated scratch
 `r4_appointments` import/idempotency/linkage transcript, PR #574's no-core-write
 appointment promotion dry-run/report, PR #576's pure promotion plan
 helper/proof, PR #578's timezone/local-time proof, PR #580's conflict
-predicate proof, and PR #582's guarded no-DB-write apply-plan prototype are
-complete. The next safe slice is scratch-only CLI/runbook wiring and transcript
-that writes core appointments only inside an isolated scratch DB before any real
-core diary promotion.
+predicate proof, PR #582's guarded no-DB-write apply-plan prototype, and PR
+#584's guarded scratch core-promotion CLI/prototype transcript are complete.
+The next operational step is to clean up the PR #584 scratch stack after this
+docs/evidence refresh merges.
 
-Keep the next slice proof-only:
+Keep the post-cleanup direction conservative:
 
-- reuse PR #582 scratch-first/default-DB refusal gates;
-- require the no-core-write promotion report to pass before apply;
-- require an explicit confirmation token before any scratch apply;
-- consume the promotion plan, timezone policy, and conflict predicate helpers;
-- do not wire importer or live/default-DB apply behaviour;
-- keep any apply prototype scratch-only;
+- preserve the PR #584 evidence artefacts;
 - keep R4 strictly SELECT-only;
-- keep real core diary promotion out of scope until scratch apply proofs are
-  reviewed.
+- do not wire importer or live/default-DB apply behaviour;
+- do not start real core diary promotion without a separate explicit cutover
+  design, approval, and rehearsal;
+- choose the next readiness slice from `docs/R4_MIGRATION_READINESS.md`.
