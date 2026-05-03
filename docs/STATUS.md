@@ -3,12 +3,13 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@45d6de8cdd11cf0b9f4889cb0914ca0a89f732a6`.
-- Current repo `master` is `45d6de8cdd11cf0b9f4889cb0914ca0a89f732a6`; it includes merged R4 charting continuity through PR #567, PR #568's backend-only SELECT-only appointment cutover inventory tooling, PR #569's docs refresh after #568, PR #570's appointment status/null-patient/clinician mapping policy, PR #571's backend-only pure appointment status-mapping helper/proof, PR #572's docs refresh after #571, PR #573's scratch appointment import evidence refresh, PR #574's backend-only/report-only appointment promotion dry-run tooling, PR #575's docs/evidence refresh after PR #574, PR #576's backend-only pure appointment promotion plan helper/proof, PR #577's docs refresh after PR #576, PR #578's backend-only pure appointment timezone/local-time proof, PR #579's docs refresh after PR #578, PR #580's backend-only pure appointment conflict predicate proof, PR #581's docs refresh after #580, PR #582's backend-only no-DB-write guarded core-promotion apply-plan prototype, PR #583's docs refresh after #582, and PR #584's scratch-only guarded core-promotion CLI/prototype.
+- The authoritative continuity baseline is `origin/master@adb15f34cbf65bb46b2e4528f5e996a921414168`.
+- Current repo `master` is `adb15f34cbf65bb46b2e4528f5e996a921414168`; it includes merged R4 charting continuity through PR #567, appointment readiness through PR #585, PR #586's R4 finance source discovery, PR #588's unrelated frontend-only patient-notes smoke fix, and PR #587's backend-only SELECT-only finance inventory command/report.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment cutover inventory tooling is merged as of PR #568, appointment status policy is merged as of PR #570, the backend status helper/proof is merged as of PR #571, the isolated scratch appointment import/idempotency/linkage transcript is complete, the no-core-write appointment promotion dry-run/report is complete as of PR #574, the backend promotion plan helper/proof is merged as of PR #576, the appointment timezone/local-time proof is merged as of PR #578, the appointment conflict predicate proof is merged as of PR #580, the guarded core-promotion apply-plan prototype is merged as of PR #582, and the scratch-only guarded core-promotion CLI/prototype transcript is complete as of PR #584.
-- The live SELECT-only appointment inventory, isolated scratch appointment import/idempotency/linkage transcript, no-core-write appointment promotion dry-run/report, pure promotion plan helper/proof, timezone/local-time proof, conflict predicate proof, guarded apply-plan prototype, and scratch-only guarded core-promotion apply transcript have completed with no R4 writes and no live/default core diary promotion. The PR #584 scratch transcript used current R4 source data with `101057` appointments, identified `94162` status-policy promote candidates, applied `94162` core appointments inside scratch only, and reran idempotently with `created=0`, `updated=0`, and `skipped=94162`. Refused rows totalled `6895`: deleted/excluded `3726`, manual-review `1417`, and null-patient read-only `1752`. The default `dental_pms` refusal probe exited nonzero before session/open, PMS writes were scratch-only, and the scratch stack remains running for inspection. Next action after this docs/evidence refresh merges: clean up the PR #584 scratch stack, then move to the next readiness area without enabling live/default core diary promotion.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`, and `docs/r4/R4_FINANCE_SOURCE_DISCOVERY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment scratch-readiness evidence is complete through PR #585, R4 finance source discovery is recorded as of PR #586, and the SELECT-only finance inventory command/report is merged as of PR #587.
+- The appointment readiness track is paused before any live/default core diary promotion. The PR #584 scratch transcript used current R4 source data with `101057` appointments, identified `94162` status-policy promote candidates, applied `94162` core appointments inside scratch only, reran idempotently with `created=0`, `updated=0`, and `skipped=94162`, refused `6895` rows, and proved default `dental_pms` refusal before session/open. The scratch stack was cleaned up after PR #585; evidence artefacts remain preserved.
+- The R4 finance track has completed source discovery and live SELECT-only inventory with no R4 writes, no PMS DB writes, and no finance records created or changed. PR #587's inventory evidence path is `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/`; next slice is finance sign/cancellation/allocation policy.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -71,6 +72,30 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-03: PR #587 merged on `master` as backend-only, SELECT-only finance inventory command/report tooling.
+  - Exact slice implemented:
+    - added `backend/app/scripts/r4_finance_inventory.py`
+    - added `backend/tests/r4_import/test_r4_finance_inventory.py`
+  - Evidence path: `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/`
+  - Key artefact: `finance_inventory.json`; `select_only=true`.
+  - PatientStats: `row_count=17012`, `nonzero_balance_count=1018`, `total_balance=-131342.13`, `TreatmentBalance=-139692.13`, `SundriesBalance=8350.00`, `NHSBalance=2724.60`, `PrivateBalance=-142416.73`, `DPBBalance=0.00`, aged debt 30-60 `379.84`, 60-90 `579.00`, 90+ `9370.98`, null/blank patient codes `0`.
+  - `vwPayments`: `row_count=44906`, date range `2005-08-09T08:18:27` to `2026-05-01T10:59:49`, `total_amount=-4421051.59`, payments `38269`, refunds `110`, credits `6513`, cancellations `1032`, null/blank patient codes `0`.
+  - `Adjustments`: `row_count=47731`, date range `2005-08-05T14:32:31.063000` to `2026-05-01T10:59:49`, `total_amount=-4975508.73`, `CancellationOf=460`, null/blank patient codes `0`.
+  - `Transactions`: `row_count=516218`, date range `1929-02-03T00:00:00` to `2026-05-02T08:08:44`, `PatientCost=4844211.68`, `DPBCost=77933.64`, `PaymentAdjustmentID=0`, `TPNumber=62604`, `TPItem=62604`, null/blank patient codes `0`.
+  - `PaymentAllocations` and `vwAllocatedPayments`: each `row_count=3130`, `total_cost=11714.03`, refunds `795`, advanced payments `2335`, linked payments `3130`, charge refs `0`, null/blank patient codes `0`.
+  - Lookup/classification counts: `PaymentTypes=18`, `OtherPaymentTypes=1`, `PaymentCardTypes=32`, `AdjustmentTypes=6`, `vwDenplan=4182`, `DenplanPatients=3`, `NHSPatientDetails=16468`.
+  - Risks surfaced: sign conventions, cancellation/reversal handling, allocation semantics, no explicit invoice/statement source, NHS/private/Denplan classification policy, refund mismatch between `vwPayments` and `PaymentAllocations`, and opening balance reconciliation.
+  - Safety: live R4 access was SELECT-only; no R4 writes occurred; no PMS DB writes occurred; no finance import/staging models were added; no invoices, payments, balances, or finance records were created or changed.
+  - Next finance slice: finance sign/cancellation/allocation policy.
+- 2026-05-03: PR #586 merged on `master` as docs-only/inspection-only R4 finance source discovery.
+  - Exact slice implemented:
+    - added `docs/r4/R4_FINANCE_SOURCE_DISCOVERY.md`
+  - The report identified `dbo.PatientStats`, `dbo.vwPayments`, `dbo.Adjustments`, `dbo.Transactions`, `dbo.PaymentAllocations`, `dbo.vwAllocatedPayments`, lookup tables, and scheme/classification sources as finance-readiness inputs.
+  - No finance import, finance records, PMS DB writes, or R4 writes occurred.
+- 2026-05-03: PR #588 merged on `master` as a frontend-only patient-notes smoke fix unrelated to R4 finance work.
+  - Exact slice implemented:
+    - updated `frontend/app/(app)/patients/[id]/PatientDetailClient.tsx`
+  - The fix keeps the clinical-note panel mounted during refresh after initial clinical data load, so the `Note saved.` success notification remains visible while the clinical summary reloads.
 - 2026-05-03: PR #584 merged on `master` as scratch-only guarded core-promotion CLI/prototype, followed by scratch evidence capture.
   - Exact slice implemented:
     - added `backend/app/scripts/r4_appointment_core_promotion_apply.py`
@@ -85,7 +110,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Idempotency rerun: core `appointments` stayed `94162`; created `0`, updated `0`, skipped `94162`.
   - Refused rows totalled `6895`: deleted/excluded `3726`, manual-review `1417`, null-patient read-only `1752`; no deleted, null-patient, manual-review, or conflict rows were promoted.
   - Safety: the default `dental_pms` refusal probe exited nonzero before session/open; R4 access was SELECT-only, no R4 writes occurred, PMS writes were scratch-only, and no live/default core diary promotion occurred.
-  - The scratch stack remains running for inspection; next action after this evidence refresh merges is scratch cleanup.
+  - The scratch stack was cleaned up after PR #585; evidence artefacts remain preserved.
 - 2026-05-03: PR #582 merged on `master` as backend-only, no-DB-write guarded core-promotion apply-plan prototype.
   - Exact slice implemented:
     - added `backend/app/services/r4_import/appointment_core_promotion_apply.py`
@@ -93,7 +118,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - The prototype composes the appointment status policy, timezone/local-time policy, promotion plan, and conflict predicate helpers before producing future scratch-apply appointment payloads.
   - Safety gates include scratch/test database URL refusal, explicit `SCRATCH_APPLY` confirmation, prior no-core-write dry-run report validation, zero unmapped promote candidates, optional zero unresolved clinicians, row-level refusal for null-patient/deleted/manual-review rows, fail-closed invalid/ambiguous/non-existent datetimes, conflict refusal, and idempotency skip by legacy ID.
   - Normal routes/importers/runtime remain unchanged; no CLI/runtime wiring, DB write, R4 access, or core diary promotion occurred.
-  - Superseded by PR #584's scratch-only CLI/runbook transcript; next action after the PR #584 evidence refresh merges is scratch cleanup.
+  - Superseded by PR #584's scratch-only CLI/runbook transcript; the PR #584 scratch stack was cleaned up after PR #585.
 - 2026-05-03: PR #580 merged on `master` as backend-only, pure-helper/test-only appointment conflict predicate proof.
   - Exact slice implemented:
     - added `backend/app/services/appointment_conflicts.py`

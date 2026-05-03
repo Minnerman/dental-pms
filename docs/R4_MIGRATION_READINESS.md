@@ -2,7 +2,7 @@
 
 Status date: 2026-05-03
 
-Baseline: `master@45d6de8cdd11cf0b9f4889cb0914ca0a89f732a6`
+Baseline: `master@adb15f34cbf65bb46b2e4528f5e996a921414168`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -20,18 +20,18 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 | R4 data area | R4 source identified? | Importer exists? | Parity/reconciliation exists? | Scale-out/full cohort proven? | Frontend/workflow support exists? | Remaining gap | Risk | Size |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Patients | Yes: `dbo.Patients` via `R4SqlServerSource.stream_patients`. | Yes: `r4_import --entity patients`. | Partial: mapping-quality reports, Postgres window verify, patient mapping/admin tooling. | Partial: 5,000-patient windows and many charting cohorts proven; full all-patient cutover dry-run not recorded. | Yes: core patient record, search, demographics, recalls, ledger, documents. | Full all-patient dry-run in isolated target DB, final mapping-quality report, duplicate/contact-data policy. | Medium | Medium |
-| Past appointments | Yes: `dbo.vwAppointmentDetails`; live SELECT-only inventory records 101,051 appointments from 2001-10-27 to 2027-02-01, with 100,994 before the 2026-04-29 cutover date. The PR #584 scratch transcript used newer R4 source data with `101057` appointments and the same `100994` past rows. | Yes: `r4_import --entity appointments` into `r4_appointments`. | Strong for raw R4 staging and promotion planning: linkage report/queue, manual mappings, unmapped appointments admin, live inventory evidence, PR #571 pure helper proof, the 2026-04-30 scratch transcript mapped `99299` rows with `1752` expected null-patient rows and `0` actionable unmapped rows, PR #574's no-core-write promotion dry-run/report classified the full `101051` rows, PR #576 added the pure promotion plan helper/proof, PR #578 added the timezone/local-time proof, PR #580 added the conflict predicate proof, PR #582 added the guarded no-DB-write apply-plan prototype, and PR #584 completed the scratch-only guarded apply transcript. | Strong for scratch-only evidence: raw staging import created `101051`, idempotency rerun created `0` and skipped `101051`; PR #574 found `94156` status-policy promote candidates and kept core `appointments` unchanged at `0` before/after; PR #584 used current R4 data, created `94162` core appointments inside scratch only, reran idempotently with `skipped=94162`, refused `6895`, and proved default `dental_pms` refusal before session/open. | Partial: read-only R4 calendar/admin linking plus core appointments UI. | Evidence refresh and scratch cleanup; live/default core diary promotion remains out of scope until a separate explicit cutover decision. | High | Medium-large |
-| Future appointments | Yes: same `dbo.vwAppointmentDetails`; live inventory records 57 rows on/after 2026-04-29, including `Cancelled`, `Pending`, and `Deleted` examples through 2027-02-01. The PR #584 scratch transcript saw `63` future rows from fresher R4 data. | Yes: same appointment importer. | Strong for scratch-only promotion planning and proof: live inventory evidence, PR #571 fail-closed status helper tests, full scratch raw import/linkage evidence, PR #574 promotion dry-run evidence, PR #576 promotion plan helper/proof, PR #578 timezone/local-time proof, PR #580 conflict predicate proof, PR #582 guarded apply-plan prototype, and PR #584 scratch-only guarded apply transcript are complete. | Strong for scratch-only reporting/planning/apply: PR #574 classified future booked/cancelled/deleted rows without core writes; PR #576 proves deterministic row-level planning without importer/apply wiring; PR #578 proves Europe/London local-wall-time handling; PR #580 proves overlap predicate semantics; PR #584 applied eligible rows only in scratch and reran idempotently. | Partial: core diary, booking, R4 calendar read-only. | Evidence refresh and scratch cleanup; no live/default active future diary promotion is authorised. | High | Medium-large |
+| Past appointments | Yes: `dbo.vwAppointmentDetails`; live SELECT-only inventory records 101,051 appointments from 2001-10-27 to 2027-02-01, with 100,994 before the 2026-04-29 cutover date. The PR #584 scratch transcript used newer R4 source data with `101057` appointments and the same `100994` past rows. | Yes: `r4_import --entity appointments` into `r4_appointments`. | Strong for raw R4 staging and promotion planning: linkage report/queue, manual mappings, unmapped appointments admin, live inventory evidence, PR #571 pure helper proof, the 2026-04-30 scratch transcript mapped `99299` rows with `1752` expected null-patient rows and `0` actionable unmapped rows, PR #574's no-core-write promotion dry-run/report classified the full `101051` rows, PR #576 added the pure promotion plan helper/proof, PR #578 added the timezone/local-time proof, PR #580 added the conflict predicate proof, PR #582 added the guarded no-DB-write apply-plan prototype, and PR #584 completed the scratch-only guarded apply transcript. | Strong for scratch-only evidence: raw staging import created `101051`, idempotency rerun created `0` and skipped `101051`; PR #574 found `94156` status-policy promote candidates and kept core `appointments` unchanged at `0` before/after; PR #584 used current R4 data, created `94162` core appointments inside scratch only, reran idempotently with `skipped=94162`, refused `6895`, and proved default `dental_pms` refusal before session/open. | Partial: read-only R4 calendar/admin linking plus core appointments UI. | Scratch evidence is recorded and cleanup is complete; live/default core diary promotion remains out of scope until a separate explicit cutover decision. | High | Medium-large |
+| Future appointments | Yes: same `dbo.vwAppointmentDetails`; live inventory records 57 rows on/after 2026-04-29, including `Cancelled`, `Pending`, and `Deleted` examples through 2027-02-01. The PR #584 scratch transcript saw `63` future rows from fresher R4 data. | Yes: same appointment importer. | Strong for scratch-only promotion planning and proof: live inventory evidence, PR #571 fail-closed status helper tests, full scratch raw import/linkage evidence, PR #574 promotion dry-run evidence, PR #576 promotion plan helper/proof, PR #578 timezone/local-time proof, PR #580 conflict predicate proof, PR #582 guarded apply-plan prototype, and PR #584 scratch-only guarded apply transcript are complete. | Strong for scratch-only reporting/planning/apply: PR #574 classified future booked/cancelled/deleted rows without core writes; PR #576 proves deterministic row-level planning without importer/apply wiring; PR #578 proves Europe/London local-wall-time handling; PR #580 proves overlap predicate semantics; PR #584 applied eligible rows only in scratch and reran idempotently. | Partial: core diary, booking, R4 calendar read-only. | Scratch evidence is recorded and cleanup is complete; no live/default active future diary promotion is authorised. | High | Medium-large |
 | Clinical notes | Yes: `PatientNotes`, `TreatmentNotes`, `TemporaryNotes`, `OldPatientNotes`, `vwAppointmentDetails.notes`, `CompletedQuestionnaire.Notes`. | Yes for active canonical domains including patient, treatment, temporary, appointment, completed questionnaire, and old patient notes. | Yes for import/parity packs and deterministic cohort selectors for active note/finding domains, including PR #551 support for `appointment_notes`, `temporary_notes`, and `completed_treatment_findings`. | Strong for the active charting path: PR #560 completed the live deterministic scale-out proof covering completed questionnaire notes and old patient notes with `perio_plaque`; PR #562 completed `appointment_notes` accepted-cohort closure; PR #566 included the active note domains in the successful all-domain scratch dry-run/apply/idempotency/parity transcript. | Partial: charting notes/history surfaces exist, but not every note style has direct UI affordance. | No active canonical transcript gap; remaining note risk belongs to broader cutover policy/UI affordance review. | Medium | Medium |
 | Odontogram/charting | Yes: treatment plans/items, treatments, BPE/BPEFurcation, PerioProbe, PerioPlaque, restorative treatments, completed treatment findings, chart healing actions, tooth systems/surfaces, notes. | Yes: `charting_canonical`, legacy charting tables, and raw support for charting foundations. | Yes: domain parity packs, consolidated parity runner, spotcheck/export tests, golden-corpus docs. | Strong: full cohort proven for treatment plans/items, BPE, furcations, perioprobe, restorative treatments, completed treatment findings, temporary notes; PR #560 completed the live deterministic scale-out proof for `perio_plaque`, `completed_questionnaire_notes`, and `old_patient_notes`; PR #562 completed `appointment_notes` accepted-cohort closure; PR #566 completed the current-master all-domain scratch dry-run/apply/idempotency/parity transcript. | Yes: charting API, odontogram, perio/BPE, treatment-plan overlays, charting viewer/export proofs. | Combined charting canonical transcript is complete; charting engine rule maturity/golden corpus remains high importance before broad historic cutover. | Medium-high | Medium |
 | Treatment plans | Yes: `TreatmentPlans`, `TreatmentPlanItems`, `TreatmentPlanReviews`, `Treatments/Codes`. | Yes: raw `treatment_plans`, `treatments`; canonical `treatment_plans` and `treatment_plan_items`. | Yes for plans/items; reviews are imported in raw plan model but not a first-class canonical parity domain. | Partial/strong: Stage 105 raw full import, Stage 135/136 canonical cohorts exhausted; raw plan patient-id backfill/mapping still needs cutover proof. | Partial: admin R4 treatment-plan viewer and patient clinical treatment planning. | Decide whether `treatment_plan_reviews` needs canonical/parity lane; reconcile raw R4 plan tables against canonical display path. | Medium | Medium |
 | Treatment transactions/history | Yes: `dbo.Transactions`. | Yes: `r4_import --entity treatment_transactions`. | Partial: idempotency/statistics; patient transaction API/UI proofs. | Partial: 184,505 transactions proven for 5,000-patient window, not full all-patient cutover. | Yes: read-only patient transactions tab. | Full-range import/reconcile, fee/cost semantics review before using as financial truth. | Medium | Medium |
 | Users/clinicians | Yes: `dbo.Users`. | Yes: `r4_import --entity users`. | Basic idempotency and display-name usage in transaction/calendar views. | Partial: user import pilot recorded 77 users. | Partial: clinician names in R4 calendar/transactions; core PMS user/RBAC remains separate. | Cutover policy for R4 clinician identity vs PMS login accounts. | Low | Small |
 | Recalls | Not confirmed in repo audit. PMS recall workflow exists, but no R4 recall source mapping was found. | No R4 recall importer found. | No R4 recall parity/reconciliation found. | No. | Yes: recalls dashboard, communications, letters, KPI, patient recall tab. | SELECT-only R4 recall source discovery, mapping of due dates/status/contact history, import/reconciliation design. | High | Large |
-| Finance ledger | Not confirmed in R4 source audit. | No R4 finance importer found. | No R4 finance reconciliation found. | No. | Yes: PMS patient ledger, payments/adjustments, cash-up/outstanding/trends reports. | SELECT-only source discovery for finance ledger/account entries; decide whether `dbo.Transactions` costs are clinical history only or financial source. | High | Large |
-| Invoices | Not confirmed in R4 source audit. | No R4 invoice importer found. | No R4 invoice reconciliation found. | No. | Yes: PMS invoice, lines, issue/void, PDF. | Source discovery for invoice/statement tables, numbering, VAT/discount/write-off semantics, PDF history policy. | High | Large |
-| Payments | Not confirmed in R4 source audit. | No R4 payment importer found. | No R4 payment reconciliation found. | No. | Yes: invoice payments, receipts, patient quick payments. | Source discovery for payment rows, methods, allocations, refunds, cash-up linkage. | High | Large |
-| Balances | Not confirmed in R4 source audit. | No R4 balance importer found. | No R4 balance reconciliation found. | No. | Yes: PMS patient balance and outstanding reports from ledger. | Opening-balance policy and reconciliation against R4 aged debt/statement balance. | High | Medium |
+| Finance ledger | Yes: PR #586 identified `dbo.PatientStats`, `dbo.vwPayments`, `dbo.Adjustments`, `dbo.Transactions`, `dbo.PaymentAllocations`, `dbo.vwAllocatedPayments`, lookup tables, and scheme/classification sources; PR #587 added repeatable SELECT-only inventory evidence. | No R4 finance importer found. | No import reconciliation yet; PR #587 inventory records balance/payment/adjustment/transaction/allocation counts and key risks. | Inventory only: live SELECT-only report complete, no finance records written. | Yes: PMS patient ledger, payments/adjustments, cash-up/outstanding/trends reports. | Finance sign/cancellation/allocation policy; opening balance reconciliation; decide whether `dbo.Transactions` costs are clinical history only or financial source. | High | Large |
+| Invoices | No explicit R4 invoice/statement source confirmed; finance evidence suggests charges may need `dbo.Transactions`, `dbo.SundryCharges`, and adjustment/payment reconciliation rather than one-to-one invoice import. | No R4 invoice importer found. | No R4 invoice reconciliation found. | Inventory only. | Yes: PMS invoice, lines, issue/void, PDF. | Invoice/statement absence policy, numbering/history policy, VAT/discount/write-off semantics. | High | Large |
+| Payments | Yes: `dbo.vwPayments` and `dbo.Adjustments` are high-confidence payment/refund/credit/cancellation sources; `PaymentAllocations`/`vwAllocatedPayments` provide sparse allocation/refund/advanced-payment evidence. | No R4 payment importer found. | No payment reconciliation yet; PR #587 found `44906` `vwPayments`, `47731` `Adjustments`, and `3130` allocation rows in each allocation source. | Inventory only: no payment records written. | Yes: invoice payments, receipts, patient quick payments. | Sign conventions, cancellation/reversal policy, refund mismatch reconciliation, allocation semantics, payment method mapping. | High | Large |
+| Balances | Yes: `dbo.PatientStats` is the high-confidence balance/aged-debt snapshot source. | No R4 balance importer found. | No balance reconciliation yet; PR #587 found `17012` PatientStats rows, `1018` non-zero balances, total balance `-131342.13`, and aged debt 30-60 `379.84`, 60-90 `579.00`, 90+ `9370.98`. | Inventory only: no balance records written. | Yes: PMS patient balance and outstanding reports from ledger. | Opening-balance policy and reconciliation against transactions, payments, refunds, credits, allocations, and aged debt. | High | Medium |
 | Documents/attachments | Not confirmed in R4 source audit. | No R4 document/attachment importer found. | No R4 document/attachment reconciliation found. | No. | Yes: PMS attachments, generated documents, PDFs, templates. | SELECT-only discovery for document/attachment metadata and binary storage; storage-size and PHI handling plan. | Medium-high | Large |
 | Treatment/code catalog | Yes: `Treatments`, `Codes`, surface/material tables. | Yes: treatments importer and treatment-code sync helpers. | Partial: importer tests and code-label usage in charting. | Partial: treatments imported for treatment-plan work. | Yes: PMS treatments/fees admin and labels in charting. | Separate fee schedule vs clinical code semantics; sync policy for missing code labels. | Medium | Medium |
 
@@ -56,7 +56,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 
 ### Proof-Only Tasks Before More Code
 
-- SELECT-only finance source inventory: table names, row counts, date ranges, keys, payment methods, allocation model.
+- SELECT-only finance source discovery and inventory are complete as of PR #586 and PR #587. Next proof should define finance sign/cancellation/allocation policy before any importer or PMS finance writes.
 - SELECT-only recall source inventory: due-date/status/contact-history tables and patient linkage.
 - Isolated scratch appointment import/idempotency/linkage is complete as of the 2026-04-30 transcript: `r4_appointments` created `101051`, idempotency rerun created `0` and skipped `101051`, linkage mapped `99299` with `1752` expected null-patient rows and `0` actionable unmapped rows. Do not repeat it unless data freshness or code changes require it.
 - No-core-write appointment promotion dry-run/report is complete as of PR #574: the scratch report considered `101051` rows, found `94156` status-policy promote candidates, `94156` patient-linked candidates, `94156` clinician-resolved candidates, `3726` deleted excluded rows, `1417` manual-review rows, `1752` null-patient read-only rows, and kept core `appointments` unchanged at `0` before/after.
@@ -76,29 +76,21 @@ Start with an isolated target DB and non-financial domains:
 2. Treatment plans/items and treatment transactions.
 3. Charting canonical domains using the PR #566 all-domain scratch transcript as the current baseline.
 4. Guarded R4 appointment core-promotion scratch transcript, using PR #574's no-core-write report, PR #576's promotion plan helper, PR #578's timezone/local-time proof, PR #580's conflict predicate proof, PR #582's guarded apply-plan prototype, and PR #584's scratch-only CLI/runbook transcript. Live/default core diary writes remain out of scope.
-5. Only after the above is stable, start finance source discovery/import prototypes in isolation.
+5. Only after the above is stable, continue finance policy/reconciliation proofs in isolation.
 
 Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. Clean up the PR #584 guarded scratch core-promotion stack after the evidence refresh merges.
-   - Target: remove only scratch project `dentalpms_appt_core_apply_20260503_154718` and its scratch volumes while preserving `.run` artefacts.
-   - Why next: the scratch-only core `appointments` write/idempotency/default-DB-refusal transcript is complete and recorded; the stack remains running only for inspection.
-   - Likely files: none.
-   - Likely validation: Docker project/container/volume checks, preserved artefact path check, git status checks, no R4 access, no live/default PMS DB writes.
-   - Backend-only/proof-only likely: operational cleanup only.
-   - Risk: low.
-
-2. Finance/payment/balance source discovery.
-   - Target: SELECT-only inventory of R4 finance, invoice, payment, allocation, balance, and cash-up candidate tables.
-   - Why next: finance is the largest unknown and should not wait until late cutover; discovery is proof-only and does not force importer design yet.
-   - Likely files: new discovery script or docs under `docs/r4/`, no importer initially.
-   - Likely validation: command transcript, table/column/count report, no R4 writes.
-   - Backend-only/docs-only: yes for discovery.
+1. Finance sign/cancellation/allocation policy.
+   - Target: map the PR #587 inventory evidence into a fail-closed finance policy for balance/payment signs, cancellations/reversals, refunds/credits, allocation rows, and opening-balance treatment.
+   - Why next: source discovery and repeatable SELECT-only inventory are complete, but importer design remains unsafe until signs, reversals, allocation semantics, and opening-balance reconciliation are explicit.
+   - Likely files: docs/policy plus optional pure helper/tests only if inspection finds a safe no-DB-write proof.
+   - Likely validation: docs diff checks; if helper exists, focused unit tests; no R4 writes and no PMS DB writes.
+   - Backend-only/docs-only: likely docs-only/policy-only first.
    - Risk: high.
 
-3. Recall source discovery.
+2. Recall source discovery.
    - Target: SELECT-only inventory of R4 recall due-date/status/contact-history candidates and patient linkage.
    - Why next: recalls remain a high-risk unmapped domain in the readiness table, but discovery can be kept proof-only before importer design.
    - Likely files: new discovery script or docs under `docs/r4/`, no importer initially.
@@ -106,7 +98,7 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only/docs-only: yes for discovery.
    - Risk: high.
 
-4. Patients/users/treatment-code dry-run manifest.
+3. Patients/users/treatment-code dry-run manifest.
    - Target: define the first isolated non-financial full-dry-run manifest for patients, users, and treatment/code catalog before broad cutover rehearsal.
    - Why next: these are the recommended starting domains for dry-run import work and avoid the higher-risk finance and future-diary write paths.
    - Likely files: docs/runbook or proof manifest only unless inspection finds a missing importer guard.
@@ -114,13 +106,21 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Backend-only/docs-only: likely yes.
    - Risk: medium.
 
-5. Odontogram golden-corpus/rule-confidence review.
+4. Odontogram golden-corpus/rule-confidence review.
    - Target: review visible charting rule confidence now that canonical importer/parity evidence is stable.
    - Why next: PR #566 reduces canonical plumbing risk; clinical display interpretation remains a higher charting risk before broad historic cutover.
    - Likely files: docs/golden-corpus evidence or narrowly scoped frontend/backend charting tests if inspection finds a real rule gap.
    - Likely validation: existing charting parity/export tests plus any focused golden-corpus proof.
    - Backend/frontend: only if a visible rule gap is chosen deliberately.
    - Risk: medium-high.
+
+5. Finance opening-balance reconciliation proof.
+   - Target: after sign/cancellation/allocation policy, prove `PatientStats` balance/aged-debt reconciliation against payment, refund, credit, and allocation evidence without writing PMS finance records.
+   - Why next: `1018` non-zero balances and total balance `-131342.13` are known; opening balances must reconcile before any finance import design.
+   - Likely files: backend SELECT-only/report-only helper or docs evidence depending on policy outcome.
+   - Likely validation: focused report tests, `git diff --check`, optional SELECT-only run, no PMS DB writes.
+   - Backend-only/report-only likely: yes.
+   - Risk: high.
 
 ## Cutover Readiness Gaps
 
@@ -157,11 +157,12 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ### Finance / Payment / Balance Risks
 
-- R4 finance source tables are not yet mapped in repo evidence.
+- R4 finance sources are now mapped at discovery/inventory level, but not imported or reconciled.
 - Clinical `Transactions` costs may not equal accounting ledger truth.
-- Payments may be split, partially allocated, refunded, reversed, or written off.
-- Opening balances must reconcile to R4 patient statements and aged debt, not just imported invoices.
-- Cash-up totals must match payment method/date semantics used by the practice.
+- `vwPayments`, `Adjustments`, and allocation rows expose payments/refunds/credits/cancellations with sign and reversal semantics that are not yet policy-mapped.
+- Refund counts differ between `vwPayments` (`110`) and `PaymentAllocations`/`vwAllocatedPayments` (`795`) and must be reconciled before ledger writes.
+- Opening balances must reconcile to `PatientStats` balances and aged debt, not just imported invoices.
+- Cash-up/payment-method totals must match date/method semantics used by the practice.
 
 ### Appointment Migration Risks
 
@@ -191,7 +192,8 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ### Track 2: Finance / Payment / Balance
 
-- Start with SELECT-only source discovery and a written source map.
+- Source discovery and repeatable SELECT-only inventory are complete as of PR #586 and PR #587.
+- Next, write the finance sign/cancellation/allocation policy before any importer, staging model, or PMS finance write path.
 - Keep invoices, payments, balances, and cash-up reconciliation in separate PRs.
 - Do not import finance into live PMS tables until reconciliation rules are documented and tested.
 

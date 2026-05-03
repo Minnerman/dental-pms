@@ -2,7 +2,7 @@
 
 Status date: 2026-05-03
 
-Baseline: `master@70ae1cc7d214b70d785a2beae9cdea8045f5a4ba`
+Baseline: `master@adb15f34cbf65bb46b2e4528f5e996a921414168`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -26,6 +26,63 @@ Query types used:
 - Aggregate-only `COUNT`, `MIN`, `MAX`, `SUM`, and grouped distribution queries
   over likely candidates. No broad row samples or patient-level finance records
   were extracted into the repo.
+
+## SELECT-Only Inventory Evidence
+
+PR #587 added the repeatable backend SELECT-only finance inventory command and
+captured the first live inventory transcript.
+
+Evidence path:
+`/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/`
+
+Key artefact: `finance_inventory.json`
+
+Safety result:
+
+- `select_only=true`
+- R4 access was SELECT-only.
+- No R4 writes occurred.
+- No PMS DB writes occurred.
+- No finance import, finance staging models, invoices, payments, balances, or
+  finance records were created or changed.
+
+Key inventory figures:
+
+- `dbo.PatientStats`: `row_count=17012`, `nonzero_balance_count=1018`,
+  `total_balance=-131342.13`, `TreatmentBalance=-139692.13`,
+  `SundriesBalance=8350.00`, `NHSBalance=2724.60`,
+  `PrivateBalance=-142416.73`, `DPBBalance=0.00`, aged debt 30-60 `379.84`,
+  60-90 `579.00`, 90+ `9370.98`, null/blank patient codes `0`.
+- `dbo.vwPayments`: `row_count=44906`, date range
+  `2005-08-09T08:18:27` to `2026-05-01T10:59:49`,
+  `total_amount=-4421051.59`, payments `38269`, refunds `110`,
+  credits `6513`, cancellations `1032`, null/blank patient codes `0`.
+- `dbo.Adjustments`: `row_count=47731`, date range
+  `2005-08-05T14:32:31.063000` to `2026-05-01T10:59:49`,
+  `total_amount=-4975508.73`, `CancellationOf=460`, null/blank patient
+  codes `0`.
+- `dbo.Transactions`: `row_count=516218`, date range
+  `1929-02-03T00:00:00` to `2026-05-02T08:08:44`,
+  `PatientCost=4844211.68`, `DPBCost=77933.64`, `PaymentAdjustmentID=0`,
+  `TPNumber=62604`, `TPItem=62604`, null/blank patient codes `0`.
+- `dbo.PaymentAllocations` and `dbo.vwAllocatedPayments`: each
+  `row_count=3130`, `total_cost=11714.03`, refunds `795`, advanced
+  payments `2335`, linked payments `3130`, charge refs `0`, null/blank
+  patient codes `0`.
+- Lookup tables: `PaymentTypes=18`, `OtherPaymentTypes=1`,
+  `PaymentCardTypes=32`, `AdjustmentTypes=6`.
+- Scheme/classification: `vwDenplan=4182`, `DenplanPatients=3`,
+  `NHSPatientDetails=16468`.
+
+Inventory risks carried forward:
+
+- sign conventions
+- cancellation/reversal handling
+- allocation semantics
+- no explicit invoice/statement source
+- NHS/private/Denplan classification policy
+- refund mismatch between `vwPayments` and `PaymentAllocations`
+- opening balance reconciliation
 
 ## Existing PMS Finance Surface
 
@@ -169,34 +226,38 @@ Largest gaps before finance import design:
 
 ## Recommended Next Slice
 
-Add a backend SELECT-only finance inventory command plus focused tests. The
-command should not import or write finance records. It should query only the
-identified sources and emit a JSON report with:
+Define the finance sign/cancellation/allocation policy before any finance
+importer, finance staging model, or PMS finance write path.
 
-- `PatientStats` balance and aged-debt distributions.
-- `vwPayments` and `Adjustments` type/status/method/sign distributions.
-- `PaymentAllocations` refund/advanced-payment/allocation distributions.
-- `Transactions` treatment-cost totals and date ranges.
-- Lookup table snapshots for payment/adjustment/card type IDs.
-- Row counts for empty or low-use reconciliation sources.
-- No broad row dumps; only representative edge samples if needed and redacted.
+Suggested worktree: `/home/amir/dental-pms-finance-policy-proof`
 
-Suggested worktree: `/home/amir/dental-pms-finance-inventory-proof`
+Suggested first inputs:
 
-Suggested first files to inspect:
+- This document and the PR #587 inventory artefact.
+- `backend/app/scripts/r4_finance_inventory.py`
+- Existing PMS finance models/routes:
+  - `backend/app/models/invoice.py`
+  - `backend/app/models/ledger.py`
+  - `backend/app/routers/invoices.py`
+  - `backend/app/routers/patients.py`
+  - `backend/app/routers/reports.py`
 
-- `backend/app/services/r4_import/sqlserver_source.py`
-- `backend/app/scripts/r4_import.py`
-- `backend/tests/r4_import/test_sqlserver_source.py`
-- `backend/app/models/invoice.py`
-- `backend/app/models/ledger.py`
-- `backend/app/routers/invoices.py`
-- `backend/app/routers/patients.py`
-- `backend/app/routers/reports.py`
+Policy questions to settle:
+
+- balance sign convention for `PatientStats`
+- payment/refund/credit sign convention for `vwPayments` and `Adjustments`
+- cancellation/reversal handling using `IsCancelled`, `Status`, and
+  `CancellationOf`
+- allocation semantics for `PaymentAllocations` / `vwAllocatedPayments`
+- refund mismatch policy for `110` `vwPayments` refund rows versus `795`
+  allocation refund rows
+- opening balance reconciliation against `PatientStats` aged debt
+- NHS/private/Denplan classification boundaries
+- explicit rule that no finance importer or PMS finance write path starts until
+  the above policy is recorded and tested where possible
 
 Expected validation:
 
-- Unit tests for SQL shape/safety and report normalization.
-- `git diff --check`.
-- Optional live R4 run only with `R4_SQLSERVER_READONLY=true`, using SELECT-only
-  metadata/aggregate queries and no PMS DB writes.
+- Docs diff checks for a policy-only slice.
+- Optional pure helper/unit tests only if a no-DB-write proof is justified.
+- No R4 writes, no PMS DB writes, and no finance records created or changed.
