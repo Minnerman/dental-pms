@@ -3,12 +3,12 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@55e46a08450e95da8b4029d9aa3c3616dbfddbd2`.
-- Current repo `master` is `55e46a08450e95da8b4029d9aa3c3616dbfddbd2`; it includes merged R4 charting continuity through PR #567, PR #568's backend-only SELECT-only appointment cutover inventory tooling, PR #569's docs refresh after #568, PR #570's appointment status/null-patient/clinician mapping policy, PR #571's backend-only pure appointment status-mapping helper/proof, PR #572's docs refresh after #571, PR #573's scratch appointment import evidence refresh, PR #574's backend-only/report-only appointment promotion dry-run tooling, PR #575's docs/evidence refresh after PR #574, PR #576's backend-only pure appointment promotion plan helper/proof, PR #577's docs refresh after PR #576, and PR #578's backend-only pure appointment timezone/local-time proof.
+- The authoritative continuity baseline is `origin/master@9bd01233703468d8b0910d9effe3e7b1d84fae50`.
+- Current repo `master` is `9bd01233703468d8b0910d9effe3e7b1d84fae50`; it includes merged R4 charting continuity through PR #567, PR #568's backend-only SELECT-only appointment cutover inventory tooling, PR #569's docs refresh after #568, PR #570's appointment status/null-patient/clinician mapping policy, PR #571's backend-only pure appointment status-mapping helper/proof, PR #572's docs refresh after #571, PR #573's scratch appointment import evidence refresh, PR #574's backend-only/report-only appointment promotion dry-run tooling, PR #575's docs/evidence refresh after PR #574, PR #576's backend-only pure appointment promotion plan helper/proof, PR #577's docs refresh after PR #576, PR #578's backend-only pure appointment timezone/local-time proof, PR #579's docs refresh after PR #578, and PR #580's backend-only pure appointment conflict predicate proof.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment cutover inventory tooling is merged as of PR #568, appointment status policy is merged as of PR #570, the backend status helper/proof is merged as of PR #571, the isolated scratch appointment import/idempotency/linkage transcript is complete, the no-core-write appointment promotion dry-run/report is complete as of PR #574, the backend promotion plan helper/proof is merged as of PR #576, and the appointment timezone/local-time proof is merged as of PR #578.
-- The live SELECT-only appointment inventory, isolated scratch appointment import/idempotency/linkage transcript, no-core-write appointment promotion dry-run/report, pure promotion plan helper/proof, and timezone/local-time proof have completed with no R4 writes and no core diary promotion. The promotion dry-run considered `101051` R4 appointments, identified `94156` status-policy promote candidates, and left core `appointments` unchanged at `0` before/after. PR #578 proves naive R4 appointment datetimes as Europe/London clinic-local wall times, converts valid local times to UTC-aware datetimes for future core diary storage, and fails closed for invalid, missing, ambiguous, or non-existent local times. Next action: conflict predicate extraction before any real core diary promotion.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, and `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment cutover inventory tooling is merged as of PR #568, appointment status policy is merged as of PR #570, the backend status helper/proof is merged as of PR #571, the isolated scratch appointment import/idempotency/linkage transcript is complete, the no-core-write appointment promotion dry-run/report is complete as of PR #574, the backend promotion plan helper/proof is merged as of PR #576, the appointment timezone/local-time proof is merged as of PR #578, and the appointment conflict predicate proof is merged as of PR #580.
+- The live SELECT-only appointment inventory, isolated scratch appointment import/idempotency/linkage transcript, no-core-write appointment promotion dry-run/report, pure promotion plan helper/proof, timezone/local-time proof, and conflict predicate proof have completed with no R4 writes and no core diary promotion. The promotion dry-run considered `101051` R4 appointments, identified `94156` status-policy promote candidates, and left core `appointments` unchanged at `0` before/after. PR #578 proves naive R4 appointment datetimes as Europe/London clinic-local wall times, converts valid local times to UTC-aware datetimes for future core diary storage, and fails closed for invalid, missing, ambiguous, or non-existent local times. PR #580 proves the pure same-clinician conflict predicate while leaving route behaviour and promotion/import/apply wiring unchanged. Next action: guarded core-promotion apply design/prototype in scratch only before any real core diary promotion.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -71,20 +71,28 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-03: PR #580 merged on `master` as backend-only, pure-helper/test-only appointment conflict predicate proof.
+  - Exact slice implemented:
+    - added `backend/app/services/appointment_conflicts.py`
+    - added `backend/tests/appointments/test_appointment_conflict_predicate.py`
+  - The helper proves same-clinician overlap semantics for future guarded apply work: `booked`, `arrived`, `in_progress`, and `completed` block; `cancelled`, `no_show`, and soft-deleted existing appointments do not block; exact same and partial overlaps conflict; back-to-back intervals do not conflict; missing/different clinician does not conflict; patient identity is irrelevant; aware datetimes compare by instant; and missing/naive/invalid datetimes or missing/unknown existing statuses fail closed.
+  - Route behaviour remains unchanged: the create route still allows overlaps by existing behaviour, and update route behaviour was not refactored in this slice.
+  - No R4 promotion/apply/import wiring, core appointment apply/promotion, PMS DB write, or R4 access occurred.
+  - Next implementation slice is guarded core-promotion apply design/prototype in scratch only.
 - 2026-05-03: PR #578 merged on `master` as backend-only, pure-helper/test-only appointment timezone/local-time proof.
   - Exact slice implemented:
     - added `backend/app/services/r4_import/appointment_datetime_policy.py`
     - added `backend/tests/r4_import/test_appointment_datetime_policy.py`
   - The helper interprets naive R4 appointment datetimes as Europe/London clinic-local wall times, converts valid local times to UTC-aware datetimes for future PMS core diary storage, and fails closed for invalid, missing, ambiguous fall-back, or non-existent spring-forward local times.
   - Importer and promotion behaviour remain unchanged; no conflict predicate extraction, core appointment apply/promotion, PMS DB write, or R4 access occurred in the slice.
-  - Next implementation slice is conflict predicate extraction before any guarded core diary apply path.
+  - Superseded by PR #580's conflict predicate proof; next implementation slice is guarded core-promotion apply design/prototype in scratch only.
 - 2026-04-30: PR #576 merged on `master` as backend-only, pure-helper/test-only appointment promotion plan proof.
   - Exact slice implemented:
     - added `backend/app/services/r4_import/appointment_promotion_plan.py`
     - added `backend/tests/r4_import/test_appointment_promotion_plan.py`
   - The helper classifies R4 appointment staging rows into eligible promotion candidates, excluded rows, manual-review rows, null-patient read-only rows, unmapped-patient rows, and clinician-unresolved rows, with aggregate counts and reason samples.
   - Importer/apply behaviour remains unchanged; no timezone conversion, conflict predicate, core appointment apply/promotion, PMS DB write, or R4 access occurred in the slice.
-  - Superseded by PR #578's timezone/local-time proof; next implementation slice is conflict predicate extraction before any real core diary promotion.
+  - Superseded by PR #578's timezone/local-time proof and PR #580's conflict predicate proof; next implementation slice is guarded core-promotion apply design/prototype in scratch only.
 - 2026-04-30: PR #574 merged on `master` as backend-only/report-only no-core-write appointment promotion dry-run tooling, followed by scratch evidence capture.
   - Exact slice implemented:
     - added `backend/app/services/r4_import/appointment_promotion_dryrun.py`
@@ -96,7 +104,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Results: report considered `101051` R4 appointments; status-policy promote candidates `94156`; patient-linked promote candidates `94156`; clinician-resolved promote candidates `94156`.
   - Category counts: completed `83836`, cancelled `5247`, no_show `3833`, booked `1240` (`47` future, `1193` past), deleted excluded `3726`, manual-review `1417`, null-patient read-only `1752`.
   - Risk counts: null patient-code rows `1752`, patient_unmapped `0`, clinician_unresolved `0`, distinct clinician codes `20`, clinic code `1=101051`.
-  - The promotion dry-run scratch stack was cleaned up after evidence capture; superseded by PR #576's promotion plan helper/proof and PR #578's timezone/local-time proof, so the next readiness step is conflict predicate extraction before any guarded core-promotion apply path.
+  - The promotion dry-run scratch stack was cleaned up after evidence capture; superseded by PR #576's promotion plan helper/proof, PR #578's timezone/local-time proof, and PR #580's conflict predicate proof, so the next readiness step is guarded core-promotion apply design/prototype in scratch only.
 - 2026-04-30: Isolated scratch appointment import/idempotency/linkage transcript completed with no tracked repo changes.
   - Evidence path: `/home/amir/dental-pms-appointments-scratch-import/.run/appointment_import_idempotency_linkage_dentalpms_appts_scratch_20260430_033056/`
   - Scratch target: Compose project `dentalpms_appts_scratch_20260430_033056`, DB `dental_pms_appointments_scratch`, Postgres port `5552`, backend port `8212`; frontend port `3212` was reserved but not started.
@@ -104,7 +112,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - Results: appointment dry-run exited `0`; scratch patient import created `17010` patients and `17010` `r4_patient_mappings`; scratch appointment import created `101051`, updated `0`, skipped `0`, with `1752` null-patient rows.
   - Idempotency rerun: created `0`, updated `0`, skipped `101051`.
   - Linkage report: `appointments_total=101051`, `appointments_imported=101051`, `appointments_not_imported=0`, `mapped=99299`, `unmapped=1752`, `actionable_unmapped=0`.
-  - Superseded by PR #574's no-core-write appointment promotion dry-run/report, PR #576's promotion plan helper/proof, and PR #578's timezone/local-time proof; next readiness step is conflict predicate extraction before any real core diary promotion.
+  - Superseded by PR #574's no-core-write appointment promotion dry-run/report, PR #576's promotion plan helper/proof, PR #578's timezone/local-time proof, and PR #580's conflict predicate proof; next readiness step is guarded core-promotion apply design/prototype in scratch only.
 - 2026-04-30: PR #571 merged on `master` as backend-only, pure-helper/test-only appointment status-mapping proof.
   - Exact slice implemented:
     - added `backend/app/services/r4_import/appointment_status_policy.py`
@@ -112,7 +120,7 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   - The helper converts the PR #570 policy into deterministic promotion decisions/categories for R4 appointment `status`, `cancelled`, `apptflag`, null/blank patient-code, clinician, and clinic inputs.
   - Unknown, ambiguous, conflicting, null-patient, deleted, standby/waiting, and stale in-surgery cases fail closed or require manual review.
   - Importer behaviour remains unchanged; no appointment import, scratch import, core diary promotion, PMS DB write, or R4 access occurred in the slice.
-  - Superseded by the isolated scratch appointment import/idempotency/linkage transcript, PR #574's no-core-write appointment promotion dry-run/report, PR #576's promotion plan helper/proof, and PR #578's timezone/local-time proof recorded above; next readiness step is conflict predicate extraction before any real core diary promotion.
+  - Superseded by the isolated scratch appointment import/idempotency/linkage transcript, PR #574's no-core-write appointment promotion dry-run/report, PR #576's promotion plan helper/proof, PR #578's timezone/local-time proof, and PR #580's conflict predicate proof recorded above; next readiness step is guarded core-promotion apply design/prototype in scratch only.
 - 2026-04-29: Live SELECT-only appointment cutover inventory completed against R4 with no R4 writes, no PMS DB writes, and no tracked repo changes.
   - Evidence path: `/home/amir/dental-pms-appointments-inventory-run/.run/appointment_cutover_inventory_20260429_225200/`
   - Key results: total appointments `101051`, date range `2001-10-27T11:15:00` to `2027-02-01T09:00:00`, future count `57`, past count `100994`, null/blank patient-code count `1752`, clinician/provider codes `20`, clinic code `1=101051`.
