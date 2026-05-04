@@ -474,28 +474,54 @@ Decision evidence:
 
 ## Recommended Next Slice
 
-Make an opening-balance snapshot import design/proof before any finance import
-work.
+The opening-balance snapshot import design is now recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`.
+
+Design decision:
+
+- `PatientStats` is the only currently strong opening-balance snapshot source.
+- The future opening-balance effect should be a controlled cutover snapshot,
+  not historical invoice/payment reconstruction.
+- Only the combined `PatientStats.Balance` should affect a future opening
+  balance; component and aged-debt fields remain metadata and reconciliation
+  evidence.
+- Raw R4 signs must be preserved. Positive PatientStats balances are
+  proof-only debt increases; negative PatientStats balances are proof-only debt
+  decreases/credits; zero balances are no-op.
+- Future scratch apply, if separately approved, should require mapped nonzero
+  PatientCodes, a dry run, scratch/test DB refusal gates, an explicit
+  confirmation token, a run manifest, idempotency proof, before/after counts,
+  and a rollback strategy.
+- `finance_import_ready=false`; no finance import, staging models, invoices,
+  payments, balances, ledger rows, or finance records are authorised.
+
+Next smallest slice: pure opening-balance snapshot plan helper plus unit tests
+before any scratch write or import work.
 
 Suggested first inputs:
 
 - This document.
 - `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
 - `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
+- `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`
 - The PR #587 inventory artefact.
 - The live opening balance proof artefact recorded above.
 - The PR #596 cancellation/refund/allocation artefact recorded above.
 - `backend/app/services/r4_import/finance_classification_policy.py`
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 - The live cash-event proof artefact recorded above.
-- `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
 
-Expected decision scope:
+Expected next proof-helper scope:
 
-- decide whether a bounded opening-balance snapshot path can avoid historical
-  invoice reconstruction while preserving raw R4 balance evidence;
-- keep the live cash-event candidate population as proof evidence, not import
-  authorisation;
+- classify and plan only; do not write PMS finance rows;
+- preserve raw R4 balance evidence and proposed direction separately;
+- require patient mapping for all nonzero balance candidates before any later
+  scratch apply;
+- keep zero balances no-op unless later proof requires metadata;
+- fail closed on missing PatientCode, unmapped nonzero patients, component
+  mismatches, sign ambiguity, pence conversion ambiguity, or default/live DB
+  write attempts;
 - keep `PaymentAllocations` and `vwAllocatedPayments` reconciliation-only;
 - keep unmatched refunds and cancelled rows blocked/manual-review;
 - avoid invoice application because allocation charge refs are absent;
