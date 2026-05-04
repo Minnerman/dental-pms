@@ -272,21 +272,23 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. SELECT-only opening-balance reconciliation report.
-   - Target: reconcile `PatientStats.Balance` and aged-debt evidence against
+1. Live SELECT-only opening-balance reconciliation report.
+   - Target: run the PR #593 report tooling to reconcile `PatientStats.Balance` and aged-debt evidence against
      classified payment/refund/credit, transaction, and allocation summaries
      without writing PMS finance records.
-   - Why next: PR #591 completed the pure finance classification/sign helper
-     and unit tests without DB access, importer wiring, R4 access, PMS DB
-     writes, or finance record changes; `1018` non-zero balances and total
-     balance `-131342.13` remain unsafe until reconciled.
-   - Validation: query-shape tests, JSON report schema tests, live SELECT-only
-     artefact if R4 env is available, no PMS DB writes.
+   - Why next: PR #591 completed the pure finance classification/sign helper,
+     and PR #593 completed the SELECT-only opening balance reconciliation
+     command/report tooling without importer wiring, R4 writes, PMS DB writes,
+     or finance record changes; live opening balance proof evidence is still
+     pending, and `1018` non-zero balances with total balance `-131342.13`
+     remain unsafe until recorded.
+   - Validation: live SELECT-only artefact with `select_only=true`, no R4
+     writes, no PMS DB writes, and no finance records created or changed.
 
 2. Payment method/allocation mismatch proof.
    - Target: use the classifier reason codes to tighten payment method mapping,
-     cancellation pairing, refund mismatch, and allocation semantics after the
-     opening-balance proof identifies which source totals reconcile.
+     cancellation pairing, refund mismatch, and allocation semantics after live
+     opening-balance proof evidence identifies which source totals reconcile.
    - Why next later: refund counts differ between `vwPayments` and allocation
      sources, and allocation rows have no charge refs in current inventory
      evidence.

@@ -236,6 +236,17 @@ Importer behaviour remains unchanged; no finance import/staging model was added,
 no invoices/payments/balances or finance records were created or changed, no PMS
 DB writes occurred, and no R4 access or writes occurred in that slice.
 
+PR #593 added backend-only SELECT-only opening balance reconciliation
+command/report tooling in
+`backend/app/services/r4_import/opening_balance_reconciliation.py` and
+`backend/app/scripts/r4_opening_balance_reconciliation.py`, with focused tests in
+`backend/tests/r4_import/test_r4_opening_balance_reconciliation.py`. The tooling
+reports PatientStats component consistency, aged debt consistency, patient
+linkage, classification/sign summary, and cross-source aggregate indicators.
+Live SELECT-only opening balance proof evidence is still pending. No finance
+import/staging model was added, no finance records were created or changed, no
+PMS DB writes occurred, and no R4 access or writes occurred in that slice.
+
 That policy keeps finance fail-closed:
 
 - `PatientStats` is the current balance and aged-debt snapshot source, not a
@@ -269,23 +280,25 @@ manual-review rows, and excluded rows.
 
 ## Recommended Next Slice
 
-Add an opening-balance reconciliation proof before any finance importer, finance
-staging model, or PMS finance write path.
+Run and record the live SELECT-only opening-balance reconciliation proof before
+any finance importer, finance staging model, or PMS finance write path.
 
-Suggested worktree: `/home/amir/dental-pms-opening-balance-reconciliation-proof`
+Suggested worktree: `/home/amir/dental-pms-opening-balance-live-proof`
 
 Suggested first inputs:
 
 - This document.
 - `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
 - The PR #587 inventory artefact.
-- `backend/app/scripts/r4_finance_inventory.py`
+- `backend/app/scripts/r4_opening_balance_reconciliation.py`
+- `backend/app/services/r4_import/opening_balance_reconciliation.py`
 - `backend/app/services/r4_import/finance_classification_policy.py`
-- `backend/tests/r4_import/test_finance_classification_policy.py`
 
 Expected proof:
 
-- reconcile `PatientStats.Balance` and aged debt evidence against classified
+- run the PR #593 SELECT-only report tooling against R4 when complete R4 env is
+  available;
+- record `PatientStats.Balance` and aged debt evidence against classified
   payments, refunds, credits, transactions, and allocation summaries;
 - preserve raw R4 signs while reporting the proposed PMS debt/payment direction;
 - keep `Transactions` and allocations as reconciliation inputs, not invoice or
@@ -297,7 +310,6 @@ Expected proof:
 
 Expected validation:
 
-- Focused report/schema tests if a helper is added.
 - `git diff --check`.
-- Optional live SELECT-only run if R4 env is available.
+- Live SELECT-only report artefact with `select_only=true`.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.

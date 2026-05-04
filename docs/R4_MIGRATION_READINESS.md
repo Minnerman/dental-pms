@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@af5c078c0c03f4c2981c9d392c0d84b221adaa10`
+Baseline: `master@f57b225a50697f618ef88dc0af27f7b6ad3dfd28`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -28,10 +28,10 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 | Treatment transactions/history | Yes: `dbo.Transactions`. | Yes: `r4_import --entity treatment_transactions`. | Partial: idempotency/statistics; patient transaction API/UI proofs. | Partial: 184,505 transactions proven for 5,000-patient window, not full all-patient cutover. | Yes: read-only patient transactions tab. | Full-range import/reconcile, fee/cost semantics review before using as financial truth. | Medium | Medium |
 | Users/clinicians | Yes: `dbo.Users`. | Yes: `r4_import --entity users`. | Basic idempotency and display-name usage in transaction/calendar views. | Partial: user import pilot recorded 77 users. | Partial: clinician names in R4 calendar/transactions; core PMS user/RBAC remains separate. | Cutover policy for R4 clinician identity vs PMS login accounts. | Low | Small |
 | Recalls | Not confirmed in repo audit. PMS recall workflow exists, but no R4 recall source mapping was found. | No R4 recall importer found. | No R4 recall parity/reconciliation found. | No. | Yes: recalls dashboard, communications, letters, KPI, patient recall tab. | SELECT-only R4 recall source discovery, mapping of due dates/status/contact history, import/reconciliation design. | High | Large |
-| Finance ledger | Yes: PR #586 identified `dbo.PatientStats`, `dbo.vwPayments`, `dbo.Adjustments`, `dbo.Transactions`, `dbo.PaymentAllocations`, `dbo.vwAllocatedPayments`, lookup tables, and scheme/classification sources; PR #587 added repeatable SELECT-only inventory evidence. | No R4 finance importer found. | No import reconciliation yet; PR #587 inventory records balance/payment/adjustment/transaction/allocation counts and key risks, `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md` records the fail-closed source/sign/cancellation/allocation policy, and PR #591 added the backend-only pure classification/sign helper proof. | Inventory, policy, and helper proof only: live SELECT-only report complete, no finance records written. | Yes: PMS patient ledger, payments/adjustments, cash-up/outstanding/trends reports. | Opening balance reconciliation; decide whether `dbo.Transactions` costs are clinical history only or financial source. | High | Large |
+| Finance ledger | Yes: PR #586 identified `dbo.PatientStats`, `dbo.vwPayments`, `dbo.Adjustments`, `dbo.Transactions`, `dbo.PaymentAllocations`, `dbo.vwAllocatedPayments`, lookup tables, and scheme/classification sources; PR #587 added repeatable SELECT-only inventory evidence. | No R4 finance importer found. | No import reconciliation yet; PR #587 inventory records balance/payment/adjustment/transaction/allocation counts and key risks, `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md` records the fail-closed source/sign/cancellation/allocation policy, PR #591 added the backend-only pure classification/sign helper proof, and PR #593 added backend-only SELECT-only opening balance reconciliation command/report tooling. | Inventory, policy, helper proof, and opening balance report tooling only: live finance inventory is complete; live opening balance proof evidence is pending; no finance records written. | Yes: PMS patient ledger, payments/adjustments, cash-up/outstanding/trends reports. | Run/record the live SELECT-only opening balance proof when complete R4 env is available; then decide whether `dbo.Transactions` costs are clinical history only or financial source. | High | Large |
 | Invoices | No explicit R4 invoice/statement source confirmed; finance evidence suggests charges may need `dbo.Transactions`, `dbo.SundryCharges`, and adjustment/payment reconciliation rather than one-to-one invoice import. | No R4 invoice importer found. | No R4 invoice reconciliation found. | Inventory only. | Yes: PMS invoice, lines, issue/void, PDF. | Invoice/statement absence policy, numbering/history policy, VAT/discount/write-off semantics. | High | Large |
 | Payments | Yes: `dbo.vwPayments` and `dbo.Adjustments` are high-confidence payment/refund/credit/cancellation sources; `PaymentAllocations`/`vwAllocatedPayments` provide sparse allocation/refund/advanced-payment evidence. | No R4 payment importer found. | No payment reconciliation yet; PR #587 found `44906` `vwPayments`, `47731` `Adjustments`, and `3130` allocation rows in each allocation source; PR #591 proves deterministic classification/sign handling without importer wiring. | Inventory, policy, and helper proof only: no payment records written. | Yes: invoice payments, receipts, patient quick payments. | Refund mismatch reconciliation, allocation semantics, payment method mapping. | High | Large |
-| Balances | Yes: `dbo.PatientStats` is the high-confidence balance/aged-debt snapshot source. | No R4 balance importer found. | No balance reconciliation yet; PR #587 found `17012` PatientStats rows, `1018` non-zero balances, total balance `-131342.13`, and aged debt 30-60 `379.84`, 60-90 `579.00`, 90+ `9370.98`. | Inventory only: no balance records written. | Yes: PMS patient balance and outstanding reports from ledger. | Opening-balance policy and reconciliation against transactions, payments, refunds, credits, allocations, and aged debt. | High | Medium |
+| Balances | Yes: `dbo.PatientStats` is the high-confidence balance/aged-debt snapshot source. | No R4 balance importer found. | No balance import reconciliation yet; PR #587 found `17012` PatientStats rows, `1018` non-zero balances, total balance `-131342.13`, and aged debt 30-60 `379.84`, 60-90 `579.00`, 90+ `9370.98`; PR #593 added the SELECT-only opening balance reconciliation command/report tooling for PatientStats component consistency, aged debt, patient linkage, classification/sign, and cross-source indicators. | Inventory and report tooling only: live opening balance proof evidence is still pending; no balance records written. | Yes: PMS patient balance and outstanding reports from ledger. | Run/record live SELECT-only opening balance proof evidence, then continue to cancellation pairing/refund-allocation mismatch proof. | High | Medium |
 | Documents/attachments | Not confirmed in R4 source audit. | No R4 document/attachment importer found. | No R4 document/attachment reconciliation found. | No. | Yes: PMS attachments, generated documents, PDFs, templates. | SELECT-only discovery for document/attachment metadata and binary storage; storage-size and PHI handling plan. | Medium-high | Large |
 | Treatment/code catalog | Yes: `Treatments`, `Codes`, surface/material tables. | Yes: treatments importer and treatment-code sync helpers. | Partial: importer tests and code-label usage in charting. | Partial: treatments imported for treatment-plan work. | Yes: PMS treatments/fees admin and labels in charting. | Separate fee schedule vs clinical code semantics; sync policy for missing code labels. | Medium | Medium |
 
@@ -56,7 +56,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 
 ### Proof-Only Tasks Before More Code
 
-- SELECT-only finance source discovery and inventory are complete as of PR #586 and PR #587. Finance sign/cancellation/allocation policy is recorded in `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`, and PR #591 completed the backend-only pure finance classification/sign helper proof without importer wiring, PMS DB writes, R4 access, or finance record changes. Next proof should be opening balance reconciliation before any importer or PMS finance writes.
+- SELECT-only finance source discovery and inventory are complete as of PR #586 and PR #587. Finance sign/cancellation/allocation policy is recorded in `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`, PR #591 completed the backend-only pure finance classification/sign helper proof, and PR #593 completed backend-only SELECT-only opening balance reconciliation command/report tooling without importer wiring, PMS DB writes, R4 writes, or finance record changes. Live opening balance proof evidence is still pending.
 - SELECT-only recall source inventory: due-date/status/contact-history tables and patient linkage.
 - Isolated scratch appointment import/idempotency/linkage is complete as of the 2026-04-30 transcript: `r4_appointments` created `101051`, idempotency rerun created `0` and skipped `101051`, linkage mapped `99299` with `1752` expected null-patient rows and `0` actionable unmapped rows. Do not repeat it unless data freshness or code changes require it.
 - No-core-write appointment promotion dry-run/report is complete as of PR #574: the scratch report considered `101051` rows, found `94156` status-policy promote candidates, `94156` patient-linked candidates, `94156` clinician-resolved candidates, `3726` deleted excluded rows, `1417` manual-review rows, `1752` null-patient read-only rows, and kept core `appointments` unchanged at `0` before/after.
@@ -82,12 +82,12 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. Finance opening-balance reconciliation proof.
-   - Target: prove `PatientStats` balance/aged-debt reconciliation against payment, refund, credit, transaction, and allocation evidence without writing PMS finance records.
-   - Why next: PR #591 made row-level finance classification/sign handling executable and fail-closed; `1018` non-zero balances and total balance `-131342.13` remain unsafe until reconciled.
-   - Likely files: backend SELECT-only/report-only helper or docs evidence depending on implementation inspection; no importer, staging model, or PMS DB session.
-   - Likely validation: focused report/schema tests, query-shape tests if a script is added, optional SELECT-only run if R4 env is available, no R4 writes and no PMS DB writes.
-   - Backend-only/report-only likely: yes.
+1. Live SELECT-only opening-balance reconciliation proof evidence.
+   - Target: run the PR #593 report tooling against R4 to prove `PatientStats` balance/aged-debt reconciliation indicators against payment, refund, credit, transaction, and allocation evidence without writing PMS finance records.
+   - Why next: PR #593 made opening balance reconciliation reporting repeatable; live evidence is still pending, and `1018` non-zero balances with total balance `-131342.13` remain unsafe until the report is recorded.
+   - Likely files: docs/evidence refresh after the live report run; no importer, staging model, or PMS DB session.
+   - Likely validation: live SELECT-only report artefact, `select_only=true`, no R4 writes, no PMS DB writes, no finance records created or changed.
+   - Backend-only/docs-only likely: yes.
    - Risk: high.
 
 2. Recall source discovery.
@@ -115,8 +115,8 @@ Do not start with finance or future diary writes into core live workflow tables.
    - Risk: medium-high.
 
 5. Finance payment method and allocation policy helper continuation.
-   - Target: after opening balance reconciliation, tighten payment method mapping and allocation/refund mismatch handling using the PR #591 classifier reason codes.
-   - Why next later: refund/allocation mismatch and charge-ref absence remain high-risk finance blockers, but opening-balance reconciliation should settle the first snapshot before method/allocation import design.
+   - Target: after live opening balance evidence is recorded, tighten payment method mapping, cancellation pairing, and allocation/refund mismatch handling using the PR #591 classifier reason codes.
+   - Why next later: refund/allocation mismatch and charge-ref absence remain high-risk finance blockers, but opening-balance evidence should settle the first snapshot before method/allocation import design.
    - Likely files: backend pure helper/report tests or docs policy update, depending on reconciliation results.
    - Likely validation: focused unit/report tests, no R4 writes, no PMS DB writes.
    - Backend-only/proof-only likely: yes.
@@ -194,7 +194,8 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 - Source discovery and repeatable SELECT-only inventory are complete as of PR #586 and PR #587.
 - Finance sign/cancellation/allocation policy is recorded in `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`.
-- Next, add a pure finance classification/sign helper before any importer, staging model, or PMS finance write path.
+- Finance classification/sign helper proof is complete as of PR #591, and opening balance reconciliation command/report tooling is complete as of PR #593.
+- Next, run/record the live SELECT-only opening balance proof when complete R4 env is available before any importer, staging model, or PMS finance write path.
 - Keep invoices, payments, balances, and cash-up reconciliation in separate PRs.
 - Do not import finance into live PMS tables until reconciliation rules are documented and tested.
 
