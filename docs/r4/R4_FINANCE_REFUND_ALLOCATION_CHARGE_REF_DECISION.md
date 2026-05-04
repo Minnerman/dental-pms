@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@3a64bc8fb93fde005189b966ab9d5124fc6c48b5`
+Baseline: `master@57cc7fe0cabf54c06cf2106adb9d82e6988507f3`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This decision is
 design evidence only. It does not authorise finance import, finance staging
@@ -19,6 +19,7 @@ This decision uses:
 - `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/finance_inventory.json`
 - `/home/amir/dental-pms-opening-balance-live-proof/.run/opening_balance_reconciliation_20260504_083558/opening_balance_reconciliation.json`
 - `/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/finance_cancellation_allocation_reconciliation.json`
+- `/home/amir/dental-pms-finance-cash-event-live-proof/.run/finance_cash_event_staging_20260504_191704/finance_cash_event_staging.json`
 - `backend/app/services/r4_import/finance_classification_policy.py`
 - `backend/app/scripts/r4_finance_inventory.py`
 - `backend/app/scripts/r4_finance_cancellation_allocation_reconciliation.py`
@@ -57,6 +58,23 @@ Advanced payment, credit, and allocation evidence:
 - linked allocations: `3130`
 - charge refs: `0`
 - missing charge refs: `3130`
+
+Live cash-event staging proof evidence:
+
+- `vwPayments` rows considered: `44906`
+- `Adjustments` rows considered: `47732`
+- eligible cash-event candidates: `42914`
+- manual-review rows: `47794`
+- excluded rows: `0`
+- cancellation/reversal rows: `1930`
+- payment candidates: `36859`
+- refund candidates: `104`
+- credit candidates: `5951`
+- missing patient/date/amount/zero amount counts: `0`
+- method-family counts: cash `25678`, cheque `10928`, card `6946`,
+  credit/overpayment `1344`, other/unknown `10`
+- classification rows: candidate `42914`, manual-review `49724`
+- import-readiness gate: `finance_import_ready=false`
 
 Opening balance evidence remains relevant but separate:
 
@@ -231,39 +249,33 @@ These rules supersede any weaker interpretation:
 
 ## Recommended Next Slice
 
-Selected target: run and record live SELECT-only cash-event staging proof from
-`vwPayments` and `Adjustments`, without import.
+Selected target: payment method mapping / import-readiness decision or
+charge-ref / invoice source discovery decision before any finance import.
 
 Why this is the smallest justified next step:
 
-- PR #599 has merged the backend-only SELECT-only cash-event proof/report
-  tooling, but live evidence remains pending.
-- The cancellation decision is strong enough to exclude or tag paired
-  `Adjustments.CancellationOf` rows in the live proof report.
+- The live cash-event proof has completed and reports
+  `finance_import_ready=false`.
+- The proof found a stable candidate population, but also `47794`
+  manual-review rows and unresolved refund/allocation and charge-ref blockers.
 - `vwPayments` is the clearest payment/refund/credit candidate source.
 - `PaymentAllocations` cannot apply payments to invoices because charge refs are
   absent.
-- The live proof can remain SELECT-only, proof-report-only, and avoid PMS DB
-  sessions.
+- Payment method mapping is still proof-only, while no explicit
+  invoice/statement/charge-ref source is proven.
 
 Likely files:
 
-- no implementation files for the live run;
-- evidence artefacts under a timestamped `.run/` directory;
-- a later docs/evidence refresh if the run succeeds.
+- docs/design-only decision first;
+- no implementation files unless inspection proves a narrow proof helper is
+  required;
+- if a proof is later needed, keep it backend-only, SELECT-only, and
+  proof-report-only.
 
 Likely validation:
 
-- confirm `R4_SQLSERVER_ENABLED=true`
-- confirm `R4_SQLSERVER_READONLY=true`
-- confirm R4 host/user/password are present
-- command exits `0`
-- JSON has `select_only=true`
+- `git diff --check`
 - no R4 writes, no PMS DB writes, no finance records created or changed
-- if live R4 env is available, a SELECT-only report run with JSON/stdout/stderr
-  artefacts under `.run/`
-- explicit confirmation of no R4 writes, no PMS DB writes, and no finance record
-  creation or mutation
 
-Backend-only/proof-only is expected. The next slice must not create finance
-staging models or import finance records.
+Docs/design-only is expected. The next slice must not create finance staging
+models or import finance records.

@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@3a64bc8fb93fde005189b966ab9d5124fc6c48b5`
+Baseline: `master@57cc7fe0cabf54c06cf2106adb9d82e6988507f3`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -379,9 +379,54 @@ credit handling, payment type mapping, classification/sign summary,
 import-readiness gates, risks, and bounded samples from `vwPayments` plus
 `Adjustments`.
 
-Live cash-event staging proof evidence is still pending. No finance import,
-finance staging model, PMS DB write, R4 access/write, or finance record creation
-occurred in PR #599.
+Live cash-event staging proof evidence completed on 2026-05-04.
+
+Evidence path:
+`/home/amir/dental-pms-finance-cash-event-live-proof/.run/finance_cash_event_staging_20260504_191704/`
+
+Key artefact: `finance_cash_event_staging.json`
+
+Safety result:
+
+- `select_only=true`
+- command exit `0`
+- `stderr.log` empty
+- R4 access was SELECT-only.
+- No R4 writes occurred.
+- No PMS DB writes occurred.
+- No finance import, finance staging models, invoices, payments, balances,
+  ledger rows, or finance records were created or changed.
+
+Key cash-event proof figures:
+
+- Candidate population: `vwPayments` rows `44906`, `Adjustments` rows
+  `47732`, eligible cash-event candidates `42914`, manual-review rows
+  `47794`, excluded rows `0`, cancellation/reversal rows `1930`, payment
+  candidates `36859`, refund candidates `104`, credit candidates `5951`, and
+  missing patient/date/amount/zero amount counts `0`.
+- Cancellation pairing: `Adjustments CancellationOf=460`, paired originals
+  `460`, missing originals `0`, patient mismatches `0`, date-order risk `0`,
+  paired net amount `0.00`.
+- Refund handling: `vwPayments` refunds `110`, refund total `18563.48`,
+  refund candidates `104`, allocation refunds `795`, matching allocation
+  refunds `62`, allocation refunds without `vwPayments` refund `733`, and
+  `vwPayments` refunds without allocation `48`.
+- Credit and method proof: `vwPayments` credits `6513`, credit total
+  `-1330109.00`, credit candidates `5951`, advanced payment allocations
+  `2335`; proof-only method-family counts were cash `25678`, cheque `10928`,
+  card `6946`, credit/overpayment `1344`, and other/unknown `10`.
+- Classification/sign proof: candidate rows `42914`, manual-review rows
+  `49724`, raw signs negative `88880` and positive `3758`, proof-only PMS
+  directions decrease debt `42810` and increase debt `104`.
+- Import-readiness gate: `finance_import_ready=false`.
+
+Risks carried forward from the live cash-event proof:
+
+- allocation refunds remain unresolved;
+- charge refs are absent;
+- payment method mapping is proof-only;
+- cancellation rows outside proven pairs remain manual-review/excluded;
+- no explicit invoice/statement/charge-ref source is proven.
 
 ## Helper Continuity
 
@@ -402,8 +447,8 @@ manual-review rows, and excluded rows.
 
 ## Recommended Next Slice
 
-Run and record the live SELECT-only cash-event staging proof from `vwPayments`
-and `Adjustments`, without import.
+Make a payment method mapping / import-readiness decision or a charge-ref /
+invoice source discovery decision before any finance import work.
 
 Suggested first inputs:
 
@@ -415,19 +460,16 @@ Suggested first inputs:
 - The PR #596 cancellation/refund/allocation artefact recorded above.
 - `backend/app/services/r4_import/finance_classification_policy.py`
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
-- `backend/app/scripts/r4_finance_cash_event_staging.py`
+- The live cash-event proof artefact recorded above.
 
-Expected proof scope:
+Expected decision scope:
 
-- execute the merged PR #599 proof/report command once complete R4 env is
-  available;
-- classify `vwPayments` and `Adjustments` rows into payment, refund, credit,
-  cancellation/reversal, excluded, and manual-review report categories;
-- exclude or tag paired `Adjustments.CancellationOf` rows without creating PMS
-  finance records;
+- decide whether payment method/import-readiness policy or explicit
+  charge-ref/invoice source discovery is the smallest next blocker;
+- keep the live cash-event candidate population as proof evidence, not import
+  authorisation;
 - keep `PaymentAllocations` and `vwAllocatedPayments` reconciliation-only;
-- report unmatched or cancelled `vwPayments` rows as blocked/manual-review;
-- preserve raw R4 signs and stable source refs;
+- keep unmatched refunds and cancelled rows blocked/manual-review;
 - avoid invoice application because allocation charge refs are absent;
 - avoid finance import, finance staging models, R4 writes, PMS DB writes, and
   finance record creation.
@@ -435,8 +477,5 @@ Expected proof scope:
 Expected validation:
 
 - `git diff --check`.
-- Focused pure-helper/report tests.
-- Existing finance classification helper tests and cancellation/allocation proof
-  tests if helper behaviour is reused.
-- Live SELECT-only JSON/stdout/stderr artefact with `select_only=true`.
+- Docs/design-only change by default.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.

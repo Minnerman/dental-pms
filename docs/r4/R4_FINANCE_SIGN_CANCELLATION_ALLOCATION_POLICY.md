@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@3a64bc8fb93fde005189b966ab9d5124fc6c48b5`
+Baseline: `master@57cc7fe0cabf54c06cf2106adb9d82e6988507f3`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This policy is
 design evidence only. It does not authorise finance import, finance staging
@@ -17,6 +17,7 @@ This policy uses:
 - `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/finance_inventory.json`
 - `/home/amir/dental-pms-opening-balance-live-proof/.run/opening_balance_reconciliation_20260504_083558/opening_balance_reconciliation.json`
 - `/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/finance_cancellation_allocation_reconciliation.json`
+- `/home/amir/dental-pms-finance-cash-event-live-proof/.run/finance_cash_event_staging_20260504_191704/finance_cash_event_staging.json`
 - `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
 - PR #599 cash-event staging proof tooling.
 - Current PMS finance code for invoices, payments, patient ledger, patient
@@ -52,6 +53,16 @@ Inventory evidence:
   `vwPayments` refund `733`, `vwPayments` refunds without allocation `48`,
   advanced payment allocations `2335`, `vwPayments` credits `6513`, linked
   allocations `3130`, charge refs `0`, and missing charge refs `3130`.
+- Cash-event staging proof: `vwPayments` rows `44906`, `Adjustments` rows
+  `47732`, eligible cash-event candidates `42914`, manual-review rows
+  `47794`, excluded rows `0`, cancellation/reversal rows `1930`, payment
+  candidates `36859`, refund candidates `104`, credit candidates `5951`,
+  missing patient/date/amount/zero amount counts `0`, and
+  `finance_import_ready=false`.
+- Cash-event method/sign proof: proof-only method families were cash `25678`,
+  cheque `10928`, card `6946`, credit/overpayment `1344`, and other/unknown
+  `10`; classification rows were candidate `42914` and manual-review `49724`,
+  with raw signs negative `88880` and positive `3758`.
 
 Current PMS finance convention:
 
@@ -155,10 +166,11 @@ PR #596 narrows this risk: all `460` `Adjustments.CancellationOf` rows resolved
 to original `Adjustments` rows, with `0` missing originals, `0` patient
 mismatches, and paired net amount `0.00`. This supports a future
 exclude/net/manual-review decision for paired `Adjustments` cancellations, but
-it does not authorise import. `vwPayments` still has `1032` cancelled rows with
-total `-90633.58`, so cancellation handling remains fail-closed until the next
-cash-event proof reports how `vwPayments` cancellation flags relate to base
-`Adjustments` rows and any later import-readiness policy.
+it does not authorise import. The live cash-event proof classified
+cancellation/reversal rows separately and kept `vwPayments` cancellation rows
+outside proven `Adjustments.CancellationOf` pairs excluded/manual-review, so
+cancellation handling remains fail-closed until a later import-readiness policy
+authorises a representation.
 
 ## Payment, Refund, Credit, and Adjustment Policy
 
@@ -185,10 +197,12 @@ than import-ready evidence.
 
 The refund-allocation/charge-ref semantics decision is now recorded in
 `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`: `vwPayments`
-plus `Adjustments` are the next cash-event proof sources, matched allocation
-refunds are reconciliation evidence only, unmatched allocation refunds are
+plus `Adjustments` are the cash-event proof sources, matched allocation refunds
+are reconciliation evidence only, unmatched allocation refunds are
 manual-review/reconciliation-only, and `vwPayments` refunds without allocation
-rows may be proof candidates but are not import-ready.
+rows may be proof candidates but are not import-ready. The live cash-event
+proof confirmed `104` refund candidates and kept allocation refunds
+reconciliation-only.
 
 Rows with blank flags or mutually inconsistent payment/refund/credit flags are
 manual-review. No classifier may infer payment/refund/credit type from sign
@@ -306,7 +320,8 @@ Before any finance import or PMS finance write path exists:
   an import-readiness decision even though `Adjustments.CancellationOf` pairing
   is now proven at aggregate level.
 - Cancellation and reversal pairing is proven for `Adjustments.CancellationOf`
-  rows, but `vwPayments` cancellation flag semantics still need policy mapping.
+  rows, but `vwPayments` cancellation flag semantics still need policy mapping;
+  the live cash-event proof keeps these rows excluded/manual-review.
 - Refund counts differ sharply between `vwPayments` and allocation sources, and
   PR #596 confirmed most allocation refund rows do not match `vwPayments`
   refunds.
@@ -317,21 +332,23 @@ Before any finance import or PMS finance write path exists:
   and payments.
 - Payment/card/merchant metadata may include sensitive fields and needs explicit
   retention policy before staging.
+- Payment method mapping / import-readiness policy may be the next blocker, but
+  absent charge refs and no explicit invoice/statement source may justify
+  source discovery first.
 
 ## Recommended Next Proof Slices
 
-1. Run and record live SELECT-only cash-event staging proof from `vwPayments`
-   and `Adjustments`.
-   - Target: execute the merged PR #599 proof/report command and capture
-     candidate, excluded, cancellation, refund, credit, payment-method,
-     classification/sign, import-readiness, risk, and sample evidence without
-     importing finance records.
-   - Why next: the cash-event staging tooling is merged, but live evidence is
-     still pending. Finance import-readiness remains blocked until the live
-     report confirms the candidate/exclusion shape.
-   - Validation: complete R4 env with `R4_SQLSERVER_READONLY=true`, command exit
-     `0`, JSON `select_only=true`, no PMS DB writes, no R4 writes, no finance
-     records created or changed.
+1. Payment method mapping / import-readiness decision or charge-ref / invoice
+   source discovery decision.
+   - Target: use the live cash-event proof to choose whether the next finance
+     blocker is payment method/import-readiness policy or explicit charge-ref /
+     invoice source discovery.
+   - Why next: the live proof confirms a candidate population exists, but
+     `finance_import_ready=false`; blockers include proof-only method mapping,
+     unresolved allocation refunds, absent charge refs, cancelled rows outside
+     proven pairs, and no explicit invoice/statement/charge-ref source.
+   - Validation: docs/design-only by default, `git diff --check`, no PMS DB
+     writes, no R4 writes, no finance records created or changed.
 
 2. Payment method mapping proof.
    - Target: once cash-event staging has a stable candidate/exclusion shape, map R4
