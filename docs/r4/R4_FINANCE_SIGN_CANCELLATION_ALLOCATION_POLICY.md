@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@57cc7fe0cabf54c06cf2106adb9d82e6988507f3`
+Baseline: `master@dd28ea7c91aec28c33a321b6ebbc95e6c6d665af`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This policy is
 design evidence only. It does not authorise finance import, finance staging
@@ -19,6 +19,7 @@ This policy uses:
 - `/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/finance_cancellation_allocation_reconciliation.json`
 - `/home/amir/dental-pms-finance-cash-event-live-proof/.run/finance_cash_event_staging_20260504_191704/finance_cash_event_staging.json`
 - `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
+- `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
 - PR #599 cash-event staging proof tooling.
 - Current PMS finance code for invoices, payments, patient ledger, patient
   balances, cash-up, outstanding, trends, and month-pack reporting.
@@ -327,26 +328,27 @@ Before any finance import or PMS finance write path exists:
   refunds.
 - Allocation rows have no charge refs in current inventory and PR #596 evidence.
 - No R4 invoice/statement source is confirmed.
+- `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md` confirms no
+  explicit patient invoice/statement source or usable allocation charge refs are
+  proven.
 - `Transactions` costs may not equal accounting ledger truth.
 - Opening balance import could double count if combined with historic charges
   and payments.
 - Payment/card/merchant metadata may include sensitive fields and needs explicit
   retention policy before staging.
-- Payment method mapping / import-readiness policy may be the next blocker, but
-  absent charge refs and no explicit invoice/statement source may justify
-  source discovery first.
+- Opening-balance snapshot design is now the smallest finance path that avoids
+  historical invoice reconstruction, but it must still prove double-counting
+  and cutover semantics before any import.
 
 ## Recommended Next Proof Slices
 
-1. Payment method mapping / import-readiness decision or charge-ref / invoice
-   source discovery decision.
-   - Target: use the live cash-event proof to choose whether the next finance
-     blocker is payment method/import-readiness policy or explicit charge-ref /
-     invoice source discovery.
-   - Why next: the live proof confirms a candidate population exists, but
-     `finance_import_ready=false`; blockers include proof-only method mapping,
-     unresolved allocation refunds, absent charge refs, cancelled rows outside
-     proven pairs, and no explicit invoice/statement/charge-ref source.
+1. Opening-balance snapshot import design/proof.
+   - Target: decide whether a bounded opening-balance snapshot path can avoid
+     historical invoice reconstruction while preserving raw R4 balance evidence.
+   - Why next: the live invoice/charge-ref source decision confirms no explicit
+     patient invoice/statement source and no usable allocation charge refs,
+     while PatientStats component checks have already passed with `0`
+     mismatches.
    - Validation: docs/design-only by default, `git diff --check`, no PMS DB
      writes, no R4 writes, no finance records created or changed.
 

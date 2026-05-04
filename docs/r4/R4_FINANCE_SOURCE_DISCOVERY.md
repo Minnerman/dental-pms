@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@57cc7fe0cabf54c06cf2106adb9d82e6988507f3`
+Baseline: `master@dd28ea7c91aec28c33a321b6ebbc95e6c6d665af`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -445,10 +445,37 @@ payment/refund/credit candidates, cancellation/reversal rows, allocation
 reconciliation rows, transaction reconciliation rows, reference-only rows,
 manual-review rows, and excluded rows.
 
+## Invoice and Charge-Ref Source Decision
+
+The finance invoice/charge-ref source decision is recorded in
+`docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`.
+
+Decision evidence:
+
+- A live SELECT-only metadata/source-discovery check used only
+  `INFORMATION_SCHEMA` table/view and column searches plus targeted aggregate
+  counts for suspected finance sources.
+- No explicit row-bearing R4 patient invoice or statement source was found.
+- `Clinics.SMSInvoiceNumber` remains the only invoice-like field found, and it
+  is not patient invoice truth.
+- `PaymentAllocations` and `vwAllocatedPayments` remain reconciliation-only:
+  current live aggregate evidence found `3130` rows in each source, linked
+  `PaymentID=3130`, `ChargeTransactionRefID=0`, and
+  `ChargeAdjustmentRefID=0`.
+- `Transactions` remains treatment/clinical charge evidence and reconciliation
+  input, not invoice truth. Current aggregate evidence still has
+  `PaymentAdjustmentID` non-zero `0`.
+- Historical invoice import and payment application to PMS invoices remain
+  blocked.
+- `finance_import_ready=false`; no finance import, staging models, invoices,
+  payments, balances, ledger rows, or finance records were created or changed.
+- R4 access for the decision was SELECT-only; no R4 writes or PMS DB writes
+  occurred.
+
 ## Recommended Next Slice
 
-Make a payment method mapping / import-readiness decision or a charge-ref /
-invoice source discovery decision before any finance import work.
+Make an opening-balance snapshot import design/proof before any finance import
+work.
 
 Suggested first inputs:
 
@@ -461,16 +488,19 @@ Suggested first inputs:
 - `backend/app/services/r4_import/finance_classification_policy.py`
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 - The live cash-event proof artefact recorded above.
+- `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
 
 Expected decision scope:
 
-- decide whether payment method/import-readiness policy or explicit
-  charge-ref/invoice source discovery is the smallest next blocker;
+- decide whether a bounded opening-balance snapshot path can avoid historical
+  invoice reconstruction while preserving raw R4 balance evidence;
 - keep the live cash-event candidate population as proof evidence, not import
   authorisation;
 - keep `PaymentAllocations` and `vwAllocatedPayments` reconciliation-only;
 - keep unmatched refunds and cancelled rows blocked/manual-review;
 - avoid invoice application because allocation charge refs are absent;
+- avoid historical invoice import because no explicit patient invoice/statement
+  source is proven;
 - avoid finance import, finance staging models, R4 writes, PMS DB writes, and
   finance record creation.
 

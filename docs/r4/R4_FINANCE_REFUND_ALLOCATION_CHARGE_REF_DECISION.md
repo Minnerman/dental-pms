@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@57cc7fe0cabf54c06cf2106adb9d82e6988507f3`
+Baseline: `master@dd28ea7c91aec28c33a321b6ebbc95e6c6d665af`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This decision is
 design evidence only. It does not authorise finance import, finance staging
@@ -242,6 +242,10 @@ These rules supersede any weaker interpretation:
   cash-refund events or require another reference source.
 - Whether an explicit R4 invoice, statement, or charge-ref source exists outside
   the currently proven sources.
+- The invoice/charge-ref source decision in
+  `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md` confirms no
+  explicit patient invoice/statement source or usable allocation charge refs are
+  proven in the current evidence.
 - Whether cash-event staging plus opening balance snapshot would double count
   without a cutover date and balance reconciliation rule.
 - Whether payment method and credit type lookups can be collapsed into current
@@ -249,20 +253,21 @@ These rules supersede any weaker interpretation:
 
 ## Recommended Next Slice
 
-Selected target: payment method mapping / import-readiness decision or
-charge-ref / invoice source discovery decision before any finance import.
+Selected target: opening-balance snapshot import design/proof before any finance
+import.
 
 Why this is the smallest justified next step:
 
 - The live cash-event proof has completed and reports
   `finance_import_ready=false`.
-- The proof found a stable candidate population, but also `47794`
-  manual-review rows and unresolved refund/allocation and charge-ref blockers.
+- The invoice/charge-ref source decision confirms no explicit patient
+  invoice/statement source and no usable allocation charge refs.
 - `vwPayments` is the clearest payment/refund/credit candidate source.
 - `PaymentAllocations` cannot apply payments to invoices because charge refs are
   absent.
-- Payment method mapping is still proof-only, while no explicit
-  invoice/statement/charge-ref source is proven.
+- Opening-balance snapshot design is the smallest path that does not require
+  historical invoice reconstruction, but it must still prove double-counting and
+  cutover policy before import.
 
 Likely files:
 
