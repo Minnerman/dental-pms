@@ -229,6 +229,13 @@ Largest gaps before finance import design:
 The finance sign/cancellation/allocation policy is recorded in
 `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`.
 
+PR #591 added the backend-only pure finance classification/sign helper proof in
+`backend/app/services/r4_import/finance_classification_policy.py` with focused
+tests in `backend/tests/r4_import/test_finance_classification_policy.py`.
+Importer behaviour remains unchanged; no finance import/staging model was added,
+no invoices/payments/balances or finance records were created or changed, no PMS
+DB writes occurred, and no R4 access or writes occurred in that slice.
+
 That policy keeps finance fail-closed:
 
 - `PatientStats` is the current balance and aged-debt snapshot source, not a
@@ -243,12 +250,29 @@ That policy keeps finance fail-closed:
   codes, refund/allocation mismatches, and invoice-source gaps remain
   manual-review or excluded until a proof settles them.
 
+## Helper Continuity
+
+The helper now covers the source groups identified here:
+
+- `PatientStats`
+- `vwPayments`
+- `Adjustments`
+- `Transactions`
+- `PaymentAllocations` / `vwAllocatedPayments`
+- lookup tables
+- scheme/classification sources
+
+It implements fail-closed classifications for balance snapshot candidates,
+payment/refund/credit candidates, cancellation/reversal rows, allocation
+reconciliation rows, transaction reconciliation rows, reference-only rows,
+manual-review rows, and excluded rows.
+
 ## Recommended Next Slice
 
-Add a pure finance classification/sign helper before any finance importer,
-finance staging model, or PMS finance write path.
+Add an opening-balance reconciliation proof before any finance importer, finance
+staging model, or PMS finance write path.
 
-Suggested worktree: `/home/amir/dental-pms-finance-classification-proof`
+Suggested worktree: `/home/amir/dental-pms-opening-balance-reconciliation-proof`
 
 Suggested first inputs:
 
@@ -256,27 +280,24 @@ Suggested first inputs:
 - `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
 - The PR #587 inventory artefact.
 - `backend/app/scripts/r4_finance_inventory.py`
-- Existing PMS finance models/routes:
-  - `backend/app/models/invoice.py`
-  - `backend/app/models/ledger.py`
-  - `backend/app/routers/invoices.py`
-  - `backend/app/routers/patients.py`
-  - `backend/app/routers/reports.py`
+- `backend/app/services/r4_import/finance_classification_policy.py`
+- `backend/tests/r4_import/test_finance_classification_policy.py`
 
-Expected helper proof:
+Expected proof:
 
-- classify inventory-shaped rows into payment, refund, credit,
-  adjustment/write-off, cancellation/reversal, allocation, opening-balance, or
-  manual-review categories;
-- preserve raw R4 sign and amount;
-- produce deterministic reason codes;
-- fail closed for unknown flags/statuses/signs, missing patient code, cancelled
-  or reversed rows, allocation/refund mismatches, and invoice-source ambiguity;
-- avoid DB access, R4 access, finance staging models, and PMS finance writes.
+- reconcile `PatientStats.Balance` and aged debt evidence against classified
+  payments, refunds, credits, transactions, and allocation summaries;
+- preserve raw R4 signs while reporting the proposed PMS debt/payment direction;
+- keep `Transactions` and allocations as reconciliation inputs, not invoice or
+  ledger import truth;
+- fail closed for mismatch, unknown type/status/sign, missing patient code,
+  cancellations/reversals, and allocation/refund ambiguity;
+- avoid finance import, finance staging models, R4 writes, PMS DB writes, and
+  finance record creation.
 
 Expected validation:
 
-- Focused unit tests for known/unknown flag combinations, cancellation handling,
-  sign preservation, patient-code requirement, and reason codes.
+- Focused report/schema tests if a helper is added.
 - `git diff --check`.
+- Optional live SELECT-only run if R4 env is available.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.
