@@ -243,9 +243,55 @@ command/report tooling in
 `backend/tests/r4_import/test_r4_opening_balance_reconciliation.py`. The tooling
 reports PatientStats component consistency, aged debt consistency, patient
 linkage, classification/sign summary, and cross-source aggregate indicators.
-Live SELECT-only opening balance proof evidence is still pending. No finance
-import/staging model was added, no finance records were created or changed, no
-PMS DB writes occurred, and no R4 access or writes occurred in that slice.
+No finance import/staging model was added, no finance records were created or
+changed, no PMS DB writes occurred, and no R4 access or writes occurred in that
+slice.
+
+Live SELECT-only opening balance proof completed on 2026-05-04.
+
+Evidence path:
+`/home/amir/dental-pms-opening-balance-live-proof/.run/opening_balance_reconciliation_20260504_083558/`
+
+Key artefact: `opening_balance_reconciliation.json`
+
+Safety result:
+
+- `select_only=true`
+- R4 access was SELECT-only.
+- No R4 writes occurred.
+- No PMS DB writes occurred.
+- No finance records were created or changed.
+
+Key proof figures:
+
+- `PatientStats`: `row_count=17012`, `nonzero_balance_count=1018`,
+  null/blank PatientCode `0`, total Balance `-131342.13`,
+  TreatmentBalance `-139692.13`, SundriesBalance `8350.00`,
+  NHSBalance `2724.60`, PrivateBalance `-142416.73`, DPBBalance `0.00`.
+- Component checks: Balance matched TreatmentBalance + SundriesBalance with
+  `0` mismatches; TreatmentBalance matched NHS + Private + DPB with `0`
+  mismatches.
+- Aged debt: total `10329.82`, rows with aged debt `126`, aged debt with zero
+  balance `0`, balance without aged debt `892`; aged debt did not reconcile
+  directly to total balance or positive debt total.
+- Patient linkage: PatientCode present `17012`, blank/null `0`, distinct
+  PatientCodes `17012`; no PMS patient mapping query/write was performed.
+- Classification/sign proof: balance snapshot candidates `1018`, excluded
+  zero/no-action rows `15994`, manual review `0`; raw signs positive `291`,
+  negative `727`, zero `15994`, unknown `0`; proof-only PMS directions
+  increase debt `291`, decrease debt `727`, no change `15994`.
+- Cross-source indicators remained aggregate-only: `vwPayments` rows `44906`,
+  total `-4421051.59`, refunds `110`, credits `6513`, cancellations `1032`;
+  `Adjustments` rows `47731`, total `-4975508.73`, `CancellationOf=460`;
+  `Transactions` rows `516218`, PatientCost `4844211.68`, DPBCost `77933.64`,
+  PaymentAdjustmentID `0`; `PaymentAllocations`/`vwAllocatedPayments` rows
+  `3130`, total_cost `11714.03`, refunds `795`, advanced payments `2335`,
+  charge refs `0`.
+
+The proof keeps the opening-balance path report-only. `PatientStats` is still a
+snapshot source, not row-level invoice/payment truth, and cross-source totals
+remain indicators only. The next finance proof must explain cancellation
+pairing and the refund/allocation mismatch before any finance import design.
 
 That policy keeps finance fail-closed:
 
@@ -280,31 +326,29 @@ manual-review rows, and excluded rows.
 
 ## Recommended Next Slice
 
-Run and record the live SELECT-only opening-balance reconciliation proof before
-any finance importer, finance staging model, or PMS finance write path.
+Prove cancellation pairing and the refund/allocation mismatch before any finance
+importer, finance staging model, or PMS finance write path.
 
-Suggested worktree: `/home/amir/dental-pms-opening-balance-live-proof`
+Suggested worktree: `/home/amir/dental-pms-finance-cancellation-allocation-proof`
 
 Suggested first inputs:
 
 - This document.
 - `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
 - The PR #587 inventory artefact.
-- `backend/app/scripts/r4_opening_balance_reconciliation.py`
-- `backend/app/services/r4_import/opening_balance_reconciliation.py`
+- The live opening balance proof artefact recorded above.
 - `backend/app/services/r4_import/finance_classification_policy.py`
 
 Expected proof:
 
-- run the PR #593 SELECT-only report tooling against R4 when complete R4 env is
-  available;
-- record `PatientStats.Balance` and aged debt evidence against classified
-  payments, refunds, credits, transactions, and allocation summaries;
-- preserve raw R4 signs while reporting the proposed PMS debt/payment direction;
-- keep `Transactions` and allocations as reconciliation inputs, not invoice or
-  ledger import truth;
-- fail closed for mismatch, unknown type/status/sign, missing patient code,
-  cancellations/reversals, and allocation/refund ambiguity;
+- identify cancellation/reversal pairs and unpaired cancellation rows in
+  `vwPayments`/`Adjustments`;
+- explain why `vwPayments` has `110` refund rows while
+  `PaymentAllocations`/`vwAllocatedPayments` have `795` refund rows;
+- keep allocations as reconciliation inputs, not invoice application truth;
+- preserve raw R4 signs and stable source refs;
+- fail closed for mismatch, unknown type/status/sign, missing patient code, and
+  allocation/refund ambiguity;
 - avoid finance import, finance staging models, R4 writes, PMS DB writes, and
   finance record creation.
 
