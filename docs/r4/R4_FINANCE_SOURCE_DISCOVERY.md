@@ -1,8 +1,8 @@
 # R4 Finance Source Discovery
 
-Status date: 2026-05-03
+Status date: 2026-05-04
 
-Baseline: `master@d59e83b4c940cae6692919848fdb83e420127be5`
+Baseline: `master@39b38c70950344a0027f6eae952b2356b0d9d949`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -290,8 +290,54 @@ Key proof figures:
 
 The proof keeps the opening-balance path report-only. `PatientStats` is still a
 snapshot source, not row-level invoice/payment truth, and cross-source totals
-remain indicators only. The next finance proof must explain cancellation
-pairing and the refund/allocation mismatch before any finance import design.
+remain indicators only.
+
+PR #596 added backend-only SELECT-only cancellation/refund/allocation
+reconciliation proof tooling in
+`backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
+and `backend/app/scripts/r4_finance_cancellation_allocation_reconciliation.py`,
+with focused tests in
+`backend/tests/r4_import/test_r4_finance_cancellation_allocation_reconciliation.py`.
+
+Live SELECT-only cancellation/refund/allocation proof completed on 2026-05-04.
+
+Evidence path:
+`/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/`
+
+Key artefact: `finance_cancellation_allocation_reconciliation.json`
+
+Safety result:
+
+- `select_only=true`
+- R4 access was SELECT-only.
+- No R4 writes occurred.
+- No PMS DB writes occurred.
+- No finance import/staging model was added.
+- No invoices, payments, balances, ledger rows, or finance records were created
+  or changed.
+
+Key proof figures:
+
+- Cancellation pairing: `vwPayments` cancelled rows `1032`, cancelled total
+  `-90633.58`; `Adjustments CancellationOf=460`, originals found `460`,
+  originals missing `0`, patient mismatches `0`, paired net amount `0.00`.
+- Cancellation impact: paired `Adjustments` cancellations net to zero within
+  tolerance, but cancellation rows still remain manual-review/excluded under
+  policy until import readiness is proven.
+- Refund/allocation mismatch: `vwPayments` refunds `110`, refund total
+  `18563.48`; `PaymentAllocations` refunds `795`, refund total `-53401.40`;
+  matching allocation refunds `62`, allocation refunds without `vwPayments`
+  refund `733`, and `vwPayments` refunds without allocation `48`.
+- Advanced payment / credit / allocation: advanced payment allocations `2335`,
+  `vwPayments` credits `6513`, linked allocations `3130`, charge refs `0`,
+  missing charge refs `3130`.
+- Classification/sign samples: allocation reconciliation `20`,
+  cancellation/reversal `5`, refund candidate `10`, credit candidate `5`,
+  manual review `5`.
+
+This evidence resolves the narrow `Adjustments.CancellationOf` pairing question,
+but keeps finance import readiness blocked because refund/allocation mismatch,
+missing charge refs, allocation semantics, and manual-review rows remain.
 
 That policy keeps finance fail-closed:
 
@@ -326,10 +372,8 @@ manual-review rows, and excluded rows.
 
 ## Recommended Next Slice
 
-Prove cancellation pairing and the refund/allocation mismatch before any finance
-importer, finance staging model, or PMS finance write path.
-
-Suggested worktree: `/home/amir/dental-pms-finance-cancellation-allocation-proof`
+Make a refund-allocation/charge-ref semantics decision before any finance
+import-readiness decision.
 
 Suggested first inputs:
 
@@ -337,23 +381,26 @@ Suggested first inputs:
 - `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
 - The PR #587 inventory artefact.
 - The live opening balance proof artefact recorded above.
+- The PR #596 cancellation/refund/allocation artefact recorded above.
 - `backend/app/services/r4_import/finance_classification_policy.py`
+- `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 
-Expected proof:
+Expected decision scope:
 
-- identify cancellation/reversal pairs and unpaired cancellation rows in
-  `vwPayments`/`Adjustments`;
-- explain why `vwPayments` has `110` refund rows while
-  `PaymentAllocations`/`vwAllocatedPayments` have `795` refund rows;
-- keep allocations as reconciliation inputs, not invoice application truth;
+- decide whether the `733` allocation refunds without `vwPayments` refunds are
+  a different reporting grain, advanced/credit movement, historical allocation
+  artefact, or unresolved manual-review blocker;
+- decide how to treat the `48` `vwPayments` refunds without allocation rows;
+- decide whether `0` charge refs / `3130` missing charge refs permanently block
+  invoice application and imply opening-balance-only migration for finance;
 - preserve raw R4 signs and stable source refs;
-- fail closed for mismatch, unknown type/status/sign, missing patient code, and
-  allocation/refund ambiguity;
+- keep allocations as reconciliation inputs, not invoice application truth,
+  unless a later proof finds reliable charge refs;
 - avoid finance import, finance staging models, R4 writes, PMS DB writes, and
   finance record creation.
 
 Expected validation:
 
 - `git diff --check`.
-- Live SELECT-only report artefact with `select_only=true`.
+- Docs/policy diff only, or focused pure-helper/report tests if code is added.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.
