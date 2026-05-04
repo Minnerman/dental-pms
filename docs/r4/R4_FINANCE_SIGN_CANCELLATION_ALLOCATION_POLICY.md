@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@39b38c70950344a0027f6eae952b2356b0d9d949`
+Baseline: `master@180cfd33f9551cdf6f5c0485b863f4d93d3a6951`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This policy is
 design evidence only. It does not authorise finance import, finance staging
@@ -17,6 +17,7 @@ This policy uses:
 - `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/finance_inventory.json`
 - `/home/amir/dental-pms-opening-balance-live-proof/.run/opening_balance_reconciliation_20260504_083558/opening_balance_reconciliation.json`
 - `/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/finance_cancellation_allocation_reconciliation.json`
+- `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
 - Current PMS finance code for invoices, payments, patient ledger, patient
   balances, cash-up, outstanding, trends, and month-pack reporting.
 
@@ -155,8 +156,8 @@ mismatches, and paired net amount `0.00`. This supports a future
 exclude/net/manual-review decision for paired `Adjustments` cancellations, but
 it does not authorise import. `vwPayments` still has `1032` cancelled rows with
 total `-90633.58`, so cancellation handling remains fail-closed until the next
-semantics decision maps how `vwPayments` cancellation flags relate to base
-`Adjustments` rows and import policy.
+cash-event proof reports how `vwPayments` cancellation flags relate to base
+`Adjustments` rows and any later import-readiness policy.
 
 ## Payment, Refund, Credit, and Adjustment Policy
 
@@ -178,9 +179,15 @@ credit/deposit movements, payment reversals, or a different reporting grain.
 PR #596 confirmed the mismatch remains material: only `62` allocation refund
 rows matched `vwPayments` refund rows by `PaymentID`/`RefId`, `733` allocation
 refunds had no matching `vwPayments` refund, and `48` `vwPayments` refunds had
-no allocation refund. The next decision must explain whether these unmatched
-rows are a reporting-grain difference, advanced/credit movement, historical
-allocation artefact, or unresolved manual-review blocker.
+no allocation refund. These unmatched rows remain unresolved blockers rather
+than import-ready evidence.
+
+The refund-allocation/charge-ref semantics decision is now recorded in
+`docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`: `vwPayments`
+plus `Adjustments` are the next cash-event proof sources, matched allocation
+refunds are reconciliation evidence only, unmatched allocation refunds are
+manual-review/reconciliation-only, and `vwPayments` refunds without allocation
+rows may be proof candidates but are not import-ready.
 
 Rows with blank flags or mutually inconsistent payment/refund/credit flags are
 manual-review. No classifier may infer payment/refund/credit type from sign
@@ -202,6 +209,11 @@ Current evidence is high risk:
 - PR #596 found linked allocations `3130`, charge refs `0`, and missing charge
   refs `3130`, confirming invoice application remains blocked by missing
   charge refs.
+- The refund-allocation/charge-ref decision keeps `PaymentAllocations` and
+  `vwAllocatedPayments` reconciliation-only. Allocation rows cannot create PMS
+  invoices, invoice payments, refunds, credits, or ledger entries unless a later
+  proof finds reliable charge/invoice refs and an import-readiness decision
+  authorises that path.
 
 Policy:
 
@@ -307,20 +319,20 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Refund-allocation/charge-ref semantics decision.
-   - Target: decide how PR #596's refund/allocation and charge-ref evidence
-     should affect finance import-readiness.
-   - Why next: `Adjustments.CancellationOf` pairing is strong, but refund
-     counts still differ between `vwPayments` (`110`) and allocation sources
-     (`795`), only `62` allocation refunds matched `vwPayments` refunds, `733`
-     allocation refunds had no matching `vwPayments` refund, `48` `vwPayments`
-     refunds had no allocation refund, and allocation rows have `0` charge refs
-     / `3130` missing charge refs.
-   - Validation: docs/policy diff or focused pure-helper/report tests if code
-     is added; no PMS DB writes.
+1. SELECT-only cash-event staging proof from `vwPayments` and `Adjustments`.
+   - Target: classify active payment, refund, and credit cash-event candidates,
+     paired/excluded cancellation rows, and manual-review rows without importing
+     finance records.
+   - Why next: the refund-allocation/charge-ref decision keeps allocations
+     reconciliation-only, blocks invoice application because charge refs are
+     absent, and identifies `vwPayments` plus `Adjustments` as the smallest
+     useful next proof source.
+   - Validation: focused pure-helper/report tests, existing finance
+     classification helper tests, optional live SELECT-only report artefact if
+     R4 env is available, no PMS DB writes, no R4 writes.
 
 2. Payment method mapping proof.
-   - Target: once refund/allocation/charge-ref semantics are known, map R4
+   - Target: once cash-event staging has a stable candidate/exclusion shape, map R4
      payment and card lookup values to PMS reporting/payment method categories.
    - Why next later: method mapping affects cash-up/reporting, but it should not
      outrun cancellation/reversal and allocation semantics.

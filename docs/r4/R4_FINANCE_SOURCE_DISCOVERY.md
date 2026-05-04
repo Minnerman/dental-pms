@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@39b38c70950344a0027f6eae952b2356b0d9d949`
+Baseline: `master@180cfd33f9551cdf6f5c0485b863f4d93d3a6951`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -353,6 +353,23 @@ That policy keeps finance fail-closed:
   codes, refund/allocation mismatches, and invoice-source gaps remain
   manual-review or excluded until a proof settles them.
 
+The refund-allocation/charge-ref semantics decision is recorded in
+`docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`.
+
+Decision summary:
+
+- `Adjustments.CancellationOf` pairing is reliable for the current `460` paired
+  rows; paired cancellations are reversal metadata or exclusion evidence, not
+  independent import rows.
+- `vwPayments` plus `Adjustments` are the safest future payment/refund/credit
+  cash-event proof sources.
+- `PaymentAllocations` / `vwAllocatedPayments` remain reconciliation-only.
+- Allocation rows cannot apply payments to PMS invoices because charge refs are
+  `0` and missing charge refs are `3130`.
+- `vwPayments` credits are future proof candidates; advanced-payment allocation
+  rows remain reconciliation-only until credit/deposit semantics are proven.
+- Finance import readiness remains blocked.
+
 ## Helper Continuity
 
 The helper now covers the source groups identified here:
@@ -372,35 +389,39 @@ manual-review rows, and excluded rows.
 
 ## Recommended Next Slice
 
-Make a refund-allocation/charge-ref semantics decision before any finance
-import-readiness decision.
+Run a SELECT-only cash-event staging proof from `vwPayments` and `Adjustments`,
+without import.
 
 Suggested first inputs:
 
 - This document.
 - `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
+- `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
 - The PR #587 inventory artefact.
 - The live opening balance proof artefact recorded above.
 - The PR #596 cancellation/refund/allocation artefact recorded above.
 - `backend/app/services/r4_import/finance_classification_policy.py`
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 
-Expected decision scope:
+Expected proof scope:
 
-- decide whether the `733` allocation refunds without `vwPayments` refunds are
-  a different reporting grain, advanced/credit movement, historical allocation
-  artefact, or unresolved manual-review blocker;
-- decide how to treat the `48` `vwPayments` refunds without allocation rows;
-- decide whether `0` charge refs / `3130` missing charge refs permanently block
-  invoice application and imply opening-balance-only migration for finance;
+- classify `vwPayments` and `Adjustments` rows into payment, refund, credit,
+  cancellation/reversal, excluded, and manual-review report categories;
+- exclude or tag paired `Adjustments.CancellationOf` rows without creating PMS
+  finance records;
+- keep `PaymentAllocations` and `vwAllocatedPayments` reconciliation-only;
+- report unmatched or cancelled `vwPayments` rows as blocked/manual-review;
 - preserve raw R4 signs and stable source refs;
-- keep allocations as reconciliation inputs, not invoice application truth,
-  unless a later proof finds reliable charge refs;
+- avoid invoice application because allocation charge refs are absent;
 - avoid finance import, finance staging models, R4 writes, PMS DB writes, and
   finance record creation.
 
 Expected validation:
 
 - `git diff --check`.
-- Docs/policy diff only, or focused pure-helper/report tests if code is added.
+- Focused pure-helper/report tests.
+- Existing finance classification helper tests and cancellation/allocation proof
+  tests if helper behaviour is reused.
+- Optional live SELECT-only JSON/stdout/stderr artefact if complete R4 env is
+  available.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.
