@@ -342,15 +342,18 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Opening-balance snapshot import design/proof.
-   - Target: decide whether a bounded opening-balance snapshot path can avoid
-     historical invoice reconstruction while preserving raw R4 balance evidence.
-   - Why next: the live invoice/charge-ref source decision confirms no explicit
-     patient invoice/statement source and no usable allocation charge refs,
-     while PatientStats component checks have already passed with `0`
-     mismatches.
-   - Validation: docs/design-only by default, `git diff --check`, no PMS DB
-     writes, no R4 writes, no finance records created or changed.
+1. Pure opening-balance snapshot plan helper plus unit tests.
+   - Target: convert the docs/design decision in
+     `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md` into a pure
+     planning helper that classifies PatientStats rows, preserves raw signs,
+     proposes proof-only directions, and emits fail-closed reasons without
+     writing finance records.
+   - Why next: the opening-balance snapshot design now records that
+     `PatientStats` is the only currently strong opening-balance snapshot
+     source, while invoice import and payment application remain blocked.
+   - Validation: focused unit tests, existing finance classification tests if
+     relevant, `git diff --check`, no PMS DB writes, no R4 writes, no finance
+     records created or changed.
 
 2. Payment method mapping proof.
    - Target: once cash-event staging has a stable candidate/exclusion shape, map R4

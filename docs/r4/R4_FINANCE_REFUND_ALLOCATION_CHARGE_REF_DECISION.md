@@ -253,11 +253,13 @@ These rules supersede any weaker interpretation:
 
 ## Recommended Next Slice
 
-Selected target: opening-balance snapshot import design/proof before any finance
-import.
+Selected target: pure opening-balance snapshot plan helper plus unit tests
+before any finance import.
 
 Why this is the smallest justified next step:
 
+- The opening-balance snapshot import design is now recorded in
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`.
 - The live cash-event proof has completed and reports
   `finance_import_ready=false`.
 - The invoice/charge-ref source decision confirms no explicit patient
@@ -265,22 +267,23 @@ Why this is the smallest justified next step:
 - `vwPayments` is the clearest payment/refund/credit candidate source.
 - `PaymentAllocations` cannot apply payments to invoices because charge refs are
   absent.
-- Opening-balance snapshot design is the smallest path that does not require
-  historical invoice reconstruction, but it must still prove double-counting and
-  cutover policy before import.
+- Opening-balance snapshot planning is the smallest path that does not require
+  historical invoice reconstruction, but it must still prove patient mapping,
+  double-counting, cutover policy, idempotency, and rollback before any scratch
+  apply.
 
 Likely files:
 
-- docs/design-only decision first;
-- no implementation files unless inspection proves a narrow proof helper is
-  required;
-- if a proof is later needed, keep it backend-only, SELECT-only, and
-  proof-report-only.
+- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
+- `backend/tests/r4_import/test_opening_balance_snapshot_plan.py`
+- no finance staging models or importer wiring.
 
 Likely validation:
 
 - `git diff --check`
+- focused unit tests for the pure planner
+- existing finance classification tests if relevant
 - no R4 writes, no PMS DB writes, no finance records created or changed
 
-Docs/design-only is expected. The next slice must not create finance staging
-models or import finance records.
+Backend-only / pure-helper / proof-only is expected. The next slice must not
+create finance staging models or import finance records.
