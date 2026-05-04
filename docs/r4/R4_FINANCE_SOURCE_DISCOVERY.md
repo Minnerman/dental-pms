@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@180cfd33f9551cdf6f5c0485b863f4d93d3a6951`
+Baseline: `master@3a64bc8fb93fde005189b966ab9d5124fc6c48b5`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This report is
 source discovery only. It does not authorise finance import, PMS DB writes, R4
@@ -370,6 +370,19 @@ Decision summary:
   rows remain reconciliation-only until credit/deposit semantics are proven.
 - Finance import readiness remains blocked.
 
+PR #599 added backend-only SELECT-only cash-event staging proof tooling in
+`backend/app/services/r4_import/finance_cash_event_staging.py` and
+`backend/app/scripts/r4_finance_cash_event_staging.py`, with focused tests in
+`backend/tests/r4_import/test_r4_finance_cash_event_staging.py`. The tooling
+reports candidate cash-event population, cancellation pairing, refund handling,
+credit handling, payment type mapping, classification/sign summary,
+import-readiness gates, risks, and bounded samples from `vwPayments` plus
+`Adjustments`.
+
+Live cash-event staging proof evidence is still pending. No finance import,
+finance staging model, PMS DB write, R4 access/write, or finance record creation
+occurred in PR #599.
+
 ## Helper Continuity
 
 The helper now covers the source groups identified here:
@@ -389,8 +402,8 @@ manual-review rows, and excluded rows.
 
 ## Recommended Next Slice
 
-Run a SELECT-only cash-event staging proof from `vwPayments` and `Adjustments`,
-without import.
+Run and record the live SELECT-only cash-event staging proof from `vwPayments`
+and `Adjustments`, without import.
 
 Suggested first inputs:
 
@@ -402,9 +415,12 @@ Suggested first inputs:
 - The PR #596 cancellation/refund/allocation artefact recorded above.
 - `backend/app/services/r4_import/finance_classification_policy.py`
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
+- `backend/app/scripts/r4_finance_cash_event_staging.py`
 
 Expected proof scope:
 
+- execute the merged PR #599 proof/report command once complete R4 env is
+  available;
 - classify `vwPayments` and `Adjustments` rows into payment, refund, credit,
   cancellation/reversal, excluded, and manual-review report categories;
 - exclude or tag paired `Adjustments.CancellationOf` rows without creating PMS
@@ -422,6 +438,5 @@ Expected validation:
 - Focused pure-helper/report tests.
 - Existing finance classification helper tests and cancellation/allocation proof
   tests if helper behaviour is reused.
-- Optional live SELECT-only JSON/stdout/stderr artefact if complete R4 env is
-  available.
+- Live SELECT-only JSON/stdout/stderr artefact with `select_only=true`.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.

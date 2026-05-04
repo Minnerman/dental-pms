@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@180cfd33f9551cdf6f5c0485b863f4d93d3a6951`
+Baseline: `master@3a64bc8fb93fde005189b966ab9d5124fc6c48b5`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This decision is
 design evidence only. It does not authorise finance import, finance staging
@@ -231,33 +231,35 @@ These rules supersede any weaker interpretation:
 
 ## Recommended Next Slice
 
-Selected target: SELECT-only cash-event staging proof from `vwPayments` and
-`Adjustments`, without import.
+Selected target: run and record live SELECT-only cash-event staging proof from
+`vwPayments` and `Adjustments`, without import.
 
 Why this is the smallest justified next step:
 
+- PR #599 has merged the backend-only SELECT-only cash-event proof/report
+  tooling, but live evidence remains pending.
 - The cancellation decision is strong enough to exclude or tag paired
-  `Adjustments.CancellationOf` rows in a proof report.
+  `Adjustments.CancellationOf` rows in the live proof report.
 - `vwPayments` is the clearest payment/refund/credit candidate source.
 - `PaymentAllocations` cannot apply payments to invoices because charge refs are
   absent.
-- Explicit invoice/statement discovery remains important, but it is not needed
-  to prove the safer cash-event candidate/exclusion population.
-- A cash-event staging proof can remain backend-only, SELECT-only,
-  proof-report-only, and avoid PMS DB sessions.
+- The live proof can remain SELECT-only, proof-report-only, and avoid PMS DB
+  sessions.
 
 Likely files:
 
-- `backend/app/services/r4_import/finance_cash_event_staging.py`
-- `backend/app/scripts/r4_finance_cash_event_staging.py`
-- `backend/tests/r4_import/test_r4_finance_cash_event_staging.py`
+- no implementation files for the live run;
+- evidence artefacts under a timestamped `.run/` directory;
+- a later docs/evidence refresh if the run succeeds.
 
 Likely validation:
 
-- `git diff --check`
-- focused pytest for the new cash-event staging proof tests
-- existing finance classification helper tests
-- existing cancellation/allocation proof tests if helper behaviour is reused
+- confirm `R4_SQLSERVER_ENABLED=true`
+- confirm `R4_SQLSERVER_READONLY=true`
+- confirm R4 host/user/password are present
+- command exits `0`
+- JSON has `select_only=true`
+- no R4 writes, no PMS DB writes, no finance records created or changed
 - if live R4 env is available, a SELECT-only report run with JSON/stdout/stderr
   artefacts under `.run/`
 - explicit confirmation of no R4 writes, no PMS DB writes, and no finance record
