@@ -272,24 +272,25 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Pure finance classification/sign helper and unit tests.
-   - Target: classify inventory-shaped R4 finance rows into payment, refund,
-     credit, adjustment/write-off, cancellation/reversal, allocation,
-     opening-balance, or manual-review categories without DB access.
-   - Why next: the policy is deterministic enough for a no-DB-write helper, and
-     the helper can fail closed before any reconciliation or importer work.
-   - Validation: focused unit tests for known/unknown flag combinations, sign
-     preservation, cancellation handling, patient-code requirement, and reason
-     codes.
-
-2. SELECT-only opening-balance reconciliation report.
-   - Target: reconcile `PatientStats.Balance` against payment/refund/credit,
-     transaction, and allocation summaries without writing PMS finance records.
-   - Why next after the helper: `1018` non-zero balances and total balance
-     `-131342.13` are known, but opening balances remain unsafe until
-     reconciled.
+1. SELECT-only opening-balance reconciliation report.
+   - Target: reconcile `PatientStats.Balance` and aged-debt evidence against
+     classified payment/refund/credit, transaction, and allocation summaries
+     without writing PMS finance records.
+   - Why next: PR #591 completed the pure finance classification/sign helper
+     and unit tests without DB access, importer wiring, R4 access, PMS DB
+     writes, or finance record changes; `1018` non-zero balances and total
+     balance `-131342.13` remain unsafe until reconciled.
    - Validation: query-shape tests, JSON report schema tests, live SELECT-only
      artefact if R4 env is available, no PMS DB writes.
+
+2. Payment method/allocation mismatch proof.
+   - Target: use the classifier reason codes to tighten payment method mapping,
+     cancellation pairing, refund mismatch, and allocation semantics after the
+     opening-balance proof identifies which source totals reconcile.
+   - Why next later: refund counts differ between `vwPayments` and allocation
+     sources, and allocation rows have no charge refs in current inventory
+     evidence.
+   - Validation: focused unit/report tests, no PMS DB writes.
 
 Do not start finance import, finance staging models, invoice creation, payment
 creation, or balance mutation until these proofs pass and are recorded.

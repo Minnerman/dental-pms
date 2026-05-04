@@ -3,13 +3,13 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Pause / handover
-- The authoritative continuity baseline is `origin/master@adb15f34cbf65bb46b2e4528f5e996a921414168`.
-- Current repo `master` is `adb15f34cbf65bb46b2e4528f5e996a921414168`; it includes merged R4 charting continuity through PR #567, appointment readiness through PR #585, PR #586's R4 finance source discovery, PR #588's unrelated frontend-only patient-notes smoke fix, and PR #587's backend-only SELECT-only finance inventory command/report.
+- The authoritative continuity baseline is `origin/master@af5c078c0c03f4c2981c9d392c0d84b221adaa10`.
+- Current repo `master` is `af5c078c0c03f4c2981c9d392c0d84b221adaa10`; it includes merged R4 charting continuity through PR #567, appointment readiness through PR #585, PR #586's R4 finance source discovery, PR #588's unrelated frontend-only patient-notes smoke fix, PR #587's backend-only SELECT-only finance inventory command/report, PR #590's finance sign/cancellation/allocation policy, and PR #591's backend-only finance classification/sign helper proof.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
 - V1 closure evidence is recorded in the 2026-03-28 release-candidate signoff entry below.
-- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`, and `docs/r4/R4_FINANCE_SOURCE_DISCOVERY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment scratch-readiness evidence is complete through PR #585, R4 finance source discovery is recorded as of PR #586, and the SELECT-only finance inventory command/report is merged as of PR #587.
+- When development resumes: keep any preserved local operational diffs separate, review this file, `docs/R4_MIGRATION_READINESS.md`, `docs/r4/CHARTING_CANONICAL_READINESS.md`, `docs/r4/CHARTING_CANONICAL_DRYRUN_PARITY_SUMMARY.md`, and `docs/r4/R4_FINANCE_SOURCE_DISCOVERY.md`; the active-domain allowlist guard is complete as of PR #558, the `perio_plaque`/`completed_questionnaire_notes`/`old_patient_notes` live deterministic scale-out proof is complete as of PR #560, `appointment_notes` accepted-cohort closure is complete as of PR #562, the combined current-master all-domain charting canonical scratch dry-run/apply/idempotency/parity transcript is complete as of PR #566, appointment scratch-readiness evidence is complete through PR #585, R4 finance source discovery is recorded as of PR #586, the SELECT-only finance inventory command/report is merged as of PR #587, and the finance classification/sign helper proof is complete as of PR #591.
 - The appointment readiness track is paused before any live/default core diary promotion. The PR #584 scratch transcript used current R4 source data with `101057` appointments, identified `94162` status-policy promote candidates, applied `94162` core appointments inside scratch only, reran idempotently with `created=0`, `updated=0`, and `skipped=94162`, refused `6895` rows, and proved default `dental_pms` refusal before session/open. The scratch stack was cleaned up after PR #585; evidence artefacts remain preserved.
-- The R4 finance track has completed source discovery and live SELECT-only inventory with no R4 writes, no PMS DB writes, and no finance records created or changed. PR #587's inventory evidence path is `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/`; next slice is finance sign/cancellation/allocation policy.
+- The R4 finance track has completed source discovery, live SELECT-only inventory, fail-closed sign/cancellation/allocation policy, and backend-only pure classification/sign helper proof with no importer behaviour changes, no R4 writes, no PMS DB writes, and no finance records created or changed. PR #587's inventory evidence path is `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/`; next slice is opening balance reconciliation proof.
 - Do not reopen V1 unless a real regression is proven.
 - R4 remains strictly SELECT-only/read-only.
 
@@ -72,6 +72,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-04: PR #591 merged on `master` as backend-only/pure-helper/test-only finance classification/sign helper proof.
+  - Exact slice implemented:
+    - added `backend/app/services/r4_import/finance_classification_policy.py`
+    - added `backend/tests/r4_import/test_finance_classification_policy.py`
+  - The helper covers `PatientStats`, `vwPayments`, `Adjustments`, `Transactions`, `PaymentAllocations`, `vwAllocatedPayments`, lookup tables, and scheme/classification sources.
+  - Implemented classifications include `balance_snapshot_candidate`, `payment_candidate`, `refund_candidate`, `credit_candidate`, `cancellation_or_reversal`, `allocation_reconciliation_only`, `transaction_reconciliation_only`, `classification_reference_only`, `manual_review`, and `excluded`.
+  - Fail-closed coverage includes unknown source, missing patient code, cancelled/reversed rows, ambiguous payment flags, unexpected signs, unknown adjustment type, transaction-as-invoice gaps, allocation missing charge refs, and reference-only scheme/lookup rows.
+  - Safety: importer behaviour remained unchanged; no finance import/staging models were added; no invoices, payments, balances, or finance records were created or changed; no PMS DB writes occurred; no R4 access or writes occurred.
+  - Next finance slice: opening balance reconciliation proof.
 - 2026-05-03: PR #587 merged on `master` as backend-only, SELECT-only finance inventory command/report tooling.
   - Exact slice implemented:
     - added `backend/app/scripts/r4_finance_inventory.py`
