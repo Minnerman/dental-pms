@@ -1,8 +1,8 @@
 # R4 Finance Sign, Cancellation, and Allocation Policy
 
-Status date: 2026-05-03
+Status date: 2026-05-04
 
-Baseline: `master@d59e83b4c940cae6692919848fdb83e420127be5`
+Baseline: `master@39b38c70950344a0027f6eae952b2356b0d9d949`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This policy is
 design evidence only. It does not authorise finance import, finance staging
@@ -15,6 +15,8 @@ This policy uses:
 
 - `docs/r4/R4_FINANCE_SOURCE_DISCOVERY.md`
 - `/home/amir/dental-pms-finance-inventory-proof/.run/finance_inventory_20260503_201724/finance_inventory.json`
+- `/home/amir/dental-pms-opening-balance-live-proof/.run/opening_balance_reconciliation_20260504_083558/opening_balance_reconciliation.json`
+- `/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/finance_cancellation_allocation_reconciliation.json`
 - Current PMS finance code for invoices, payments, patient ledger, patient
   balances, cash-up, outstanding, trends, and month-pack reporting.
 
@@ -38,6 +40,16 @@ Inventory evidence:
 - Lookup/classification counts: `PaymentTypes=18`, `OtherPaymentTypes=1`,
   `PaymentCardTypes=32`, `AdjustmentTypes=6`, `vwDenplan=4182`,
   `DenplanPatients=3`, `NHSPatientDetails=16468`.
+- Opening balance proof: `PatientStats` component checks passed with `0`
+  mismatches, TreatmentBalance split checks passed with `0` mismatches, aged
+  debt total `10329.82`, and `892` non-zero balance rows had no aged debt.
+- Cancellation/refund/allocation proof: `Adjustments CancellationOf=460`,
+  originals found `460`, originals missing `0`, patient mismatches `0`, paired
+  net amount `0.00`; `vwPayments` refunds `110`, `PaymentAllocations` refunds
+  `795`, matching allocation refunds `62`, allocation refunds without
+  `vwPayments` refund `733`, `vwPayments` refunds without allocation `48`,
+  advanced payment allocations `2335`, `vwPayments` credits `6513`, linked
+  allocations `3130`, charge refs `0`, and missing charge refs `3130`.
 
 Current PMS finance convention:
 
@@ -137,6 +149,15 @@ Policy:
 - cancellation totals must be reported separately from active payment, refund,
   credit, and adjustment totals.
 
+PR #596 narrows this risk: all `460` `Adjustments.CancellationOf` rows resolved
+to original `Adjustments` rows, with `0` missing originals, `0` patient
+mismatches, and paired net amount `0.00`. This supports a future
+exclude/net/manual-review decision for paired `Adjustments` cancellations, but
+it does not authorise import. `vwPayments` still has `1032` cancelled rows with
+total `-90633.58`, so cancellation handling remains fail-closed until the next
+semantics decision maps how `vwPayments` cancellation flags relate to base
+`Adjustments` rows and import policy.
+
 ## Payment, Refund, Credit, and Adjustment Policy
 
 Candidate classes for a later pure helper:
@@ -153,6 +174,13 @@ The `vwPayments` refund count (`110`) and `PaymentAllocations` refund count
 (`795`) conflict at inventory level. Refund import must stay blocked until a
 SELECT-only reconciliation explains whether allocation refunds are linked to
 credit/deposit movements, payment reversals, or a different reporting grain.
+
+PR #596 confirmed the mismatch remains material: only `62` allocation refund
+rows matched `vwPayments` refund rows by `PaymentID`/`RefId`, `733` allocation
+refunds had no matching `vwPayments` refund, and `48` `vwPayments` refunds had
+no allocation refund. The next decision must explain whether these unmatched
+rows are a reporting-grain difference, advanced/credit movement, historical
+allocation artefact, or unresolved manual-review blocker.
 
 Rows with blank flags or mutually inconsistent payment/refund/credit flags are
 manual-review. No classifier may infer payment/refund/credit type from sign
@@ -171,6 +199,9 @@ Current evidence is high risk:
 - charge transaction refs are `0`;
 - allocation refund count is `795`, which does not match `vwPayments` refunds
   `110`.
+- PR #596 found linked allocations `3130`, charge refs `0`, and missing charge
+  refs `3130`, confirming invoice application remains blocked by missing
+  charge refs.
 
 Policy:
 
@@ -258,11 +289,15 @@ Before any finance import or PMS finance write path exists:
 ## Open Questions and Risks
 
 - Patient-level statement examples are still needed to prove balance signs.
-- `vwPayments` versus `Adjustments` duplicate and key relationships need a
-  classifier proof.
-- Cancellation and reversal pairing is not yet proven.
-- Refund counts differ sharply between `vwPayments` and allocation sources.
-- Allocation rows have no charge refs in current inventory evidence.
+- `vwPayments` versus `Adjustments` duplicate and key relationships still need
+  an import-readiness decision even though `Adjustments.CancellationOf` pairing
+  is now proven at aggregate level.
+- Cancellation and reversal pairing is proven for `Adjustments.CancellationOf`
+  rows, but `vwPayments` cancellation flag semantics still need policy mapping.
+- Refund counts differ sharply between `vwPayments` and allocation sources, and
+  PR #596 confirmed most allocation refund rows do not match `vwPayments`
+  refunds.
+- Allocation rows have no charge refs in current inventory and PR #596 evidence.
 - No R4 invoice/statement source is confirmed.
 - `Transactions` costs may not equal accounting ledger truth.
 - Opening balance import could double count if combined with historic charges
@@ -272,18 +307,20 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Cancellation pairing/refund-allocation mismatch proof.
-   - Target: use the classifier reason codes to tighten payment method mapping,
-     cancellation pairing, refund mismatch, and allocation semantics after the
-     live opening-balance proof recorded PatientStats component consistency.
-   - Why next: live opening balance proof evidence is complete and confirms
-     PatientStats component consistency, but refund counts still differ between
-     `vwPayments` (`110`) and allocation sources (`795`), and allocation rows
-     have no charge refs in current evidence.
-   - Validation: focused unit/report tests, no PMS DB writes.
+1. Refund-allocation/charge-ref semantics decision.
+   - Target: decide how PR #596's refund/allocation and charge-ref evidence
+     should affect finance import-readiness.
+   - Why next: `Adjustments.CancellationOf` pairing is strong, but refund
+     counts still differ between `vwPayments` (`110`) and allocation sources
+     (`795`), only `62` allocation refunds matched `vwPayments` refunds, `733`
+     allocation refunds had no matching `vwPayments` refund, `48` `vwPayments`
+     refunds had no allocation refund, and allocation rows have `0` charge refs
+     / `3130` missing charge refs.
+   - Validation: docs/policy diff or focused pure-helper/report tests if code
+     is added; no PMS DB writes.
 
 2. Payment method mapping proof.
-   - Target: once cancellation/refund/allocation semantics are known, map R4
+   - Target: once refund/allocation/charge-ref semantics are known, map R4
      payment and card lookup values to PMS reporting/payment method categories.
    - Why next later: method mapping affects cash-up/reporting, but it should not
      outrun cancellation/reversal and allocation semantics.
