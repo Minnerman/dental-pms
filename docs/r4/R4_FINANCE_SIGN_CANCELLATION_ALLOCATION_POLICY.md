@@ -2,7 +2,7 @@
 
 Status date: 2026-05-04
 
-Baseline: `master@180cfd33f9551cdf6f5c0485b863f4d93d3a6951`
+Baseline: `master@3a64bc8fb93fde005189b966ab9d5124fc6c48b5`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This policy is
 design evidence only. It does not authorise finance import, finance staging
@@ -18,6 +18,7 @@ This policy uses:
 - `/home/amir/dental-pms-opening-balance-live-proof/.run/opening_balance_reconciliation_20260504_083558/opening_balance_reconciliation.json`
 - `/home/amir/dental-pms-finance-cancellation-allocation-proof/.run/finance_cancellation_allocation_reconciliation_20260504_140810/finance_cancellation_allocation_reconciliation.json`
 - `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
+- PR #599 cash-event staging proof tooling.
 - Current PMS finance code for invoices, payments, patient ledger, patient
   balances, cash-up, outstanding, trends, and month-pack reporting.
 
@@ -319,17 +320,18 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. SELECT-only cash-event staging proof from `vwPayments` and `Adjustments`.
-   - Target: classify active payment, refund, and credit cash-event candidates,
-     paired/excluded cancellation rows, and manual-review rows without importing
-     finance records.
-   - Why next: the refund-allocation/charge-ref decision keeps allocations
-     reconciliation-only, blocks invoice application because charge refs are
-     absent, and identifies `vwPayments` plus `Adjustments` as the smallest
-     useful next proof source.
-   - Validation: focused pure-helper/report tests, existing finance
-     classification helper tests, optional live SELECT-only report artefact if
-     R4 env is available, no PMS DB writes, no R4 writes.
+1. Run and record live SELECT-only cash-event staging proof from `vwPayments`
+   and `Adjustments`.
+   - Target: execute the merged PR #599 proof/report command and capture
+     candidate, excluded, cancellation, refund, credit, payment-method,
+     classification/sign, import-readiness, risk, and sample evidence without
+     importing finance records.
+   - Why next: the cash-event staging tooling is merged, but live evidence is
+     still pending. Finance import-readiness remains blocked until the live
+     report confirms the candidate/exclusion shape.
+   - Validation: complete R4 env with `R4_SQLSERVER_READONLY=true`, command exit
+     `0`, JSON `select_only=true`, no PMS DB writes, no R4 writes, no finance
+     records created or changed.
 
 2. Payment method mapping proof.
    - Target: once cash-event staging has a stable candidate/exclusion shape, map R4
