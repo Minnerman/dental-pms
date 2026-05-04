@@ -272,26 +272,21 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Live SELECT-only opening-balance reconciliation report.
-   - Target: run the PR #593 report tooling to reconcile `PatientStats.Balance` and aged-debt evidence against
-     classified payment/refund/credit, transaction, and allocation summaries
-     without writing PMS finance records.
-   - Why next: PR #591 completed the pure finance classification/sign helper,
-     and PR #593 completed the SELECT-only opening balance reconciliation
-     command/report tooling without importer wiring, R4 writes, PMS DB writes,
-     or finance record changes; live opening balance proof evidence is still
-     pending, and `1018` non-zero balances with total balance `-131342.13`
-     remain unsafe until recorded.
-   - Validation: live SELECT-only artefact with `select_only=true`, no R4
-     writes, no PMS DB writes, and no finance records created or changed.
-
-2. Payment method/allocation mismatch proof.
+1. Cancellation pairing/refund-allocation mismatch proof.
    - Target: use the classifier reason codes to tighten payment method mapping,
-     cancellation pairing, refund mismatch, and allocation semantics after live
-     opening-balance proof evidence identifies which source totals reconcile.
-   - Why next later: refund counts differ between `vwPayments` and allocation
-     sources, and allocation rows have no charge refs in current inventory
-     evidence.
+     cancellation pairing, refund mismatch, and allocation semantics after the
+     live opening-balance proof recorded PatientStats component consistency.
+   - Why next: live opening balance proof evidence is complete and confirms
+     PatientStats component consistency, but refund counts still differ between
+     `vwPayments` (`110`) and allocation sources (`795`), and allocation rows
+     have no charge refs in current evidence.
+   - Validation: focused unit/report tests, no PMS DB writes.
+
+2. Payment method mapping proof.
+   - Target: once cancellation/refund/allocation semantics are known, map R4
+     payment and card lookup values to PMS reporting/payment method categories.
+   - Why next later: method mapping affects cash-up/reporting, but it should not
+     outrun cancellation/reversal and allocation semantics.
    - Validation: focused unit/report tests, no PMS DB writes.
 
 Do not start finance import, finance staging models, invoice creation, payment
