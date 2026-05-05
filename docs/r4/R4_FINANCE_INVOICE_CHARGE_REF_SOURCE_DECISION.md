@@ -187,33 +187,36 @@ These rules supersede weaker interpretations:
 
 ## Recommended Next Slice
 
-Selected target: pure opening-balance snapshot plan helper plus unit tests.
+Selected target: scratch-only opening-balance dry-run/report design.
 
 Why this is the smallest justified next step:
 
 - the opening-balance snapshot import design is now recorded in
   `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`;
+- PR #604 completed the backend-only pure opening-balance snapshot plan helper
+  proof and unit tests without importer wiring, R4 access, PMS DB writes, or
+  finance record changes;
 - the live opening balance proof found internally consistent `PatientStats`
   balances with `0` component mismatches;
 - invoice/statement source discovery remains negative;
 - allocation charge refs remain absent;
 - cash-event proof found a candidate population, but `finance_import_ready=false`
   and payment/application semantics remain blocked;
-- an opening-balance snapshot planning helper is the smallest executable proof
-  that does not require historical invoice reconstruction, staging models, or
-  PMS finance writes.
+- scratch-only opening-balance dry-run/report design is the smallest next proof
+  step because the planning helper is now merged, but no scratch DB report,
+  mapping closure, idempotency expectation, or rollback evidence shape has been
+  designed yet.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
-- `backend/tests/r4_import/test_opening_balance_snapshot_plan.py`
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_DRYRUN_REPORT_DESIGN.md`
+- narrow references in `docs/STATUS.md` and `docs/R4_MIGRATION_READINESS.md`
 - no finance staging models, import wiring, PMS DB writes, or R4 writes.
 
 Likely validation:
 
 - `git diff --check`
-- focused unit tests for the pure planner
-- existing finance classification tests if relevant
+- docs-only validation if present
 - no R4 writes
 - no PMS DB writes
 - no finance records created or changed

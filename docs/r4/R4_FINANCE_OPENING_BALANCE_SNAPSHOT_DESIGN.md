@@ -1,8 +1,8 @@
 # R4 Finance Opening-Balance Snapshot Design
 
-Status date: 2026-05-04
+Status date: 2026-05-05
 
-Baseline: `master@92c955b82f92f6c987da4cfa57e1f9c1333059d9`
+Baseline: `master@f9920265c197bbc009d00038e32b10fc8994c216`
 
 Safety: R4 SQL Server remains strictly read-only / SELECT-only. This document is
 design evidence only. It does not authorise finance import, finance staging
@@ -78,6 +78,28 @@ manifest-scoped patient ledger `adjustment` row per eligible non-zero mapped
 patient, with no `related_invoice_id`.
 
 This is a future-proof recommendation only. This slice does not implement it.
+
+## Plan Helper Continuity
+
+PR #604 completed the first recommended proof phase as backend-only,
+pure-helper/test-only work:
+
+- added `backend/app/services/r4_import/opening_balance_snapshot_plan.py`;
+- added `backend/tests/r4_import/test_opening_balance_snapshot_plan.py`;
+- kept importer behaviour unchanged;
+- added no finance import or finance staging models;
+- created or changed no invoices, payments, balances, ledger rows, or finance
+  records;
+- performed no PMS DB writes;
+- performed no R4 access or writes.
+
+The helper accepts row-like `PatientStats` data and supplied patient mapping,
+then emits deterministic plan decisions without DB access. It preserves raw
+R4 signs and values, converts exact pence amounts only, requires patient mapping
+for non-zero balances, keeps zero balances as no-op rows, checks component
+consistency, and fails closed for missing PatientCode, missing mapping,
+component mismatch, invalid/non-pence amounts, explicit sign conflict, and
+unsupported sources.
 
 ## Source Decision
 
@@ -239,12 +261,15 @@ Required gates:
 
 Recommended proof phases:
 
-1. Pure planning helper and unit tests. Convert row-like `PatientStats` data plus
-   mapping evidence into deterministic plan rows and refusal reasons. No DB and
-   no R4 access.
-2. Scratch dry-run/report. Read mapped patients from an isolated scratch DB and
+1. Pure planning helper and unit tests. Completed by PR #604. It converts
+   row-like `PatientStats` data plus mapping evidence into deterministic plan
+   rows and refusal reasons with no DB and no R4 access.
+2. Scratch dry-run/report design. Define the report shape, scratch/default DB
+   refusal gates, mapping closure evidence, manifest fields, idempotency
+   expectations, and rollback evidence before implementing the report.
+3. Scratch dry-run/report. Read mapped patients from an isolated scratch DB and
    produce a plan, but write nothing.
-3. Scratch apply transcript, only after a separate decision. Create one
+4. Scratch apply transcript, only after a separate decision. Create one
    manifest-scoped `PatientLedgerEntry` adjustment per eligible non-zero mapped
    patient, with no invoice/payment rows and no `related_invoice_id`.
 
@@ -297,8 +322,8 @@ Opening-balance snapshot is safer than historical invoice import because:
 Still blocked before any live/default finance migration:
 
 - patient mapping proof for non-zero candidates;
-- deterministic plan helper proof;
-- scratch dry-run/report;
+- scratch-only dry-run/report design;
+- scratch dry-run/report implementation and transcript;
 - scratch apply/idempotency/rollback transcript, if writes are later selected;
 - cutover timestamp and double-counting policy;
 - payment/refund/credit handling policy for post-cutover or staged cash events;
@@ -308,32 +333,36 @@ Still blocked before any live/default finance migration:
 
 ## Recommended Next Slice
 
-Selected target: pure opening-balance snapshot plan helper plus unit tests.
+Selected target: scratch-only opening-balance dry-run/report design.
 
 Why this is the smallest justified next step:
 
-- the design needs deterministic row-level eligibility, sign, pence conversion,
-  and refusal logic before any DB proof;
-- it can be backend-only and pure-helper/test-only;
-- it requires no R4 access and no PMS DB access;
-- it gives the later scratch dry-run a small, testable policy core.
+- PR #604 has completed deterministic row-level eligibility, sign, pence
+  conversion, patient mapping, component consistency, and refusal logic;
+- the next risk is defining how a scratch-only dry-run/report will consume that
+  helper without writing finance records;
+- the design must specify mapping evidence, manifest output, before/after count
+  expectations, idempotency expectations, default/live DB refusal gates, and
+  rollback/report evidence before any implementation;
+- it should remain docs/design-only first and require no R4 access or PMS DB
+  access.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
-- `backend/tests/r4_import/test_opening_balance_snapshot_plan.py`
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_DRYRUN_REPORT_DESIGN.md`
+- narrow references in `docs/STATUS.md` and `docs/R4_MIGRATION_READINESS.md`
 
 Likely validation:
 
-- focused pytest for the new helper;
-- existing finance classification/opening-balance proof tests if relevant;
 - `git diff --check`;
+- docs-only validation if present;
+- no R4 access;
 - no R4 writes;
 - no PMS DB writes;
 - no finance records created or changed.
 
-Backend-only/proof-only is likely for the next slice. It must not add finance
-staging models, importer wiring, or PMS write paths.
+Docs/design-only is likely for the next slice. It must not add finance staging
+models, importer wiring, PMS write paths, R4 access, or finance records.
 
 ## Fail-Closed Rules
 
