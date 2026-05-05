@@ -271,10 +271,85 @@ Implemented first shape:
 - include tests for report shape, mapping failure, component failure, manifest
   fields, and no session/write behaviour.
 
-The next proof should execute that tooling against the real `PatientStats` row
-artefact and scratch mapping evidence. This remains smaller and safer than a
-scratch apply proof because it exercises the policy core and report contract
-before designing any finance write path.
+That proof has now been executed against the real `PatientStats` row artefact
+and scratch mapping evidence.
+
+## Scratch Dry-Run Execution Evidence
+
+Execution completed on 2026-05-05.
+
+Artefact paths:
+
+- PatientStats rows:
+  `/home/amir/dental-pms-opening-balance-dryrun-execution/.run/opening_balance_snapshot_dryrun_20260505_080845/patient_stats_rows.json`
+- Dry-run/mapping directory:
+  `/home/amir/dental-pms-opening-balance-dryrun-execution/.run/opening_balance_snapshot_dryrun_mapping_20260505_082233/`
+
+Key artefacts:
+
+- `scratch_patient_mapping.json`
+- `mapping_coverage_summary.json`
+- `opening_balance_snapshot_dryrun_report.json`
+- `opening_balance_snapshot_dryrun.stdout`
+- `opening_balance_snapshot_dryrun.stderr`
+- `opening_balance_snapshot_dryrun_exit_code.txt`
+- `patients_import_stats.json`
+- `patients_mapping_quality.json`
+
+Scratch mapping evidence:
+
+- scratch compose project: `dentalpms-obmap-20260505-082233`;
+- scratch DB: `dental_pms_opening_balance_mapping_scratch`;
+- Postgres port: `5579`;
+- scratch PMS writes were migrations, a minimal admin actor, patients, and
+  `r4_patient_mappings` only;
+- mapping rows: `17012`;
+- non-zero candidate mapping coverage: `1018/1018`;
+- unmapped non-zero candidates: `0`.
+
+Dry-run result:
+
+- command exit code `0`;
+- report JSON parsed successfully;
+- `dry_run=true`;
+- `import_ready=false`;
+- `finance_import_ready=false`;
+- manifest `no_write=true`;
+- manifest `apply_mode=false`.
+
+Report figures:
+
+- source summary: rows `17012`, non-zero `1018`, final no-op zero rows
+  `15820`, total balance `-131742.13`;
+- mapping summary: mappings supplied `17012`, mapped non-zero candidates
+  `1018`, unmapped non-zero candidates `0`, coverage `1.0000`;
+- eligibility summary: eligible `1018`, no-op `15820`,
+  component mismatch `174`, all other refusal classes `0`;
+- sign summary: positive `291`, negative `727`, zero `15994`,
+  `increase_debt=291`, `decrease_debt_or_credit=727`, `no_action=15994`;
+- component consistency: pass `16838`, mismatch `174`, not evaluated `0`;
+- aged debt: present `126`, balance without aged debt `892`, aged debt with
+  zero balance `0`, total aged debt `10329.82`;
+- refusal reason: `component_amount_missing_or_invalid=174`.
+
+Source drift:
+
+- total `Balance`, `TreatmentBalance`, and `PrivateBalance` each drifted by
+  `-400.00` compared with the earlier live opening-balance proof.
+
+Safety result:
+
+- R4 access was SELECT-only;
+- R4 writes did not occur;
+- default/main `dental_pms` was not touched;
+- scratch finance counts remained `invoices=0`, `payments=0`, and
+  `patient_ledger_entries=0`;
+- no finance records were created or changed.
+
+The `174` component refusals were zero-balance rows with missing/null component
+fields and remain no-write/manual-review evidence. The scratch mapping stack
+remains running for inspection and should be cleaned up after the docs/evidence
+PR merges.
 
 ## Import-Readiness Implication
 
@@ -282,10 +357,10 @@ before designing any finance write path.
 
 Before any opening-balance write is considered, the project still needs:
 
-1. scratch-only dry-run execution evidence using the real `PatientStats` row
-   artefact and scratch mapping evidence;
-2. docs/evidence refresh after that run;
-3. a later guarded scratch apply design;
+1. scratch mapping stack cleanup after the evidence PR merges;
+2. review of the `-400.00` source drift and the `174` zero-balance component
+   refusals;
+3. a later guarded scratch apply design, if writes remain in scope;
 4. explicit write model decision for adjustment or opening-balance ledger rows;
 5. scratch apply/idempotency/rollback proof;
 6. separate approval before any live/default finance migration.
@@ -296,44 +371,39 @@ remains blocked because allocation charge refs are absent.
 
 ## Recommended Next Slice
 
-Selected target: scratch-only dry-run execution evidence using the real
-`PatientStats` row artefact and scratch mapping evidence, no writes.
+Selected target: scratch mapping stack cleanup after the docs/evidence PR
+merges.
 
 Why this is the smallest justified next step:
 
-- the policy helper is already merged and tested;
-- PR #607 has completed report composition, mapping summaries, refusal
-  handling, manifest fields, and no-write safety gates;
-- no finance write model needs to be chosen to execute the report;
-- no finance staging model is required;
-- the resulting artefacts will support a later docs/evidence refresh and only
-  then a guarded scratch apply design.
+- the scratch-only dry-run execution evidence is complete;
+- the stack was intentionally left running for inspection;
+- cleanup is operationally separate from finance import and does not require
+  repo code or docs changes.
 
 Likely files:
 
-- no repo code files for the execution itself;
-- a later docs/evidence refresh if the scratch-only run succeeds.
+- none.
 
 Likely validation:
 
-- command exit status, JSON parse/top-level report shape, and manifest fields;
-- expected mapping, eligibility, sign, component, and aged-debt summaries;
-- `import_ready=false`, manifest `no_write=true`, and `apply_mode=false`;
-- `git status --short`;
-- no live R4 query unless explicitly running a SELECT-only source capture;
-- no PMS DB writes;
-- no finance records created or changed.
+- scratch `docker compose ps` before cleanup;
+- cleanup command transcript;
+- final absence of scratch containers;
+- preserved artefact paths;
+- no repo tracked changes.
 
-Backend-only/proof-only remains likely for the next slice. Finance import,
-finance staging models, default/live PMS finance writes, R4 writes, and
-frontend changes remain out of scope.
+Any later opening-balance write proof should start with a docs/design-only
+guarded scratch apply decision. Finance import, finance staging models,
+default/live PMS finance writes, R4 writes, and frontend changes remain out of
+scope.
 
 ## Open Questions and Risks
 
-- Whether all `1018` non-zero balance candidates map cleanly in the current
-  scratch patient mapping set.
-- Whether source totals drift if the dry-run queries R4 instead of consuming the
-  preserved 2026-05-04 artefact.
+- Source totals drifted by `-400.00` compared with the preserved 2026-05-04
+  proof and must be carried into any later write decision.
+- The dry-run found `174` zero-balance component refusals due missing/null
+  component fields; they remain no-write/manual-review evidence.
 - Which cutover timestamp should anchor the future opening-balance snapshot.
 - How to prevent double counting if later cash-event staging is also selected.
 - Whether aged-debt metadata needs operator-facing reporting before any apply
