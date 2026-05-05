@@ -603,12 +603,23 @@ Safety:
   `patient_ledger_entries=0`;
 - no finance records were created or changed.
 
-The scratch mapping stack `dentalpms-obmap-20260505-082233` remains running for
-inspection and should be cleaned up after the docs/evidence PR merges.
+Scratch mapping stack cleanup completed after the docs/evidence PR merged:
 
-Next smallest action: scratch mapping stack cleanup after evidence PR merge.
-Any later opening-balance write work must start with a separate guarded scratch
-apply design decision; finance import remains out of scope.
+- project `dentalpms-obmap-20260505-082233` containers were removed;
+- project `dentalpms-obmap-20260505-082233` volumes were removed;
+- artefacts remain preserved under the dry-run and mapping artefact directory;
+- default/main `dental-pms` stack remained untouched;
+- no R4 access or writes occurred during cleanup;
+- no PMS DB writes occurred during cleanup;
+- no finance records were created or changed.
+
+Next smallest action: guarded scratch-only opening-balance apply
+design/prototype decision, no live/default writes. Any later opening-balance
+write work must start with a separate guarded scratch apply decision; finance
+import remains out of scope.
+
+That decision must continue to:
+
 - keep unmatched refunds and cancelled rows blocked/manual-review;
 - avoid invoice application because allocation charge refs are absent;
 - avoid historical invoice import because no explicit patient invoice/statement

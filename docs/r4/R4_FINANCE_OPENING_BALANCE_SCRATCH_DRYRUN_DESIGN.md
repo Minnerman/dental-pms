@@ -347,9 +347,17 @@ Safety result:
 - no finance records were created or changed.
 
 The `174` component refusals were zero-balance rows with missing/null component
-fields and remain no-write/manual-review evidence. The scratch mapping stack
-remains running for inspection and should be cleaned up after the docs/evidence
-PR merges.
+fields and remain no-write/manual-review evidence.
+
+Scratch cleanup completed after the docs/evidence PR merged:
+
+- project `dentalpms-obmap-20260505-082233` containers were removed;
+- project `dentalpms-obmap-20260505-082233` volumes were removed;
+- artefacts remain preserved under the dry-run/mapping directory above;
+- default/main `dental-pms` stack remained untouched;
+- no R4 access or writes occurred during cleanup;
+- no PMS DB writes occurred during cleanup;
+- no finance records were created or changed.
 
 ## Import-Readiness Implication
 
@@ -357,13 +365,13 @@ PR merges.
 
 Before any opening-balance write is considered, the project still needs:
 
-1. scratch mapping stack cleanup after the evidence PR merges;
-2. review of the `-400.00` source drift and the `174` zero-balance component
+1. review of the `-400.00` source drift and the `174` zero-balance component
    refusals;
-3. a later guarded scratch apply design, if writes remain in scope;
-4. explicit write model decision for adjustment or opening-balance ledger rows;
-5. scratch apply/idempotency/rollback proof;
-6. separate approval before any live/default finance migration.
+2. a guarded scratch-only apply design/prototype decision, if writes remain in
+   scope;
+3. explicit write model decision for adjustment or opening-balance ledger rows;
+4. scratch apply/idempotency/rollback proof;
+5. separate approval before any live/default finance migration.
 
 Historical invoice import remains blocked because no explicit patient
 invoice/statement/charge-ref source is proven. Invoice payment application
@@ -371,32 +379,35 @@ remains blocked because allocation charge refs are absent.
 
 ## Recommended Next Slice
 
-Selected target: scratch mapping stack cleanup after the docs/evidence PR
-merges.
+Selected target: guarded scratch-only opening-balance apply design/prototype
+decision, no live/default writes.
 
 Why this is the smallest justified next step:
 
 - the scratch-only dry-run execution evidence is complete;
-- the stack was intentionally left running for inspection;
-- cleanup is operationally separate from finance import and does not require
-  repo code or docs changes.
+- scratch cleanup is complete and artefacts were preserved;
+- the dry-run mapped `1018/1018` non-zero candidates but still reported
+  `import_ready=false`;
+- source drift and the `174` zero-balance component refusals must be handled
+  before any apply decision;
+- any write proof still needs manifest, idempotency, rollback, and
+  double-counting design.
 
 Likely files:
 
-- none.
+- finance design docs only, unless the selected next slice is deliberately
+  narrowed further.
 
 Likely validation:
 
-- scratch `docker compose ps` before cleanup;
-- cleanup command transcript;
-- final absence of scratch containers;
-- preserved artefact paths;
-- no repo tracked changes.
+- docs diff checks;
+- no R4 access;
+- no R4 writes;
+- no PMS DB writes;
+- no finance records created or changed.
 
-Any later opening-balance write proof should start with a docs/design-only
-guarded scratch apply decision. Finance import, finance staging models,
-default/live PMS finance writes, R4 writes, and frontend changes remain out of
-scope.
+Finance import, finance staging models, default/live PMS finance writes, R4
+writes, and frontend changes remain out of scope.
 
 ## Open Questions and Risks
 
