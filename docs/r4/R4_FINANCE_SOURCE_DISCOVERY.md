@@ -495,8 +495,13 @@ Design decision:
 - `finance_import_ready=false`; no finance import, staging models, invoices,
   payments, balances, ledger rows, or finance records are authorised.
 
-Next smallest slice: pure opening-balance snapshot plan helper plus unit tests
-before any scratch write or import work.
+PR #604 has now completed the pure opening-balance snapshot plan helper plus
+unit tests as backend-only, pure-helper/test-only work. It added deterministic
+PatientStats planning decisions without importer wiring, R4 access, PMS DB
+writes, finance staging models, or finance record changes.
+
+Next smallest slice: scratch-only opening-balance dry-run/report design before
+any scratch write or import work.
 
 Suggested first inputs:
 
@@ -505,6 +510,7 @@ Suggested first inputs:
 - `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
 - `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`
+- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
 - The PR #587 inventory artefact.
 - The live opening balance proof artefact recorded above.
 - The PR #596 cancellation/refund/allocation artefact recorded above.
@@ -512,16 +518,17 @@ Suggested first inputs:
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 - The live cash-event proof artefact recorded above.
 
-Expected next proof-helper scope:
+Expected next design scope:
 
-- classify and plan only; do not write PMS finance rows;
-- preserve raw R4 balance evidence and proposed direction separately;
-- require patient mapping for all nonzero balance candidates before any later
-  scratch apply;
+- consume the PR #604 pure plan helper as the policy core;
+- define scratch-only dry-run/report behaviour without writes;
+- define mapping evidence needed for all nonzero balance candidates;
+- define manifest output, refusal/manual-review reporting, idempotency
+  expectations, and rollback/report evidence for a later implementation;
 - keep zero balances no-op unless later proof requires metadata;
-- fail closed on missing PatientCode, unmapped nonzero patients, component
-  mismatches, sign ambiguity, pence conversion ambiguity, or default/live DB
-  write attempts;
+- preserve fail-closed behaviour for missing PatientCode, unmapped nonzero
+  patients, component mismatches, sign ambiguity, pence conversion ambiguity,
+  or default/live DB write attempts;
 - keep `PaymentAllocations` and `vwAllocatedPayments` reconciliation-only;
 - keep unmatched refunds and cancelled rows blocked/manual-review;
 - avoid invoice application because allocation charge refs are absent;

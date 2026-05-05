@@ -253,13 +253,16 @@ These rules supersede any weaker interpretation:
 
 ## Recommended Next Slice
 
-Selected target: pure opening-balance snapshot plan helper plus unit tests
-before any finance import.
+Selected target: scratch-only opening-balance dry-run/report design before any
+finance import.
 
 Why this is the smallest justified next step:
 
 - The opening-balance snapshot import design is now recorded in
   `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`.
+- PR #604 completed the backend-only pure opening-balance snapshot plan helper
+  proof and unit tests without importer wiring, R4 access, PMS DB writes, or
+  finance record changes.
 - The live cash-event proof has completed and reports
   `finance_import_ready=false`.
 - The invoice/charge-ref source decision confirms no explicit patient
@@ -267,23 +270,22 @@ Why this is the smallest justified next step:
 - `vwPayments` is the clearest payment/refund/credit candidate source.
 - `PaymentAllocations` cannot apply payments to invoices because charge refs are
   absent.
-- Opening-balance snapshot planning is the smallest path that does not require
-  historical invoice reconstruction, but it must still prove patient mapping,
-  double-counting, cutover policy, idempotency, and rollback before any scratch
-  apply.
+- Opening-balance snapshot dry-run/report design is the smallest path that does
+  not require historical invoice reconstruction, but it must still define how
+  patient mapping, double-counting, cutover policy, idempotency expectations,
+  and rollback evidence will be proven before any scratch apply.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
-- `backend/tests/r4_import/test_opening_balance_snapshot_plan.py`
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_DRYRUN_REPORT_DESIGN.md`
+- narrow references in `docs/STATUS.md` and `docs/R4_MIGRATION_READINESS.md`
 - no finance staging models or importer wiring.
 
 Likely validation:
 
 - `git diff --check`
-- focused unit tests for the pure planner
-- existing finance classification tests if relevant
+- docs-only validation if present
 - no R4 writes, no PMS DB writes, no finance records created or changed
 
-Backend-only / pure-helper / proof-only is expected. The next slice must not
-create finance staging models or import finance records.
+Docs/design-only is expected. The next slice must not create finance staging
+models or import finance records.
