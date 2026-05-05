@@ -500,8 +500,28 @@ unit tests as backend-only, pure-helper/test-only work. It added deterministic
 PatientStats planning decisions without importer wiring, R4 access, PMS DB
 writes, finance staging models, or finance record changes.
 
-Next smallest slice: scratch-only opening-balance dry-run/report design before
-any scratch write or import work.
+The scratch-only opening-balance dry-run/report design is now recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md`.
+
+Design decision:
+
+- the future dry-run/report consumes the PR #604 pure plan helper as the policy
+  core;
+- all `1018` non-zero-balance `PatientStats` candidates must map before the
+  report can be considered successful;
+- the `15994` zero-balance rows remain no-op and mapping-visible;
+- component fields and aged debt remain metadata/reconciliation evidence;
+- safety gates include default/live DB refusal, explicit dry-run mode, no apply
+  command, no finance writes, no ledger rows, no balance mutation, no
+  invoice/payment creation, source artefact/run manifest requirements, and an
+  R4 read-only guard if R4 is queried;
+- the report should emit JSON/stdout/stderr/exit-code artefacts and
+  `import_ready=false`;
+- `finance_import_ready=false`; no finance import, staging models, invoices,
+  payments, balances, ledger rows, or finance records are authorised.
+
+Next smallest slice: backend-only opening-balance dry-run/report CLI plus tests,
+with no writes.
 
 Suggested first inputs:
 
@@ -511,6 +531,7 @@ Suggested first inputs:
 - `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`
 - `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md`
 - The PR #587 inventory artefact.
 - The live opening balance proof artefact recorded above.
 - The PR #596 cancellation/refund/allocation artefact recorded above.
@@ -518,13 +539,13 @@ Suggested first inputs:
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 - The live cash-event proof artefact recorded above.
 
-Expected next design scope:
+Expected next implementation scope:
 
 - consume the PR #604 pure plan helper as the policy core;
-- define scratch-only dry-run/report behaviour without writes;
-- define mapping evidence needed for all nonzero balance candidates;
-- define manifest output, refusal/manual-review reporting, idempotency
-  expectations, and rollback/report evidence for a later implementation;
+- implement scratch-only dry-run/report behaviour without writes;
+- report mapping evidence needed for all nonzero balance candidates;
+- emit manifest output, refusal/manual-review reporting, safety-gate status,
+  and bounded samples;
 - keep zero balances no-op unless later proof requires metadata;
 - preserve fail-closed behaviour for missing PatientCode, unmapped nonzero
   patients, component mismatches, sign ambiguity, pence conversion ambiguity,

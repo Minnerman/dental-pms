@@ -322,7 +322,7 @@ Opening-balance snapshot is safer than historical invoice import because:
 Still blocked before any live/default finance migration:
 
 - patient mapping proof for non-zero candidates;
-- scratch-only dry-run/report design;
+- backend-only scratch dry-run/report CLI plus tests;
 - scratch dry-run/report implementation and transcript;
 - scratch apply/idempotency/rollback transcript, if writes are later selected;
 - cutover timestamp and double-counting policy;
@@ -333,36 +333,39 @@ Still blocked before any live/default finance migration:
 
 ## Recommended Next Slice
 
-Selected target: scratch-only opening-balance dry-run/report design.
+Selected target: backend-only opening-balance dry-run/report CLI plus tests, no
+writes.
 
 Why this is the smallest justified next step:
 
 - PR #604 has completed deterministic row-level eligibility, sign, pence
   conversion, patient mapping, component consistency, and refusal logic;
-- the next risk is defining how a scratch-only dry-run/report will consume that
-  helper without writing finance records;
-- the design must specify mapping evidence, manifest output, before/after count
-  expectations, idempotency expectations, default/live DB refusal gates, and
-  rollback/report evidence before any implementation;
-- it should remain docs/design-only first and require no R4 access or PMS DB
-  access.
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md` now defines how
+  a scratch-only dry-run/report will consume that helper without writing finance
+  records;
+- the next risk is implementing report composition, mapping summaries, refusal
+  reasons, safety gates, and artefact shape before any scratch apply design;
+- the next slice should keep no-write behaviour and require no finance staging
+  model or importer wiring.
 
 Likely files:
 
-- `docs/r4/R4_FINANCE_OPENING_BALANCE_DRYRUN_REPORT_DESIGN.md`
-- narrow references in `docs/STATUS.md` and `docs/R4_MIGRATION_READINESS.md`
+- `backend/app/services/r4_import/opening_balance_snapshot_dry_run.py`
+- `backend/app/scripts/r4_opening_balance_snapshot_dry_run.py`
+- `backend/tests/r4_import/test_opening_balance_snapshot_dry_run.py`
 
 Likely validation:
 
+- focused unit tests for report shape and safety gates;
+- existing opening-balance snapshot plan helper tests;
 - `git diff --check`;
-- docs-only validation if present;
-- no R4 access;
+- no live R4 access unless explicitly capturing SELECT-only evidence;
 - no R4 writes;
 - no PMS DB writes;
 - no finance records created or changed.
 
-Docs/design-only is likely for the next slice. It must not add finance staging
-models, importer wiring, PMS write paths, R4 access, or finance records.
+Backend-only/proof-only is likely for the next slice. It must not add finance
+staging models, importer wiring, PMS write paths, R4 writes, or finance records.
 
 ## Fail-Closed Rules
 
