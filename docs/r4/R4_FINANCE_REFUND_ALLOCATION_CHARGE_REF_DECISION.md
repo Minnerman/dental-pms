@@ -253,16 +253,18 @@ These rules supersede any weaker interpretation:
 
 ## Recommended Next Slice
 
-Selected target: scratch-only opening-balance dry-run/report design before any
-finance import.
+Selected target: scratch-only opening-balance dry-run execution evidence before
+any finance import.
 
 Why this is the smallest justified next step:
 
-- The opening-balance snapshot import design is now recorded in
+- The opening-balance snapshot import design is recorded in
   `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`.
 - PR #604 completed the backend-only pure opening-balance snapshot plan helper
   proof and unit tests without importer wiring, R4 access, PMS DB writes, or
   finance record changes.
+- PR #607 completed backend-only dry-run/report tooling with JSON inputs, no R4
+  source mode, no DB write path, and no apply mode.
 - The live cash-event proof has completed and reports
   `finance_import_ready=false`.
 - The invoice/charge-ref source decision confirms no explicit patient
@@ -270,22 +272,23 @@ Why this is the smallest justified next step:
 - `vwPayments` is the clearest payment/refund/credit candidate source.
 - `PaymentAllocations` cannot apply payments to invoices because charge refs are
   absent.
-- Opening-balance snapshot dry-run/report design is the smallest path that does
-  not require historical invoice reconstruction, but it must still define how
-  patient mapping, double-counting, cutover policy, idempotency expectations,
-  and rollback evidence will be proven before any scratch apply.
+- Opening-balance snapshot dry-run execution evidence is the smallest path that
+  does not require historical invoice reconstruction, but it must still prove
+  patient mapping, report totals, manifest contents, and refusal reasons before
+  any scratch apply.
 
 Likely files:
 
-- `docs/r4/R4_FINANCE_OPENING_BALANCE_DRYRUN_REPORT_DESIGN.md`
-- narrow references in `docs/STATUS.md` and `docs/R4_MIGRATION_READINESS.md`
+- no repo code files for the execution itself;
+- later docs/evidence refresh if the scratch-only run succeeds;
 - no finance staging models or importer wiring.
 
 Likely validation:
 
-- `git diff --check`
-- docs-only validation if present
+- command exit status and JSON parse/top-level report shape
+- `git status --short`
+- docs-only validation if a later evidence refresh is opened
 - no R4 writes, no PMS DB writes, no finance records created or changed
 
-Docs/design-only is expected. The next slice must not create finance staging
-models or import finance records.
+Backend-only/proof-only execution is expected. The next slice must not create
+finance staging models or import finance records.

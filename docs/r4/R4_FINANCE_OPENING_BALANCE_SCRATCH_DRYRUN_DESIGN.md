@@ -257,24 +257,24 @@ records.
 
 ## Future Scratch Proof Shape
 
-The next implementation slice should be a backend-only opening-balance
-dry-run/report CLI plus tests with no writes.
+PR #607 implemented the backend-only opening-balance dry-run/report tooling with
+no R4 source mode, no DB write path, no apply mode, and no finance writes.
 
-Recommended first shape:
+Implemented first shape:
 
-- read a `PatientStats` artefact or SELECT-only source through explicit
-  dry-run/report parameters;
-- read patient mappings from a supplied mapping artefact, or from scratch DB
-  read-only access if the implementation can prove default/live DB refusal
-  before session creation;
+- read a `PatientStats` JSON artefact through explicit dry-run/report
+  parameters;
+- read patient mappings from a supplied mapping JSON artefact;
 - call the pure planning helper for each row;
 - write JSON/stdout/stderr/exit-code artefacts;
 - refuse apply/write options because no apply command exists in this phase;
-- include tests for report shape, mapping failure, component failure, live DB
-  refusal, and no session/write behaviour.
+- include tests for report shape, mapping failure, component failure, manifest
+  fields, and no session/write behaviour.
 
-This is smaller and safer than a scratch apply proof because it exercises the
-policy core and report contract before designing any finance write path.
+The next proof should execute that tooling against the real `PatientStats` row
+artefact and scratch mapping evidence. This remains smaller and safer than a
+scratch apply proof because it exercises the policy core and report contract
+before designing any finance write path.
 
 ## Import-Readiness Implication
 
@@ -282,13 +282,13 @@ policy core and report contract before designing any finance write path.
 
 Before any opening-balance write is considered, the project still needs:
 
-1. dry-run/report CLI implementation and tests;
-2. live/scratch dry-run evidence;
-3. docs/evidence refresh after that run;
-4. a later guarded scratch apply design;
-5. explicit write model decision for adjustment or opening-balance ledger rows;
-6. scratch apply/idempotency/rollback proof;
-7. separate approval before any live/default finance migration.
+1. scratch-only dry-run execution evidence using the real `PatientStats` row
+   artefact and scratch mapping evidence;
+2. docs/evidence refresh after that run;
+3. a later guarded scratch apply design;
+4. explicit write model decision for adjustment or opening-balance ledger rows;
+5. scratch apply/idempotency/rollback proof;
+6. separate approval before any live/default finance migration.
 
 Historical invoice import remains blocked because no explicit patient
 invoice/statement/charge-ref source is proven. Invoice payment application
@@ -296,38 +296,37 @@ remains blocked because allocation charge refs are absent.
 
 ## Recommended Next Slice
 
-Selected target: backend-only opening-balance dry-run/report CLI plus tests, no
-writes.
+Selected target: scratch-only dry-run execution evidence using the real
+`PatientStats` row artefact and scratch mapping evidence, no writes.
 
 Why this is the smallest justified next step:
 
 - the policy helper is already merged and tested;
-- the next risk is report composition, mapping summaries, refusal handling, and
-  environment safety gates;
-- no finance write model needs to be chosen to produce the report;
+- PR #607 has completed report composition, mapping summaries, refusal
+  handling, manifest fields, and no-write safety gates;
+- no finance write model needs to be chosen to execute the report;
 - no finance staging model is required;
 - the resulting artefacts will support a later docs/evidence refresh and only
   then a guarded scratch apply design.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_dry_run.py`
-- `backend/app/scripts/r4_opening_balance_snapshot_dry_run.py`
-- `backend/tests/r4_import/test_opening_balance_snapshot_dry_run.py`
+- no repo code files for the execution itself;
+- a later docs/evidence refresh if the scratch-only run succeeds.
 
 Likely validation:
 
-- focused unit tests for the new report wrapper and CLI guards;
-- existing opening-balance snapshot plan helper tests;
-- existing opening-balance reconciliation tests if the source adapter is reused;
-- `git diff --check`;
-- no live R4 query unless explicitly running a SELECT-only evidence capture;
+- command exit status, JSON parse/top-level report shape, and manifest fields;
+- expected mapping, eligibility, sign, component, and aged-debt summaries;
+- `import_ready=false`, manifest `no_write=true`, and `apply_mode=false`;
+- `git status --short`;
+- no live R4 query unless explicitly running a SELECT-only source capture;
 - no PMS DB writes;
 - no finance records created or changed.
 
-Backend-only/proof-only is likely for the next slice. Finance import, finance
-staging models, default/live PMS finance writes, R4 writes, and frontend changes
-remain out of scope.
+Backend-only/proof-only remains likely for the next slice. Finance import,
+finance staging models, default/live PMS finance writes, R4 writes, and
+frontend changes remain out of scope.
 
 ## Open Questions and Risks
 

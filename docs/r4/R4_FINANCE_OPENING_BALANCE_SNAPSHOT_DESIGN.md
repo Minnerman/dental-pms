@@ -322,8 +322,9 @@ Opening-balance snapshot is safer than historical invoice import because:
 Still blocked before any live/default finance migration:
 
 - patient mapping proof for non-zero candidates;
-- backend-only scratch dry-run/report CLI plus tests;
-- scratch dry-run/report implementation and transcript;
+- PR #607 dry-run/report tooling execution against real `PatientStats` rows and
+  scratch mapping evidence;
+- scratch dry-run/report evidence transcript;
 - scratch apply/idempotency/rollback transcript, if writes are later selected;
 - cutover timestamp and double-counting policy;
 - payment/refund/credit handling policy for post-cutover or staged cash events;
@@ -333,33 +334,33 @@ Still blocked before any live/default finance migration:
 
 ## Recommended Next Slice
 
-Selected target: backend-only opening-balance dry-run/report CLI plus tests, no
-writes.
+Selected target: scratch-only dry-run execution evidence using the real
+`PatientStats` row artefact and scratch mapping evidence, no writes.
 
 Why this is the smallest justified next step:
 
 - PR #604 has completed deterministic row-level eligibility, sign, pence
   conversion, patient mapping, component consistency, and refusal logic;
-- `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md` now defines how
-  a scratch-only dry-run/report will consume that helper without writing finance
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md` defines how a
+  scratch-only dry-run/report consumes that helper without writing finance
   records;
-- the next risk is implementing report composition, mapping summaries, refusal
-  reasons, safety gates, and artefact shape before any scratch apply design;
-- the next slice should keep no-write behaviour and require no finance staging
-  model or importer wiring.
+- PR #607 has completed the backend-only report composition, mapping summaries,
+  refusal reasons, safety gates, and artefact shape with no R4 source mode, no
+  DB write path, and no apply mode;
+- the next risk is proving the report against real `PatientStats` rows and
+  scratch mapping evidence before any scratch apply design.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_dry_run.py`
-- `backend/app/scripts/r4_opening_balance_snapshot_dry_run.py`
-- `backend/tests/r4_import/test_opening_balance_snapshot_dry_run.py`
+- no repo code files for the execution itself;
+- a later docs/evidence refresh if the scratch-only run succeeds.
 
 Likely validation:
 
-- focused unit tests for report shape and safety gates;
-- existing opening-balance snapshot plan helper tests;
-- `git diff --check`;
-- no live R4 access unless explicitly capturing SELECT-only evidence;
+- command exit status, JSON parse/top-level report shape, and manifest fields;
+- `import_ready=false`, manifest `no_write=true`, and `apply_mode=false`;
+- `git status --short`;
+- no live R4 access unless explicitly capturing a SELECT-only source artefact;
 - no R4 writes;
 - no PMS DB writes;
 - no finance records created or changed.

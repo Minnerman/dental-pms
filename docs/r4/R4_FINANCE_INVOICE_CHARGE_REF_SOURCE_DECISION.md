@@ -187,30 +187,31 @@ These rules supersede weaker interpretations:
 
 ## Recommended Next Slice
 
-Selected target: scratch-only opening-balance dry-run/report design.
+Selected target: scratch-only opening-balance dry-run execution evidence.
 
 Why this is the smallest justified next step:
 
-- the opening-balance snapshot import design is now recorded in
+- the opening-balance snapshot import design is recorded in
   `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`;
 - PR #604 completed the backend-only pure opening-balance snapshot plan helper
   proof and unit tests without importer wiring, R4 access, PMS DB writes, or
   finance record changes;
+- PR #607 completed backend-only dry-run/report tooling with JSON inputs, no R4
+  source mode, no DB write path, and no apply mode;
 - the live opening balance proof found internally consistent `PatientStats`
   balances with `0` component mismatches;
 - invoice/statement source discovery remains negative;
 - allocation charge refs remain absent;
 - cash-event proof found a candidate population, but `finance_import_ready=false`
   and payment/application semantics remain blocked;
-- scratch-only opening-balance dry-run/report design is the smallest next proof
-  step because the planning helper is now merged, but no scratch DB report,
-  mapping closure, idempotency expectation, or rollback evidence shape has been
-  designed yet.
+- scratch-only opening-balance dry-run execution evidence is the smallest next
+  proof step because the planning helper and report tooling are now merged, but
+  no scratch mapping report evidence exists yet.
 
 Likely files:
 
-- `docs/r4/R4_FINANCE_OPENING_BALANCE_DRYRUN_REPORT_DESIGN.md`
-- narrow references in `docs/STATUS.md` and `docs/R4_MIGRATION_READINESS.md`
+- no repo code files for the execution itself;
+- later docs/evidence refresh if the scratch-only run succeeds;
 - no finance staging models, import wiring, PMS DB writes, or R4 writes.
 
 Likely validation:
