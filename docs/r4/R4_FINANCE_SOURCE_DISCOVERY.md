@@ -520,8 +520,11 @@ Design decision:
 - `finance_import_ready=false`; no finance import, staging models, invoices,
   payments, balances, ledger rows, or finance records are authorised.
 
-Next smallest slice: backend-only opening-balance dry-run/report CLI plus tests,
-with no writes.
+PR #607 completed the backend-only opening-balance dry-run/report tooling with
+no R4 source mode, no DB write path, no apply mode, and no finance writes.
+
+Next smallest slice: scratch-only dry-run execution evidence using the real
+`PatientStats` row artefact and scratch mapping evidence, with no writes.
 
 Suggested first inputs:
 
@@ -530,8 +533,10 @@ Suggested first inputs:
 - `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
 - `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`
-- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md`
+- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
+- `backend/app/services/r4_import/opening_balance_snapshot_dry_run.py`
+- `backend/app/scripts/r4_opening_balance_snapshot_dry_run.py`
 - The PR #587 inventory artefact.
 - The live opening balance proof artefact recorded above.
 - The PR #596 cancellation/refund/allocation artefact recorded above.
@@ -539,13 +544,15 @@ Suggested first inputs:
 - `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
 - The live cash-event proof artefact recorded above.
 
-Expected next implementation scope:
+Expected next proof scope:
 
-- consume the PR #604 pure plan helper as the policy core;
-- implement scratch-only dry-run/report behaviour without writes;
-- report mapping evidence needed for all nonzero balance candidates;
-- emit manifest output, refusal/manual-review reporting, safety-gate status,
-  and bounded samples;
+- run the PR #607 report tooling against the real `PatientStats` row artefact
+  and scratch mapping evidence;
+- report mapping evidence for all nonzero balance candidates;
+- emit JSON/stdout/stderr/exit-code artefacts with manifest output,
+  refusal/manual-review reporting, safety-gate status, and bounded samples;
+- prove manifest `no_write=true`, `apply_mode=false`, and
+  `import_ready=false`;
 - keep zero balances no-op unless later proof requires metadata;
 - preserve fail-closed behaviour for missing PatientCode, unmapped nonzero
   patients, component mismatches, sign ambiguity, pence conversion ambiguity,
@@ -560,6 +567,7 @@ Expected next implementation scope:
 
 Expected validation:
 
-- `git diff --check`.
-- Docs/design-only change by default.
+- command exit status and JSON parse/top-level report shape.
+- `git status --short`.
+- Docs/evidence-only change only if recording a completed run.
 - No R4 writes, no PMS DB writes, and no finance records created or changed.

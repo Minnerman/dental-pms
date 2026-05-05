@@ -342,17 +342,16 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Scratch-only opening-balance dry-run/report design.
-   - Target: use PR #604's pure opening-balance snapshot plan helper as the
-     policy core and define the scratch-only dry-run/report shape before any
-     implementation or write path.
-   - Why next: the plan helper now classifies PatientStats rows, preserves raw
-     signs, proposes proof-only directions, and emits fail-closed reasons
-     without writing finance records. The next risk is designing how a scratch
-     report proves patient mapping, manifest contents, idempotency expectations,
-     and rollback evidence without importing finance.
-   - Validation: `git diff --check`, docs-only validation if present, no PMS DB
-     writes, no R4 access/writes, no finance records created or changed.
+1. Scratch-only opening-balance dry-run execution evidence.
+   - Target: run PR #607's no-write dry-run/report tooling against the real
+     `PatientStats` row artefact and scratch mapping evidence.
+   - Why next: the plan helper, scratch dry-run/report design, and backend
+     report tooling are complete. The next risk is proving patient mapping,
+     manifest contents, refusal reasons, and report totals without importing
+     finance.
+   - Validation: command exit status, JSON report shape, `import_ready=false`,
+     manifest `no_write=true`, no PMS DB writes, no R4 writes, and no finance
+     records created or changed.
 
 2. Payment method mapping proof.
    - Target: once cash-event staging has a stable candidate/exclusion shape, map R4
