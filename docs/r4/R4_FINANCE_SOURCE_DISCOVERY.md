@@ -523,41 +523,92 @@ Design decision:
 PR #607 completed the backend-only opening-balance dry-run/report tooling with
 no R4 source mode, no DB write path, no apply mode, and no finance writes.
 
-Next smallest slice: scratch-only dry-run execution evidence using the real
-`PatientStats` row artefact and scratch mapping evidence, with no writes.
+Scratch-only opening-balance dry-run execution evidence completed on
+2026-05-05.
 
-Suggested first inputs:
+Evidence paths:
 
-- This document.
-- `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`
-- `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md`
-- `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md`
-- `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md`
-- `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md`
-- `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
-- `backend/app/services/r4_import/opening_balance_snapshot_dry_run.py`
-- `backend/app/scripts/r4_opening_balance_snapshot_dry_run.py`
-- The PR #587 inventory artefact.
-- The live opening balance proof artefact recorded above.
-- The PR #596 cancellation/refund/allocation artefact recorded above.
-- `backend/app/services/r4_import/finance_classification_policy.py`
-- `backend/app/services/r4_import/finance_cancellation_allocation_reconciliation.py`
-- The live cash-event proof artefact recorded above.
+- PatientStats rows:
+  `/home/amir/dental-pms-opening-balance-dryrun-execution/.run/opening_balance_snapshot_dryrun_20260505_080845/patient_stats_rows.json`
+- Dry-run and mapping artefacts:
+  `/home/amir/dental-pms-opening-balance-dryrun-execution/.run/opening_balance_snapshot_dryrun_mapping_20260505_082233/`
 
-Expected next proof scope:
+Key artefacts:
 
-- run the PR #607 report tooling against the real `PatientStats` row artefact
-  and scratch mapping evidence;
-- report mapping evidence for all nonzero balance candidates;
-- emit JSON/stdout/stderr/exit-code artefacts with manifest output,
-  refusal/manual-review reporting, safety-gate status, and bounded samples;
-- prove manifest `no_write=true`, `apply_mode=false`, and
-  `import_ready=false`;
-- keep zero balances no-op unless later proof requires metadata;
-- preserve fail-closed behaviour for missing PatientCode, unmapped nonzero
-  patients, component mismatches, sign ambiguity, pence conversion ambiguity,
-  or default/live DB write attempts;
-- keep `PaymentAllocations` and `vwAllocatedPayments` reconciliation-only;
+- `scratch_patient_mapping.json`
+- `mapping_coverage_summary.json`
+- `opening_balance_snapshot_dryrun_report.json`
+- `opening_balance_snapshot_dryrun.stdout`
+- `opening_balance_snapshot_dryrun.stderr`
+- `opening_balance_snapshot_dryrun_exit_code.txt`
+- `patients_import_stats.json`
+- `patients_mapping_quality.json`
+
+Execution result:
+
+- dry-run command exited `0`;
+- report JSON parsed successfully;
+- `dry_run=true`;
+- `import_ready=false`;
+- `finance_import_ready=false`;
+- manifest `no_write=true`;
+- manifest `apply_mode=false`.
+
+PatientStats and mapping evidence:
+
+- real `PatientStats` rows extracted: `17012`;
+- non-zero balance rows: `1018`;
+- raw zero-sign rows: `15994`;
+- blank PatientCode: `0`;
+- scratch mapping rows: `17012`;
+- non-zero candidate mapping coverage: `1018/1018`;
+- unmapped non-zero candidates: `0`.
+
+Dry-run report figures:
+
+- source summary: row count `17012`, non-zero count `1018`, final no-op zero
+  rows `15820`, total balance `-131742.13`;
+- mapping summary: mappings supplied `17012`, mapped non-zero candidates
+  `1018`, unmapped non-zero candidates `0`, coverage `1.0000`;
+- eligibility summary: eligible `1018`, no-op `15820`, component mismatch
+  `174`, all other refusal classes `0`;
+- sign summary: positive `291`, negative `727`, zero `15994`,
+  `increase_debt=291`, `decrease_debt_or_credit=727`, `no_action=15994`;
+- component consistency: pass `16838`, mismatch `174`, not evaluated `0`;
+- aged debt: present `126`, balance without aged debt `892`, aged debt with
+  zero balance `0`, total aged debt `10329.82`;
+- refusal reason: `component_amount_missing_or_invalid=174`.
+
+The `174` component refusals were zero-balance rows with missing/null component
+fields in the fresh source extraction. They remain manual-review/no-write
+evidence and do not authorise finance records.
+
+Source drift:
+
+- total `Balance` drifted by `-400.00` versus the earlier live opening-balance
+  proof;
+- `TreatmentBalance` drifted by `-400.00`;
+- `PrivateBalance` drifted by `-400.00`.
+
+Safety:
+
+- R4 access was SELECT-only for patient import/mapping generation;
+- R4 writes did not occur;
+- PMS writes were limited to isolated scratch DB
+  `dental_pms_opening_balance_mapping_scratch`;
+- scratch PMS writes were migrations, a minimal admin actor, patients, and
+  `r4_patient_mappings` only;
+- default/main `dental_pms` was not touched;
+- scratch finance counts remained `invoices=0`, `payments=0`, and
+  `patient_ledger_entries=0`;
+- no finance records were created or changed.
+
+The scratch mapping stack `dentalpms-obmap-20260505-082233` remains running for
+inspection and should be cleaned up after the docs/evidence PR merges.
+
+Next smallest action: scratch mapping stack cleanup after evidence PR merge.
+Any later opening-balance write work must start with a separate guarded scratch
+apply design decision; finance import remains out of scope.
 - keep unmatched refunds and cancelled rows blocked/manual-review;
 - avoid invoice application because allocation charge refs are absent;
 - avoid historical invoice import because no explicit patient invoice/statement
