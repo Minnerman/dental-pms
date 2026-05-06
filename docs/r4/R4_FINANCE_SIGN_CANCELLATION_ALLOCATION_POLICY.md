@@ -342,17 +342,18 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Backend-only guarded scratch apply planning/preflight helper and tests.
+1. Guarded scratch apply CLI design/prototype, only after explicit instruction.
    - Target: convert
-     `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md` into
-     executable no-write guard decisions for target refusal, dry-run report
-     acceptance, manifest construction, planned ledger rows, and idempotency
-     markers.
+     `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md` and PR #612's
+     backend-only preflight helper proof into a guarded scratch-only command
+     design or prototype.
    - Why next: scratch-only dry-run evidence, cleanup, and guarded apply design
-     are complete. A planning/preflight helper proves the apply gates before a
-     CLI or DB write path exists.
-   - Validation: focused backend tests, py_compile, no PMS DB writes, no R4
-     writes, and no finance records created or changed.
+     are complete, and PR #612 proved the planning/preflight gates without a DB
+     session or CLI. The next step still needs explicit instruction because it
+     would introduce the first apply command surface.
+   - Validation: focused backend tests, py_compile, scratch/default target
+     refusal checks, no R4 writes, no default/live PMS DB writes, and no finance
+     import.
 
 2. Payment method mapping proof.
    - Target: once cash-event staging has a stable candidate/exclusion shape, map R4

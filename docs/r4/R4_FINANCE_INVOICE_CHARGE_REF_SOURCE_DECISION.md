@@ -187,8 +187,8 @@ These rules supersede weaker interpretations:
 
 ## Recommended Next Slice
 
-Selected target: backend-only guarded scratch apply planning/preflight helper
-and tests, no execution and no DB writes.
+Selected target: guarded scratch apply CLI design/prototype, only after
+explicit instruction.
 
 Why this is the smallest justified next step:
 
@@ -199,23 +199,26 @@ Why this is the smallest justified next step:
 - scratch-only dry-run execution evidence and cleanup are complete;
 - the guarded scratch-only apply design is recorded in
   `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md`;
+- PR #612 completed the backend-only guarded scratch apply planning/preflight
+  helper proof, with no CLI, no importer/apply behaviour change, no DB session,
+  no apply execution, no PMS DB writes, no R4 access/writes, no finance staging
+  models, and no finance records created or changed;
 - the live opening balance proof found internally consistent `PatientStats`
   balances with `0` component mismatches;
 - invoice/statement source discovery remains negative;
 - allocation charge refs remain absent;
 - cash-event proof found a candidate population, but `finance_import_ready=false`
   and payment/application semantics remain blocked;
-- the next risk is proving target refusal, dry-run report acceptance, manifest
-  construction, planned ledger rows, duplicate marker refusal, and idempotency
-  classification before any scratch apply execution.
+- the next risk is designing/prototyping the guarded scratch CLI surface around
+  the proven preflight helper without starting apply execution or finance
+  import.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`;
-- `backend/tests/r4_import/test_opening_balance_snapshot_apply_plan.py`;
-- later docs/evidence refresh after the helper proof;
-- no finance staging models, import wiring, apply CLI, PMS DB writes, or R4
-  writes.
+- a guarded backend script/CLI and focused tests only after explicit
+  instruction;
+- no finance staging models, default/live DB writes, finance import, PMS finance
+  writes, or R4 writes.
 
 Likely validation:
 

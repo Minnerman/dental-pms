@@ -2,7 +2,7 @@
 
 Status date: 2026-05-06
 
-Baseline: `master@2a7258e0aadf95cf7d008445172bd9a99ce90a88`
+Baseline: `master@78e02a0a53b13c3d8db9e24863398e857ef50581`
 
 Safety: this is a docs/design decision only. It does not implement opening
 balance import, finance import, finance staging models, PMS DB writes, R4
@@ -467,38 +467,57 @@ Before live/default PMS use, the project still needs:
 
 ## Recommended Next Slice
 
-Selected target: backend-only guarded scratch apply planning/preflight helper
-and tests, no execution and no DB writes.
+PR #612 completed the previously recommended backend-only guarded scratch apply
+planning/preflight helper and tests.
+
+Completed helper proof:
+
+- implemented no-write preflight decisions for DB target, confirmation token,
+  dry-run report, eligibility, mapping, before-counts, write plan, idempotency,
+  rollback, and reason codes;
+- refused missing target, default `dental_pms`, non-scratch/non-test targets,
+  missing or wrong confirmation token, invalid dry-run report flags,
+  incomplete non-zero mapping coverage, component mismatch among would-write
+  rows, unacknowledged source drift, unsupported representation, invoice,
+  payment, staging, balance-mutation intent, partial duplicate manifests, and
+  broad ledger deletion;
+- planned only `patient_ledger_entry_adjustment` rows and kept
+  `finance_import_ready=false`;
+- stayed backend-only/pure-helper/test-only, with no CLI, no DB session, no
+  importer/apply behaviour change, no apply execution, no finance import, no
+  finance staging models, no finance records created or changed, no PMS DB
+  writes, and no R4 access or writes.
+
+Selected target: guarded scratch apply CLI design/prototype, only after
+explicit instruction.
 
 Why this is the smallest safe next step:
 
-- the write representation and safety gates are now selected;
-- a helper can validate the dry-run report, target classification, manifest
-  fields, idempotency keys, and planned ledger rows without opening a DB write
-  path;
-- it can prove default/live target refusal logic before any CLI or apply
-  implementation exists;
-- it avoids creating finance records while converting this design into
-  executable guard decisions.
+- the write representation and safety gates are selected;
+- the PR #612 helper proves default/live target refusal and dry-run acceptance
+  without opening a DB write path;
+- a future command surface should be designed/prototyped only around those
+  proven gates;
+- no scratch apply execution, finance import, or live/default write work should
+  begin without explicit instruction.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`
-- `backend/tests/r4_import/test_opening_balance_snapshot_apply_plan.py`
-- docs/status/readiness update after the helper proof
+- a guarded backend script/CLI and focused tests only after explicit
+  instruction;
+- docs/status/readiness update after any later proof.
 
 Likely validation:
 
-- focused backend unit tests for target refusal, dry-run report acceptance,
-  manifest fields, planned ledger rows, duplicate marker refusal, and
-  idempotency classification;
-- `python -m py_compile` for the new helper;
+- focused backend tests for CLI argument parsing, confirmation token, target
+  refusal, and preflight-helper integration;
+- `python -m py_compile` for any new CLI code;
 - no R4 access;
 - no PMS DB writes;
 - no finance records created or changed.
 
-This should remain backend-only/proof-only. A scratch apply CLI and execution
-transcript should come later, after the planning/preflight helper is proven.
+This should remain backend-only/proof-only unless a later task explicitly asks
+for scratch execution. Finance import remains out of scope.
 
 ## Stop Point
 

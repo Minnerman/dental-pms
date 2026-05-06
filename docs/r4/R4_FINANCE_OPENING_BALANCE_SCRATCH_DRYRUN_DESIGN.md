@@ -379,8 +379,8 @@ remains blocked because allocation charge refs are absent.
 
 ## Recommended Next Slice
 
-Selected target: backend-only guarded scratch apply planning/preflight helper
-and tests, no execution and no DB writes.
+Selected target: guarded scratch apply CLI design/prototype, only after
+explicit instruction.
 
 Why this is the smallest justified next step:
 
@@ -390,15 +390,19 @@ Why this is the smallest justified next step:
 - scratch cleanup is complete and artefacts were preserved;
 - the dry-run mapped `1018/1018` non-zero candidates but still reported
   `import_ready=false`;
-- the next risk is proving dry-run report acceptance, target refusal, manifest
-  construction, planned ledger rows, duplicate marker refusal, and idempotency
-  classification without executing an apply.
+- PR #612 completed the backend-only guarded scratch apply planning/preflight
+  helper proof, covering dry-run report acceptance, target refusal, manifest
+  requirements, planned ledger rows, duplicate marker refusal, idempotency, and
+  rollback planning without a DB session, CLI, or apply execution;
+- the next risk is designing/prototyping the guarded scratch CLI surface around
+  that proven preflight helper without starting apply execution or finance
+  import.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`;
-- `backend/tests/r4_import/test_opening_balance_snapshot_apply_plan.py`;
-- docs/status refresh after the helper proof.
+- a guarded backend script/CLI and focused tests only after explicit
+  instruction;
+- docs/status refresh after any later proof.
 
 Likely validation:
 
