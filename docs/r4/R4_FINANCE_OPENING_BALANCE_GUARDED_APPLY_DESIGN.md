@@ -4,10 +4,13 @@ Status date: 2026-05-06
 
 Baseline: `master@78e02a0a53b13c3d8db9e24863398e857ef50581`
 
-Safety: this is a docs/design decision only. It does not implement opening
-balance import, finance import, finance staging models, PMS DB writes, R4
-writes, invoice creation, payment creation, balance mutation, ledger creation,
-or live cutover.
+Safety: this document records the guarded scratch-only apply design and the
+first CLI prototype. The prototype defaults to validation/no-write mode and can
+write only manifest-scoped `PatientLedgerEntry` adjustment rows when an explicit
+scratch/test target, `--apply`, `--confirm SCRATCH_OPENING_BALANCE_APPLY`, and
+an audit actor ID are supplied. It does not authorise finance import, finance
+staging models, R4 writes, invoice creation, payment creation, live/default PMS
+writes, or live cutover.
 
 R4 SQL Server remains strictly read-only / SELECT-only. This design does not
 require live R4 access because it uses preserved evidence artefacts.
@@ -26,7 +29,10 @@ This design uses:
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md`
 - `backend/app/services/r4_import/opening_balance_snapshot_plan.py`
 - `backend/app/services/r4_import/opening_balance_snapshot_dry_run.py`
+- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`
+- `backend/app/services/r4_import/opening_balance_snapshot_guarded_apply.py`
 - `backend/app/scripts/r4_opening_balance_snapshot_dry_run.py`
+- `backend/app/scripts/r4_opening_balance_guarded_scratch_apply.py`
 - `backend/app/models/ledger.py`
 - `backend/app/models/invoice.py`
 - `backend/app/routers/patients.py`
@@ -465,6 +471,80 @@ Before live/default PMS use, the project still needs:
   opening-balance cutover point.
 - Aged-debt metadata has no PMS write representation in this design.
 
+## Guarded Scratch Apply CLI Prototype
+
+The current prototype adds:
+
+- `backend/app/services/r4_import/opening_balance_snapshot_guarded_apply.py`
+- `backend/app/scripts/r4_opening_balance_guarded_scratch_apply.py`
+- `backend/tests/r4_import/test_opening_balance_guarded_scratch_apply_cli.py`
+
+Prototype behaviour:
+
+- consumes the existing opening-balance dry-run report JSON shape;
+- computes and reports the dry-run report SHA256;
+- accepts optional expected report SHA256, total balance, eligible count, and
+  dry-run repo SHA guards;
+- refuses non-scratch/non-test, default `dental_pms`, and production/live-looking
+  database URLs before opening a session;
+- defaults to validation/no-write mode;
+- requires both `--apply` and
+  `--confirm SCRATCH_OPENING_BALANCE_APPLY` before any scratch write;
+- requires `--actor-id` for scratch audit fields when applying;
+- runs the PR #612 preflight helper before applying;
+- creates only `PatientLedgerEntry` rows with `entry_type=adjustment`,
+  `related_invoice_id=NULL`, and references shaped
+  `R4OB:<manifest_id>:<PatientCode>`;
+- never creates `Invoice`, `InvoiceLine`, `Payment`, or finance staging rows;
+- writes no rows in validation mode and does not open a DB session in that mode;
+- supports idempotent rerun by exact manifest/reference/patient/amount match;
+- fails closed on invalid artefacts, mismatched checksum/expected totals,
+  missing guards, incomplete row artefacts, unsafe targets, or mismatched
+  existing manifest rows.
+
+Safe validation command shape:
+
+```bash
+python -m app.scripts.r4_opening_balance_guarded_scratch_apply \
+  --dry-run-report-json /path/to/opening_balance_snapshot_dryrun_report.json \
+  --database-url postgresql+psycopg://user:pass@host:5432/dental_pms_opening_balance_apply_scratch \
+  --manifest-id ob-YYYYMMDDHHMMSS-abcdef123456 \
+  --output-json /path/to/opening_balance_guarded_apply_validate.json \
+  --expected-report-sha256 <sha256> \
+  --expected-total-balance -131742.13 \
+  --expected-eligible-count 1018 \
+  --expected-repo-sha <dry-run-repo-sha> \
+  --acknowledge-source-drift
+```
+
+Scratch apply command shape, for an explicitly isolated scratch/test DB only:
+
+```bash
+python -m app.scripts.r4_opening_balance_guarded_scratch_apply \
+  --dry-run-report-json /path/to/opening_balance_snapshot_dryrun_report.json \
+  --database-url postgresql+psycopg://user:pass@host:5432/dental_pms_opening_balance_apply_scratch \
+  --manifest-id ob-YYYYMMDDHHMMSS-abcdef123456 \
+  --output-json /path/to/opening_balance_guarded_apply_report.json \
+  --expected-report-sha256 <sha256> \
+  --expected-total-balance -131742.13 \
+  --expected-eligible-count 1018 \
+  --expected-repo-sha <dry-run-repo-sha> \
+  --acknowledge-source-drift \
+  --apply \
+  --confirm SCRATCH_OPENING_BALANCE_APPLY \
+  --actor-id <scratch-admin-user-id>
+```
+
+Current limitation: the prototype can apply only when the accepted dry-run
+report contains every eligible row under `samples.eligible_opening_balance`.
+The preserved execution report used bounded samples, so a future scratch apply
+execution still needs either a full eligible-row dry-run artefact or a narrower
+prototype fixture. This branch does not execute a scratch apply against the
+preserved evidence artefacts.
+
+`finance_import_ready` remains `false`. The prototype is not authorised for
+live/default PMS data and is not a full finance import path.
+
 ## Recommended Next Slice
 
 PR #612 completed the previously recommended backend-only guarded scratch apply
@@ -488,40 +568,35 @@ Completed helper proof:
   finance staging models, no finance records created or changed, no PMS DB
   writes, and no R4 access or writes.
 
-Selected target: guarded scratch apply CLI design/prototype, only after
-explicit instruction.
+Selected next target after this prototype: docs/status refresh after merge, then
+an explicit guarded scratch-only apply execution proof only if authorised.
 
-Why this is the smallest safe next step:
+Why this remains separate:
 
-- the write representation and safety gates are selected;
-- the PR #612 helper proves default/live target refusal and dry-run acceptance
-  without opening a DB write path;
-- a future command surface should be designed/prototyped only around those
-  proven gates;
-- no scratch apply execution, finance import, or live/default write work should
-  begin without explicit instruction.
+- this branch proves the command surface, guard logic, checksum/expected-total
+  checks, validation mode, scratch-only write mechanics, and idempotency in
+  deterministic tests;
+- it does not execute against the preserved scratch artefacts;
+- it does not prove full `1018`-row scratch application because the preserved
+  dry-run report has bounded eligible samples;
+- live/default PMS writes and full finance import remain out of scope.
 
-Likely files:
+Likely validation for the next execution-proof slice, if explicitly
+authorised:
 
-- a guarded backend script/CLI and focused tests only after explicit
-  instruction;
-- docs/status/readiness update after any later proof.
-
-Likely validation:
-
-- focused backend tests for CLI argument parsing, confirmation token, target
-  refusal, and preflight-helper integration;
-- `python -m py_compile` for any new CLI code;
-- no R4 access;
-- no PMS DB writes;
-- no finance records created or changed.
-
-This should remain backend-only/proof-only unless a later task explicitly asks
-for scratch execution. Finance import remains out of scope.
+- regenerate or provide a full eligible-row dry-run artefact in isolated
+  scratch/test context;
+- run validation mode first;
+- prove default/live refusal before session/open;
+- apply only to an isolated scratch/test PMS DB;
+- rerun idempotently;
+- verify invoices/payments remain unchanged;
+- preserve stdout/stderr/exit-code/report artefacts.
 
 ## Stop Point
 
-This document records the guarded scratch-only apply decision. It does not
-implement finance import, opening-balance apply, finance staging models,
-invoice creation, payment creation, ledger creation, balance mutation, R4
-writes, PMS DB writes, frontend changes, Docker changes, or runtime changes.
+This document records the guarded scratch-only apply decision and CLI
+prototype. It does not implement finance import, finance staging models,
+invoice creation, payment creation, R4 writes, live/default PMS writes,
+frontend changes, Docker changes, or runtime changes. No scratch apply
+execution against preserved evidence artefacts has started.
