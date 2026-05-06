@@ -165,8 +165,15 @@ Safety:
   `patient_ledger_entries=0`;
 - no finance records were created or changed.
 
-The scratch mapping stack `dentalpms-obmap-20260505-082233` remains running for
-inspection and should be cleaned up after the docs/evidence PR merges.
+Scratch mapping stack cleanup completed after the docs/evidence PR merged:
+
+- project `dentalpms-obmap-20260505-082233` containers were removed;
+- project `dentalpms-obmap-20260505-082233` volumes were removed;
+- artefacts remain preserved under the dry-run/mapping artefact path above;
+- default/main `dental-pms` stack remained untouched;
+- no R4 access or writes occurred during cleanup;
+- no PMS DB writes occurred during cleanup;
+- no finance records were created or changed.
 
 ## Source Decision
 
@@ -401,31 +408,36 @@ Still blocked before any live/default finance migration:
 
 ## Recommended Next Slice
 
-Selected target: scratch mapping stack cleanup after the docs/evidence PR
-merges.
+Selected target: guarded scratch-only opening-balance apply design/prototype
+decision, no live/default writes.
 
 Why this is the smallest justified next step:
 
 - the scratch-only dry-run execution evidence is complete;
-- the scratch stack was deliberately left running for inspection;
-- cleanup avoids stale scratch services and does not require finance import,
-  finance staging models, or default/live PMS writes.
+- the scratch mapping stack cleanup is complete and artefacts were preserved;
+- the dry-run mapped `1018/1018` non-zero candidates but still reported
+  `import_ready=false`;
+- source drift and the `174` zero-balance component refusals must be carried
+  into any future write decision;
+- any opening-balance write proof still needs explicit manifest, idempotency,
+  rollback, and double-counting design before implementation.
 
 Likely files:
 
-- none.
+- finance design docs only, unless the selected next slice is deliberately
+  narrowed further.
 
 Likely validation:
 
-- scratch `docker compose ps` before cleanup;
-- cleanup transcript;
-- final absence of the scratch stack containers;
-- preserved artefact paths;
-- no repo tracked changes.
+- docs diff checks;
+- no R4 access;
+- no R4 writes;
+- no PMS DB writes;
+- no finance records created or changed.
 
-Any later opening-balance write work must start with a separate guarded scratch
-apply design decision. It must not add live/default finance writes, R4 writes,
-or finance records without explicit approval.
+Finance import remains out of scope. This next slice must not add
+live/default finance writes, R4 writes, or finance records without explicit
+approval.
 
 ## Fail-Closed Rules
 
