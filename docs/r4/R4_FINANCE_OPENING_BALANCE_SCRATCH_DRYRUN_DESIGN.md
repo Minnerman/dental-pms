@@ -379,35 +379,38 @@ remains blocked because allocation charge refs are absent.
 
 ## Recommended Next Slice
 
-Selected target: guarded scratch-only opening-balance apply design/prototype
-decision, no live/default writes.
+Selected target: backend-only guarded scratch apply planning/preflight helper
+and tests, no execution and no DB writes.
 
 Why this is the smallest justified next step:
 
+- the guarded scratch-only apply design is now recorded in
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md`;
 - the scratch-only dry-run execution evidence is complete;
 - scratch cleanup is complete and artefacts were preserved;
 - the dry-run mapped `1018/1018` non-zero candidates but still reported
   `import_ready=false`;
-- source drift and the `174` zero-balance component refusals must be handled
-  before any apply decision;
-- any write proof still needs manifest, idempotency, rollback, and
-  double-counting design.
+- the next risk is proving dry-run report acceptance, target refusal, manifest
+  construction, planned ledger rows, duplicate marker refusal, and idempotency
+  classification without executing an apply.
 
 Likely files:
 
-- finance design docs only, unless the selected next slice is deliberately
-  narrowed further.
+- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`;
+- `backend/tests/r4_import/test_opening_balance_snapshot_apply_plan.py`;
+- docs/status refresh after the helper proof.
 
 Likely validation:
 
-- docs diff checks;
+- focused backend tests;
+- py_compile;
 - no R4 access;
 - no R4 writes;
 - no PMS DB writes;
 - no finance records created or changed.
 
-Finance import, finance staging models, default/live PMS finance writes, R4
-writes, and frontend changes remain out of scope.
+Finance import, finance staging models, scratch apply execution, default/live
+PMS finance writes, R4 writes, and frontend changes remain out of scope.
 
 ## Open Questions and Risks
 
