@@ -408,36 +408,38 @@ Still blocked before any live/default finance migration:
 
 ## Recommended Next Slice
 
-Selected target: guarded scratch-only opening-balance apply design/prototype
-decision, no live/default writes.
+Selected target: backend-only guarded scratch apply planning/preflight helper
+and tests, no execution and no DB writes.
 
 Why this is the smallest justified next step:
 
+- the guarded scratch-only apply design is now recorded in
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md`;
 - the scratch-only dry-run execution evidence is complete;
 - the scratch mapping stack cleanup is complete and artefacts were preserved;
 - the dry-run mapped `1018/1018` non-zero candidates but still reported
   `import_ready=false`;
-- source drift and the `174` zero-balance component refusals must be carried
-  into any future write decision;
-- any opening-balance write proof still needs explicit manifest, idempotency,
-  rollback, and double-counting design before implementation.
+- the next risk is proving the apply gates and planned ledger representation
+  without creating a write path.
 
 Likely files:
 
-- finance design docs only, unless the selected next slice is deliberately
-  narrowed further.
+- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`;
+- `backend/tests/r4_import/test_opening_balance_snapshot_apply_plan.py`;
+- docs/status refresh after the helper proof.
 
 Likely validation:
 
-- docs diff checks;
+- focused backend tests;
+- py_compile;
 - no R4 access;
 - no R4 writes;
 - no PMS DB writes;
 - no finance records created or changed.
 
-Finance import remains out of scope. This next slice must not add
-live/default finance writes, R4 writes, or finance records without explicit
-approval.
+Finance import remains out of scope. This next slice must not add a scratch
+apply CLI, execute an apply, add live/default finance writes, write R4, or
+create finance records.
 
 ## Fail-Closed Rules
 

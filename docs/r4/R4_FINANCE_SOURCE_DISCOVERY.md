@@ -613,9 +613,12 @@ Scratch mapping stack cleanup completed after the docs/evidence PR merged:
 - no PMS DB writes occurred during cleanup;
 - no finance records were created or changed.
 
-Next smallest action: guarded scratch-only opening-balance apply
-design/prototype decision, no live/default writes. Any later opening-balance
-write work must start with a separate guarded scratch apply decision; finance
+The guarded scratch-only opening-balance apply design is now recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md`.
+
+Next smallest action: backend-only guarded scratch apply planning/preflight
+helper and tests, no execution and no DB writes. Any later opening-balance
+write work must still pass the separate guarded scratch apply gates; finance
 import remains out of scope.
 
 That decision must continue to:

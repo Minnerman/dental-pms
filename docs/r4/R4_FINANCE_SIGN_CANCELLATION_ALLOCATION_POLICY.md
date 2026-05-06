@@ -342,16 +342,17 @@ Before any finance import or PMS finance write path exists:
 
 ## Recommended Next Proof Slices
 
-1. Scratch-only opening-balance dry-run execution evidence.
-   - Target: run PR #607's no-write dry-run/report tooling against the real
-     `PatientStats` row artefact and scratch mapping evidence.
-   - Why next: the plan helper, scratch dry-run/report design, and backend
-     report tooling are complete. The next risk is proving patient mapping,
-     manifest contents, refusal reasons, and report totals without importing
-     finance.
-   - Validation: command exit status, JSON report shape, `import_ready=false`,
-     manifest `no_write=true`, no PMS DB writes, no R4 writes, and no finance
-     records created or changed.
+1. Backend-only guarded scratch apply planning/preflight helper and tests.
+   - Target: convert
+     `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md` into
+     executable no-write guard decisions for target refusal, dry-run report
+     acceptance, manifest construction, planned ledger rows, and idempotency
+     markers.
+   - Why next: scratch-only dry-run evidence, cleanup, and guarded apply design
+     are complete. A planning/preflight helper proves the apply gates before a
+     CLI or DB write path exists.
+   - Validation: focused backend tests, py_compile, no PMS DB writes, no R4
+     writes, and no finance records created or changed.
 
 2. Payment method mapping proof.
    - Target: once cash-event staging has a stable candidate/exclusion shape, map R4
