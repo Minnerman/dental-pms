@@ -616,10 +616,15 @@ Scratch mapping stack cleanup completed after the docs/evidence PR merged:
 The guarded scratch-only opening-balance apply design is now recorded in
 `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md`.
 
-Next smallest action: backend-only guarded scratch apply planning/preflight
-helper and tests, no execution and no DB writes. Any later opening-balance
-write work must still pass the separate guarded scratch apply gates; finance
-import remains out of scope.
+PR #612 completed the backend-only guarded scratch apply planning/preflight
+helper proof. The helper remains pure planning/test code: no CLI was added, no
+importer/apply behaviour changed, no finance import or staging models were
+added, no finance records were created or changed, no PMS DB writes occurred,
+and no R4 access or writes occurred.
+
+Next smallest action: guarded scratch apply CLI design/prototype only after
+explicit instruction. Any later opening-balance write work must still pass the
+separate guarded scratch apply gates; finance import remains out of scope.
 
 That decision must continue to:
 

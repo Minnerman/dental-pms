@@ -408,8 +408,8 @@ Still blocked before any live/default finance migration:
 
 ## Recommended Next Slice
 
-Selected target: backend-only guarded scratch apply planning/preflight helper
-and tests, no execution and no DB writes.
+Selected target: guarded scratch apply CLI design/prototype, only after
+explicit instruction.
 
 Why this is the smallest justified next step:
 
@@ -417,16 +417,21 @@ Why this is the smallest justified next step:
   `docs/r4/R4_FINANCE_OPENING_BALANCE_GUARDED_APPLY_DESIGN.md`;
 - the scratch-only dry-run execution evidence is complete;
 - the scratch mapping stack cleanup is complete and artefacts were preserved;
+- PR #612 completed the backend-only guarded scratch apply planning/preflight
+  helper proof, with no CLI, no importer/apply behaviour change, no DB session,
+  no apply execution, no PMS DB writes, no R4 access/writes, no finance staging
+  models, and no finance records created or changed;
 - the dry-run mapped `1018/1018` non-zero candidates but still reported
   `import_ready=false`;
-- the next risk is proving the apply gates and planned ledger representation
-  without creating a write path.
+- the next risk is designing/prototyping the guarded scratch CLI surface around
+  the proven preflight helper without starting apply execution or finance
+  import.
 
 Likely files:
 
-- `backend/app/services/r4_import/opening_balance_snapshot_apply_plan.py`;
-- `backend/tests/r4_import/test_opening_balance_snapshot_apply_plan.py`;
-- docs/status refresh after the helper proof.
+- a guarded backend script/CLI and focused tests only after explicit
+  instruction;
+- docs/status refresh after any later proof.
 
 Likely validation:
 
@@ -437,9 +442,8 @@ Likely validation:
 - no PMS DB writes;
 - no finance records created or changed.
 
-Finance import remains out of scope. This next slice must not add a scratch
-apply CLI, execute an apply, add live/default finance writes, write R4, or
-create finance records.
+Finance import remains out of scope. The next slice must not execute an apply,
+add live/default finance writes, write R4, or create finance records.
 
 ## Fail-Closed Rules
 
