@@ -478,6 +478,7 @@ The current prototype adds:
 - `backend/app/services/r4_import/opening_balance_snapshot_guarded_apply.py`
 - `backend/app/scripts/r4_opening_balance_guarded_scratch_apply.py`
 - `backend/tests/r4_import/test_opening_balance_guarded_scratch_apply_cli.py`
+- `backend/tests/r4_import/test_opening_balance_guarded_scratch_apply_synthetic_proof.py`
 
 Prototype behaviour:
 
@@ -545,6 +546,31 @@ preserved evidence artefacts.
 `finance_import_ready` remains `false`. The prototype is not authorised for
 live/default PMS data and is not a full finance import path.
 
+## Bounded Synthetic Scratch Proof
+
+The bounded synthetic proof is recorded in:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_SYNTHETIC_SCRATCH_PROOF.md`
+- `backend/tests/r4_import/test_opening_balance_guarded_scratch_apply_synthetic_proof.py`
+
+Proof scope:
+
+- generated non-R4 dry-run report rows only;
+- synthetic patient/account codes `TEST-R4OB-001` and `TEST-R4OB-002` only;
+- local SQLite scratch/test database under pytest `tmp_path` only;
+- explicit write guards: `--apply`,
+  `--confirm SCRATCH_OPENING_BALANCE_APPLY`, and `--actor-id`;
+- validation/no-write mode creates no SQLite database file;
+- first guarded apply creates two manifest-scoped `PatientLedgerEntry`
+  adjustment rows;
+- second guarded apply creates zero rows and skips the two existing rows;
+- non-scratch/default target and report identity mismatches fail closed.
+
+This proof does not use real R4 artefacts, real patient data, a real PMS
+database, actual PMS Postgres, or live/default PMS data. It does not prove the
+full `1018`-row preserved evidence artefact and does not authorise finance
+import.
+
 ## Recommended Next Slice
 
 PR #612 completed the previously recommended backend-only guarded scratch apply
@@ -568,14 +594,17 @@ Completed helper proof:
   finance staging models, no finance records created or changed, no PMS DB
   writes, and no R4 access or writes.
 
-Selected next target after this prototype: docs/status refresh after merge, then
-an explicit guarded scratch-only apply execution proof only if authorised.
+Selected next target after this prototype and synthetic proof: docs/status
+refresh after merge, then a separate full eligible-row artefact/export decision
+only if authorised.
 
 Why this remains separate:
 
-- this branch proves the command surface, guard logic, checksum/expected-total
+- PR #614 proves the command surface, guard logic, checksum/expected-total
   checks, validation mode, scratch-only write mechanics, and idempotency in
   deterministic tests;
+- the bounded synthetic proof proves those mechanics through the CLI against
+  generated non-R4 rows and a local SQLite scratch/test database;
 - it does not execute against the preserved scratch artefacts;
 - it does not prove full `1018`-row scratch application because the preserved
   dry-run report has bounded eligible samples;
