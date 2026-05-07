@@ -26,6 +26,15 @@ The synthetic proof does not prove live migration readiness, does not prove a
 preserved-evidence scratch apply, and does not authorise finance import.
 `finance_import_ready=false`.
 
+The execution package decision is recorded in:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_EXECUTION_PACKAGE_DECISION.md`
+
+That decision recommends Option B, an approved bounded fixture package, for the
+next explicitly authorised scratch/test-only execution proof. A complete
+eligible-row artefact package remains blocked until provenance, redaction,
+storage, hashes, and owner approval are established.
+
 ## Purpose
 
 A future explicitly authorised slice may execute the guarded scratch apply CLI
@@ -68,6 +77,10 @@ The current preserved dry-run report has bounded eligible samples, not a full
 eligible-row apply payload. It must not be used for scratch apply unless the
 future slice first supplies an approved full eligible-row artefact or an
 approved bounded fixture.
+
+For the next execution proof, use the approved bounded fixture package defined
+by the package decision. Do not proceed to a complete eligible-row package until
+the Option A blockers in that decision are cleared.
 
 ## Required Provenance
 
