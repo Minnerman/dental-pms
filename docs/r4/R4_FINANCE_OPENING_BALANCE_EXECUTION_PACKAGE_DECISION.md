@@ -39,11 +39,21 @@ Completed:
 - PR #615: bounded synthetic scratch execution proof using generated non-R4 data
   and local SQLite scratch/test under pytest `tmp_path`.
 - PR #616: preserved-evidence scratch execution plan.
+- PR #617: execution package decision selecting Option B next.
+
+Candidate package prepared after this decision:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_PACKAGE.md`
+- `docs/r4/fixtures/opening_balance_bounded_fixture/`
+
+That package is candidate/pending approval only. It does not authorise
+execution.
 
 Not completed:
 
 - no preserved-evidence scratch apply execution;
 - no complete `1018`-row apply artefact approval;
+- no owner approval for the candidate bounded fixture package;
 - no live/default PMS write approval;
 - no finance import.
 
@@ -335,9 +345,10 @@ Live finance import:
 
 Next slice after this decision, only after explicit instruction:
 
-- prepare the Option B approved bounded fixture package for scratch/test-only
-  execution, without running guarded scratch apply until the package is reviewed
-  and approved.
+- review and approve or revise the candidate Option B bounded fixture package
+  for scratch/test-only execution, without running guarded scratch apply until
+  package approval is recorded and a separate execution slice is explicitly
+  authorised.
 
 Expected scope for that next slice:
 

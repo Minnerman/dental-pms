@@ -2,7 +2,7 @@
 
 Status date: 2026-05-07
 
-Baseline: `origin/master@c813bbdbc7e3f15674860a70f450ead601fbfa1b`
+Baseline: `origin/master@5817a99bf14ec389b93fc169a9ddc536b54ba239`
 
 R4 policy: strictly read-only / SELECT-only. This document is a planning and readiness guide only. It does not authorise writes to R4, broad imports, or live cutover.
 
@@ -57,6 +57,7 @@ Move the R4 migration from one-small-gap-at-a-time work to a structured readines
 ### Proof-Only Tasks Before More Code
 
 - SELECT-only finance source discovery and inventory are complete as of PR #586 and PR #587. Finance sign/cancellation/allocation policy is recorded in `docs/r4/R4_FINANCE_SIGN_CANCELLATION_ALLOCATION_POLICY.md`, PR #591 completed the backend-only pure finance classification/sign helper proof, PR #593 completed backend-only SELECT-only opening balance reconciliation command/report tooling, the 2026-05-04 live opening balance proof evidence is recorded, PR #596 completed live SELECT-only cancellation/refund/allocation proof evidence, `docs/r4/R4_FINANCE_REFUND_ALLOCATION_CHARGE_REF_DECISION.md` records the refund-allocation/charge-ref semantics decision, the 2026-05-04 live cash-event staging proof evidence is complete with `finance_import_ready=false`, `docs/r4/R4_FINANCE_INVOICE_CHARGE_REF_SOURCE_DECISION.md` records that no explicit patient invoice/statement source or usable allocation charge refs are proven, `docs/r4/R4_FINANCE_OPENING_BALANCE_SNAPSHOT_DESIGN.md` records the opening-balance snapshot design, PR #604 completed the backend-only pure opening-balance snapshot plan helper proof, `docs/r4/R4_FINANCE_OPENING_BALANCE_SCRATCH_DRYRUN_DESIGN.md` records the scratch-only dry-run/report design, PR #607 completed backend-only no-write dry-run/report tooling, the 2026-05-05 scratch-only dry-run execution evidence is complete with `import_ready=false`, PR #612 completed backend-only guarded scratch apply planning/preflight helper proof, PR #614 added the guarded scratch-only apply CLI prototype, PR #615 added a bounded synthetic scratch execution proof, PR #616 records the future preserved-evidence scratch execution plan, and `docs/r4/R4_FINANCE_OPENING_BALANCE_EXECUTION_PACKAGE_DECISION.md` recommends an approved bounded fixture as the next execution package, all without finance importer wiring, R4 writes, default/main PMS DB writes, real patient data, or live finance record changes.
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_PACKAGE.md` records a candidate bounded fixture package for the next opening-balance proof. It is pending owner approval, does not authorise guarded scratch apply execution, uses synthetic/non-sensitive fixture data only, keeps `finance_import_ready=false`, and keeps finance import out of scope.
 - SELECT-only recall source inventory: due-date/status/contact-history tables and patient linkage.
 - Isolated scratch appointment import/idempotency/linkage is complete as of the 2026-04-30 transcript: `r4_appointments` created `101051`, idempotency rerun created `0` and skipped `101051`, linkage mapped `99299` with `1752` expected null-patient rows and `0` actionable unmapped rows. Do not repeat it unless data freshness or code changes require it.
 - No-core-write appointment promotion dry-run/report is complete as of PR #574: the scratch report considered `101051` rows, found `94156` status-policy promote candidates, `94156` patient-linked candidates, `94156` clinician-resolved candidates, `3726` deleted excluded rows, `1417` manual-review rows, `1752` null-patient read-only rows, and kept core `appointments` unchanged at `0` before/after.
@@ -82,8 +83,8 @@ Do not start with finance or future diary writes into core live workflow tables.
 
 ## Recommended Next 5 Slices
 
-1. Approved bounded fixture package, only after explicit instruction.
-   - Target: prepare the Option B package selected in `docs/r4/R4_FINANCE_OPENING_BALANCE_EXECUTION_PACKAGE_DECISION.md` for a later scratch/test-only execution proof, without running guarded scratch apply until the package is reviewed and approved.
+1. Candidate bounded fixture package review/approval, only after explicit instruction.
+   - Target: review and approve or revise the candidate package in `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_PACKAGE.md`; do not run guarded scratch apply until approval is recorded and a separate scratch/test-only execution slice is explicitly authorised.
    - Why next: PR #615 proved the CLI write path and idempotency with synthetic non-R4 data, PR #616 defined the preserved-evidence execution plan, and the package decision records that a complete eligible-row artefact is not yet approved.
    - Likely files: docs/evidence package manifest, or a tiny fixture-generation/proof support change only if explicitly authorised.
    - Likely validation: manifest/checksum/expected-total/eligible-count/repo-SHA review, validation mode first in a later execution slice, default/live refusal proof, isolated scratch/test-only apply, idempotency rerun, invoice/payment counts unchanged, stdout/stderr/exit-code/report artefacts, no real patient data in committed docs, no R4 access unless separately authorised as SELECT-only, no live/default PMS writes, and no finance import.
