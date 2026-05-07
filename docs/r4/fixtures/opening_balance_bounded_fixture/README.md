@@ -1,8 +1,9 @@
-# Opening-Balance Candidate Bounded Fixture Package
+# Opening-Balance Bounded Fixture Package
 
 Status date: 2026-05-07
 
-Package status: candidate bounded fixture package pending approval.
+Package status: owner-approved bounded fixture package for future
+scratch/test-only preserved-evidence execution.
 
 This package is documentation/fixture preparation only. It does not authorise
 guarded scratch apply execution, R4 access, real R4 artefact access, real
@@ -18,8 +19,8 @@ This package prepares the Option B bounded fixture selected in
 
 It is deliberately small, synthetic, inspectable, and hashable. A future
 explicitly authorised slice may use this package for scratch/test-only
-preserved-evidence execution proof only after the approval checklist is
-completed.
+preserved-evidence execution proof only after validation/no-write and the
+future execution checks are completed.
 
 ## Contents
 
@@ -28,11 +29,14 @@ completed.
   redacted command shapes, and future evidence requirements.
 - `APPROVAL_CHECKLIST.md`: owner approval checklist required before any future
   execution.
+- `APPROVAL_RECORD_20260507.md`: owner approval record for this exact fixture
+  hash and manifest checksum.
 
 ## Fixture Summary
 
 - manifest ID: `ob-bounded-fixture-20260507-000001`
-- package status: candidate pending owner approval
+- package status: owner approved for future scratch/test-only package use;
+  execution still requires a separate explicitly authorised slice
 - fixture type: synthetic non-R4 bounded fixture
 - row count: `3`
 - eligible count: `3`
@@ -52,6 +56,10 @@ The fixture uses only these synthetic source identifiers:
 
 No real R4 patient codes, patient names, DOBs, addresses, phone numbers, emails,
 clinical details, real account numbers, unredacted DSNs, or secrets are included.
+
+`fixture.json` and `manifest.json` retain their original package-preparation
+metadata so the approved hashes remain valid. The external approval record is
+the approval authority for future scratch/test-only package use.
 
 ## Inclusion Rules
 
@@ -75,7 +83,7 @@ Excluded rows:
 - real R4 rows;
 - real patient, account, demographic, or clinical values.
 
-Zero/no-op rows are intentionally excluded from this candidate package because
+Zero/no-op rows are intentionally excluded from this bounded package because
 the guarded apply CLI consumes complete eligible rows for the selected execution
 set. The zero/no-op path is already represented in dry-run planning evidence and
 does not create ledger rows.
@@ -91,7 +99,7 @@ python -m json.tool docs/r4/fixtures/opening_balance_bounded_fixture/fixture.jso
 python -m json.tool docs/r4/fixtures/opening_balance_bounded_fixture/manifest.json >/tmp/opening_balance_bounded_manifest.json.pretty
 ```
 
-Expected hashes for this candidate package:
+Expected hashes for this bounded package:
 
 ```text
 2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d  docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json
@@ -100,8 +108,8 @@ Expected hashes for this candidate package:
 
 ## Future Command Shapes
 
-The future execution slice must run validation/no-write first. The package does
-not authorise either command.
+The future execution slice must run validation/no-write first. The package
+approval does not authorise either command by itself.
 
 Validation/no-write shape:
 
@@ -117,7 +125,8 @@ python -m app.scripts.r4_opening_balance_guarded_scratch_apply \
   --expected-repo-sha 5817a99bf14ec389b93fc169a9ddc536b54ba239
 ```
 
-Future guarded scratch apply shape, only after approval and validation review:
+Future guarded scratch apply shape, only in a separately authorised execution
+slice after validation review:
 
 ```bash
 python -m app.scripts.r4_opening_balance_guarded_scratch_apply \

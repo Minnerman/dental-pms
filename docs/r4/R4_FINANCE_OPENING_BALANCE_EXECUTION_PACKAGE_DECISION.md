@@ -41,19 +41,19 @@ Completed:
 - PR #616: preserved-evidence scratch execution plan.
 - PR #617: execution package decision selecting Option B next.
 
-Candidate package prepared after this decision:
+Bounded fixture package prepared after this decision:
 
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_PACKAGE.md`
 - `docs/r4/fixtures/opening_balance_bounded_fixture/`
 
-That package is candidate/pending approval only. It does not authorise
-execution.
+That package now has an owner approval record for future scratch/test-only
+package use. The approval does not authorise execution by itself.
 
 Not completed:
 
 - no preserved-evidence scratch apply execution;
 - no complete `1018`-row apply artefact approval;
-- no owner approval for the candidate bounded fixture package;
+- no separate execution-slice authorisation for guarded scratch apply;
 - no live/default PMS write approval;
 - no finance import.
 
@@ -343,12 +343,11 @@ Live finance import:
 
 ## Recommended Next Slice
 
-Next slice after this decision, only after explicit instruction:
+Next slice after package approval, only after explicit instruction:
 
-- review and approve or revise the candidate Option B bounded fixture package
-  for scratch/test-only execution, without running guarded scratch apply until
-  package approval is recorded and a separate execution slice is explicitly
-  authorised.
+- run the future scratch/test-only preserved-evidence execution slice with
+  validation/no-write first, without running guarded scratch apply unless that
+  slice separately authorises execution and all guards pass.
 
 Expected scope for that next slice:
 
