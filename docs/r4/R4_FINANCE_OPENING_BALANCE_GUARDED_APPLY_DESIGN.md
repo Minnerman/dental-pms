@@ -571,6 +571,42 @@ database, actual PMS Postgres, or live/default PMS data. It does not prove the
 full `1018`-row preserved evidence artefact and does not authorise finance
 import.
 
+## Preserved-Evidence Scratch Execution Plan
+
+The future preserved-evidence scratch execution plan is recorded in:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_PRESERVED_EVIDENCE_SCRATCH_EXECUTION_PLAN.md`
+
+That plan is docs-only. It does not execute the guarded apply path, open a real
+R4 artefact, connect to a real PMS database, write PMS Postgres rows, create
+finance records, or authorise finance import.
+
+The plan separates three states:
+
+- completed synthetic scratch proof from PR #615;
+- future bounded preserved-evidence scratch execution, only after explicit
+  instruction and only against isolated scratch/test data;
+- live/default finance import, which remains unauthorised and out of scope.
+
+Before any preserved-evidence scratch apply run, the plan requires an accepted
+dry-run artefact package with complete eligible rows for the selected bounded
+execution set, manifest/report/source hashes, expected total, eligible count,
+repo SHA guard, validation/no-write command first, explicit scratch target
+classification, and guarded write flags:
+
+- `--apply`
+- `--confirm SCRATCH_OPENING_BALANCE_APPLY`
+- `--actor-id`
+
+It also requires evidence capture for validation, apply, idempotency, optional
+rollback, stdout, stderr, exit codes, before/after finance counts, created,
+skipped, and refused counts, redacted command shape, target classification,
+manifest ID, repo SHAs, and cleanup/rollback outcome. Patient-sensitive data,
+full artefact contents, unredacted DSNs, and secrets must stay out of committed
+docs.
+
+`finance_import_ready` remains `false`.
+
 ## Recommended Next Slice
 
 PR #612 completed the previously recommended backend-only guarded scratch apply
@@ -594,17 +630,21 @@ Completed helper proof:
   finance staging models, no finance records created or changed, no PMS DB
   writes, and no R4 access or writes.
 
-Selected next target after this prototype and synthetic proof: docs/status
-refresh after merge, then a separate full eligible-row artefact/export decision
-only if authorised.
+Selected next target after this prototype and synthetic proof: the
+preserved-evidence scratch execution package decision, using
+`docs/r4/R4_FINANCE_OPENING_BALANCE_PRESERVED_EVIDENCE_SCRATCH_EXECUTION_PLAN.md`,
+only after explicit instruction.
 
 Why this remains separate:
 
 - PR #614 proves the command surface, guard logic, checksum/expected-total
   checks, validation mode, scratch-only write mechanics, and idempotency in
   deterministic tests;
-- the bounded synthetic proof proves those mechanics through the CLI against
+- PR #615's bounded synthetic proof proves those mechanics through the CLI against
   generated non-R4 rows and a local SQLite scratch/test database;
+- the preserved-evidence plan defines the required artefact package, evidence
+  capture, stop conditions, idempotency expectations, and cleanup/rollback
+  expectations for a future explicitly authorised scratch/test run;
 - it does not execute against the preserved scratch artefacts;
 - it does not prove full `1018`-row scratch application because the preserved
   dry-run report has bounded eligible samples;

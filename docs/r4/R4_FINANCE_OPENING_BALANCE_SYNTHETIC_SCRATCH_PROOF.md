@@ -52,8 +52,9 @@ live/default PMS write, and does not make finance import ready.
 
 ## Next Slice
 
-After this synthetic proof is merged, the next safe finance slice is a
-docs/status refresh or a separate full eligible-row artefact/export decision.
+After PR #615, the next safe finance slice is the docs-only preserved-evidence
+scratch execution plan in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_PRESERVED_EVIDENCE_SCRATCH_EXECUTION_PLAN.md`.
 Any scratch apply execution against preserved evidence still requires explicit
 instruction, a complete eligible-row artefact or deliberately bounded fixture,
 and isolated scratch/test data only.
