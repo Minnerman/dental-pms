@@ -1,0 +1,96 @@
+{
+  "approval": {
+    "approval_status": "candidate_pending_owner_approval",
+    "approved_for_execution": false,
+    "approval_required_before_execution": true,
+    "approval_record": "docs/r4/fixtures/opening_balance_bounded_fixture/APPROVAL_CHECKLIST.md"
+  },
+  "baseline": {
+    "base_origin_master_sha": "5817a99bf14ec389b93fc169a9ddc536b54ba239",
+    "package_commit_sha": "pending_until_pr_commit"
+  },
+  "commands": {
+    "future_apply_command_shape_redacted": "python -m app.scripts.r4_opening_balance_guarded_scratch_apply --dry-run-report-json docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json --database-url '<scratch-or-test-dsn-redacted>' --manifest-id ob-bounded-fixture-20260507-000001 --output-json '<redacted-evidence-dir>/opening_balance_guarded_apply_report.json' --expected-report-sha256 2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d --expected-total-balance 7.35 --expected-eligible-count 3 --expected-repo-sha 5817a99bf14ec389b93fc169a9ddc536b54ba239 --apply --confirm SCRATCH_OPENING_BALANCE_APPLY --actor-id '<safe-non-sensitive-actor-id>'",
+    "future_validation_command_shape_redacted": "python -m app.scripts.r4_opening_balance_guarded_scratch_apply --dry-run-report-json docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json --database-url '<scratch-or-test-dsn-redacted>' --manifest-id ob-bounded-fixture-20260507-000001 --output-json '<redacted-evidence-dir>/opening_balance_guarded_apply_validate.json' --expected-report-sha256 2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d --expected-total-balance 7.35 --expected-eligible-count 3 --expected-repo-sha 5817a99bf14ec389b93fc169a9ddc536b54ba239",
+    "manifest_checksum_command": "sha256sum docs/r4/fixtures/opening_balance_bounded_fixture/manifest.json",
+    "source_fixture_checksum_command": "sha256sum docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json"
+  },
+  "evidence_requirements": {
+    "created_skipped_refused_counts": true,
+    "expected_total": "7.35",
+    "first_guarded_apply_result": true,
+    "fixture_or_source_hash": "2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d",
+    "manifest_checksum": "calculate_with_manifest_checksum_command_after_review",
+    "manifest_id": "ob-bounded-fixture-20260507-000001",
+    "redacted_command_shape": true,
+    "repo_sha": "5817a99bf14ec389b93fc169a9ddc536b54ba239",
+    "row_count": 3,
+    "safe_non_sensitive_actor_operator_id": "required_for_future_apply",
+    "second_run_idempotency_result": true,
+    "target_classification": "scratch_or_test_only",
+    "timestamp": "required_for_future_execution",
+    "validation_no_write_result": true
+  },
+  "fixture": {
+    "eligible_count": 3,
+    "expected_total": "7.35",
+    "fixture_file": "docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json",
+    "fixture_sha256": "2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d",
+    "fixture_type": "synthetic_candidate_bounded_fixture",
+    "manifest_id": "ob-bounded-fixture-20260507-000001",
+    "row_count": 3,
+    "source_artifact_hash": null,
+    "source_artifact_type": "synthetic_non_r4_fixture"
+  },
+  "inclusion_exclusion_rules": {
+    "excluded": [
+      "zero-balance no-op rows",
+      "unmapped non-zero rows",
+      "component-mismatch rows",
+      "ambiguous-sign rows",
+      "invalid amount rows",
+      "real R4 patient rows",
+      "real patient identifiers or demographic values"
+    ],
+    "included": [
+      "exactly three synthetic non-zero eligible opening-balance rows",
+      "synthetic source patient codes TEST-R4OB-BF-001 through TEST-R4OB-BF-003",
+      "synthetic mapped patient IDs 990001 through 990003",
+      "one negative amount to exercise decrease_debt_or_credit",
+      "two positive amounts to exercise increase_debt"
+    ]
+  },
+  "safety": {
+    "actual_pms_postgres_writes_authorized": false,
+    "finance_import_authorized": false,
+    "finance_import_ready": false,
+    "guarded_scratch_apply_authorized_by_this_package": false,
+    "live_default_pms_writes_authorized": false,
+    "real_patient_data": false,
+    "real_r4_artifact": false,
+    "r4_access_required": false,
+    "scratch_test_only_future_target": true
+  },
+  "sensitive_data_policy": {
+    "committed_fixture_contains_real_r4_data": false,
+    "committed_fixture_contains_real_patient_data": false,
+    "forbidden_in_committed_evidence": [
+      "real patient names",
+      "DOBs",
+      "addresses",
+      "phone numbers",
+      "emails",
+      "clinical details",
+      "real R4 patient codes",
+      "real account numbers",
+      "full real artefact contents",
+      "unredacted DSNs",
+      "secrets"
+    ]
+  },
+  "target": {
+    "classification": "scratch_or_test_only",
+    "default_live_or_production_refused": true,
+    "requires_explicit_future_authorization": true
+  }
+}
