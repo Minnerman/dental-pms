@@ -38,6 +38,10 @@ Package files:
 - `docs/r4/fixtures/opening_balance_bounded_fixture/APPROVAL_CHECKLIST.md`
 - `docs/r4/fixtures/opening_balance_bounded_fixture/APPROVAL_RECORD_20260507.md`
 
+Execution-readiness report:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_EXECUTION_READINESS.md`
+
 ## Fixture Summary
 
 - manifest ID: `ob-bounded-fixture-20260507-000001`
@@ -191,6 +195,7 @@ Live finance import:
 ## Next Slice
 
 Only after explicit instruction: run the future scratch/test-only execution
-slice with validation/no-write first. Do not run guarded scratch apply unless
-that future slice separately authorises execution and all target, hash, total,
-count, repo-SHA, rollback/cleanup, and redaction checks pass.
+slice using the readiness report, with validation/no-write first. Do not run
+guarded scratch apply unless that future slice separately authorises execution
+and all target, hash, total, count, repo-SHA, rollback/cleanup, and redaction
+checks pass.
