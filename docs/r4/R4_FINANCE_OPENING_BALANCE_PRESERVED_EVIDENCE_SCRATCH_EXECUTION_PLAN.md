@@ -35,12 +35,15 @@ next explicitly authorised scratch/test-only execution proof. A complete
 eligible-row artefact package remains blocked until provenance, redaction,
 storage, hashes, and owner approval are established.
 
-The current candidate bounded fixture package is recorded in:
+The bounded fixture package and approval record are recorded in:
 
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_PACKAGE.md`
 - `docs/r4/fixtures/opening_balance_bounded_fixture/`
 
-The candidate package is pending approval and does not authorise execution.
+The package is approved for future scratch/test-only package use, but that
+approval does not authorise execution by itself. A future execution slice must
+still be separately authorised, run validation/no-write first, and complete the
+target, hash, total, count, repo-SHA, rollback/cleanup, and redaction checks.
 
 ## Purpose
 

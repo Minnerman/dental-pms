@@ -2,7 +2,7 @@
 
 Status date: 2026-05-07
 
-Baseline: `origin/master@5817a99bf14ec389b93fc169a9ddc536b54ba239`
+Baseline: `origin/master@20dbbd06d27c5041ce916038ae7b5bff32ac4c98`
 
 Safety: this is package preparation only. It does not execute guarded scratch
 apply, run the CLI, access R4, open a real R4 artefact, use real patient data,
@@ -17,10 +17,12 @@ PR #617 selected Option B, an approved bounded fixture, as the next package type
 for a future explicitly authorised scratch/test-only preserved-evidence
 execution proof.
 
-This document records the candidate bounded fixture package prepared after that
-decision. The package is deliberately small, synthetic, inspectable, and
-hashable. It remains pending owner approval and must not be executed until a
-future slice explicitly authorises scratch/test-only execution.
+This document records the bounded fixture package prepared after that decision.
+The package is deliberately small, synthetic, inspectable, and hashable. Owner
+approval for this exact fixture hash and manifest checksum is recorded in the
+package directory. The approval does not authorise execution by itself; any
+future guarded scratch apply remains a separate explicitly authorised
+scratch/test-only slice.
 
 ## Package Location
 
@@ -34,11 +36,13 @@ Package files:
 - `docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json`
 - `docs/r4/fixtures/opening_balance_bounded_fixture/manifest.json`
 - `docs/r4/fixtures/opening_balance_bounded_fixture/APPROVAL_CHECKLIST.md`
+- `docs/r4/fixtures/opening_balance_bounded_fixture/APPROVAL_RECORD_20260507.md`
 
 ## Fixture Summary
 
 - manifest ID: `ob-bounded-fixture-20260507-000001`
-- approval status: candidate pending owner approval
+- approval status: approved for future scratch/test-only package use; execution
+  still requires a separate explicitly authorised slice
 - fixture type: synthetic non-R4 bounded fixture
 - row count: `3`
 - eligible count: `3`
@@ -63,7 +67,7 @@ ledger adjustments.
 
 ## Acceptance Criteria Covered
 
-The candidate package records:
+The package records:
 
 - stable manifest ID;
 - fixture SHA256;
@@ -76,7 +80,7 @@ The candidate package records:
 - redacted future command shapes;
 - future evidence fields;
 - approval checklist;
-- explicit pending-approval status.
+- external approval record for the exact fixture hash and manifest checksum.
 
 The package contains no real patient names, DOBs, addresses, phone numbers,
 emails, clinical details, real R4 patient codes, real account numbers, real R4
@@ -84,9 +88,18 @@ artefact contents, unredacted DSNs, or secrets.
 
 ## Approval Gate
 
-The package is not approved for execution. Before any future run, the approval
-checklist must be completed by the owner/reviewer and the future execution slice
-must explicitly authorise scratch/test-only guarded apply.
+The package is approved for future scratch/test-only package use by:
+
+- `docs/r4/fixtures/opening_balance_bounded_fixture/APPROVAL_RECORD_20260507.md`
+
+`fixture.json` and `manifest.json` are intentionally unchanged so the approved
+fixture hash and manifest checksum remain valid. The manifest's original
+candidate metadata is not the approval authority; the external approval record
+is.
+
+The approval does not authorise execution. Before any future run, the future
+execution slice must explicitly authorise scratch/test-only guarded apply and
+complete the remaining execution checks in the approval checklist.
 
 Approval must confirm:
 
@@ -154,11 +167,11 @@ Approved-bounded-fixture decision:
 
 - PR #617 selected Option B, approved bounded fixture, as the next package type.
 
-Candidate bounded fixture package:
+Approved bounded fixture package:
 
-- this package prepares a candidate fixture and checklist only;
-- it is pending approval;
-- it does not execute anything.
+- this package records the fixture, checklist, and approval record;
+- it is approved for future scratch/test-only package use;
+- it does not execute anything or authorise execution by itself.
 
 Future preserved-evidence scratch execution:
 
@@ -177,7 +190,7 @@ Live finance import:
 
 ## Next Slice
 
-Only after explicit instruction: review and approve or revise the candidate
-bounded fixture package. Do not run guarded scratch apply until approval is
-recorded and a future execution slice explicitly authorises scratch/test-only
-execution.
+Only after explicit instruction: run the future scratch/test-only execution
+slice with validation/no-write first. Do not run guarded scratch apply unless
+that future slice separately authorises execution and all target, hash, total,
+count, repo-SHA, rollback/cleanup, and redaction checks pass.
