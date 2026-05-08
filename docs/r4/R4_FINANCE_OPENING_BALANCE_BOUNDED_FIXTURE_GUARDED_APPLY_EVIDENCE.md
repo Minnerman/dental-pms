@@ -15,6 +15,7 @@ This report records the first owner-authorised guarded apply/write proof for the
 - Eligible count: `3`
 - Expected total: `7.35`
 - Validation/no-write sign-off: `docs/r4/fixtures/opening_balance_bounded_fixture/VALIDATION_NOWRITE_SIGNOFF_20260508.md`
+- Guarded apply/write evidence sign-off: `docs/r4/fixtures/opening_balance_bounded_fixture/GUARDED_APPLY_EVIDENCE_SIGNOFF_20260508.md`
 - Owner authorisation: provided in task input for the first local isolated scratch/test-only guarded apply/write proof only.
 
 ## Target
