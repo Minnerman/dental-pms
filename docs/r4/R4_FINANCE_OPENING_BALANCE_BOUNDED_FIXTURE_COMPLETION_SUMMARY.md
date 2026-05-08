@@ -74,6 +74,6 @@ Recommended next options are:
 
 - pause after bounded-fixture pathway completion;
 - perform a final owner review/status sign-off if desired;
-- plan a separate full eligible-row artefact track with provenance, redaction,
-  storage, hashes, and owner approval;
+- review the separate full eligible-row artefact planning track:
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PLAN.md`;
 - do not proceed to live import from this bounded-fixture pathway.
