@@ -12,6 +12,14 @@ live/default PMS use.
 
 `finance_import_ready=false`. Finance import remains out of scope.
 
+Validation/no-write evidence for this approved package is recorded in:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_VALIDATION_NOWRITE_EVIDENCE.md`
+
+That evidence did not use `--apply` or `--confirm`, did not connect to a PMS
+database, did not create a SQLite scratch/test database file, and did not create
+ledger rows or finance records.
+
 ## Readiness Status
 
 Status: ready for a later separately authorised scratch/test-only
