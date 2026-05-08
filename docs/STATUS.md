@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-08: Owner sign-off recorded for bounded opening-balance fixture validation/no-write evidence.
+  - Sign-off record: `docs/r4/fixtures/opening_balance_bounded_fixture/VALIDATION_NOWRITE_SIGNOFF_20260508.md`
+  - Evidence report: `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_VALIDATION_NOWRITE_EVIDENCE.md`
+  - Scope: sign-off is limited to validation/no-write evidence for manifest `ob-bounded-fixture-20260507-000001`, evidence SHA256 `c053f6514b6a9109c60561be5ae7485d81399d43cfc58bcbe58f915b5c880840`, fixture SHA256 `2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d`, manifest SHA256 `66cc1c7ac16a4e677dfea6994cef86a5b7c496a00fbfec10336fa7641d98bb67`, row count `3`, eligible count `3`, and expected total `7.35`.
+  - Non-authorisation: this sign-off does not authorise guarded apply/write, live/default PMS writes, actual PMS Postgres writes, R4 access, real artefact access, real patient data, finance import, invoice/payment/staging import, or production execution.
+  - Import-readiness: `finance_import_ready=false`; finance import remains out of scope.
+  - Next finance slice: only after explicit separate instruction, decide whether to authorise a scratch/test-only guarded apply/write proof using the signed-off validation/no-write evidence.
 - 2026-05-08: Bounded opening-balance fixture validation/no-write evidence recorded.
   - Evidence report: `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_VALIDATION_NOWRITE_EVIDENCE.md`
   - Approved package: manifest `ob-bounded-fixture-20260507-000001`, row count `3`, eligible count `3`, expected total `7.35`.

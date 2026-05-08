@@ -22,6 +22,8 @@ Approved bounded fixture package:
   `docs/r4/fixtures/opening_balance_bounded_fixture/fixture.json`
 - manifest:
   `docs/r4/fixtures/opening_balance_bounded_fixture/manifest.json`
+- validation/no-write sign-off:
+  `docs/r4/fixtures/opening_balance_bounded_fixture/VALIDATION_NOWRITE_SIGNOFF_20260508.md`
 - manifest ID: `ob-bounded-fixture-20260507-000001`
 - row count: `3`
 - eligible count: `3`
@@ -100,6 +102,23 @@ The preflight plan reported `is_safe_to_apply_in_scratch=false` with
 confirmation was intentionally not supplied. This preserves the apply gate and
 does not indicate an apply/write authorisation.
 
+## Owner Sign-Off
+
+Owner sign-off for this validation/no-write evidence is recorded in:
+
+- `docs/r4/fixtures/opening_balance_bounded_fixture/VALIDATION_NOWRITE_SIGNOFF_20260508.md`
+
+The sign-off is limited to this evidence document, the local evidence SHA256,
+the approved bounded fixture hash, the manifest checksum, manifest
+`ob-bounded-fixture-20260507-000001`, row count `3`, eligible count `3`, and
+expected total `7.35`.
+
+The sign-off accepts the validation/no-write evidence for consideration of a
+later separately authorised scratch/test-only guarded apply/write slice. It
+does not authorise guarded apply/write, PMS writes, R4 access, real artefact
+access, real patient data use, finance import, invoice/payment/staging import,
+or production execution.
+
 Target classification:
 
 - target string: local SQLite scratch/test URL
@@ -142,8 +161,9 @@ This validation evidence does not authorise:
 
 ## Next Gate
 
-The next gate is review of this validation/no-write evidence. Guarded
-apply/write may be considered only in a later separately authorised
-scratch/test-only slice, and only after that review confirms the target,
-fixture hash, manifest checksum, expected total, eligible count, repo SHA,
-rollback/cleanup plan, and redaction controls still match the approved package.
+After owner sign-off, the next gate is a separate explicit decision whether to
+authorise a scratch/test-only guarded apply/write slice. Guarded apply/write may
+be considered only in that later separately authorised slice, and only after it
+re-confirms the target, fixture hash, manifest checksum, expected total,
+eligible count, repo SHA, rollback/cleanup plan, and redaction controls still
+match the approved package.
