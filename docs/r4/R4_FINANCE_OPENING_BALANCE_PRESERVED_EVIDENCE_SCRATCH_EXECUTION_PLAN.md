@@ -45,6 +45,10 @@ approval does not authorise execution by itself. A future execution slice must
 still be separately authorised, run validation/no-write first, and complete the
 target, hash, total, count, repo-SHA, rollback/cleanup, and redaction checks.
 
+Execution-readiness for the approved bounded fixture package is recorded in:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_BOUNDED_FIXTURE_EXECUTION_READINESS.md`
+
 ## Purpose
 
 A future explicitly authorised slice may execute the guarded scratch apply CLI
