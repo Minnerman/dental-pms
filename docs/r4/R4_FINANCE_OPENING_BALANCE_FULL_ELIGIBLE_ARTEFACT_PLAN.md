@@ -216,9 +216,16 @@ Stop this planning track if any future task would require:
 - wording that implies live import, production readiness, or completed full
   eligible-row artefact execution.
 
+## Linked Governance Proposal
+
+The separate provenance and redaction proposal is recorded at
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_PROPOSAL.md`.
+It is also planning-only and does not create, access, inspect, copy, hash,
+store, validate, or execute a real artefact.
+
 ## Next Conservative Slice
 
-The next safe slice is owner review of this plan or a separate provenance and
-redaction proposal for a future artefact package. Do not proceed to live import.
-Do not run validation/no-write or guarded apply/write until a future task
-explicitly authorises that exact gate.
+The next safe slice is owner review of this plan and the linked provenance and
+redaction proposal. Do not proceed to live import. Do not run validation/no-write
+or guarded apply/write until a future task explicitly authorises that exact
+gate.
