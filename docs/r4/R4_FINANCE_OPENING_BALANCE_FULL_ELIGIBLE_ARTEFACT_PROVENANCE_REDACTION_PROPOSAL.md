@@ -17,6 +17,15 @@ proposal.
 `finance_import_ready=false`. Live finance import remains out of scope.
 Migration/import is not complete. Production readiness is not established.
 
+Owner sign-off for this proposal is recorded separately at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_SIGNOFF.md`.
+That sign-off accepts this proposal as governance only and does not authorise
+R4 access, real artefact access, artefact creation/copying/hashing/storage,
+validation, execution, real patient data use, PMS DB connection, guarded
+scratch apply, CLI validation/no-write, live/default PMS writes, actual PMS
+Postgres writes, finance import, invoice/payment/staging import, production
+execution, or full eligible-row artefact execution.
+
 ## Relationship To Bounded Fixture Pathway
 
 The bounded-fixture pathway is complete through signed-off local isolated
