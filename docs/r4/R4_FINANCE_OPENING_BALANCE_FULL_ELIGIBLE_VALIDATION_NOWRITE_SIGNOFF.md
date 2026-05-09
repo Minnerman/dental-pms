@@ -13,8 +13,8 @@ patient data, connect to a PMS database, rerun validation/no-write, run guarded
 apply/write, create or change finance records, or perform finance import.
 
 `finance_import_ready=false`. Migration/import is not complete. Production
-readiness is not established. Full eligible-row guarded apply/write has not
-run.
+readiness is not established. At this sign-off time, full eligible-row guarded
+apply/write had not run.
 
 ## Evidence Boundaries
 
@@ -47,13 +47,20 @@ above. This clears the validation/no-write evidence-review gate for the next
 standing-authorised non-live stage: scratch/test-only guarded apply/write
 proof.
 
-Guarded apply/write remains a future non-live slice under the standing
-authorisation. That future slice must re-check all documented provenance,
+At this sign-off time, guarded apply/write remained a future non-live slice
+under the standing authorisation. That future slice had to re-check all documented provenance,
 manifest, checksum, expected-total, count, repo-SHA, scratch/test target, and
 command guards before any proof run.
 
 This sign-off record does not run guarded apply/write and does not record
 guarded apply/write evidence.
+
+Guarded apply/write proof evidence for the next non-live slice is now recorded
+separately at
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_GUARDED_APPLY_EVIDENCE.md`.
+That evidence remains scratch/test-only and does not authorise live/default PMS
+DB writes, actual PMS Postgres writes, production execution, live finance
+import, or invoice/payment/staging import.
 
 ## Explicit Non-Authorisations
 
@@ -77,6 +84,10 @@ or evidence summaries.
 The next eligible slice is scratch/test-only guarded apply/write proof for
 request `r4ob-full-eligible-request-20260509-000001`, subject to all standing
 authorisation guards and stop conditions.
+
+That proof evidence is now recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_GUARDED_APPLY_EVIDENCE.md`;
+the next gate is owner review/sign-off of that proof evidence.
 
 Live/default PMS DB writes, actual PMS Postgres writes, production execution,
 live finance import, invoice/payment/staging import, and committing raw
