@@ -38,6 +38,8 @@ eligible-row artefact execution has not happened.
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_PROPOSAL.md`
 - provenance/redaction governance sign-off:
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_SIGNOFF.md`
+- standing owner authorisation:
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_STANDING_AUTHORISATION.md`
 
 ## Owner Roles
 
