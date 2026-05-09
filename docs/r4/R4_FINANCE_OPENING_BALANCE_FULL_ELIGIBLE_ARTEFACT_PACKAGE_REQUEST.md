@@ -44,6 +44,14 @@ repo record only. It does not create or authorise any artefact, R4 access,
 patient data use, PMS DB connection, validation/no-write, guarded apply/write,
 finance import, live import, or production use.
 
+A later owner-authorised docs-only request record is recorded at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_RECORD_20260509.md`.
+That record fills owner-authorised, non-sensitive request metadata and request
+ID `r4ob-full-eligible-request-20260509-000001`. It remains a request record
+only and does not authorise artefact creation/access, R4 access, validation,
+guarded apply/write, PMS DB connection, finance import, live import, production
+use, or full eligible-row artefact execution.
+
 ## Relationship To Completed Bounded Fixture Pathway
 
 The bounded-fixture pathway is complete through signed-off local isolated

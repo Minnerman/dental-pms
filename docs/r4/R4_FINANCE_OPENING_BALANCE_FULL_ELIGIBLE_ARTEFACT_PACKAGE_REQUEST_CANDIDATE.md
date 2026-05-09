@@ -26,6 +26,8 @@ eligible-row artefact execution has not happened.
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_SIGNOFF.md`
 - package request readiness/gap assessment:
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_READINESS.md`
+- later owner-authorised request record:
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_RECORD_20260509.md`
 - provenance/redaction governance:
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_PROPOSAL.md`
 - provenance/redaction governance sign-off:
@@ -44,6 +46,19 @@ the project owner, data owner, artefact owner, approving owner, and requesting
 owner for this candidate record.
 
 Use role labels only. Do not record personal names in this request track.
+
+## Later Owner-Authorised Request Record
+
+A later docs-only owner-authorised request record now exists at:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_RECORD_20260509.md`
+
+That later record uses owner-authorised, non-sensitive request metadata and
+request ID `r4ob-full-eligible-request-20260509-000001`. It remains a
+documentation record only and still does not authorise R4 access, real artefact
+access, artefact creation, artefact hashing, artefact storage, validation,
+execution, PMS DB connection, finance import, production execution, or full
+eligible-row artefact execution.
 
 ## Owner Approval Recorded
 
