@@ -20,6 +20,16 @@ authorised by this request/template.
 `finance_import_ready=false`. Live finance import remains out of scope.
 Migration/import is not complete. Production readiness is not established.
 
+Owner sign-off for this request/template is recorded separately at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_SIGNOFF.md`.
+That sign-off accepts this request/template as the required structure for any
+future full eligible-row artefact package request only. It does not authorise
+R4 access, real artefact access, artefact creation/copying/hashing/storage,
+validation, execution, real patient data use, PMS DB connection, guarded
+scratch apply, CLI validation/no-write, live/default PMS writes, actual PMS
+Postgres writes, finance import, invoice/payment/staging import, production
+execution, or full eligible-row artefact execution.
+
 ## Relationship To Completed Bounded Fixture Pathway
 
 The bounded-fixture pathway is complete through signed-off local isolated
