@@ -37,6 +37,13 @@ That note does not create a specific request record and does not authorise
 artefact creation, artefact access, validation/no-write, guarded apply/write,
 finance import, live import, or production use.
 
+A later docs-only candidate request record is recorded at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_CANDIDATE.md`.
+That candidate records role labels and owner approval to create the candidate
+repo record only. It does not create or authorise any artefact, R4 access,
+patient data use, PMS DB connection, validation/no-write, guarded apply/write,
+finance import, live import, or production use.
+
 ## Relationship To Completed Bounded Fixture Pathway
 
 The bounded-fixture pathway is complete through signed-off local isolated
