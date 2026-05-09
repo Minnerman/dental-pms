@@ -19,6 +19,13 @@ contents, patient names, dates of birth, addresses, phone numbers, emails,
 clinical details, unredacted DSNs, secrets, or production/live-looking target
 details.
 
+Owner sign-off for this package evidence is recorded separately at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_EVIDENCE_SIGNOFF.md`.
+That sign-off is limited to package-evidence review and does not authorise
+guarded apply/write, live/default PMS DB writes, actual PMS Postgres writes,
+production execution, live finance import, invoice/payment/staging import, or
+committing raw artefact or patient-level contents.
+
 `finance_import_ready=false`. Migration/import is not complete. Production
 readiness is not established. Live finance import remains out of scope.
 
