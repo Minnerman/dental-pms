@@ -23,6 +23,18 @@ record only. It is not a complete final full eligible-row artefact package
 request and does not authorise artefact creation, access, hashing, storage,
 validation, execution, import, or production use.
 
+A later owner-authorised request record is now recorded separately at:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_RECORD_20260509.md`
+
+That later record fills the non-sensitive request metadata supplied by the
+Project owner and records request ID
+`r4ob-full-eligible-request-20260509-000001`. It remains a docs-only request
+record and does not authorise R4 access, real artefact access, artefact
+creation, artefact hashing, artefact storage, validation/no-write, guarded
+apply/write, PMS DB connection, finance import, production execution, or full
+eligible-row artefact execution.
+
 This note does not authorise artefact creation, artefact access, artefact
 copying, artefact hashing, artefact storage, validation/no-write, guarded
 apply/write, execution, import, or production use.
@@ -38,6 +50,12 @@ eligible-row artefact execution has not happened.
 
 A specific full eligible-row artefact package request record cannot be created
 from the current committed docs without inventing owner-provided details.
+
+Post-assessment update: after this readiness/gap assessment and the candidate
+record, the Project owner supplied the remaining non-sensitive request metadata.
+The resulting owner-authorised docs-only request record is linked above. This
+update does not change the original assessment baseline and does not authorise
+any artefact creation/access or execution gate.
 
 The repo contains the approved request structure, governance rules, and some
 source/policy context. It does not contain a complete, concrete owner-approved
