@@ -44,6 +44,11 @@ Validation/no-write remains a future non-live slice under the standing
 authorisation. This sign-off record does not run validation/no-write and does
 not record validation/no-write evidence.
 
+Validation/no-write evidence for the next non-live slice is now recorded
+separately at
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_VALIDATION_NOWRITE_EVIDENCE.md`.
+That evidence remains no-write only and does not authorise guarded apply/write.
+
 ## Explicit Non-Authorisations
 
 This sign-off does not authorise:
