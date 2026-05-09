@@ -69,6 +69,21 @@ The proposed manifest ID above does not mean a manifest exists. The actual
 manifest ID and checksum must be generated and approved only in a later
 separately authorised artefact and manifest creation slice.
 
+The following values are not available yet and must not be invented or inferred
+from the bounded fixture:
+
+- Source artefact SHA256: not available yet; must be captured only after a later
+  separately authorised artefact creation/access slice.
+- Expected total: not available yet; must be captured only after a later
+  separately authorised artefact/manifest creation slice.
+- Eligible row count: not available yet; must be captured only after a later
+  separately authorised artefact/manifest creation slice.
+- Excluded row count: not available yet; must be captured only after a later
+  separately authorised artefact/manifest creation slice.
+
+The absence of these values means this request record is not an artefact
+package, not a manifest, and not an execution authorisation.
+
 ## Request Policies
 
 ### Inclusion Rules
