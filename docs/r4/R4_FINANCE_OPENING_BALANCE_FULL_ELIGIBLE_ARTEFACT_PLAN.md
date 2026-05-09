@@ -223,9 +223,15 @@ The separate provenance and redaction proposal is recorded at
 It is also planning-only and does not create, access, inspect, copy, hash,
 store, validate, or execute a real artefact.
 
+The package request/template is recorded at
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST.md`.
+It is a request/proposal template only and does not authorise artefact creation,
+artefact access, hashing, storage, validation/no-write, guarded apply/write,
+execution, live import, or production use.
+
 ## Next Conservative Slice
 
-The next safe slice is owner review of this plan and the linked provenance and
-redaction proposal. Do not proceed to live import. Do not run validation/no-write
-or guarded apply/write until a future task explicitly authorises that exact
+The next safe slice is owner review of the package request/template. Do not
+proceed to artefact creation, artefact access, validation/no-write, guarded
+apply/write, or live import until a future task explicitly authorises that exact
 gate.

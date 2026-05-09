@@ -1,72 +1,53 @@
-# R4 Finance Opening-Balance Full Eligible-Row Artefact Provenance And Redaction Proposal
+# R4 Finance Opening-Balance Full Eligible-Row Artefact Package Request
 
-Status date: 2026-05-08
+Status date: 2026-05-09
 
-Baseline: `origin/master@f8b07039595874e59bdfb79b8862b29e8f238184`
+Baseline: `origin/master@af8e8c61532cc59abf69f63dd19eedc82db6dff3`
 
-This is a proposal and planning document only. It defines governance for a
-future full eligible-row opening-balance artefact package, but it does not
-create, access, inspect, copy, hash, store, validate, or execute any real
-full eligible-row artefact.
+This is a request, proposal, and template document only. It defines what would
+need to be requested and approved before any future full eligible-row
+opening-balance artefact package can be created, accessed, hashed, stored,
+validated, or executed.
 
-No full eligible-row artefact is included in this repository from this slice.
-No R4 access occurred. No real artefact was accessed. No patient data was used.
-No PMS database connection occurred. No scratch execution is authorised by this
-proposal.
+This document does not authorise artefact creation, artefact access, artefact
+copying, artefact hashing, artefact storage, validation/no-write, guarded
+apply/write, execution, import, or production use.
+
+No R4 access occurred. No real R4 artefact was accessed. No real patient data
+was used. No PMS database connection occurred. No scratch execution is
+authorised by this request/template.
 
 `finance_import_ready=false`. Live finance import remains out of scope.
 Migration/import is not complete. Production readiness is not established.
 
-Owner sign-off for this proposal is recorded separately at:
-`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_SIGNOFF.md`.
-That sign-off accepts this proposal as governance only and does not authorise
-R4 access, real artefact access, artefact creation/copying/hashing/storage,
-validation, execution, real patient data use, PMS DB connection, guarded
-scratch apply, CLI validation/no-write, live/default PMS writes, actual PMS
-Postgres writes, finance import, invoice/payment/staging import, production
-execution, or full eligible-row artefact execution.
-
-The package request/template for a future full eligible-row artefact package is
-recorded separately at:
-`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST.md`.
-That request/template is planning-only and does not authorise artefact creation,
-artefact access, hashing, storage, validation/no-write, guarded apply/write,
-execution, finance import, live import, or production use.
-
-## Relationship To Bounded Fixture Pathway
+## Relationship To Completed Bounded Fixture Pathway
 
 The bounded-fixture pathway is complete through signed-off local isolated
 scratch/test guarded apply/write proof evidence for the approved bounded fixture
-only:
+only. That proof is bounded to manifest `ob-bounded-fixture-20260507-000001`,
+fixture/source SHA256
+`2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d`, and
+manifest SHA256
+`66cc1c7ac16a4e677dfea6994cef86a5b7c496a00fbfec10336fa7641d98bb67`.
 
-- manifest ID: `ob-bounded-fixture-20260507-000001`
-- fixture/source SHA256:
-  `2afabfcb903b0f4e5a94702ae93b7752e9309e30116a4d01e1f55ec84465b53d`
-- manifest SHA256:
-  `66cc1c7ac16a4e677dfea6994cef86a5b7c496a00fbfec10336fa7641d98bb67`
-- first apply evidence SHA256:
-  `802d4ca94762e060037b97dc68bdd08ad40d17541f04493378f5a0125a567837`
-- second idempotency evidence SHA256:
-  `e83a3faf7a6b22045d11a98559f342618d81a192841079864d0e2688cdfa5e2b`
-- local query verification evidence SHA256:
-  `db8846ca82489a67a0979a5524fbb1e8f0cefe6d36db12630180e13293b762f0`
+This request concerns future full eligible-row artefact package governance only.
+It does not prove the full eligible-row artefact path, does not authorise another
+scratch execution, and does not imply live finance import or production
+migration readiness. The full eligible-row artefact proof is not done.
 
-That bounded completion does not prove the full eligible-row artefact path. This
-proposal concerns future full eligible-row artefact governance only. The full
-eligible-row artefact proof is not done.
+## Requested Package Contents
 
-## Future Artefact Provenance Package
+A future full eligible-row artefact package request must define:
 
-A future full eligible-row artefact package must be approved before any
-validation/no-write or guarded apply/write slice is considered. The package must
-record:
-
-- artefact owner;
+- request ID convention;
+- requesting owner;
 - approving owner or role;
+- artefact owner;
 - source system description;
 - extraction purpose;
-- extraction method description, without performing extraction in this proposal;
-- extraction timestamp requirement;
+- extraction method description, without performing extraction in this request;
+- extraction window or effective date requirement;
+- creation timestamp requirement;
 - operator or actor identifier requirement where safe and non-sensitive;
 - source artefact naming convention;
 - manifest naming convention;
@@ -82,13 +63,71 @@ record:
 - zero and negative balance policy;
 - duplicate handling policy;
 - currency and decimal precision policy;
-- target classification requirement: scratch/test only;
+- storage location approval requirement;
+- scratch/test-only target classification requirement;
 - redacted command shape requirement.
 
-The package must make provenance review possible without committing patient-level
-contents or full artefact rows.
+The request must not include full artefact contents or patient-level rows.
 
-## Redaction And Storage Policy
+## Required Approvals Before Artefact Creation Or Access
+
+Future work must pass these approvals and gates in order:
+
+1. Owner approval to create or obtain the artefact.
+2. Provenance approval.
+3. Redaction and storage approval.
+4. Artefact storage and access-control approval.
+5. Manifest, checksum, and expected-total approval.
+6. Scratch/test target approval.
+7. Validation/no-write authorisation.
+8. Validation/no-write evidence review and sign-off.
+9. Guarded apply/write readiness check.
+10. Separate guarded apply/write authorisation.
+11. Guarded apply/write evidence review and sign-off.
+12. Post-proof decision.
+13. Live import remains separate and unauthorised.
+
+No gate is satisfied by this request/template alone.
+
+## Request Form Template
+
+Use placeholder text only. Do not fill this template with real patient data,
+real artefact details, real R4 row contents, unredacted DSNs, or secrets.
+
+| Field | Placeholder |
+| --- | --- |
+| Request ID | `<request-id>` |
+| Requested by | `<requesting-owner-or-role>` |
+| Artefact owner | `<artefact-owner-or-role>` |
+| Approving owner | `<approving-owner-or-role>` |
+| Source system | `<source-system-description>` |
+| Extraction purpose | `<purpose-summary>` |
+| Extraction method | `<method-description-without-performing-extraction>` |
+| Extraction effective date | `<effective-date-or-window>` |
+| Creation timestamp | `<creation-timestamp-to-be-recorded-later>` |
+| Operator/actor identifier | `<safe-non-sensitive-operator-or-actor-id>` |
+| Expected artefact location policy | `<approved-storage-location-policy>` |
+| Manifest ID | `<manifest-id>` |
+| Source artefact SHA256 | `<source-artefact-sha256>` |
+| Manifest checksum | `<manifest-checksum>` |
+| Expected total | `<expected-total>` |
+| Eligible row count | `<eligible-row-count>` |
+| Excluded row count | `<excluded-row-count-if-applicable>` |
+| Repo SHA | `<repo-sha>` |
+| Tool/CLI version or commit SHA | `<tool-or-cli-version-or-commit-sha>` |
+| Inclusion rules | `<inclusion-rules>` |
+| Exclusion rules | `<exclusion-rules>` |
+| Zero/negative balance policy | `<zero-negative-balance-policy>` |
+| Duplicate handling policy | `<duplicate-handling-policy>` |
+| Currency/decimal policy | `<currency-decimal-policy>` |
+| Storage approval | `<storage-approval-status>` |
+| Redaction approval | `<redaction-approval-status>` |
+| Scratch/test target approval | `<scratch-test-target-approval-status>` |
+| Validation/no-write authorisation | `<validation-no-write-authorisation-status>` |
+| Guarded apply/write authorisation | `<guarded-apply-write-authorisation-status>` |
+| Notes | `<non-sensitive-notes>` |
+
+## Redaction And Storage Rules
 
 Future artefact handling must satisfy these rules before artefact creation or
 use:
@@ -104,37 +143,13 @@ use:
 - no production/live-looking target details in committed docs;
 - artefact storage location must be approved before artefact creation or use;
 - storage must be access-controlled;
-- stored artefact should be hashable and immutable for the evidence window;
+- stored artefact should be immutable for the evidence window;
 - evidence docs may record hashes, counts, and totals, but not patient-level
   contents;
 - runtime output must be reviewed before committing any summary;
 - redacted command shape must not include secrets.
 
-The approved storage policy must define who can access the artefact, how the
-artefact is named, how the immutable evidence window is enforced, and when the
-artefact may be deleted or retained.
-
-## Approval Gates
-
-Future work must pass these gates in order:
-
-1. Owner approval for creating or obtaining the artefact.
-2. Provenance approval.
-3. Redaction and storage approval.
-4. Manifest, checksum, and expected-total approval.
-5. Scratch/test target approval.
-6. Validation/no-write authorisation.
-7. Validation/no-write evidence review and sign-off.
-8. Guarded apply/write readiness check.
-9. Separate guarded apply/write authorisation.
-10. Guarded apply/write evidence review and sign-off.
-11. Post-proof decision: pause, revise, bounded rehearsal, or future migration
-    planning.
-12. Live import remains separate and unauthorised.
-
-No gate is satisfied by this proposal alone.
-
-## Required Future Validation/No-Write Evidence
+## Future Validation/No-Write Evidence Requirements
 
 A future validation/no-write slice must preserve:
 
@@ -163,7 +178,7 @@ A future validation/no-write slice must preserve:
 
 Validation/no-write evidence must not be treated as apply/write authorisation.
 
-## Required Future Guarded Apply/Write Evidence
+## Future Guarded Apply/Write Evidence Requirements
 
 A future guarded apply/write slice must be separately authorised and must
 preserve:
@@ -202,11 +217,13 @@ or ambiguous targets.
 
 ## Rejection Criteria
 
-Reject the future package or stop before execution if any item is present:
+Reject the future package request or stop before artefact creation/access if any
+item is present:
 
 - missing owner approval;
 - missing provenance;
 - missing redaction/storage approval;
+- missing artefact storage/access-control approval;
 - missing source artefact hash;
 - missing manifest checksum;
 - missing expected total;
@@ -231,9 +248,9 @@ Reject the future package or stop before execution if any item is present:
 - invoice, payment, or staging intent;
 - any finance import request.
 
-## Proposal-Slice Stop Conditions
+## Request-Slice Stop Conditions
 
-Stop this planning/proposal slice if any future task would require:
+Stop this request/proposal slice if any future task would require:
 
 - R4 access;
 - real R4 artefact access;
@@ -246,8 +263,7 @@ Stop this planning/proposal slice if any future task would require:
 
 ## Next Conservative Slice
 
-The next safe slice is owner review of the package request/template. Any
+The next safe slice is owner review of this package request/template. Any
 artefact creation, artefact access, validation/no-write, guarded apply/write,
-or live import remains separate and unauthorised until the appropriate owner
-approval, provenance approval, redaction/storage approval, and target approval
+or live import remains separate and unauthorised until the appropriate approval
 gates are explicitly satisfied in later slices.
