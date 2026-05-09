@@ -8,6 +8,13 @@ This evidence records the standing-authorised non-live scratch/test-only
 validation/no-write slice for the approved full eligible-row opening-balance
 package. It does not authorise or perform guarded apply/write.
 
+Owner sign-off for this validation/no-write evidence is recorded separately at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_VALIDATION_NOWRITE_SIGNOFF.md`.
+That sign-off is limited to validation/no-write evidence review and does not
+authorise live/default PMS DB writes, actual PMS Postgres writes, production
+execution, live finance import, invoice/payment/staging import, or committing
+raw artefact or patient-level contents.
+
 This slice did not access R4, did not connect to a PMS database, did not create
 a SQLite scratch/test database file, did not write rows, did not pass `--apply`,
 did not pass `--confirm`, did not create or change finance records, and did not
