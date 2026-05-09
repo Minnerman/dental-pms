@@ -30,6 +30,13 @@ scratch apply, CLI validation/no-write, live/default PMS writes, actual PMS
 Postgres writes, finance import, invoice/payment/staging import, production
 execution, or full eligible-row artefact execution.
 
+A later readiness/gap assessment for creating a specific request record is
+recorded at:
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_READINESS.md`.
+That note does not create a specific request record and does not authorise
+artefact creation, artefact access, validation/no-write, guarded apply/write,
+finance import, live import, or production use.
+
 ## Relationship To Completed Bounded Fixture Pathway
 
 The bounded-fixture pathway is complete through signed-off local isolated
