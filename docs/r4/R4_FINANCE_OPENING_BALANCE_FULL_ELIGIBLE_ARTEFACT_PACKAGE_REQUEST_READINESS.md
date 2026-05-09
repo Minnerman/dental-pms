@@ -14,6 +14,15 @@ structure:
 
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST.md`
 
+A later docs-only candidate request record is recorded separately at:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_REQUEST_CANDIDATE.md`
+
+That candidate records role labels and approval to create the candidate repo
+record only. It is not a complete final full eligible-row artefact package
+request and does not authorise artefact creation, access, hashing, storage,
+validation, execution, import, or production use.
+
 This note does not authorise artefact creation, artefact access, artefact
 copying, artefact hashing, artefact storage, validation/no-write, guarded
 apply/write, execution, import, or production use.
@@ -64,13 +73,12 @@ request fields still require owner selection, approval, or confirmation.
 
 ## Missing Inputs Requiring Owner Decision
 
-The following required request fields are missing, ambiguous, or not yet
-owner-approved for a specific full eligible-row package request:
+The later candidate request record records owner role labels for requesting
+owner, artefact owner, and approving owner/role. The following required request
+fields remain missing, ambiguous, or not yet owner-approved for a complete
+specific full eligible-row package request:
 
 - request ID;
-- requesting owner;
-- artefact owner;
-- approving owner or role;
 - specific source system description for the request record;
 - final extraction purpose for the specific request;
 - extraction method description for this specific request;
