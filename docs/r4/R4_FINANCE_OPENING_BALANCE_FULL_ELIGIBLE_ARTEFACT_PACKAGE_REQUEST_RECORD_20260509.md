@@ -40,6 +40,8 @@ eligible-row artefact execution has not happened.
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PROVENANCE_REDACTION_SIGNOFF.md`
 - standing owner authorisation:
   `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_STANDING_AUTHORISATION.md`
+- first standing-authorised artefact package evidence:
+  `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_EVIDENCE.md`
 
 ## Owner Roles
 
@@ -71,8 +73,8 @@ The proposed manifest ID above does not mean a manifest exists. The actual
 manifest ID and checksum must be generated and approved only in a later
 separately authorised artefact and manifest creation slice.
 
-The following values are not available yet and must not be invented or inferred
-from the bounded fixture:
+At request-record creation time, the following values were not available and
+were not to be invented or inferred from the bounded fixture:
 
 - Source artefact SHA256: not available yet; must be captured only after a later
   separately authorised artefact creation/access slice.
@@ -85,6 +87,14 @@ from the bounded fixture:
 
 The absence of these values means this request record is not an artefact
 package, not a manifest, and not an execution authorisation.
+
+A later standing-authorised non-live package creation/access slice records the
+source artefact SHA256, manifest ID, manifest checksum, eligible row count,
+excluded row count, and expected total in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_ARTEFACT_PACKAGE_EVIDENCE.md`.
+That later evidence summary remains non-live and does not authorise
+validation/no-write, guarded apply/write, live finance import, production
+execution, or migration/import completion.
 
 ## Request Policies
 
