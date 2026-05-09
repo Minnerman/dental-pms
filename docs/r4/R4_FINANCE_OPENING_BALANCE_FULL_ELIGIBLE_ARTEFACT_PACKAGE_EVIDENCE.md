@@ -31,6 +31,7 @@ readiness is not established. Live finance import remains out of scope.
 | Source system | R4 `PatientStats` opening-balance source context |
 | Source artefact SHA256 | `357400cf5c1a53a8b34b6b0d7589b57b76754603946282d794b1881f71f75755` |
 | Manifest checksum | `3b902805b138700441ba99b15eb2dadef34829fa3d3544383c0e387142f5a51b` |
+| Package summary SHA256 | `25c15e9ebcd018c108dfca758ce04d6463f0520af0c918c4ee97f7cfc8aeb872` |
 | Source `PatientStats` rows considered | `17017` |
 | Eligible row count | `1018` |
 | Excluded row count | `15999` |
