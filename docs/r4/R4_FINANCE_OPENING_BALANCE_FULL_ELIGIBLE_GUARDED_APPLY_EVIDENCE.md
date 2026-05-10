@@ -42,6 +42,10 @@ The validation/no-write evidence and owner sign-off are recorded in:
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_VALIDATION_NOWRITE_EVIDENCE.md`
 - `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_VALIDATION_NOWRITE_SIGNOFF.md`
 
+Owner sign-off for this guarded apply/write proof evidence is recorded in:
+
+- `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_GUARDED_APPLY_SIGNOFF.md`
+
 The validation/no-write sign-off cleared this proof as the next non-live gate.
 This evidence does not authorise live/default PMS DB writes, actual PMS
 Postgres writes, production execution, live finance import, or
@@ -225,9 +229,13 @@ This guarded apply/write evidence does not authorise:
 This proof is not production readiness. It does not mark migration/import
 complete. Any live finance import decision remains separate and unauthorised.
 
-## Next Gate
+## Sign-Off And Next Gate
 
-The next gate is owner review/sign-off of this guarded apply/write proof
-evidence. Live/default PMS DB writes, actual PMS Postgres writes, production
-execution, live finance import, invoice/payment/staging import, and committing
-raw artefact or patient-level contents remain unauthorised.
+Owner sign-off for this guarded apply/write proof evidence is recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_GUARDED_APPLY_SIGNOFF.md`.
+
+Any further full eligible-row finance movement requires a separate explicit
+owner decision and a new scoped slice. Live/default PMS DB writes, actual PMS
+Postgres writes, production execution, live finance import,
+invoice/payment/staging import, and committing raw artefact or patient-level
+contents remain unauthorised.
