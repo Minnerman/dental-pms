@@ -106,6 +106,9 @@ The conservative next decision options are:
   slice;
 - defer live finance import until explicit production approval.
 
+The independent human/business reconciliation plan is recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_BUSINESS_RECONCILIATION_PLAN.md`.
+
 Any live import, live/default PMS DB write, actual PMS Postgres write,
 production execution, cutover, or Dental PMS live/main PMS decision must remain
 separate and requires new explicit owner approval.
