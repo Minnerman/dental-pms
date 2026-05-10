@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Backup/restore rehearsal and UAT readiness plan added.
+  - Plan: `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`
+  - Scope: docs-only readiness plan; it does not execute backup, restore, UAT, smoke tests, production writes, production cutover, live/default PMS writes, actual PMS Postgres writes, PMS database connections, R4 access, real artefact access, validation/no-write, guarded apply/write, finance import, or invoice/payment/staging import.
+  - Prerequisites recorded: backup owner `Project owner / production operator`; backup schedule target daily; backup retention target minimum 30 days; restore target non-live restore test only; latest safe backup timestamp still required; restore rehearsal execution still required.
+  - Checklists added: later non-live restore rehearsal execution checklist, UAT/practice workflow readiness checklist, production smoke readiness checklist, stop conditions, and immediate next execution candidates.
+  - Tracker update: `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md` now marks backup readiness, restore proof, smoke/regression testing, and UAT/practice workflow testing as planned or pending execution evidence.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Non-invasive production-environment evidence collection recorded.
   - Collection record: `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`
   - Scope: docs-only evidence collection using committed repo docs/config metadata and unauthenticated read-only HTTP checks against already documented endpoints. It did not access R4, access/hash/inspect real artefacts, use patient data, connect to PMS databases, open/query scratch SQLite, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, write live/default PMS data, write actual PMS Postgres data, or start production cutover.

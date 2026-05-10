@@ -43,6 +43,11 @@ target classification; verifies unauthenticated read-only frontend/backend/app
 health availability; and keeps deployment target verification, latest safe
 backup timestamp, and restore rehearsal execution blocked.
 
+Backup/restore rehearsal and UAT/smoke readiness planning is recorded in
+`docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`. That plan does not execute
+backup, restore, UAT, smoke tests, production writes, PMS database
+connections, or cutover.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -52,12 +57,12 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Partially verified / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Partially verified / blocked on backup evidence | Backup owner/role supplied; daily backup target and minimum 30 days retention target supplied; latest safe backup timestamp and actual backup evidence are unavailable | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
-| Restore proof | Ops owner | Blocked / pending execution evidence | Restore target classification supplied as non-live restore test only; restore rehearsal is not yet performed | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
+| Backup readiness | Ops owner | Planned / blocked on backup evidence | Backup owner/role supplied; daily backup target and minimum 30 days retention target supplied; latest safe backup timestamp and actual backup evidence are unavailable | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Restore proof | Ops owner | Planned / pending execution evidence | Restore target classification supplied as non-live restore test only; restore rehearsal is not yet performed | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
-| Smoke/regression testing | Technical owner | Pending evidence | Production-readiness smoke/regression pass not recorded | Smoke/regression checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
-| UAT/practice workflow testing | Practice owner | Not started | UAT checklist and acceptance not recorded | Practice workflow checklist covering reception, clinical, documents, recalls, and finance views | No-go until accepted or explicitly waived |
+| Smoke/regression testing | Technical owner | Planned / pending execution evidence | Production-readiness smoke/regression pass not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then smoke checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
+| UAT/practice workflow testing | Practice owner | Planned / pending execution evidence | UAT checklist and acceptance not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then practice workflow checklist covering reception, clinical, documents, recalls, and finance views | No-go until accepted or explicitly waived |
 | Data migration scope | Owner plus migration owner | Pending evidence | Included/excluded production data scope not finalised | Signed included/excluded data scope record | No-go until accepted |
 | Opening-balance live-import decision | Owner | Blocked by owner decision | Live finance import remains unauthorised | Separate explicit owner approval for any live opening-balance import | No-go for finance import until approval |
 | Patient data migration decision | Owner plus migration owner | Pending evidence | Patient import/cutover scope not finalised | Patient data inclusion/exclusion and duplicate/contact policy | No-go until accepted |
@@ -82,7 +87,9 @@ data or start cutover.
    domains.
 5. Prepare a production rehearsal plan with target, scope, evidence, and
    rollback handling for separate approval.
-6. Keep live import blocked until final go/no-go approval explicitly authorises
+6. Use `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md` as the next checklist for
+   backup/restore rehearsal, UAT, and smoke-readiness execution candidates.
+7. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
 ## Production Evidence Item Status
@@ -107,6 +114,10 @@ data or start cutover.
 
 - No production rehearsal has been completed.
 - No backup/restore proof has been recorded.
+- No latest safe backup timestamp has been recorded.
+- No non-live restore rehearsal has been executed.
+- No UAT/practice workflow execution evidence has been recorded.
+- No production smoke execution evidence has been recorded.
 - No final live import approval has been given.
 - No cutover go/no-go approval has been given.
 - R4 is still the live/main PMS.
