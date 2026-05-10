@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production target, user/access, and UAT evidence request added.
+  - Request: `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`
+  - Scope: docs-only evidence request. It does not access production, access R4, connect to any PMS database, query scratch SQLite, use patient data, access real artefacts, access Google Workspace, create or inspect credentials, run backup commands, run restore commands, run rclone, run deployment/migration/import commands, perform finance import, perform invoice/payment/staging import, or start production cutover.
+  - Evidence requested: production target acceptance, monitoring/logging owner role, support contact role, admin/reception/clinical/finance/support access review, UAT reception/clinical/documents/recalls/finance-view workflows, smoke/regression result classification, and final owner go/no-go input.
+  - Remaining gates: outside-Git rclone setup evidence, first backup execution evidence, latest safe backup timestamp, minimum 30-day retention proof, non-live restore rehearsal/proof, backup/restore sign-off, production target acceptance, user/access review, UAT/practice workflow evidence, smoke/regression evidence, rollback owner acceptance, and final go/no-go approval.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Rollback/go-no-go communications plan added.
   - Plan: `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md`
   - Scope: docs-only rollback, decision, and communication planning. It does not execute rollback, execute cutover, access production, access R4, connect to any PMS database, access patient data, access credentials, access Google Workspace, run backup commands, run restore commands, run rclone, perform finance import, or perform invoice/payment/staging import.
