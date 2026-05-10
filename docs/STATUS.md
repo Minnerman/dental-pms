@@ -72,6 +72,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Owner business/accounting reconciliation sign-off recorded for the full eligible-row opening-balance non-live evidence.
+  - Sign-off record: `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_BUSINESS_RECONCILIATION_SIGNOFF.md`
+  - Scope: docs-only business reconciliation sign-off for non-live evidence only; it does not access R4, access/hash/inspect real artefacts, use patient data, connect to PMS databases, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, or start production cutover.
+  - Accepted values: request `r4ob-full-eligible-request-20260509-000001`; manifest `r4ob-full-eligible-20260509-000001`; eligible/excluded rows `1018`/`15999`; expected total `-131187.13`; scratch/test proof created `1018` opening-balance ledger rows; second run created `0` duplicate rows; invoice/payment/staging-import counts `0`/`0`/`0`.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not authorised as live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Final status and next-decision summary recorded for the full eligible-row opening-balance non-live pathway.
   - Completion summary: `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_COMPLETION_SUMMARY.md`
   - Status: full eligible-row non-live pathway is complete through signed-off guarded apply/write proof evidence for request `r4ob-full-eligible-request-20260509-000001` and manifest `r4ob-full-eligible-20260509-000001`.

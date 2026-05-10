@@ -143,3 +143,6 @@ Any later reconciliation sign-off still must not by itself authorise live
 finance import, live/default PMS DB writes, actual PMS Postgres writes,
 production execution, cutover, or Dental PMS live/main PMS status unless that
 authorisation is explicit, separate, and owner-approved.
+
+The owner business reconciliation sign-off is recorded separately in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_BUSINESS_RECONCILIATION_SIGNOFF.md`.
