@@ -191,6 +191,17 @@ do not run or authorise imports by themselves. Opening-balance/live finance
 import decision and invoice/payment/staging import decision remain `pending`.
 Final owner go/no-go approval remains `hold`.
 
+First backup execution evidence status was updated on 2026-05-10 using
+classification-only values. Outside-Git rclone setup evidence remains `yes`;
+first backup execution evidence is recorded as `pass`; latest safe backup
+timestamp is recorded as `2026-05-10T14:34:56Z`; minimum 30-day retention proof
+remains `pending`; non-live restore rehearsal/proof remains `blocked`; and
+backup/restore sign-off remains `pending`. This status records only safe
+evidence classifications. It does not mark backup readiness complete, does not
+mark production readiness complete, and does not authorise live finance import,
+opening-balance import, patient data import, invoice/payment/staging import, or
+production cutover.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -200,7 +211,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Evidence request recorded / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Evidence intake/sign-off template recorded / blocked on first backup proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; backup/restore evidence intake and sign-off template is recorded; credentials, upload execution, encryption proof, current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Backup readiness | Ops owner | First backup evidence recorded / blocked on retention proof, restore proof, and sign-off | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; backup/restore evidence intake and sign-off template is recorded; first encrypted backup upload evidence is recorded as pass with a latest safe backup timestamp; minimum 30-day retention proof, non-live restore proof, backup/restore sign-off, production schedule implementation evidence, and backup integrity evidence remain unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`, then retention proof, non-live restore proof, backup/restore sign-off, and final go/no-go evidence | No-go until accepted |
 | Restore proof | Ops owner | Restore target supplied / pending execution evidence | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; restore rehearsal is not yet performed | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Template recorded / pending owner acceptance | Rollback owner, triggers, and communication path not accepted | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md`, then owner-accepted rollback/go-no-go evidence | No-go until accepted |
 | User/access readiness | Practice owner | Evidence request recorded / pending access evidence | User roles and access review not recorded | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
@@ -291,7 +302,8 @@ data or start cutover.
 | Backup schedule/frequency | Owner confirmed / pending implementation proof | Daily; repo scheduler template exists but current production installation is unverified | Actual production schedule evidence |
 | Backup retention policy | Owner confirmed / pending implementation proof | Minimum 30 days; repo retention control exists but current production setting is unverified | Actual retention evidence proving minimum 30 days |
 | Backup/restore evidence intake and sign-off template | Recorded / pending evidence | `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md` | Outside-Git setup evidence, first backup evidence, latest safe backup timestamp, retention proof, non-live restore proof, backup/restore sign-off, and final go/no-go approval |
-| Latest safe backup timestamp | Blocked | Unavailable | Owner/operator evidence or approved backup verification slice |
+| First backup execution evidence | Recorded / pending retention and restore proof | pass at `2026-05-10T14:34:56Z` | Minimum 30-day retention proof, non-live restore proof, backup/restore sign-off, and final go/no-go approval |
+| Latest safe backup timestamp | Recorded / pending retention and restore proof | `2026-05-10T14:34:56Z` | Minimum 30-day retention proof, non-live restore proof, backup/restore sign-off, and final go/no-go approval |
 | Restore rehearsal target classification | Owner confirmed / pending implementation proof | Local non-live restore rehearsal environment | Specific non-live target evidence before execution |
 | Restore rehearsal status | Blocked | not yet performed | Approved restore proof slice |
 | Monitoring/logging owner role | Verified | Project owner / production operator | None for role |
@@ -302,6 +314,7 @@ data or start cutover.
 | Domain migration, monitoring/support, and cutover communications evidence request | Recorded / pending evidence | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md` | Domain migration decisions, monitoring/support readiness, cutover communications acceptance, backup/restore proof, production target acceptance, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
 | Consolidated production readiness evidence packet and final gate register | Recorded / all external gates pending | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md` | All external evidence gates remain pending until owner/operator evidence is supplied and final go/no-go approval is recorded |
 | Owner/operator readiness evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup `blocked`; latest safe backup timestamp `pending`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending`; data migration scope `yes`; patient data migration `approved by category`; appointments/treatments/recalls migration `yes`; finance/import decisions `pending`; final go/no-go `hold` | First backup, retention, restore, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
+| First backup execution evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup execution evidence `pass`; latest safe backup timestamp `2026-05-10T14:34:56Z`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending` | Minimum 30-day retention proof, non-live restore proof, backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -341,23 +354,52 @@ final go/no-go on hold.
 Safety confirmations: no secrets exposed, no patient data exposed, no private
 paths exposed, and no backup contents exposed.
 
+## First Backup Execution Evidence Status Record - 2026-05-10
+
+Classification-only status:
+
+| Gate | Recorded status |
+| --- | --- |
+| Outside-Git rclone setup evidence | yes |
+| First backup execution evidence | pass |
+| Latest safe backup timestamp | 2026-05-10T14:34:56Z |
+| Minimum 30-day retention proof | pending |
+| Non-live restore rehearsal/proof | blocked |
+| Backup/restore sign-off | pending |
+
+Reason classification: first encrypted backup upload completed; optional crypt
+salt not configured; retention proof and restore proof still pending.
+
+Blocker classification: minimum 30-day retention proof pending; non-live
+restore rehearsal blocked; backup/restore sign-off pending.
+
+Safety confirmations: no secrets exposed, no patient data exposed, no private
+paths exposed, and no backup contents exposed.
+
+This evidence-status update does not mark backup readiness complete, does not
+mark production readiness complete, and does not authorise finance import,
+opening-balance import, patient data import, invoice/payment/staging import, or
+production cutover.
+
 ## Explicit Blockers
 
 - No production rehearsal has been completed.
-- No backup/restore proof has been recorded.
-- No latest safe backup timestamp has been recorded.
-- No current production backup storage implementation evidence has been
-  recorded.
+- Backup/restore proof is incomplete because minimum 30-day retention proof,
+  non-live restore proof, and backup/restore sign-off have not been recorded.
+- First backup execution evidence and latest safe backup timestamp are
+  recorded, but current production schedule/retention implementation evidence
+  remains pending.
 - No Google Workspace / owner-controlled online storage implementation proof
   has been recorded.
-- Rclone remote-upload and crypt scaffolding is recorded, but no upload or
-  encryption execution evidence has been recorded.
-- Backup execution readiness is recorded, but first backup execution evidence
-  has not been recorded.
-- Rclone backup runner scaffolding is recorded, but the runner has not been
-  executed and no backup upload evidence has been recorded.
-- Rclone credential/setup evidence has been requested, but outside-Git setup
-  evidence has not been recorded.
+- Rclone remote-upload and crypt scaffolding is recorded, and first encrypted
+  upload evidence is recorded as pass; retention proof and restore proof remain
+  pending.
+- Backup execution readiness is recorded, and first backup execution evidence
+  is now recorded as pass.
+- Rclone backup runner scaffolding is recorded, and first backup upload
+  evidence is now recorded as pass.
+- Rclone credential/setup evidence has been requested, and outside-Git setup
+  evidence is recorded as yes.
 - No backup automation credential handling proof has been recorded.
 - No non-live restore rehearsal has been executed.
 - No UAT/practice workflow execution evidence has been recorded.
