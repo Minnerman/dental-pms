@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Target/access/monitoring/cutover/rollback evidence status recorded.
+  - Scope: evidence-status recording only. It records classification-only owner/operator readiness acceptance without production access.
+  - Evidence status: production target acceptance `yes`; user/access review `yes`; monitoring/support readiness `yes`; cutover communications acceptance `yes`; rollback owner acceptance `yes`; UAT/practice workflow evidence remains `not checked`; final owner go/no-go remains `hold`.
+  - Import decision status: opening-balance/live finance import decision and invoice/payment/staging import decision remain `pending`; `finance_import_ready=false` remains in force.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Remaining gates: UAT/practice workflow evidence, finance/import approvals, and final go/no-go remain unresolved.
+  - Non-authorisation: this status does not authorise production cutover, finance import, opening-balance import, patient import, invoice/payment/staging import, Dental PMS live/main PMS status, live/default PMS writes, actual PMS Postgres writes, or deployment. R4 remains the live/main PMS; Dental PMS is not live/main PMS; production readiness remains incomplete.
 - 2026-05-10: Production target/access/UAT evidence status recorded.
   - Scope: evidence-status recording only. It records classification-only downstream readiness status without production access.
   - Evidence status: production target acceptance `pending`; user/access review `pending`; UAT/practice workflow evidence `not checked`; smoke/regression evidence `pass`; monitoring/support readiness `pending`; cutover communications acceptance `pending`; rollback owner acceptance `pending`; final owner go/no-go `hold`.
