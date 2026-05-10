@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Backup/restore evidence intake and sign-off template added.
+  - Template: `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`
+  - Scope: docs-only intake/sign-off planning. It does not run backup commands, run restore commands, run rclone, access Google Workspace, create or inspect credentials, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, perform invoice/payment/staging import, or start production cutover.
+  - Intake: records redaction policy, acceptable evidence formats, outside-Git rclone setup evidence, first backup evidence, latest safe backup timestamp evidence, retention proof evidence, non-live restore rehearsal evidence, backup/restore sign-off evidence, final go/no-go inputs, and stop conditions.
+  - Remaining gates: outside-Git rclone setup evidence, first backup execution evidence, latest safe backup timestamp, minimum 30-day retention proof, non-live restore rehearsal/proof, backup/restore sign-off, and final go/no-go approval.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Rclone credential/setup and first-backup evidence request added.
   - Request: `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`
   - Scope: docs-only evidence/request planning. It does not create credentials, inspect credentials, access Google Workspace, run backup commands, run restore commands, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
