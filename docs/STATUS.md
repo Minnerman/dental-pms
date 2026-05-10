@@ -72,6 +72,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Non-invasive production-environment evidence collection recorded.
+  - Collection record: `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`
+  - Scope: docs-only evidence collection using committed repo docs/config metadata and unauthenticated read-only HTTP checks against already documented endpoints. It did not access R4, access/hash/inspect real artefacts, use patient data, connect to PMS databases, open/query scratch SQLite, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, write live/default PMS data, write actual PMS Postgres data, or start production cutover.
+  - Verified evidence: redacted frontend root availability HTTP `200`; redacted frontend health proxy HTTP `200`; redacted backend static health endpoint HTTP `200`.
+  - Partially verified evidence: production candidate/deployment target labels from repo docs, backup owner role default, documented backup schedule template, documented default retention policy, monitoring/logging owner role default, and support contact role default.
+  - Remaining blocked evidence: latest safe backup timestamp, restore rehearsal target classification, restore rehearsal status, and owner/operator confirmation of production label, deployment target, backup schedule/frequency, and backup retention if different from committed docs.
+  - Tracker update: `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md` now marks production evidence items as verified, partially verified, or blocked/pending owner-operator evidence.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production-environment evidence record added as blocked/pending evidence.
   - Record: `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_RECORD.md`
   - Scope: docs-only blocked/gap evidence record; it does not run verification, connect to production, connect to PMS databases, access R4, access/hash/inspect real artefacts, use patient data, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, or start production cutover.

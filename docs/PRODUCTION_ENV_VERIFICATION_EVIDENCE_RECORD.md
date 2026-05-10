@@ -14,15 +14,23 @@ Postgres data, or perform production cutover.
 
 ## Evidence Status
 
-Non-sensitive production environment evidence is not yet available in committed
-docs or in the current task input. No production values have been inferred or
-invented.
+At the time this record was created, non-sensitive production environment
+evidence was not yet available in committed docs or in the task input. No
+production values were inferred or invented.
 
 This record is therefore a blocked/gap evidence record.
 
-## Missing Evidence
+Follow-up non-invasive collection is recorded in
+`docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`. That follow-up
+partially verifies the documented production candidate/deployment labels,
+verifies unauthenticated read-only frontend/backend/app health availability,
+records role-label defaults, and leaves backup timestamp plus restore proof
+evidence blocked.
 
-The following non-sensitive evidence is still missing:
+## Original Missing Evidence
+
+This blocked record originally listed the following missing non-sensitive
+evidence before the follow-up collection record:
 
 - production environment label;
 - deployment target label;
@@ -55,6 +63,11 @@ The next action is for the owner/operator to supply the requested
 non-sensitive production evidence, or to authorise a separate non-invasive
 verification execution slice with explicit scope, redaction rules, and stop
 conditions.
+
+After the follow-up collection record, the remaining blocked evidence is the
+latest safe backup timestamp, restore rehearsal target classification, restore
+rehearsal status, and owner/operator confirmation of any production label or
+backup schedule/retention value that differs from committed repo docs.
 
 This record does not authorise production writes, live finance import,
 invoice/payment/staging import, production execution, or cutover.
