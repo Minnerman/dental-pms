@@ -152,6 +152,17 @@ migration/validation/import commands, run backup/restore/rclone commands,
 access Google Workspace, access credentials, or claim production readiness is
 complete.
 
+Domain migration, monitoring/support, and cutover communications evidence
+request is recorded in
+`docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`. That
+request defines redacted decision evidence for appointments/treatments/recalls
+migration decisions, monitoring/support readiness, and cutover communications
+readiness. It does not access R4, access real artefacts, use patient data,
+access production, connect to PMS databases, query scratch SQLite, run
+migration/validation/import commands, run monitoring setup, run deployment,
+run backup/restore/rclone commands, access Google Workspace, access
+credentials, or claim production readiness is complete.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -170,9 +181,9 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Data migration scope | Owner plus migration owner | Evidence request recorded / pending evidence | Included/excluded production data scope not finalised | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then signed included/excluded data scope record | No-go until accepted |
 | Opening-balance live-import decision | Owner | Evidence request recorded / blocked by owner decision | Live finance import remains unauthorised and `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit owner approval for any live opening-balance import | No-go for finance import until approval |
 | Patient data migration decision | Owner plus migration owner | Evidence request recorded / pending evidence | Patient import/cutover scope not finalised | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then patient data inclusion/exclusion and duplicate/contact policy classification | No-go until accepted |
-| Appointments/treatments/recalls migration decision | Owner plus migration owner | Pending evidence | Domain scope and accepted exclusions not finalised | Decision record for appointments, treatments, charting, and recalls | No-go until accepted |
-| Monitoring/support readiness | Support owner | Pending evidence | Monitoring owner and support window not recorded | Monitoring checklist, support owner, escalation route, and first support window | No-go until accepted |
-| Cutover communications | Owner plus support owner | Not started | Operator communication plan not recorded | Cutover communication plan for owner, operators, and support contacts | No-go until accepted |
+| Appointments/treatments/recalls migration decision | Owner plus migration owner | Evidence request recorded / pending evidence | Domain scope and accepted exclusions not finalised | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then decision record for appointments, treatments, charting, recalls, and workflow dependencies | No-go until accepted |
+| Monitoring/support readiness | Support owner | Evidence request recorded / pending evidence | Monitoring owner acceptance, support window, escalation route, and alert/log review are not recorded | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then monitoring/support readiness evidence | No-go until accepted |
+| Cutover communications | Owner plus support owner | Evidence request recorded / pending acceptance | Operator communication plan not accepted | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then cutover communications acceptance evidence | No-go until accepted |
 | Final go/no-go approval | Owner | Blocked by owner decision | No production rehearsal, backup/restore proof, or final cutover approval recorded | Explicit go/no-go decision record | No-go until explicit approval |
 
 ## Immediate Fast-Track Actions
@@ -232,7 +243,11 @@ data or start cutover.
    collect redacted data migration scope, patient/import, opening-balance/live
    finance import, invoice/payment/staging import, and final cutover decision
    evidence.
-19. Keep live import blocked until final go/no-go approval explicitly authorises
+19. Use
+   `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md` to
+   collect redacted domain migration, monitoring/support, and cutover
+   communications readiness evidence before final go/no-go.
+20. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
 ## Production Evidence Item Status
@@ -256,6 +271,7 @@ data or start cutover.
 | Rollback/go-no-go communications plan | Recorded / pending owner acceptance | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md` | Owner acceptance, production target acceptance, UAT/access evidence, backup/restore proof, and final go/no-go approval |
 | Production target, user/access, and UAT evidence request | Recorded / pending evidence | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md` | Production target acceptance, access review, UAT/practice workflow evidence, smoke/regression evidence, backup/restore proof, rollback owner acceptance, and final go/no-go approval |
 | Data migration scope and import-decision evidence request | Recorded / pending evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md` | Patient/import scope decisions, opening-balance/live finance import approval, invoice/payment/staging import approval, backup/restore proof, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
+| Domain migration, monitoring/support, and cutover communications evidence request | Recorded / pending evidence | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md` | Domain migration decisions, monitoring/support readiness, cutover communications acceptance, backup/restore proof, production target acceptance, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
 
 ## Explicit Blockers
 
