@@ -11,6 +11,13 @@ actual PMS Postgres writes, PMS database connections, R4 access, real artefact
 access, validation/no-write, guarded apply/write, finance import, or
 invoice/payment/staging import.
 
+Backup discovery and setup planning is recorded in
+`docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`. That plan records
+repository-only backup/restore discovery, owner-preferred candidate storage,
+and setup blockers. It does not access production, run backups, run restores,
+access Google Workspace, connect to any PMS database, or claim backup/restore
+proof is complete.
+
 R4 remains the live/main PMS. Dental PMS is not live/main PMS.
 `finance_import_ready=false`. Live finance import, production execution,
 production cutover, live/default PMS DB writes, actual PMS Postgres writes, and
@@ -37,6 +44,10 @@ The current prerequisite state is:
 Backup and restore evidence must remain redacted. It must not expose backup
 storage paths, credentials, DSNs, raw dumps, patient data, or private host
 details.
+
+Repository docs and helpers partially document backup and restore procedures,
+but current production backup configuration, latest safe backup timestamp,
+storage implementation, and non-live restore proof remain unverified.
 
 ## Later Restore Rehearsal Execution Checklist
 
@@ -121,9 +132,10 @@ The next safe execution candidates are:
 
 1. Owner/operator supplies the latest safe backup timestamp.
 2. Owner/operator confirms the safe non-live restore target.
-3. Separate non-live restore rehearsal execution slice.
-4. Separate UAT checklist execution slice.
-5. Separate read-only production smoke execution slice if the scope remains
+3. Separate backup configuration or backup timestamp evidence slice.
+4. Separate non-live restore rehearsal execution slice.
+5. Separate UAT checklist execution slice.
+6. Separate read-only production smoke execution slice if the scope remains
    non-invasive and does not require database connection, secrets exposure, or
    live writes.
 

@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production backup discovery and setup plan added to the draft backup/restore/UAT readiness PR.
+  - Plan: `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`
+  - Scope: docs-only repository discovery and setup planning. It inspected repository files and non-secret documentation only; it did not access production, connect to any PMS database, run backup commands, run restore commands, access Google Workspace, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
+  - Findings: backup and restore helpers, operator backup docs, release backup gates, and scheduler templates exist in the repo, so backup/restore capability is partially documented. Current production backup configuration, latest safe backup timestamp, storage implementation, retention proof, and non-live restore proof remain unverified.
+  - Owner-preferred candidate storage recorded as Google Workspace / owner-controlled online storage, pending later implementation and restore proof; no Google Workspace access occurred.
+  - Target policy recorded: daily database backups, uploaded files/media if used, minimum 30 days retention, access-controlled owner-controlled online storage, non-live restore rehearsal, restore evidence PR before go-live, and production cutover blocked until backup/restore proof passes.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Backup/restore rehearsal and UAT readiness plan added.
   - Plan: `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`
   - Scope: docs-only readiness plan; it does not execute backup, restore, UAT, smoke tests, production writes, production cutover, live/default PMS writes, actual PMS Postgres writes, PMS database connections, R4 access, real artefact access, validation/no-write, guarded apply/write, finance import, or invoice/payment/staging import.
