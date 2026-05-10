@@ -72,6 +72,11 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production-environment backup/restore verification plan added.
+  - Plan: `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`
+  - Scope: docs-only planning; it does not verify production, connect to production, connect to PMS databases, access R4, access/hash/inspect real artefacts, use patient data, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, or start production cutover.
+  - Tracker update: `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md` now marks production environment readiness, backup readiness, and restore proof as planned / pending execution evidence.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production readiness execution tracker and gap assessment added.
   - Tracker: `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`
   - Scope: docs-only execution tracker/gap assessment; it does not access R4, access/hash/inspect real artefacts, use patient data, connect to PMS databases, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, or start production cutover.
