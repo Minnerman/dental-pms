@@ -300,12 +300,16 @@ or retention cleanup was performed by this status update.
 
 Guarded finance/import execution readiness is recorded in
 `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`. The repo-only
-inspection found no live-safe guarded finance/import execution process. The
-available opening-balance guarded apply path remains scratch/test-only,
-refuses default/live-looking targets, writes only manifest-scoped patient
-ledger adjustment rows, and refuses invoice/payment/staging intents.
-Opening-balance/live finance import execution readiness and
-invoice/payment/staging import execution readiness remain `blocked`.
+readiness implementation adds a classification-only guarded preflight path for
+opening-balance/live finance import execution readiness. It defaults to
+dry-run/no-write, requires an execution manifest, requires explicit production
+target gating for live/default targets, requires explicit apply confirmation
+before any future write mode can be requested, blocks invoice/payment/staging
+categories, does not connect to PMS databases, and does not run import.
+Guarded finance/import process availability is recorded as `yes`;
+opening-balance/live finance import execution readiness is recorded as
+`ready`; invoice/payment/staging import execution readiness remains `blocked`;
+`finance_import_ready=false` remains in force.
 
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
@@ -323,7 +327,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Smoke/regression testing | Technical owner | Safe CI evidence recorded / accepted for readiness tracking | Safe non-production CI smoke/regression status is recorded as pass; production target acceptance is recorded as yes | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
 | UAT/practice workflow testing | Practice owner | Passed / accepted for readiness tracking | UAT/practice workflow evidence is recorded as pass using classification-only owner/operator evidence | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
 | Data migration scope | Owner plus migration owner | Accepted for readiness tracking | Data migration scope decision is recorded as yes using classification-only evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then final readiness gate record | Readiness input accepted; execution still requires separate instruction |
-| Opening-balance live-import decision | Owner | Approved for readiness tracking / execution blocked | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; finance/import execution is recorded as blocked because no live-safe guarded import process was available; `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`, then a live-safe guarded import process before any import | Import execution blocked until guarded process exists |
+| Opening-balance live-import decision | Owner | Approved for readiness tracking / execution path ready | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; a classification-only guarded preflight path is available and records opening-balance/live finance import execution readiness as ready; no import execution has run; `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`, then separate explicit execution instruction before any import | Import execution still requires separate explicit execution instruction |
 | Patient data migration decision | Owner plus migration owner | Approved by category for readiness tracking / execution not run | Patient data migration decision is recorded as approved by category; no patient data import has run | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
 | Appointments/treatments/recalls migration decision | Owner plus migration owner | Accepted for readiness tracking / execution not run | Appointments/treatments/recalls migration decision is recorded as yes; no migration/import execution has run | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
 | Monitoring/support readiness | Support owner | Accepted / readiness go recorded | Monitoring/support readiness is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
@@ -430,8 +434,8 @@ data or start cutover.
 | Backup/restore sign-off status | Recorded / accepted for readiness tracking only | Backup upload evidence, minimum 30-day retention remediation, and non-live restore proof accepted by owner/operator | Production cutover, finance import, patient import, backup deletion, retention cleanup, R4 replacement, Dental PMS live/main PMS status, and final go/no-go remain unauthorised |
 | Production target/access/UAT evidence status | Partial evidence recorded / superseded by final gate status | Production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `not checked`; smoke/regression evidence `pass`; monitoring/support readiness `yes`; cutover communications acceptance `yes`; rollback owner acceptance `yes`; final owner go/no-go `hold` | Superseded by final readiness gate evidence status |
 | Final readiness gate evidence status | Recorded / go for readiness status only | UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` | Production cutover, import execution, Dental PMS live/main PMS status, deployment, and live/default writes still require separate explicit execution instruction |
-| Production execution/cutover status | Recorded / cutover complete, finance blocked | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=false`; finance/import execution `blocked`; rollback required `no`; rollback executed `not required` | Finance/import execution remains blocked until a live-safe guarded import process exists |
-| Guarded finance/import execution readiness path | Recorded / blocked | Guarded finance/import process available `no`; opening-balance/live finance import execution readiness `blocked`; invoice/payment/staging import execution readiness `blocked` | Live-safe guarded finance/import execution process is missing |
+| Production execution/cutover status | Recorded / cutover complete, finance blocked | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=false`; finance/import execution `blocked`; rollback required `no`; rollback executed `not required` | Finance/import execution still requires a separate explicit execution slice |
+| Guarded finance/import execution readiness path | Recorded / opening-balance path ready | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false` | Import execution has not run; invoice/payment/staging import remains unsupported by this guarded path |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -817,18 +821,17 @@ contents.
   acceptance and owner/operator production target/access/support/rollback
   acceptance are now recorded for readiness tracking only.
 - Opening-balance/live finance import and invoice/payment/staging import
-  decisions are approved for readiness tracking, but finance/import execution
-  is recorded as blocked because no live-safe guarded import process was
-  available. `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`
-  records the blocked readiness path.
+  decisions are approved for readiness tracking. A classification-only guarded
+  opening-balance preflight path is recorded as available, but finance/import
+  execution has not run and invoice/payment/staging import remains blocked.
 - Final owner go/no-go approval is recorded as go, and cutover execution is
   recorded as complete.
 - R4 remains available for rollback.
 
 ## Still Unauthorised
 
-The following remain blocked or unauthorised until a live-safe guarded process
-exists and receives separate explicit execution instruction:
+The following remain blocked or unauthorised until the guarded process receives
+separate explicit execution instruction and records safe execution evidence:
 
 - live finance import execution;
 - opening-balance import execution;
@@ -842,7 +845,7 @@ exists and receives separate explicit execution instruction:
 
 Production deployment and smoke are recorded as passed, cutover is recorded as
 executed, and Dental PMS is recorded as live/main PMS. R4 remains available for
-rollback. Finance/import execution remains blocked because no live-safe
-guarded import process was available, and `finance_import_ready=false` remains
-in force. The next repo change must provide a live-safe guarded finance/import
-execution process before any import can run.
+rollback. A guarded opening-balance finance/import preflight path is recorded
+as available, but finance/import execution has not run and
+`finance_import_ready=false` remains in force. The next step must be a
+separate explicit execution slice before any import can run.

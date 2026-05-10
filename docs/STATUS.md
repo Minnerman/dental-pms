@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Guarded finance/import execution path added.
+  - Scope: repo implementation and docs for a classification-only guarded finance/import preflight path. It does not run import, connect to PMS databases, access R4, access production, access patient data, or expose sensitive material.
+  - Readiness status: guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false`.
+  - Guard behaviour: default dry-run/no-write, manifest required, live/default target classifications require an explicit production execution gate, future apply/write mode requires explicit confirmation, invoice/payment/staging categories fail closed, and output remains classification-only.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
+  - Non-execution: no finance import, opening-balance import, invoice import, payment import, staging import, patient data import, migration, R4 access, production access, PMS DB connection, backup, restore, rclone, rollback, deployment, or cutover was performed.
+  - Current boundary: Dental PMS remains live/main PMS, R4 remains available for rollback, `finance_import_ready=false`, and any finance/import execution requires a separate explicit execution slice.
 - 2026-05-10: Guarded finance/import execution readiness path recorded.
   - Scope: repo-only readiness/blocker record. It does not run import, connect to PMS databases, access R4, access production, access patient data, or expose sensitive material.
   - Readiness status: guarded finance/import process available `no`; opening-balance/live finance import execution readiness `blocked`; invoice/payment/staging import execution readiness `blocked`.
