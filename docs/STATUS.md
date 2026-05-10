@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Rclone credential/setup and first-backup evidence request added.
+  - Request: `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`
+  - Scope: docs-only evidence/request planning. It does not create credentials, inspect credentials, access Google Workspace, run backup commands, run restore commands, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
+  - Binding: the request depends on the merged rclone runner scaffold in `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md` and `ops/backup_rclone_upload.sh`.
+  - Evidence requested: rclone installed yes/no, Google Workspace/Drive remote configured yes/no, rclone crypt remote configured yes/no, config and credentials stored outside Git yes/no, destination classification, folder label `Dental PMS Production Backups`, no-secrets confirmation, and later first-backup upload evidence with redacted command shape.
+  - Remaining gates: outside-Git credential/setup evidence, first backup execution evidence, latest safe backup timestamp, minimum 30-day retention proof, non-live restore rehearsal, restore proof, backup/restore sign-off, and final go/no-go approval.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Non-secret rclone backup runner scaffolding added.
   - Runner runbook: `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`
   - Runner scaffold: `ops/backup_rclone_upload.sh`
