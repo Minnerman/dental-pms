@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Retention sign-off evidence status recorded.
+  - Scope: evidence-status recording only. It records classification-only retention and sign-off status in `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`.
+  - Evidence status: minimum 30-day retention proof `no`; retention mechanism classification `count-based`; retention target classification `less than 30 days`; backup/restore sign-off `pending`.
+  - Reason classification: daily schedule is confirmed but count-based retention is less than 30. Blocker classification: minimum 30-day retention proof failed; backup/restore sign-off pending.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; production readiness remains incomplete; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, opening-balance import, patient data import, Dental PMS live/main PMS status, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Restore remediation evidence status recorded.
   - Scope: evidence-status recording only. It records classification-only restore failure and remediation status in `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`.
   - Evidence status: restore failure classification `missing database role/user`; restore remediation status `missing role/user remediated in non-live target`; repeat non-live restore rehearsal/proof `pass`; backup/restore sign-off `pending`.
