@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production target/access/UAT evidence status recorded.
+  - Scope: evidence-status recording only. It records classification-only downstream readiness status without production access.
+  - Evidence status: production target acceptance `pending`; user/access review `pending`; UAT/practice workflow evidence `not checked`; smoke/regression evidence `pass`; monitoring/support readiness `pending`; cutover communications acceptance `pending`; rollback owner acceptance `pending`; final owner go/no-go `hold`.
+  - Import decision status: data migration scope decision `yes`; patient data migration decision `approved by category`; appointments/treatments/recalls migration decision `yes`; opening-balance/live finance import decision and invoice/payment/staging import decision remain `pending`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Remaining gates: production target acceptance, user/access review, UAT/practice workflow evidence, monitoring/support readiness, cutover communications acceptance, rollback owner acceptance, finance/import approvals, and final go/no-go remain unresolved.
+  - Non-authorisation: this status does not authorise production cutover, finance import, opening-balance import, patient import, invoice/payment/staging import, Dental PMS live/main PMS status, live/default PMS writes, actual PMS Postgres writes, or deployment. R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; production readiness remains incomplete.
 - 2026-05-10: Backup/restore sign-off status recorded.
   - Scope: evidence-status recording only. It records classification-only owner/operator acceptance of Dental PMS backup and restore readiness evidence, including post-PR #670 minimum 30-day retention remediation.
   - Evidence status: backup/restore sign-off `yes`; decision `accepted`; accepted for backup/restore readiness tracking only.
