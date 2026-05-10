@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Guarded finance/import execution readiness path recorded.
+  - Scope: repo-only readiness/blocker record. It does not run import, connect to PMS databases, access R4, access production, access patient data, or expose sensitive material.
+  - Readiness status: guarded finance/import process available `no`; opening-balance/live finance import execution readiness `blocked`; invoice/payment/staging import execution readiness `blocked`.
+  - Reason classification: existing repository finance apply tooling is scratch/test guarded only, refuses default/live-looking PMS database targets, writes only manifest-scoped patient ledger adjustment rows, and refuses invoice, payment, staging, balance-mutation, or other finance record intents.
+  - Blocker classification: live-safe guarded finance/import execution process is missing; opening-balance/live finance import and invoice/payment/staging import execution remain blocked.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
+  - Non-execution: no finance import, opening-balance import, invoice import, payment import, staging import, patient data import, migration, R4 access, production access, PMS DB connection, backup, restore, rclone, rollback, deployment, or cutover was performed.
 - 2026-05-10: Production execution cutover status recorded.
   - Scope: evidence-status recording only. It records classification-only local-operator production execution status without exposing sensitive details.
   - Execution status: production execution started `yes`; production deployment result `pass`; production smoke result `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; rollback required `no`; rollback executed `not required`.
