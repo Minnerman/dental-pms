@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: First backup execution evidence status recorded.
+  - Scope: evidence-status recording only. It records classification-only first backup execution status in `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`.
+  - Evidence status: first encrypted backup upload is recorded as `pass` with latest safe backup timestamp `2026-05-10T14:34:56Z`.
+  - Remaining backup/restore gates: minimum 30-day retention proof remains `pending`; non-live restore rehearsal/proof remains `blocked`; backup/restore sign-off remains `pending`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; production readiness remains incomplete; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, opening-balance import, patient data import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Owner/operator readiness evidence status recorded.
   - Scope: evidence-status recording only. It records classification-only owner/operator readiness status in `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`.
   - No evidence execution or verification is recorded in docs; no sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, patient data, patient-level identifiers, private contacts, private infrastructure details, R4 artefact paths, source database paths, logs, screenshots, or database output are recorded.
