@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production backup automation implementation gap recorded.
+  - Gap record: `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`
+  - Scope: repository-only helper and documentation inspection. It did not run backup commands, run restore commands, access Google Workspace, create or inspect credentials, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
+  - Findings: local database backup, uploaded files/media backup, compressed archive creation, retention controls, systemd scheduling templates, and restore helpers/procedures exist. Google Workspace upload support and archive encryption support were not found in the inspected helpers.
+  - Decision: create a gap record instead of unsafe automation scaffolding. Backup automation remains blocked until Google Workspace or owner-controlled remote upload support, archive encryption support, credential handling proof, first backup evidence, retention evidence, and non-live restore proof are recorded.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production backup automation implementation-readiness plan added.
   - Plan: `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`
   - Scope: docs-only readiness plan. It does not implement backup automation, run backup commands, run restore commands, access Google Workspace, create or inspect credentials, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
