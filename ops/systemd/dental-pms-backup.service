@@ -6,7 +6,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory=/srv/dental-pms
-Environment=BACKUP_KEEP=14
+Environment=BACKUP_KEEP=30
 ExecStart=/usr/bin/bash /srv/dental-pms/ops/backup_run.sh
 
 [Install]

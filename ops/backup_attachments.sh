@@ -44,7 +44,7 @@ prune_old() {
 }
 
 BACKUP_ROOT="$(default_backup_root)"
-BACKUP_KEEP="${BACKUP_KEEP:-14}"
+BACKUP_KEEP="${BACKUP_KEEP:-30}"
 validate_keep_count "$BACKUP_KEEP"
 mkdir -p "$BACKUP_ROOT"
 
