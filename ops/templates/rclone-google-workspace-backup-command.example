@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Example only. Do not run without separate explicit owner/operator
+# authorisation. This template is intentionally non-secret and uses placeholder
+# values only.
+
+set -euo pipefail
+
+RCLONE_CONFIG=/path/outside/repo/rclone.conf
+RCLONE_REMOTE_NAME=dental_pms_gworkspace
+RCLONE_CRYPT_REMOTE_NAME=dental_pms_gworkspace_crypt
+BACKUP_FOLDER_LABEL="Dental PMS Production Backups"
+BACKUP_SOURCE_ARCHIVE=/path/outside/repo/latest-backup.tar
+BACKUP_DESTINATION="dental_pms_gworkspace_crypt:Dental PMS Production Backups/"
+BACKUP_RETENTION_DAYS=30
+BACKUP_SCHEDULE="daily"
+
+# Upload example shape only. Do not run in this scaffolding PR.
+# rclone copy "${BACKUP_SOURCE_ARCHIVE}" "${BACKUP_DESTINATION}" --config "${RCLONE_CONFIG}"
+
+# Safe metadata check/list example shape only. Do not run in this scaffolding PR.
+# rclone lsf "${BACKUP_DESTINATION}" --config "${RCLONE_CONFIG}" --max-depth 1
+
+# Retention review example shape only. Do not run in this scaffolding PR.
+# rclone lsf "${BACKUP_DESTINATION}" --config "${RCLONE_CONFIG}" --format "pt"
+
+# Non-live restore/download example shape only. Do not run in this scaffolding
+# PR and do not use against production. Restore/download must target an
+# approved local non-live restore rehearsal environment only.
+# rclone copy "${BACKUP_DESTINATION}" /path/outside/repo/non-live-restore-input/ --config "${RCLONE_CONFIG}"
+
+# This template must never contain real remotes, tokens, passwords, DSNs,
+# private URLs, exact private paths, backup contents, raw dumps, or patient
+# data.

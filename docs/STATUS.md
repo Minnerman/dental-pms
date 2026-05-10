@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Rclone backup remote-upload/encryption scaffolding added.
+  - Scaffolding: `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`
+  - Templates: `ops/templates/rclone-google-workspace-backup.env.example`, `ops/templates/rclone-google-workspace-backup-command.example`, and `ops/templates/rclone-google-workspace-backup-schedule.example`
+  - Scope: non-secret scaffolding only. It does not run backup commands, run restore commands, access Google Workspace, create or inspect credentials, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
+  - Candidate approach: rclone for Google Workspace/Drive upload and rclone `crypt` for client-side encryption, with config, service-account/OAuth material, and crypt secrets outside Git.
+  - Remaining gates: credentials outside Git, first encrypted upload evidence, minimum 30-day retention evidence, latest safe backup timestamp, non-live restore rehearsal, restore proof, backup/restore sign-off, and final go/no-go approval.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production backup automation implementation gap recorded.
   - Gap record: `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`
   - Scope: repository-only helper and documentation inspection. It did not run backup commands, run restore commands, access Google Workspace, create or inspect credentials, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
