@@ -176,6 +176,21 @@ migration/validation/import commands, run monitoring setup, run deployment,
 access Google Workspace, access credentials, or claim production readiness is
 complete.
 
+Owner/operator readiness evidence status was recorded on 2026-05-10 using
+classification-only values. Outside-Git rclone setup evidence is recorded as
+`yes`; first backup execution is `blocked`; latest safe backup timestamp is
+`pending`; minimum 30-day retention proof is `pending`; non-live restore
+rehearsal/proof is `blocked`; backup/restore sign-off is `pending`.
+Production target acceptance, user/access review, monitoring/support
+readiness, cutover communications acceptance, and rollback owner acceptance
+remain `pending`. UAT/practice workflow evidence and smoke/regression evidence
+are `not checked`. Data migration scope decision is `yes`, patient data
+migration decision is `approved by category`, and
+appointments/treatments/recalls migration decision is `yes`; those decisions
+do not run or authorise imports by themselves. Opening-balance/live finance
+import decision and invoice/payment/staging import decision remain `pending`.
+Final owner go/no-go approval remains `hold`.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -286,6 +301,45 @@ data or start cutover.
 | Data migration scope and import-decision evidence request | Recorded / pending evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md` | Patient/import scope decisions, opening-balance/live finance import approval, invoice/payment/staging import approval, backup/restore proof, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
 | Domain migration, monitoring/support, and cutover communications evidence request | Recorded / pending evidence | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md` | Domain migration decisions, monitoring/support readiness, cutover communications acceptance, backup/restore proof, production target acceptance, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
 | Consolidated production readiness evidence packet and final gate register | Recorded / all external gates pending | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md` | All external evidence gates remain pending until owner/operator evidence is supplied and final go/no-go approval is recorded |
+| Owner/operator readiness evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup `blocked`; latest safe backup timestamp `pending`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending`; data migration scope `yes`; patient data migration `approved by category`; appointments/treatments/recalls migration `yes`; finance/import decisions `pending`; final go/no-go `hold` | First backup, retention, restore, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
+
+## Owner/Operator Evidence Status Record - 2026-05-10
+
+Classification-only status:
+
+| Gate | Recorded status |
+| --- | --- |
+| Outside-Git rclone setup evidence | yes |
+| First backup execution evidence | blocked |
+| Latest safe backup timestamp | pending |
+| Minimum 30-day retention proof | pending |
+| Non-live restore rehearsal/proof | blocked |
+| Backup/restore sign-off | pending |
+| Production target acceptance | pending |
+| User/access review | pending |
+| UAT/practice workflow evidence | not checked |
+| Smoke/regression evidence | not checked |
+| Data migration scope decision | yes |
+| Patient data migration decision | approved by category |
+| Opening-balance/live finance import decision | pending |
+| Invoice/payment/staging import decision | pending |
+| Appointments/treatments/recalls migration decision | yes |
+| Monitoring/support readiness | pending |
+| Cutover communications acceptance | pending |
+| Rollback owner acceptance | pending |
+| Final owner go/no-go approval | hold |
+
+Reason classification: outside-Git rclone setup present; optional crypt salt
+not configured; first backup blocked; external readiness gates incomplete.
+
+Blocker classification: first backup execution blocked, latest safe backup
+timestamp unavailable, retention proof pending, non-live restore blocked, UAT
+and smoke not checked, monitoring/support pending, cutover communications
+pending, rollback acceptance pending, finance/import decisions pending, and
+final go/no-go on hold.
+
+Safety confirmations: no secrets exposed, no patient data exposed, no private
+paths exposed, and no backup contents exposed.
 
 ## Explicit Blockers
 
