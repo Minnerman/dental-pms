@@ -85,9 +85,9 @@ Do not start with finance or future diary writes into core live workflow tables.
 ## Recommended Next 5 Slices
 
 1. Production readiness checklist execution under the docs-only cutover plan.
-   - Target: use `docs/PRODUCTION_READINESS_CUTOVER_PLAN.md` after business reconciliation sign-off is recorded in `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_BUSINESS_RECONCILIATION_SIGNOFF.md`.
-   - Why next: the non-live evidence track, reconciliation plan, production readiness/cutover plan, and business reconciliation sign-off are recorded, but live finance import, production cutover, and Dental PMS live/main PMS status remain unauthorised.
-   - Likely files: docs-only readiness checklist, rehearsal plan, or go/no-go planning record.
+   - Target: use `docs/PRODUCTION_READINESS_CUTOVER_PLAN.md` and `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md` after business reconciliation sign-off is recorded in `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_BUSINESS_RECONCILIATION_SIGNOFF.md`.
+   - Why next: the non-live evidence track, reconciliation plan, production readiness/cutover plan, business reconciliation sign-off, and execution tracker are recorded, but live finance import, production cutover, and Dental PMS live/main PMS status remain unauthorised.
+   - Likely files: docs-only readiness evidence, rehearsal plan, or go/no-go planning record.
    - Likely validation: docs diff checks and explicit confirmation that no R4 access, real artefact access, PMS DB connection, guarded apply/write rerun, validation/no-write rerun, finance import, live/default PMS writes, actual PMS Postgres writes, invoice/payment/staging import, raw artefact commit, patient-level committed contents, or production cutover occurred.
    - Backend-only/proof-only likely: docs-only.
    - Risk: high because this is a production decision track; keep R4 live unless separately approved.

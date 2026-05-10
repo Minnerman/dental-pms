@@ -22,10 +22,9 @@ remains `false`. Live finance import, live/default PMS DB writes, actual PMS
 Postgres writes, invoice/payment/staging import, production execution, and
 cutover remain unauthorised.
 
-The immediate decision point is business reconciliation of the signed-off
-non-live opening-balance evidence. A reconciliation plan exists in PR #643, and
-the owner-provided business reconciliation sign-off should be recorded in a
-separate docs-only PR after PR #643 is merged.
+The business reconciliation plan and owner-provided business reconciliation
+sign-off are now recorded. The execution tracker for the remaining production
+readiness gaps is `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`.
 
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 or secrets belong in this plan or any follow-up planning record.
@@ -164,9 +163,10 @@ explicit owner approval:
 
 The fastest safe sequence is:
 
-1. Merge PR #643 after review, so the independent business reconciliation plan
-   is on `master`.
-2. Record the owner business reconciliation sign-off in a later docs-only PR.
+1. Keep the independent business reconciliation plan and owner sign-off on
+   `master`.
+2. Use `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md` to close readiness
+   evidence gaps in parallel.
 3. Complete this production readiness checklist without performing live writes
    or cutover.
 4. Run a production-like rehearsal only after a separately scoped approval
