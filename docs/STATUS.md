@@ -72,6 +72,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production execution cutover status recorded.
+  - Scope: evidence-status recording only. It records classification-only local-operator production execution status without exposing sensitive details.
+  - Execution status: production execution started `yes`; production deployment result `pass`; production smoke result `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; rollback required `no`; rollback executed `not required`.
+  - Finance/import status: `finance_import_ready=false`; finance/import execution result `blocked` because no live-safe guarded import process was available. No finance import, opening-balance import, invoice/payment/staging import, or patient data import was performed.
+  - Reason classification: production deployment and smoke passed; live/main status changed after smoke; finance/import execution blocked because no live-safe guarded import process was available.
+  - Blocker classification: finance/import execution remains blocked; separate guarded import execution still required.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
+  - Non-execution: no backup, restore, rclone, import, migration, rollback, backup deletion, retention cleanup, or R4 modification was performed by this status record.
 - 2026-05-10: Final readiness gate evidence status recorded.
   - Scope: evidence-status recording only. It records classification-only owner/operator final readiness gate evidence without production access or execution.
   - Evidence status: UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` for readiness status only.
