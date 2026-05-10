@@ -242,6 +242,15 @@ or cutover. Minimum 30-day retention proof is now classified as `yes` for the
 repo-controlled count-based retention setup. Backup readiness remains
 incomplete until backup/restore sign-off is recorded.
 
+Backup/restore sign-off acceptance was recorded on 2026-05-10 using
+classification-only owner/operator evidence. The accepted scope is Dental PMS
+backup and restore readiness evidence, including the post-PR #670 minimum
+30-day retention remediation. The decision is `accepted` for backup/restore
+readiness tracking only. This sign-off does not authorise production cutover,
+finance import, patient import, backup deletion, retention cleanup, R4
+replacement, live/default PMS DB writes, actual PMS Postgres writes, or Dental
+PMS live/main PMS status.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -251,8 +260,8 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Evidence request recorded / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Retention remediation recorded / pending sign-off | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention target confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; backup/restore evidence intake and sign-off template is recorded; first encrypted backup upload evidence is recorded as pass with a latest safe backup timestamp; restore failure was classified as missing database role/user and remediated in the non-live target; repeat non-live restore proof is recorded as pass; previous minimum 30-day retention proof was no because count-based retention was classified as less than 30 days; repo count-based retention now retains 30 backups and minimum 30-day retention proof is classified as yes; backup/restore sign-off remains pending; production schedule implementation evidence and backup integrity evidence remain unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`, then backup/restore sign-off and final go/no-go evidence | No-go until accepted |
-| Restore proof | Ops owner | Repeat non-live restore passed / pending sign-off | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; original failure classified as missing database role/user; remediation was applied in the non-live target; repeat non-live restore rehearsal/proof is recorded as pass; backup/restore sign-off remains pending | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then backup/restore sign-off | No-go until accepted |
+| Backup readiness | Ops owner | Backup/restore evidence accepted / pending downstream gates | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention target confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; backup/restore evidence intake and sign-off template is recorded; first encrypted backup upload evidence is recorded as pass with a latest safe backup timestamp; restore failure was classified as missing database role/user and remediated in the non-live target; repeat non-live restore proof is recorded as pass; repo count-based retention now retains 30 backups and minimum 30-day retention proof is classified as yes; backup/restore sign-off is accepted for readiness tracking only; production schedule implementation evidence, backup integrity evidence, and final go/no-go evidence remain unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`, then production target/access/UAT/smoke/monitoring/cutover and final go/no-go evidence | No-go until final approval |
+| Restore proof | Ops owner | Repeat non-live restore passed / sign-off accepted | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; original failure classified as missing database role/user; remediation was applied in the non-live target; repeat non-live restore rehearsal/proof is recorded as pass; backup/restore sign-off is accepted for readiness tracking only | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then final go/no-go | No-go until final approval |
 | Rollback plan | Owner plus ops owner | Template recorded / pending owner acceptance | Rollback owner, triggers, and communication path not accepted | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md`, then owner-accepted rollback/go-no-go evidence | No-go until accepted |
 | User/access readiness | Practice owner | Evidence request recorded / pending access evidence | User roles and access review not recorded | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
 | Smoke/regression testing | Technical owner | Evidence request recorded / pending execution evidence | Production-readiness smoke/regression pass not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then smoke checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
@@ -340,15 +349,15 @@ data or start cutover.
 | App health check result | Verified by read-only check / pending owner acceptance | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z`; owner/operator independent result not yet verified | Owner acceptance if required |
 | Backup owner/role | Verified | Project owner / production operator | None for role |
 | Backup schedule/frequency | Owner confirmed / pending implementation proof | Daily; repo scheduler template exists but current production installation is unverified | Actual production schedule evidence |
-| Backup retention policy | Remediated / pending sign-off | Minimum 30 days target is confirmed; previous retention evidence recorded count-based retention as less than 30 days; repo count-based retention defaults and daily service template are now raised to 30 backups | Backup/restore sign-off and final go/no-go |
+| Backup retention policy | Remediated / sign-off accepted | Minimum 30 days target is confirmed; previous retention evidence recorded count-based retention as less than 30 days; repo count-based retention defaults and daily service template are now raised to 30 backups | Final go/no-go |
 | Backup/restore evidence intake and sign-off template | Recorded / pending evidence | `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md` | Outside-Git setup evidence, first backup evidence, latest safe backup timestamp, retention proof, non-live restore proof, backup/restore sign-off, and final go/no-go approval |
-| First backup execution evidence | Recorded / pending retention remediation and sign-off | pass at `2026-05-10T14:34:56Z` | Retention remediation, backup/restore sign-off, and final go/no-go approval |
-| Latest safe backup timestamp | Recorded / pending retention remediation and sign-off | `2026-05-10T14:34:56Z` | Retention remediation, backup/restore sign-off, and final go/no-go approval |
+| First backup execution evidence | Recorded / sign-off accepted | pass at `2026-05-10T14:34:56Z` | Final go/no-go approval |
+| Latest safe backup timestamp | Recorded / sign-off accepted | `2026-05-10T14:34:56Z` | Final go/no-go approval |
 | Restore rehearsal target classification | Owner confirmed / pending implementation proof | Local non-live restore rehearsal environment | Specific non-live target evidence before execution |
-| Restore rehearsal status | Recorded / passed after remediation | pass | Backup/restore sign-off |
-| Restore failure classification | Recorded | missing database role/user | None for classification; sign-off still pending |
-| Restore remediation status | Recorded | missing role/user remediated in non-live target | None for remediation status; sign-off still pending |
-| Backup/restore sign-off | Pending | pending | Retention remediation and owner/operator sign-off |
+| Restore rehearsal status | Recorded / passed after remediation | pass | Final go/no-go |
+| Restore failure classification | Recorded | missing database role/user | None for classification; final go/no-go still pending |
+| Restore remediation status | Recorded | missing role/user remediated in non-live target | None for remediation status; final go/no-go still pending |
+| Backup/restore sign-off | Accepted | accepted by owner/operator for backup/restore readiness tracking only | Production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approvals, and final go/no-go remain unresolved |
 | Monitoring/logging owner role | Verified | Project owner / production operator | None for role |
 | Support contact role | Verified | Project owner | None for role |
 | Rollback/go-no-go communications plan | Recorded / pending owner acceptance | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md` | Owner acceptance, production target acceptance, UAT/access evidence, backup/restore proof, and final go/no-go approval |
@@ -361,7 +370,8 @@ data or start cutover.
 | Retention/restore evidence status | Recorded / restore failed | Minimum 30-day retention proof `pending`; non-live restore rehearsal/proof `fail`; backup/restore sign-off `no` | Retention proof, restore remediation, repeat non-live restore proof, backup/restore sign-off, and final go/no-go remain unresolved |
 | Restore remediation evidence status | Recorded / pending sign-off | Restore failure classification `missing database role/user`; restore remediation status `missing role/user remediated in non-live target`; repeat non-live restore rehearsal/proof `pass`; backup/restore sign-off `pending` | Minimum 30-day retention proof, backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | Retention sign-off evidence status | Recorded / retention proof failed | Minimum 30-day retention proof `no`; retention mechanism classification `count-based`; retention target classification `less than 30 days`; backup/restore sign-off `pending` | Retention remediation, backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
-| Backup retention remediation | Recorded / pending sign-off | Minimum 30-day retention proof `yes`; retention mechanism classification `count-based`; retention target classification `at least 30 days`; backup/restore sign-off `pending` | Backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
+| Backup retention remediation | Recorded / sign-off accepted | Minimum 30-day retention proof `yes`; retention mechanism classification `count-based`; retention target classification `at least 30 days`; backup/restore sign-off `yes` | Production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
+| Backup/restore sign-off status | Recorded / accepted for readiness tracking only | Backup upload evidence, minimum 30-day retention remediation, and non-live restore proof accepted by owner/operator | Production cutover, finance import, patient import, backup deletion, retention cleanup, R4 replacement, Dental PMS live/main PMS status, and final go/no-go remain unauthorised |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -534,11 +544,38 @@ mark production readiness complete, and does not authorise finance import,
 opening-balance import, patient data import, invoice/payment/staging import,
 Dental PMS live/main PMS status, or production cutover.
 
+## Backup Restore Sign-Off Evidence Status Record - 2026-05-10
+
+Classification-only status:
+
+| Gate | Recorded status |
+| --- | --- |
+| Backup/restore sign-off | yes |
+| Accepted by | Owner/operator |
+| Scope accepted | Dental PMS backup and restore readiness evidence, including post-PR #670 minimum 30-day retention remediation |
+| Decision | accepted |
+
+Reason classification: backup upload evidence, minimum 30-day retention
+remediation, and non-live restore proof accepted for backup/restore readiness
+tracking only.
+
+Blocker classification: production target, access, UAT, smoke,
+monitoring/support, cutover communications, rollback acceptance, finance/import
+approvals, and final go/no-go remain unresolved.
+
+Safety confirmations: no secrets exposed, no patient data exposed, no private
+paths exposed, and no backup contents exposed.
+
+This sign-off does not authorise production cutover, finance import, patient
+import, backup deletion, retention cleanup, R4 replacement, live/default PMS DB
+writes, actual PMS Postgres writes, Dental PMS live/main PMS status, or final
+go/no-go approval.
+
 ## Explicit Blockers
 
 - No production rehearsal has been completed.
-- Backup/restore proof is incomplete because backup/restore sign-off is
-  pending and final go/no-go has not been accepted.
+- Backup/restore proof is accepted for backup/restore readiness tracking only;
+  final go/no-go has not been accepted.
 - First backup execution evidence and latest safe backup timestamp are
   recorded, and repo retention is remediated to retain 30 backups.
 - No Google Workspace / owner-controlled online storage implementation proof
@@ -554,8 +591,8 @@ Dental PMS live/main PMS status, or production cutover.
 - Rclone credential/setup evidence has been requested, and outside-Git setup
   evidence is recorded as yes.
 - No backup automation credential handling proof has been recorded.
-- Non-live restore rehearsal/proof is recorded as pass after remediation, but
-  backup/restore sign-off remains pending.
+- Non-live restore rehearsal/proof is recorded as pass after remediation, and
+  backup/restore sign-off is accepted for readiness tracking only.
 - No UAT/practice workflow execution evidence has been recorded.
 - No production smoke execution evidence has been recorded.
 - No final live import approval has been given.

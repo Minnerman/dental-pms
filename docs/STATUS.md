@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Backup/restore sign-off status recorded.
+  - Scope: evidence-status recording only. It records classification-only owner/operator acceptance of Dental PMS backup and restore readiness evidence, including post-PR #670 minimum 30-day retention remediation.
+  - Evidence status: backup/restore sign-off `yes`; decision `accepted`; accepted for backup/restore readiness tracking only.
+  - Accepted evidence: backup upload evidence, minimum 30-day retention remediation, and non-live restore proof.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Remaining gates: production target/access/UAT/smoke/monitoring/cutover evidence remains pending, rollback acceptance remains pending, finance/import approvals remain pending, and final go/no-go remains hold.
+  - Non-authorisation: this sign-off does not authorise production cutover, finance import, opening-balance import, patient import, invoice/payment/staging import, backup deletion, retention cleanup, R4 replacement, Dental PMS live/main PMS status, live/default PMS writes, or actual PMS Postgres writes. R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; production readiness remains incomplete.
 - 2026-05-10: Backup retention minimum remediation recorded.
   - Scope: repo configuration/template remediation only. Count-based database and attachments backup defaults and the daily backup service template now keep `30` backups.
   - Evidence status: minimum 30-day retention proof `yes`; retention mechanism classification `count-based`; retention target classification `at least 30 days`; backup/restore sign-off `pending`.
