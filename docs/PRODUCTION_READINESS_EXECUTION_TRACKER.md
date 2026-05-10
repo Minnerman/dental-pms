@@ -81,6 +81,14 @@ support or archive encryption support. It does not execute backups, run
 restores, access Google Workspace, create or inspect credentials, connect to
 production, or claim backup readiness is complete.
 
+Rclone backup upload/encryption scaffolding is recorded in
+`docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`. That record identifies rclone
+as the candidate Google Workspace/Drive upload mechanism and rclone `crypt` as
+the candidate client-side encryption mechanism. It adds non-secret placeholder
+templates only; it does not run backups, run restores, access Google
+Workspace, create or inspect credentials, connect to production, or claim
+backup readiness is complete.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -90,7 +98,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Partially verified / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Automation gap recorded / blocked on implementation proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; local backup, archive, scheduler, and restore foundations exist; Google Workspace upload support and archive encryption support were not found; current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Backup readiness | Ops owner | Rclone scaffolding planned / blocked on execution proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; credentials, upload execution, encryption proof, current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
 | Restore proof | Ops owner | Restore target supplied / pending execution evidence | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; restore rehearsal is not yet performed | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
@@ -134,7 +142,10 @@ data or start cutover.
 10. Use `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md` to close the
    missing Google Workspace upload and archive encryption implementation gaps
    before claiming automated backup readiness.
-11. Keep live import blocked until final go/no-go approval explicitly authorises
+11. Use `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md` as the non-secret
+   placeholder basis for a later separately authorised rclone credential setup
+   and upload execution slice.
+12. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
 ## Production Evidence Item Status
@@ -164,10 +175,8 @@ data or start cutover.
   recorded.
 - No Google Workspace / owner-controlled online storage implementation proof
   has been recorded.
-- No archive encryption support or accepted implementation blocker has been
-  recorded.
-- Backup automation implementation gap is recorded, but no implementation
-  evidence has been recorded.
+- Rclone remote-upload and crypt scaffolding is recorded, but no upload or
+  encryption execution evidence has been recorded.
 - No backup automation credential handling proof has been recorded.
 - No non-live restore rehearsal has been executed.
 - No UAT/practice workflow execution evidence has been recorded.

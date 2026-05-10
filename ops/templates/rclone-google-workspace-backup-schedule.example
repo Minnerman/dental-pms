@@ -1,0 +1,36 @@
+# Example schedule template only. Do not install or run without separate
+# explicit owner/operator authorisation.
+
+# Target schedule:
+# BACKUP_SCHEDULE="daily"
+# BACKUP_RETENTION_DAYS=30
+
+# Example systemd timer shape:
+#
+# [Unit]
+# Description=Dental PMS rclone backup upload timer
+#
+# [Timer]
+# OnCalendar=*-*-* 03:15:00
+# Persistent=true
+# Unit=dental-pms-rclone-backup-upload.service
+#
+# [Install]
+# WantedBy=timers.target
+
+# Example systemd service shape:
+#
+# [Unit]
+# Description=Dental PMS rclone backup upload
+# After=network-online.target
+# Wants=network-online.target
+#
+# [Service]
+# Type=oneshot
+# EnvironmentFile=/path/outside/repo/rclone-google-workspace-backup.env
+# ExecStart=/usr/bin/rclone copy "${BACKUP_SOURCE_ARCHIVE}" "${BACKUP_DESTINATION}" --config "${RCLONE_CONFIG}"
+
+# The real EnvironmentFile path must be outside Git. The real rclone config,
+# service-account material, OAuth material, crypt passwords, tokens, backup
+# contents, raw dumps, private paths, DSNs, and patient data must never be
+# committed.
