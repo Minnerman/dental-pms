@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production readiness execution tracker and gap assessment added.
+  - Tracker: `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`
+  - Scope: docs-only execution tracker/gap assessment; it does not access R4, access/hash/inspect real artefacts, use patient data, connect to PMS databases, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, or start production cutover.
+  - Status: opening-balance full eligible-row non-live evidence and business reconciliation sign-off are complete; R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`.
+  - Tracker gaps: production environment readiness, backup readiness, restore proof, rollback plan, user/access readiness, smoke/regression testing, UAT/practice workflow testing, data migration scope, migration-domain decisions, monitoring/support readiness, cutover communications, and final go/no-go approval remain pending or blocked by owner decision.
+  - Non-authorisation: live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, invoice/payment/staging import, and Dental PMS live/main PMS status remain unauthorised.
 - 2026-05-10: Owner business/accounting reconciliation sign-off recorded for the full eligible-row opening-balance non-live evidence.
   - Sign-off record: `docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_BUSINESS_RECONCILIATION_SIGNOFF.md`
   - Scope: docs-only business reconciliation sign-off for non-live evidence only; it does not access R4, access/hash/inspect real artefacts, use patient data, connect to PMS databases, rerun validation/no-write, rerun guarded apply/write, create finance records, perform finance import, perform invoice/payment/staging import, or start production cutover.

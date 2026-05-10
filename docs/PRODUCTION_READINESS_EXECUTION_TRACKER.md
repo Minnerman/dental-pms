@@ -1,0 +1,88 @@
+# Dental PMS Production Readiness Execution Tracker
+
+Status date: 2026-05-10
+
+Baseline:
+`origin/master@719c5c8290950cc673d19e20528f5e3f6b2b293a`
+
+This is a docs-only production readiness execution tracker and gap
+assessment. It does not perform production execution, live import, production
+cutover, R4 access, real artefact access, patient-data review, PMS database
+connection, validation/no-write, guarded apply/write, finance import, or
+invoice/payment/staging import.
+
+R4 remains the live/main PMS. Dental PMS is not live/main PMS.
+`finance_import_ready=false`.
+
+The R4 opening-balance full eligible-row non-live evidence track is complete
+through signed-off guarded apply/write proof, and the independent
+business/accounting reconciliation sign-off is recorded. This tracker does not
+authorise any live/default PMS DB write, actual PMS Postgres write, production
+execution, live finance import, invoice/payment/staging import, or Dental PMS
+becoming the live/main PMS.
+
+No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
+production passwords, live credentials, or secrets belong in this tracker.
+
+## Workstream Tracker
+
+| Workstream | Owner | Status | Blocker | Target Evidence | Go/No-Go Impact |
+| --- | --- | --- | --- | --- | --- |
+| Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
+| Production environment readiness | Ops owner | Pending evidence | Production health evidence not recorded | Read-only health checklist covering app, workers, storage, certificates, access, and service availability | No-go until accepted |
+| Backup readiness | Ops owner | Pending evidence | Current backup inventory not recorded in this tracker | Backup inventory and owner acceptance | No-go until accepted |
+| Restore proof | Ops owner | Not started | Restore proof not recorded | Restore transcript or approved restore proof summary | No-go until accepted |
+| Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
+| User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
+| Smoke/regression testing | Technical owner | Pending evidence | Production-readiness smoke/regression pass not recorded | Smoke/regression checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
+| UAT/practice workflow testing | Practice owner | Not started | UAT checklist and acceptance not recorded | Practice workflow checklist covering reception, clinical, documents, recalls, and finance views | No-go until accepted or explicitly waived |
+| Data migration scope | Owner plus migration owner | Pending evidence | Included/excluded production data scope not finalised | Signed included/excluded data scope record | No-go until accepted |
+| Opening-balance live-import decision | Owner | Blocked by owner decision | Live finance import remains unauthorised | Separate explicit owner approval for any live opening-balance import | No-go for finance import until approval |
+| Patient data migration decision | Owner plus migration owner | Pending evidence | Patient import/cutover scope not finalised | Patient data inclusion/exclusion and duplicate/contact policy | No-go until accepted |
+| Appointments/treatments/recalls migration decision | Owner plus migration owner | Pending evidence | Domain scope and accepted exclusions not finalised | Decision record for appointments, treatments, charting, and recalls | No-go until accepted |
+| Monitoring/support readiness | Support owner | Pending evidence | Monitoring owner and support window not recorded | Monitoring checklist, support owner, escalation route, and first support window | No-go until accepted |
+| Cutover communications | Owner plus support owner | Not started | Operator communication plan not recorded | Cutover communication plan for owner, operators, and support contacts | No-go until accepted |
+| Final go/no-go approval | Owner | Blocked by owner decision | No production rehearsal, backup/restore proof, or final cutover approval recorded | Explicit go/no-go decision record | No-go until explicit approval |
+
+## Immediate Fast-Track Actions
+
+These actions are planning or inspection tasks only. They must not write live
+data or start cutover.
+
+1. Verify production environment health without writing data.
+2. Validate the backup and restore plan, then record the accepted evidence.
+3. Define the UAT checklist for reception, clinical, document, recall, and
+   finance-view workflows.
+4. Define the exact data migration scope, including included and excluded
+   domains.
+5. Prepare a production rehearsal plan with target, scope, evidence, and
+   rollback handling for separate approval.
+6. Keep live import blocked until final go/no-go approval explicitly authorises
+   it.
+
+## Explicit Blockers
+
+- No production rehearsal has been completed.
+- No backup/restore proof has been recorded.
+- No final live import approval has been given.
+- No cutover go/no-go approval has been given.
+- R4 is still the live/main PMS.
+
+## Still Unauthorised
+
+The following remain unauthorised and require separate explicit owner approval:
+
+- live/default PMS DB writes;
+- actual PMS Postgres writes;
+- production execution;
+- production cutover;
+- live finance import;
+- invoice/payment/staging import;
+- Dental PMS becoming the live/main PMS.
+
+## Current Interpretation
+
+Production readiness is not complete. The safe acceleration path is to close
+the pending evidence gaps in parallel while keeping R4 live/main PMS and
+keeping all live writes, imports, and cutover actions blocked behind a later
+explicit go/no-go decision.
