@@ -46,10 +46,11 @@ copied to owner-controlled online storage, or restorable.
 
 ## Fastest Safe Implementation Path
 
-The fastest safe path is:
+The fastest safe path, using the supplied owner/operator inputs, is:
 
 1. Choose the storage target.
-   - Preferred candidate: Google Workspace / owner-controlled online storage.
+   - Supplied target label: Dental PMS Production Backups.
+   - Target class: Google Workspace / owner-controlled online storage.
    - This must remain a target label until a later authorised implementation
      proves the actual storage path and credential handling.
 2. Confirm whether the repo helpers support the chosen storage target directly
@@ -57,35 +58,46 @@ The fastest safe path is:
    - Current repo evidence documents local backup helpers and scheduler
      templates.
    - Direct Google Workspace integration is not proven by this prep slice.
-3. Create backup configuration in a later implementation slice.
+3. Confirm archive encryption support.
+   - Owner requires Google Workspace/Drive storage encryption plus backup
+     archive encryption if supported by the repo helpers.
+   - Archive encryption support is not proven by this prep slice. If the
+     helpers do not support archive encryption, record that as an
+     implementation blocker instead of claiming encryption is complete.
+4. Create backup configuration in a later implementation slice.
    - That slice must avoid committing credentials, tokens, private paths, or
      backup contents.
-4. Run the first backup in a later explicit execution slice.
+5. Run the first backup in a later explicit execution slice.
    - This prep slice does not run it.
-5. Record backup timestamp and redacted backup evidence.
+6. Record backup timestamp and redacted backup evidence.
    - Evidence should include only non-sensitive status, timestamp, storage
      classification, operator role, and integrity result if safe.
-6. Run a non-live restore rehearsal in a later explicit execution slice.
+7. Run a non-live restore rehearsal in a later explicit execution slice.
    - Restore target must be confirmed as non-live before execution.
-7. Record restore evidence.
+8. Record restore evidence.
    - Evidence should include target classification, pass/fail, timing, and
      redacted validation notes without patient-level contents or secrets.
 
-## Required Owner/Operator Inputs
+## Owner/Operator Inputs Supplied
 
-The following inputs are required before implementation can proceed:
+The following non-secret owner/operator inputs have been supplied for planning:
 
-| Input | Requirement |
+| Input | Supplied value |
 | --- | --- |
-| Google Workspace backup folder/location label | Non-secret label only; no private URL or exact path unless separately approved and safe to disclose. |
-| Upload/integration method | Confirm service account, manual upload, or another process without committing credentials. |
-| Credential handling plan | Confirm where credentials live, who controls them, and how they stay out of Git. |
-| Backup encryption requirement | Confirm whether backups must be encrypted before upload or storage. |
-| Backup schedule confirmation | Confirm daily schedule target and operating time window. |
-| Retention confirmation | Confirm minimum 30 days retention and whether additional monthly retention is required. |
-| Non-live restore target confirmation | Confirm safe target classification before any restore rehearsal. |
-| Backup evidence owner | Confirm who records redacted timestamp and integrity evidence. |
-| Restore evidence owner | Confirm who records redacted restore pass/fail evidence. |
+| Google Workspace backup folder/location label | Dental PMS Production Backups |
+| Backup method preference | Automated service account preferred; manual upload fallback only if automation is not yet implemented |
+| Credential handling plan | Credentials must be stored outside Git through environment/secret storage only; no credentials, tokens, DSNs, private URLs, or private paths may be committed |
+| Encryption requirement | Google Workspace/Drive storage encryption plus backup archive encryption if supported by the repo helpers; if archive encryption is not supported, record it as an implementation blocker |
+| Backup schedule confirmation | Daily |
+| Retention confirmation | Minimum 30 days |
+| Safe non-live restore target | Local non-live restore rehearsal environment |
+| Backup evidence owner | Project owner / production operator |
+| Restore evidence owner | Project owner / production operator |
+
+These inputs are sufficient to prepare the next implementation design or
+implementation-proof slice, but they are not implementation proof. Current
+backup storage setup, archive encryption support, latest safe backup
+timestamp, backup integrity, and non-live restore proof are still absent.
 
 ## Implementation Stop Conditions
 
@@ -93,6 +105,7 @@ Stop before implementation or execution if any of the following applies:
 
 - no safe storage target is confirmed;
 - no credential handling plan exists;
+- archive encryption is required but unsupported or unplanned;
 - secrets, DSNs, tokens, passwords, private URLs, exact private filesystem
   paths, raw database dumps, backup contents, or patient data would be exposed;
 - patient data would be committed;
@@ -111,6 +124,7 @@ The following evidence is required before production cutover can be considered:
 - backup storage classification;
 - backup schedule confirmation;
 - retention confirmation proving at least 30 days;
+- archive encryption support or explicit accepted blocker;
 - backup integrity result or checksum if safe to disclose;
 - restore rehearsal target classification;
 - restore rehearsal result pass/fail;
@@ -129,7 +143,8 @@ production readiness, production execution, live finance import, or cutover.
 
 The next safe slices are:
 
-1. Owner/operator supplies non-secret storage and credential-handling inputs.
+1. Confirm the supplied non-secret storage and credential-handling inputs remain
+   accepted at implementation time.
 2. Docs-only backup implementation design, if needed.
 3. Separately authorised backup configuration implementation.
 4. Separately authorised first backup execution evidence.

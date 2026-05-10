@@ -58,7 +58,7 @@ Google Workspace, or claim backup readiness is complete.
 
 Backup implementation/proof preparation is recorded in
 `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`. That document defines
-the required owner/operator inputs, fastest safe backup proof path,
+the supplied owner/operator inputs, fastest safe backup proof path,
 implementation stop conditions, and evidence required before cutover. It does
 not implement backups, run backup commands, run restore commands, access Google
 Workspace, connect to production, or claim backup readiness is complete.
@@ -72,8 +72,8 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Partially verified / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Prep documented / blocked on implementation proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; daily backup target and minimum 30 days retention target supplied; current production schedule, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
-| Restore proof | Ops owner | Prep documented / pending execution evidence | Restore procedure is documented; restore target classification supplied as non-live restore test only; restore rehearsal is not yet performed | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
+| Backup readiness | Ops owner | Inputs supplied / blocked on implementation proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; archive encryption required if supported; current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Restore proof | Ops owner | Restore target supplied / pending execution evidence | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; restore rehearsal is not yet performed | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
 | Smoke/regression testing | Technical owner | Planned / pending execution evidence | Production-readiness smoke/regression pass not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then smoke checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
@@ -107,9 +107,10 @@ data or start cutover.
 7. Use `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md` to close the
    backup setup gaps without exposing secrets, private paths, raw dumps, or
    patient data.
-8. Use `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md` to collect
-   non-secret owner/operator inputs before any backup implementation or proof
-   execution.
+8. Use the supplied inputs in
+   `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md` to prepare a later
+   implementation/proof slice without committing credentials, private paths,
+   backup contents, or patient data.
 9. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
@@ -123,10 +124,10 @@ data or start cutover.
 | Backend availability result | Verified by read-only check / pending owner acceptance | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z`; owner/operator independent result not yet verified | Owner acceptance if required |
 | App health check result | Verified by read-only check / pending owner acceptance | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z`; owner/operator independent result not yet verified | Owner acceptance if required |
 | Backup owner/role | Verified | Project owner / production operator | None for role |
-| Backup schedule/frequency | Partially documented / pending current proof | daily target, pending verification; repo scheduler template exists but current production installation is unverified | Actual production schedule evidence |
-| Backup retention policy | Partially documented / pending current proof | minimum 30 days target, pending verification; repo retention control exists but current production setting is unverified | Actual retention evidence proving minimum 30 days |
+| Backup schedule/frequency | Owner confirmed / pending implementation proof | Daily; repo scheduler template exists but current production installation is unverified | Actual production schedule evidence |
+| Backup retention policy | Owner confirmed / pending implementation proof | Minimum 30 days; repo retention control exists but current production setting is unverified | Actual retention evidence proving minimum 30 days |
 | Latest safe backup timestamp | Blocked | Unavailable | Owner/operator evidence or approved backup verification slice |
-| Restore rehearsal target classification | Verified for intended target class | non-live restore test only | Specific non-live target evidence before execution |
+| Restore rehearsal target classification | Owner confirmed / pending implementation proof | Local non-live restore rehearsal environment | Specific non-live target evidence before execution |
 | Restore rehearsal status | Blocked | not yet performed | Approved restore proof slice |
 | Monitoring/logging owner role | Verified | Project owner / production operator | None for role |
 | Support contact role | Verified | Project owner | None for role |
@@ -140,6 +141,8 @@ data or start cutover.
   recorded.
 - No Google Workspace / owner-controlled online storage implementation proof
   has been recorded.
+- No archive encryption support or accepted implementation blocker has been
+  recorded.
 - No non-live restore rehearsal has been executed.
 - No UAT/practice workflow execution evidence has been recorded.
 - No production smoke execution evidence has been recorded.
