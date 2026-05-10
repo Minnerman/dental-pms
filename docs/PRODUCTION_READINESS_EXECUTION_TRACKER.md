@@ -37,11 +37,11 @@ non-sensitive production environment, backup, and restore evidence is not yet
 available and lists the exact missing items.
 
 The follow-up non-invasive production evidence collection record is
-`docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`. It partially
-verifies the documented production candidate/deployment labels, verifies
-unauthenticated read-only frontend/backend/app health availability, records
-role-label defaults, and keeps backup timestamp plus restore proof evidence
-blocked.
+`docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`. It records
+owner/operator-supplied production labels, roles, backup targets, and restore
+target classification; verifies unauthenticated read-only frontend/backend/app
+health availability; and keeps deployment target verification, latest safe
+backup timestamp, and restore rehearsal execution blocked.
 
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
@@ -51,9 +51,9 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Workstream | Owner | Status | Blocker | Target Evidence | Go/No-Go Impact |
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
-| Production environment readiness | Ops owner | Partially verified / pending owner-operator confirmation | Read-only frontend, backend, and app health checks passed; production candidate/deployment labels still require owner/operator confirmation | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then owner/operator target confirmation | No-go until accepted |
-| Backup readiness | Ops owner | Partially verified / blocked on backup evidence | Owner role default, repo backup schedule template, and default retention policy are recorded; latest safe backup timestamp and current production schedule/retention confirmation are unavailable | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
-| Restore proof | Ops owner | Blocked / pending evidence | Restore rehearsal target classification and restore rehearsal status are unavailable | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then non-live restore target classification and restore rehearsal status/evidence | No-go until accepted |
+| Production environment readiness | Ops owner | Partially verified / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then deployment target acceptance | No-go until accepted |
+| Backup readiness | Ops owner | Partially verified / blocked on backup evidence | Backup owner/role supplied; daily backup target and minimum 30 days retention target supplied; latest safe backup timestamp and actual backup evidence are unavailable | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Restore proof | Ops owner | Blocked / pending execution evidence | Restore target classification supplied as non-live restore test only; restore rehearsal is not yet performed | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
 | Smoke/regression testing | Technical owner | Pending evidence | Production-readiness smoke/regression pass not recorded | Smoke/regression checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
@@ -89,19 +89,19 @@ data or start cutover.
 
 | Evidence item | Current status | Current value/evidence | Remaining gap |
 | --- | --- | --- | --- |
-| Production environment label | Partially verified | Documented production candidate on practice-server / single-practice Docker Compose deployment | Owner/operator confirmation required |
-| Deployment target label | Partially verified | Documented Docker Compose deployment target and service ports | Owner/operator confirmation required |
-| Frontend availability result | Verified | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z` | Owner acceptance |
-| Backend availability result | Verified | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z` | Owner acceptance |
-| App health check result | Verified | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z` | Owner acceptance |
-| Backup owner/role | Partially verified | Project owner / production operator role default | Owner/operator confirmation |
-| Backup schedule/frequency | Partially verified | Repo docs define manual backup commands and systemd timer template | Current installed production schedule/frequency confirmation |
-| Backup retention policy | Partially verified | Repo docs define `BACKUP_KEEP` default `14` files per stream | Current production override confirmation |
+| Production environment label | Verified | Dental PMS production candidate | None for label; deployment still needs verification |
+| Deployment target label | Blocked | Production server / hosting environment pending verification | Owner/operator target verification |
+| Frontend availability result | Verified by read-only check / pending owner acceptance | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z`; owner/operator independent result not yet verified | Owner acceptance if required |
+| Backend availability result | Verified by read-only check / pending owner acceptance | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z`; owner/operator independent result not yet verified | Owner acceptance if required |
+| App health check result | Verified by read-only check / pending owner acceptance | Read-only HTTP GET returned `200` at `2026-05-10T08:32:28Z`; owner/operator independent result not yet verified | Owner acceptance if required |
+| Backup owner/role | Verified | Project owner / production operator | None for role |
+| Backup schedule/frequency | Partially verified | daily target, pending verification | Actual backup schedule evidence |
+| Backup retention policy | Partially verified | minimum 30 days target, pending verification | Actual retention evidence |
 | Latest safe backup timestamp | Blocked | Unavailable | Owner/operator evidence or approved backup verification slice |
-| Restore rehearsal target classification | Blocked | Unavailable | Owner/operator evidence or approved restore planning/execution slice |
-| Restore rehearsal status | Blocked | Unavailable | Owner/operator evidence or approved restore proof slice |
-| Monitoring/logging owner role | Partially verified | Project owner / production operator role default | Owner/operator confirmation |
-| Support contact role | Partially verified | Project owner / support operator role default | Owner/operator confirmation |
+| Restore rehearsal target classification | Verified for intended target class | non-live restore test only | Specific non-live target evidence before execution |
+| Restore rehearsal status | Blocked | not yet performed | Approved restore proof slice |
+| Monitoring/logging owner role | Verified | Project owner / production operator | None for role |
+| Support contact role | Verified | Project owner | None for role |
 
 ## Explicit Blockers
 

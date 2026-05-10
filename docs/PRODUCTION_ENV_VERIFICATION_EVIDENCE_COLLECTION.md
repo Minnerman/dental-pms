@@ -33,24 +33,28 @@ invoice/payment/staging import remain unauthorised.
   - `backend/app/main.py` shows `GET /health` returns a static status.
   - `frontend/app/api/health/route.ts` proxies to backend `GET /health`.
 - Read-only HTTP checks performed at `2026-05-10T08:32:28Z`.
+- Owner/operator supplied non-sensitive evidence provided after the initial
+  collection record: production environment label, deployment target status,
+  owner/operator roles, backup target schedule/retention, restore target
+  classification, and restore status.
 
 ## Collected Evidence
 
 | Evidence item | Status | Safe value | Evidence source type | Timestamp | Redaction notes |
 | --- | --- | --- | --- | --- | --- |
-| Production environment label | Partially verified | production candidate on the documented practice-server / single-practice Docker Compose deployment; owner/operator confirmation still required | Repo docs | Not applicable | No private host/IP recorded |
-| Deployment target label | Partially verified | Docker Compose deployment target on documented practice-server, with frontend, backend, and Postgres service ports documented; exact production target confirmation still required | Repo docs | Not applicable | No private host/IP recorded |
-| Frontend availability result | Verified | HTTP `200`, `time_total=0.008863` for redacted frontend root | Read-only HTTP GET | `2026-05-10T08:32:28Z` | Private URL redacted |
-| Backend availability result | Verified | HTTP `200`, `time_total=0.001790` for redacted server-local backend health endpoint | Read-only HTTP GET | `2026-05-10T08:32:28Z` | Server-local URL not recorded |
-| App health check result | Verified | HTTP `200`, `time_total=0.028810` for redacted frontend health proxy | Read-only HTTP GET | `2026-05-10T08:32:28Z` | Private URL redacted |
-| Backup owner/role | Partially verified | Project owner / production operator | Owner role default, no separate operator documented | Not applicable | Role only, no personal data |
-| Backup schedule/frequency | Partially verified | Canonical backup docs include manual backup commands and a systemd timer template; current installed production schedule still needs owner/operator confirmation | Repo docs | Not applicable | No private paths recorded |
-| Backup retention policy | Partially verified | Canonical backup docs use `BACKUP_KEEP` with default `14` files per stream; current production override still needs owner/operator confirmation | Repo docs | Not applicable | No backup storage path recorded |
+| Production environment label | Verified | Dental PMS production candidate | Owner/operator supplied evidence | Not applicable | No private host/IP recorded |
+| Deployment target label | Blocked | Production server / hosting environment pending verification | Owner/operator supplied evidence | Not applicable | No private host/IP recorded |
+| Frontend availability result | Verified by read-only check / pending owner acceptance | HTTP `200`, `time_total=0.008863` for redacted frontend root; owner/operator stated independent availability result is not yet verified | Read-only HTTP GET plus owner/operator supplied status | `2026-05-10T08:32:28Z` | Private URL redacted |
+| Backend availability result | Verified by read-only check / pending owner acceptance | HTTP `200`, `time_total=0.001790` for redacted server-local backend health endpoint; owner/operator stated independent availability result is not yet verified | Read-only HTTP GET plus owner/operator supplied status | `2026-05-10T08:32:28Z` | Server-local URL not recorded |
+| App health check result | Verified by read-only check / pending owner acceptance | HTTP `200`, `time_total=0.028810` for redacted frontend health proxy; owner/operator stated independent health result is not yet verified | Read-only HTTP GET plus owner/operator supplied status | `2026-05-10T08:32:28Z` | Private URL redacted |
+| Backup owner/role | Verified | Project owner / production operator | Owner/operator supplied evidence | Not applicable | Role only, no personal data |
+| Backup schedule/frequency | Partially verified | daily target, pending verification | Owner/operator supplied evidence | Not applicable | No private paths recorded |
+| Backup retention policy | Partially verified | minimum 30 days target, pending verification | Owner/operator supplied evidence | Not applicable | No backup storage path recorded |
 | Latest safe backup timestamp | Blocked | Unavailable | Not safely available from committed non-secret docs/input | Not applicable | Backup storage was not inspected |
-| Restore rehearsal target classification | Blocked | Unavailable; later restore target must be non-live/safe | Repo plan gives required classification only | Not applicable | No target details recorded |
-| Restore rehearsal status | Blocked | Unavailable | Not safely available from committed non-secret docs/input | Not applicable | No restore logs inspected |
-| Monitoring/logging owner role | Partially verified | Project owner / production operator | Owner role default, no separate owner documented | Not applicable | Role only, no personal data |
-| Support contact role | Partially verified | Project owner / support operator | Owner role default, no separate role documented | Not applicable | Role only, no personal data |
+| Restore rehearsal target classification | Verified for intended target class | non-live restore test only | Owner/operator supplied evidence | Not applicable | No target details recorded |
+| Restore rehearsal status | Blocked | not yet performed | Owner/operator supplied evidence | Not applicable | No restore logs inspected |
+| Monitoring/logging owner role | Verified | Project owner / production operator | Owner/operator supplied evidence | Not applicable | Role only, no personal data |
+| Support contact role | Verified | Project owner | Owner/operator supplied evidence | Not applicable | Role only, no personal data |
 
 ## Read-Only HTTP Checks
 
@@ -70,20 +74,25 @@ made by this slice.
 
 The following evidence remains blocked or needs owner/operator confirmation:
 
-- owner/operator confirmation of the production environment label;
-- owner/operator confirmation of the exact deployment target label;
-- current installed backup schedule/frequency, if different from repo docs;
-- current backup retention override, if different from repo docs;
+- deployment target verification for the production server / hosting
+  environment;
+- independent owner/operator acceptance of the frontend, backend, and app
+  health results if required for go/no-go;
+- actual backup schedule/frequency verification beyond the daily target;
+- actual backup retention verification beyond the minimum 30 days target;
 - latest safe backup timestamp;
-- restore rehearsal target classification;
-- restore rehearsal status.
+- restore rehearsal execution/status, which is currently not performed.
 
 ## Next Recommended Action
 
 The availability checks and role-label defaults reduce the production
 environment evidence gap, but backup and restore proof remain blocked. The
-next safe action is for the owner/operator to supply the remaining
-non-sensitive backup/restore evidence, or to authorise a separate
+owner/operator has authorised non-invasive production readiness checks only;
+that authorisation does not include database connection, database writes,
+live/default PMS DB writes, actual PMS Postgres writes, finance import,
+production cutover, R4 access, patient data access, or secret exposure. The
+next safe action is to either obtain the remaining non-sensitive
+operator-supplied backup/restore evidence, or create a separately scoped
 non-invasive backup/restore execution evidence slice with explicit redaction
 rules and stop conditions.
 

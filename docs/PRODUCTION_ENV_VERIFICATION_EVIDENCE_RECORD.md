@@ -22,10 +22,11 @@ This record is therefore a blocked/gap evidence record.
 
 Follow-up non-invasive collection is recorded in
 `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`. That follow-up
-partially verifies the documented production candidate/deployment labels,
-verifies unauthenticated read-only frontend/backend/app health availability,
-records role-label defaults, and leaves backup timestamp plus restore proof
-evidence blocked.
+records owner/operator-supplied production labels, roles, backup targets, and
+restore target classification; verifies unauthenticated read-only
+frontend/backend/app health availability; and leaves deployment target
+verification, latest safe backup timestamp, and restore rehearsal execution
+blocked.
 
 ## Original Missing Evidence
 
@@ -65,9 +66,8 @@ verification execution slice with explicit scope, redaction rules, and stop
 conditions.
 
 After the follow-up collection record, the remaining blocked evidence is the
-latest safe backup timestamp, restore rehearsal target classification, restore
-rehearsal status, and owner/operator confirmation of any production label or
-backup schedule/retention value that differs from committed repo docs.
+deployment target verification, actual backup schedule/retention verification,
+latest safe backup timestamp, and restore rehearsal execution/status.
 
 This record does not authorise production writes, live finance import,
 invoice/payment/staging import, production execution, or cutover.
