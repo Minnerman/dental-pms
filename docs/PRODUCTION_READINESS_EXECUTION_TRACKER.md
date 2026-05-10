@@ -163,6 +163,19 @@ migration/validation/import commands, run monitoring setup, run deployment,
 run backup/restore/rclone commands, access Google Workspace, access
 credentials, or claim production readiness is complete.
 
+Consolidated production readiness evidence packet and final gate register is
+recorded in
+`docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md`. That
+packet indexes the existing evidence-request documents, defines the final gate
+register, provides a copy-safe owner/operator response skeleton, and records
+final go/no-go decision rules. It does not collect actual sensitive evidence,
+verify production, verify backups, verify restore, access R4, access real
+artefacts, use patient data, access production, connect to PMS databases,
+query scratch SQLite, run backup/restore/rclone commands, run
+migration/validation/import commands, run monitoring setup, run deployment,
+access Google Workspace, access credentials, or claim production readiness is
+complete.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -272,6 +285,7 @@ data or start cutover.
 | Production target, user/access, and UAT evidence request | Recorded / pending evidence | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md` | Production target acceptance, access review, UAT/practice workflow evidence, smoke/regression evidence, backup/restore proof, rollback owner acceptance, and final go/no-go approval |
 | Data migration scope and import-decision evidence request | Recorded / pending evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md` | Patient/import scope decisions, opening-balance/live finance import approval, invoice/payment/staging import approval, backup/restore proof, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
 | Domain migration, monitoring/support, and cutover communications evidence request | Recorded / pending evidence | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md` | Domain migration decisions, monitoring/support readiness, cutover communications acceptance, backup/restore proof, production target acceptance, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
+| Consolidated production readiness evidence packet and final gate register | Recorded / all external gates pending | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md` | All external evidence gates remain pending until owner/operator evidence is supplied and final go/no-go approval is recorded |
 
 ## Explicit Blockers
 
