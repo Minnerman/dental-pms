@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production backup implementation/proof prep added.
+  - Prep: `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`
+  - Scope: docs-only preparation. It does not implement backups, run backup commands, run restore commands, access Google Workspace, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
+  - Summary: repo-level backup helpers/docs/scheduler templates and restore procedures exist, but current production backup proof, latest safe backup timestamp, storage proof, and non-live restore proof remain absent.
+  - Fast path: choose owner-preferred Google Workspace / owner-controlled online storage, confirm safe credential handling without committing credentials, later configure backups in an authorised slice, later run first backup, later record timestamp/integrity evidence, later run non-live restore rehearsal, and later record restore proof/sign-off.
+  - Required owner/operator inputs: non-secret storage label, upload/integration method, credential handling plan, encryption requirement if any, daily schedule confirmation, minimum 30 days retention confirmation, and non-live restore target confirmation.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production backup discovery and setup plan added to the draft backup/restore/UAT readiness PR.
   - Plan: `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`
   - Scope: docs-only repository discovery and setup planning. It inspected repository files and non-secret documentation only; it did not access production, connect to any PMS database, run backup commands, run restore commands, access Google Workspace, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
