@@ -63,6 +63,15 @@ implementation stop conditions, and evidence required before cutover. It does
 not implement backups, run backup commands, run restore commands, access Google
 Workspace, connect to production, or claim backup readiness is complete.
 
+Backup automation implementation readiness is recorded in
+`docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`. That document
+defines the proposed Google Workspace / owner-controlled online storage backup
+architecture, credential handling rules, encryption approach, implementation
+work needed, stop conditions, and evidence required before cutover. It does
+not implement backup automation, run backups, run restores, access Google
+Workspace, create or inspect credentials, or claim backup readiness is
+complete.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -72,7 +81,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Partially verified / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Inputs supplied / blocked on implementation proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; archive encryption required if supported; current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Backup readiness | Ops owner | Automation readiness planned / blocked on implementation proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; archive encryption required if supported; current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
 | Restore proof | Ops owner | Restore target supplied / pending execution evidence | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; restore rehearsal is not yet performed | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
@@ -111,7 +120,9 @@ data or start cutover.
    `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md` to prepare a later
    implementation/proof slice without committing credentials, private paths,
    backup contents, or patient data.
-9. Keep live import blocked until final go/no-go approval explicitly authorises
+9. Use `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md` as the
+   readiness gate for any later backup automation implementation slice.
+10. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
 ## Production Evidence Item Status
@@ -143,6 +154,8 @@ data or start cutover.
   has been recorded.
 - No archive encryption support or accepted implementation blocker has been
   recorded.
+- No backup automation implementation evidence has been recorded.
+- No backup automation credential handling proof has been recorded.
 - No non-live restore rehearsal has been executed.
 - No UAT/practice workflow execution evidence has been recorded.
 - No production smoke execution evidence has been recorded.

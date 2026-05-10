@@ -72,6 +72,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Production backup automation implementation-readiness plan added.
+  - Plan: `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`
+  - Scope: docs-only readiness plan. It does not implement backup automation, run backup commands, run restore commands, access Google Workspace, create or inspect credentials, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
+  - Proposed architecture: source is Dental PMS production database and uploaded files/media if used; destination is Google Workspace / owner-controlled online storage; folder label `Dental PMS Production Backups`; automated service account preferred; manual upload fallback only if automation is unavailable; daily schedule; minimum 30 days retention; local non-live restore rehearsal target.
+  - Credential handling: no credentials in Git or docs; credentials only in secret manager/env/config outside the repo; credential setup requires a separate implementation slice.
+  - Encryption approach: Google Workspace provider-level storage encryption plus backup archive encryption if repo helpers support it; unsupported archive encryption remains a blocker/task.
+  - Remaining gates: implementation proof, first backup evidence, latest safe backup timestamp, integrity/retention evidence, non-live restore rehearsal, restore proof, backup/restore sign-off, and final go/no-go approval.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production backup implementation/proof prep added.
   - Prep: `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`
   - Scope: docs-only preparation. It does not implement backups, run backup commands, run restore commands, access Google Workspace, connect to production, connect to any PMS database, access R4, use patient data, expose secrets, perform finance import, or start production cutover.
