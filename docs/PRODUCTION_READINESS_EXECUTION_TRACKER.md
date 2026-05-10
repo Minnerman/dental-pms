@@ -141,6 +141,17 @@ data, access real artefacts, access Google Workspace, access credentials, run
 deployment/migration/import/backup/restore/rclone commands, or claim
 production readiness is complete.
 
+Data migration scope and import-decision evidence request is recorded in
+`docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`. That
+request defines redacted decision evidence for production data scope,
+patient-data migration decisions, opening-balance/live finance import
+decisions, invoice/payment/staging import decisions, and final cutover
+boundaries. It does not access R4, access real artefacts, use patient data,
+access production, connect to PMS databases, query scratch SQLite, run
+migration/validation/import commands, run backup/restore/rclone commands,
+access Google Workspace, access credentials, or claim production readiness is
+complete.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -156,9 +167,9 @@ production passwords, live credentials, or secrets belong in this tracker.
 | User/access readiness | Practice owner | Evidence request recorded / pending access evidence | User roles and access review not recorded | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
 | Smoke/regression testing | Technical owner | Evidence request recorded / pending execution evidence | Production-readiness smoke/regression pass not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then smoke checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
 | UAT/practice workflow testing | Practice owner | Evidence request recorded / pending UAT evidence | UAT checklist and acceptance not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then practice workflow checklist covering reception, clinical, documents, recalls, and finance views | No-go until accepted or explicitly waived |
-| Data migration scope | Owner plus migration owner | Pending evidence | Included/excluded production data scope not finalised | Signed included/excluded data scope record | No-go until accepted |
-| Opening-balance live-import decision | Owner | Blocked by owner decision | Live finance import remains unauthorised | Separate explicit owner approval for any live opening-balance import | No-go for finance import until approval |
-| Patient data migration decision | Owner plus migration owner | Pending evidence | Patient import/cutover scope not finalised | Patient data inclusion/exclusion and duplicate/contact policy | No-go until accepted |
+| Data migration scope | Owner plus migration owner | Evidence request recorded / pending evidence | Included/excluded production data scope not finalised | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then signed included/excluded data scope record | No-go until accepted |
+| Opening-balance live-import decision | Owner | Evidence request recorded / blocked by owner decision | Live finance import remains unauthorised and `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit owner approval for any live opening-balance import | No-go for finance import until approval |
+| Patient data migration decision | Owner plus migration owner | Evidence request recorded / pending evidence | Patient import/cutover scope not finalised | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then patient data inclusion/exclusion and duplicate/contact policy classification | No-go until accepted |
 | Appointments/treatments/recalls migration decision | Owner plus migration owner | Pending evidence | Domain scope and accepted exclusions not finalised | Decision record for appointments, treatments, charting, and recalls | No-go until accepted |
 | Monitoring/support readiness | Support owner | Pending evidence | Monitoring owner and support window not recorded | Monitoring checklist, support owner, escalation route, and first support window | No-go until accepted |
 | Cutover communications | Owner plus support owner | Not started | Operator communication plan not recorded | Cutover communication plan for owner, operators, and support contacts | No-go until accepted |
@@ -216,7 +227,12 @@ data or start cutover.
 17. Use `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md` to
    collect redacted production target acceptance, user/access review,
    UAT/practice workflow, and smoke/regression evidence before final go/no-go.
-18. Keep live import blocked until final go/no-go approval explicitly authorises
+18. Use
+   `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md` to
+   collect redacted data migration scope, patient/import, opening-balance/live
+   finance import, invoice/payment/staging import, and final cutover decision
+   evidence.
+19. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
 ## Production Evidence Item Status
@@ -239,6 +255,7 @@ data or start cutover.
 | Support contact role | Verified | Project owner | None for role |
 | Rollback/go-no-go communications plan | Recorded / pending owner acceptance | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md` | Owner acceptance, production target acceptance, UAT/access evidence, backup/restore proof, and final go/no-go approval |
 | Production target, user/access, and UAT evidence request | Recorded / pending evidence | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md` | Production target acceptance, access review, UAT/practice workflow evidence, smoke/regression evidence, backup/restore proof, rollback owner acceptance, and final go/no-go approval |
+| Data migration scope and import-decision evidence request | Recorded / pending evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md` | Patient/import scope decisions, opening-balance/live finance import approval, invoice/payment/staging import approval, backup/restore proof, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
 
 ## Explicit Blockers
 
