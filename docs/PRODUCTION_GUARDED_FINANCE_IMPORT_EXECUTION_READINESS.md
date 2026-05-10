@@ -25,14 +25,16 @@ recorded as live/main PMS, and R4 remains available for rollback.
 | Guarded finance/import process available | yes |
 | Opening-balance/live finance import execution readiness | ready |
 | Invoice/payment/staging import execution readiness | blocked |
+| Opening-balance/live finance import execution result | not checked |
 | finance_import_ready | false |
 
 Reason classification: repo now includes a classification-only guarded
-finance/import execution preflight path for opening-balance import readiness.
-It defaults to dry-run/no-write, requires an execution manifest, requires
-explicit production target gating for live/default targets, requires an
-explicit apply confirmation before any future write mode can be requested, and
-does not connect to databases or run import in this readiness slice.
+finance/import execution path for opening-balance import readiness. It
+defaults to dry-run/no-write, requires an execution manifest and full
+eligible-row opening-balance report, requires explicit Dental PMS live/main
+target classification, requires explicit owner production authorization,
+requires explicit apply confirmation before write mode, and records only
+counts/classifications.
 
 Blocker classification: invoice/payment/staging import remains unsupported by
 this guarded path; import execution has not run; `finance_import_ready=false`
@@ -44,7 +46,7 @@ paths exposed, and no backup contents exposed.
 
 ## Added Guard Boundary
 
-The added preflight command is
+The guarded command is
 `python -m app.scripts.r4_guarded_finance_import_execution`. It records only
 classification values and intentionally omits manifest paths, output paths,
 DSNs, private URLs, logs, screenshots, configs, patient identifiers, database
@@ -52,28 +54,38 @@ output, and backup details from command output.
 
 The current opening-balance guarded scratch apply path remains intentionally
 non-production. The new path does not reinterpret that scratch apply command as
-a live production writer. It adds a separate fail-closed gate that must be
-satisfied before any later explicitly authorised import execution slice can be
-considered.
+a live production writer. It adds a separate fail-closed live opening-balance
+executor that can connect to Dental PMS only when a later explicit execution
+slice supplies both production and apply gates.
 
 The new guard model:
 
 - defaults to dry-run/no-write;
-- requires a manifest object and clear import category;
+- requires a manifest object, clear import category, and full eligible-row
+  opening-balance report;
 - supports opening-balance readiness only;
 - blocks invoice, payment, and staging import categories;
 - requires a target classification rather than a DSN in safe output;
-- refuses live/default/production target classifications unless the explicit
-  production execution gate is supplied;
-- requires an explicit apply confirmation before future write mode can be
-  requested;
+- accepts only Dental PMS live/main PMS target classification for live apply;
+- refuses R4, generic production/live/default, and unclear target
+  classifications;
+- requires an explicit owner production authorization gate;
+- requires an explicit apply confirmation before write mode can be requested;
+- uses the PMS database URL only from a named environment variable and never
+  prints it;
+- writes only manifest-scoped `PatientLedgerEntry` adjustment rows for
+  opening-balance import when apply mode is later authorised;
+- records created/skipped/refused/update counts only;
+- fails closed on missing mapped patients, duplicate/mismatched prior
+  manifest markers, incomplete eligible-row source, unsupported categories,
+  or unsafe output confirmations;
 - requires explicit no-secrets, no-patient-data, no-private-paths, and
   no-backup-contents confirmations;
 - keeps `finance_import_ready=false`;
-- does not connect to PMS databases or run import.
+- did not connect to PMS databases or run import in this PR.
 
-This guard model is useful for the next execution slice, but it must not be
-reinterpreted as import execution evidence, finance import completion, or
+This guard model is useful for the next execution slice, but this PR must not
+be reinterpreted as import execution evidence, finance import completion, or
 authorisation for uncontrolled PMS database writes.
 
 ## Required Future Execution Slice
@@ -115,9 +127,9 @@ Stop before any finance/import execution if:
 ## Current Result
 
 Guarded opening-balance finance/import execution readiness is now available as
-a repo-only classification preflight path, but finance/import execution has
-not run. Invoice/payment/staging import execution remains blocked. No finance
-import, opening-balance import, invoice import, payment import, staging import,
+a repo-controlled guarded executor, but finance/import execution has not run.
+Invoice/payment/staging import execution remains blocked. No finance import,
+opening-balance import, invoice import, payment import, staging import,
 patient data import, R4 access, PMS DB connection, production access,
 migration, backup, restore, rclone, rollback, deployment, or cutover action
 was performed by this readiness record.

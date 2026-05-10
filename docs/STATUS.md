@@ -72,6 +72,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Live guarded opening-balance import executor added.
+  - Scope: repo implementation and docs for the guarded opening-balance finance import executor. It does not run import, connect to PMS databases, access R4, access production, access patient data, or expose sensitive material in this PR.
+  - Readiness status: guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `not checked`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false`.
+  - Guard behaviour: default dry-run/no-write, manifest required, full eligible-row opening-balance report required, Dental PMS live/main PMS target classification required for live apply, owner production authorization gate required, apply confirmation gate required, invoice/payment/staging categories fail closed, and output remains classification-only.
+  - Write boundary for a later execution slice: writes only manifest-scoped `PatientLedgerEntry` adjustment rows for opening-balance import, records counts/classifications only, and fails closed on missing mapped patients, prior mismatched manifest markers, incomplete eligible-row source, unsupported categories, or unsafe output confirmations.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
+  - Non-execution: no finance import, opening-balance import, invoice import, payment import, staging import, patient data import, migration, R4 access, production access, PMS DB connection, backup, restore, rclone, rollback, deployment, or cutover was performed.
+  - Current boundary: Dental PMS remains live/main PMS, R4 remains available for rollback, `finance_import_ready=false`, invoice/payment/staging import remains blocked, and any finance/import execution requires a separate explicit execution slice.
 - 2026-05-10: Guarded finance/import execution path added.
   - Scope: repo implementation and docs for a classification-only guarded finance/import preflight path. It does not run import, connect to PMS databases, access R4, access production, access patient data, or expose sensitive material.
   - Readiness status: guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false`.
