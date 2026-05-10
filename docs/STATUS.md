@@ -72,6 +72,12 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Data migration scope and import-decision evidence request added.
+  - Request: `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`
+  - Scope: docs-only evidence request. It does not access R4, access real artefacts, use patient data, access production, connect to any PMS database, query scratch SQLite, access Google Workspace, create or inspect credentials, run backup commands, run restore commands, run rclone, run migration/validation/import commands, perform finance import, perform invoice/payment/staging import, perform patient data import, or start production cutover.
+  - Evidence requested: included/excluded production data categories, patient data migration decision, opening-balance/live finance import decision, invoice/payment/staging import decision, duplicate/contact policy classification, and final production cutover decision inputs.
+  - Remaining gates: outside-Git rclone setup evidence, first backup execution evidence, latest safe backup timestamp, minimum 30-day retention proof, non-live restore rehearsal/proof, backup/restore sign-off, production target acceptance, user/access review, UAT/practice workflow evidence, smoke/regression evidence, data migration scope decision, patient data migration decision, opening-balance/live finance import decision, invoice/payment/staging import decision, rollback owner acceptance, and final go/no-go approval.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, patient data import, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Production target, user/access, and UAT evidence request added.
   - Request: `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`
   - Scope: docs-only evidence request. It does not access production, access R4, connect to any PMS database, query scratch SQLite, use patient data, access real artefacts, access Google Workspace, create or inspect credentials, run backup commands, run restore commands, run rclone, run deployment/migration/import commands, perform finance import, perform invoice/payment/staging import, or start production cutover.
