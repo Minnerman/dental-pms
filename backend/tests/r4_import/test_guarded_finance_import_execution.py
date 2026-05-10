@@ -6,6 +6,8 @@ from app.scripts import r4_guarded_finance_import_execution as execution_script
 from app.services.r4_import.guarded_finance_import_execution import (
     GUARDED_FINANCE_IMPORT_APPLY_CONFIRMATION_TOKEN,
     GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+    LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+    build_guarded_finance_import_execution_result,
     build_guarded_finance_import_execution_packet,
 )
 
@@ -14,7 +16,7 @@ def manifest(**overrides):
     payload = {
         "manifest_id": "finance-import-20260510-000001",
         "import_category": "opening-balance",
-        "target": {"classification": "production"},
+        "target": {"classification": LIVE_DENTAL_PMS_TARGET_CLASSIFICATION},
         "safety": {
             "real_patient_data": False,
             "real_r4_artifact": False,
@@ -40,7 +42,7 @@ def safe_packet(**overrides):
     params = {
         "manifest": manifest(),
         "import_category": "opening-balance",
-        "target_classification": "production",
+        "target_classification": LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
         "apply_requested": False,
         "apply_confirmation": None,
         "production_execution_gate": GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
@@ -53,7 +55,55 @@ def safe_packet(**overrides):
     return build_guarded_finance_import_execution_packet(**params)
 
 
-def test_opening_balance_production_gate_builds_classification_only_ready_packet():
+def report(**overrides):
+    payload = {
+        "before_finance_counts": {
+            "invoices": 0,
+            "patient_ledger_entries": 0,
+            "payments": 0,
+        },
+        "dry_run": True,
+        "eligibility_summary": {
+            "ambiguous_sign_would_write_count": 0,
+            "component_mismatch_would_write_count": 0,
+            "eligible_opening_balance": 2,
+        },
+        "finance_import_ready": False,
+        "import_ready": False,
+        "manifest": {
+            "apply_mode": False,
+            "no_write": True,
+            "repo_sha": "test-sha",
+        },
+        "mapping_summary": {
+            "nonzero_mapping_coverage": "1.0000",
+            "unmapped_nonzero_candidates": 0,
+        },
+        "samples": {
+            "eligible_opening_balance": [
+                {
+                    "amount_pence": 1000,
+                    "decision": "eligible_opening_balance",
+                    "mapped_patient_id": 101,
+                    "proposed_pms_direction": "increase_debt",
+                    "source_patient_code": "PRIVATE-SHOULD-NOT-PRINT-1",
+                },
+                {
+                    "amount_pence": -425,
+                    "decision": "eligible_opening_balance",
+                    "mapped_patient_id": 102,
+                    "proposed_pms_direction": "decrease_debt_or_credit",
+                    "source_patient_code": "PRIVATE-SHOULD-NOT-PRINT-2",
+                },
+            ]
+        },
+        "source_summary": {"known_totals": {"total_balance": "5.75"}},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_opening_balance_live_gate_builds_classification_only_ready_packet():
     packet = safe_packet()
 
     assert packet["Guarded finance/import process available"] == "yes"
@@ -78,6 +128,15 @@ def test_live_target_requires_production_execution_gate():
         packet["Opening-balance/live finance import execution readiness"] == "blocked"
     )
     assert "production_execution_gate_required" in packet["Blocker classification"]
+
+
+def test_unclear_production_target_classification_is_refused():
+    packet = safe_packet(target_classification="production")
+
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "blocked"
+    )
+    assert "target_classification_refused" in packet["Blocker classification"]
 
 
 def test_apply_mode_requires_confirmation_token():
@@ -146,7 +205,7 @@ def test_cli_prints_classification_only_without_manifest_path_or_sample_values(
                 "--category",
                 "opening-balance",
                 "--target-classification",
-                "production",
+                LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
                 "--production-execution-gate",
                 GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
                 "--output-json",
@@ -182,7 +241,7 @@ def test_cli_missing_manifest_fails_closed_without_path_traceback(tmp_path, caps
                 "--category",
                 "opening-balance",
                 "--target-classification",
-                "production",
+                LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
                 "--production-execution-gate",
                 GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
                 "--confirm-no-secret-output",
@@ -202,3 +261,129 @@ def test_cli_missing_manifest_fails_closed_without_path_traceback(tmp_path, caps
     assert "manifest_missing_or_unclear" in packet["Blocker classification"]
     assert str(missing_path) not in stdout
     assert "Traceback" not in stdout
+
+
+def test_opening_balance_execution_preflight_requires_full_report_and_keeps_no_write():
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=report(),
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        apply_requested=False,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        expected_total_balance="5.75",
+        expected_eligible_count=2,
+        expected_repo_sha="test-sha",
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "ready"
+    )
+    assert packet["Opening-balance/live finance import execution result"] == "not checked"
+    assert packet["Invoice/payment/staging import execution result"] == "blocked"
+    assert packet["finance_import_ready"] is False
+    assert packet["Result counts classification"] == {
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "refused": 0,
+    }
+
+
+def test_opening_balance_execution_blocks_incomplete_report_source():
+    incomplete = report(
+        eligibility_summary={
+            "ambiguous_sign_would_write_count": 0,
+            "component_mismatch_would_write_count": 0,
+            "eligible_opening_balance": 3,
+        }
+    )
+
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=incomplete,
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        apply_requested=False,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "blocked"
+    )
+    assert "full_eligible_row_source_required" in packet["Blocker classification"]
+
+
+def test_apply_execution_requires_database_env_actor_and_confirmation():
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=report(),
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        apply_requested=True,
+        apply_confirmation=GUARDED_FINANCE_IMPORT_APPLY_CONFIRMATION_TOKEN,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert (
+        packet["Opening-balance/live finance import execution result"] == "blocked"
+    )
+    assert "actor_id_required" in packet["Blocker classification"]
+    assert "database_url_env_missing" in packet["Blocker classification"]
+
+
+def test_cli_with_report_prints_classification_only_without_paths_or_rows(
+    tmp_path,
+    capsys,
+):
+    manifest_path = tmp_path / "manifest.json"
+    report_path = tmp_path / "report.json"
+    manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+    report_path.write_text(json.dumps(report()), encoding="utf-8")
+
+    assert (
+        execution_script.main(
+            [
+                "--manifest-json",
+                str(manifest_path),
+                "--opening-balance-report-json",
+                str(report_path),
+                "--category",
+                "opening-balance",
+                "--target-classification",
+                LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+                "--production-execution-gate",
+                GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+                "--expected-total-balance",
+                "5.75",
+                "--expected-eligible-count",
+                "2",
+                "--expected-repo-sha",
+                "test-sha",
+                "--confirm-no-secret-output",
+                "--confirm-no-patient-data-output",
+                "--confirm-no-private-path-output",
+                "--confirm-no-backup-content-output",
+            ]
+        )
+        == 0
+    )
+
+    stdout = capsys.readouterr().out
+    packet = json.loads(stdout)
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "ready"
+    )
+    assert str(manifest_path) not in stdout
+    assert str(report_path) not in stdout
+    assert "PRIVATE-SHOULD-NOT-PRINT" not in stdout
+    assert "mapped_patient_id" not in stdout
