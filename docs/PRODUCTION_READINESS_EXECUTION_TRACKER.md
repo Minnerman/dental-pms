@@ -26,6 +26,11 @@ in `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`. That plan does
 not execute verification, connect to production, connect to any PMS database,
 or claim production readiness.
 
+The non-sensitive evidence request and execution checklist is recorded in
+`docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_REQUEST.md`. That request does not
+run verification, connect to production, expose secrets, or authorise live
+writes.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -34,9 +39,9 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Workstream | Owner | Status | Blocker | Target Evidence | Go/No-Go Impact |
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
-| Production environment readiness | Ops owner | Planned / pending execution evidence | Production health evidence not recorded | `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`, then read-only health evidence covering app, workers, storage, certificates, access, and service availability | No-go until accepted |
-| Backup readiness | Ops owner | Planned / pending execution evidence | Backup owner/inventory evidence not recorded | `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`, then backup inventory, integrity proof, and owner acceptance | No-go until accepted |
-| Restore proof | Ops owner | Planned / pending execution evidence | Restore proof not recorded | `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`, then non-live restore transcript or approved restore proof summary | No-go until accepted |
+| Production environment readiness | Ops owner | Evidence requested | Production health evidence not recorded | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_REQUEST.md`, then redacted app/frontend/backend health evidence | No-go until accepted |
+| Backup readiness | Ops owner | Evidence requested | Backup owner/inventory evidence not recorded | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_REQUEST.md`, then backup owner, schedule, retention, latest safe timestamp, and integrity evidence | No-go until accepted |
+| Restore proof | Ops owner | Evidence requested | Restore proof not recorded | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_REQUEST.md`, then non-live restore target classification and restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
 | Smoke/regression testing | Technical owner | Pending evidence | Production-readiness smoke/regression pass not recorded | Smoke/regression checklist with pass/fail thresholds | No-go until accepted or explicitly waived |
@@ -55,9 +60,9 @@ These actions are planning or inspection tasks only. They must not write live
 data or start cutover.
 
 1. Verify production environment health without writing data.
-2. Review `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`, then
-   validate the backup and restore plan in a separately approved execution
-   slice and record the accepted evidence.
+2. Use `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_REQUEST.md` to request
+   non-sensitive production environment, backup, and restore evidence from the
+   production operator/admin.
 3. Define the UAT checklist for reception, clinical, document, recall, and
    finance-view workflows.
 4. Define the exact data migration scope, including included and excluded
