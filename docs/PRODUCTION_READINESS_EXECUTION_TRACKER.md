@@ -273,6 +273,17 @@ status update does not access production, R4, PMS databases, patient data,
 credentials, private paths, private URLs, logs, screenshots, or backup
 contents, and it does not authorise cutover or imports.
 
+Final readiness gate evidence status was updated on 2026-05-10 using
+classification-only owner/operator evidence. UAT/practice workflow evidence is
+recorded as `pass`; opening-balance/live finance import and
+invoice/payment/staging import decisions are recorded as `approved` for
+readiness tracking; final owner go/no-go approval is recorded as `go` for
+readiness status only. This status update does not run imports, execute
+cutover, access production, access R4, connect to PMS databases, access patient
+data, expose credentials, private paths, private URLs, logs, screenshots,
+database output, or backup contents, and it does not make Dental PMS the
+live/main PMS.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -281,20 +292,20 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Workstream | Owner | Status | Blocker | Target Evidence | Go/No-Go Impact |
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
-| Production environment readiness | Ops owner | Production target accepted / pending final go-no-go | Environment label supplied and read-only frontend/backend/app health checks passed; owner/operator production target acceptance is recorded as yes for readiness tracking only | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final go/no-go | No-go until final approval |
-| Backup readiness | Ops owner | Backup/restore evidence accepted / pending downstream gates | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention target confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; backup/restore evidence intake and sign-off template is recorded; first encrypted backup upload evidence is recorded as pass with a latest safe backup timestamp; restore failure was classified as missing database role/user and remediated in the non-live target; repeat non-live restore proof is recorded as pass; repo count-based retention now retains 30 backups and minimum 30-day retention proof is classified as yes; backup/restore sign-off is accepted for readiness tracking only; production schedule implementation evidence, backup integrity evidence, and final go/no-go evidence remain unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`, then production target/access/UAT/smoke/monitoring/cutover and final go/no-go evidence | No-go until final approval |
-| Restore proof | Ops owner | Repeat non-live restore passed / sign-off accepted | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; original failure classified as missing database role/user; remediation was applied in the non-live target; repeat non-live restore rehearsal/proof is recorded as pass; backup/restore sign-off is accepted for readiness tracking only | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then final go/no-go | No-go until final approval |
-| Rollback plan | Owner plus ops owner | Owner acceptance recorded / pending final go-no-go | Rollback owner acceptance is recorded as yes for readiness tracking only | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md`, then final go/no-go | No-go until final approval |
-| User/access readiness | Practice owner | Access review accepted / pending final go-no-go | User/access review is recorded as yes for readiness tracking only | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final go/no-go | No-go for live use until final approval |
-| Smoke/regression testing | Technical owner | Safe CI evidence recorded / pending production target acceptance | Safe non-production CI smoke/regression status is recorded as pass; production target acceptance and owner/operator production smoke acceptance remain pending | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then production target acceptance and owner/operator smoke acceptance if required | No-go until accepted or explicitly waived |
-| UAT/practice workflow testing | Practice owner | Evidence request recorded / pending UAT evidence | UAT checklist and acceptance not recorded | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then practice workflow checklist covering reception, clinical, documents, recalls, and finance views | No-go until accepted or explicitly waived |
-| Data migration scope | Owner plus migration owner | Evidence request recorded / pending evidence | Included/excluded production data scope not finalised | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then signed included/excluded data scope record | No-go until accepted |
-| Opening-balance live-import decision | Owner | Evidence request recorded / blocked by owner decision | Live finance import remains unauthorised and `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit owner approval for any live opening-balance import | No-go for finance import until approval |
-| Patient data migration decision | Owner plus migration owner | Evidence request recorded / pending evidence | Patient import/cutover scope not finalised | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then patient data inclusion/exclusion and duplicate/contact policy classification | No-go until accepted |
-| Appointments/treatments/recalls migration decision | Owner plus migration owner | Evidence request recorded / pending evidence | Domain scope and accepted exclusions not finalised | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then decision record for appointments, treatments, charting, recalls, and workflow dependencies | No-go until accepted |
-| Monitoring/support readiness | Support owner | Accepted / pending final go-no-go | Monitoring/support readiness is recorded as yes for readiness tracking only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final go/no-go | No-go until final approval |
-| Cutover communications | Owner plus support owner | Accepted / pending final go-no-go | Cutover communications acceptance is recorded as yes for readiness tracking only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final go/no-go | No-go until final approval |
-| Final go/no-go approval | Owner | Blocked by owner decision | No production rehearsal, backup/restore proof, or final cutover approval recorded | Explicit go/no-go decision record | No-go until explicit approval |
+| Production environment readiness | Ops owner | Production target accepted / readiness go recorded | Environment label supplied and read-only frontend/backend/app health checks passed; owner/operator production target acceptance is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| Backup readiness | Ops owner | Backup/restore evidence accepted / readiness go recorded | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention target confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; backup/restore evidence intake and sign-off template is recorded; first encrypted backup upload evidence is recorded as pass with a latest safe backup timestamp; restore failure was classified as missing database role/user and remediated in the non-live target; repeat non-live restore proof is recorded as pass; repo count-based retention now retains 30 backups and minimum 30-day retention proof is classified as yes; backup/restore sign-off is accepted for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| Restore proof | Ops owner | Repeat non-live restore passed / readiness go recorded | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; original failure classified as missing database role/user; remediation was applied in the non-live target; repeat non-live restore rehearsal/proof is recorded as pass; backup/restore sign-off is accepted for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| Rollback plan | Owner plus ops owner | Owner acceptance recorded / readiness go recorded | Rollback owner acceptance is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_ROLLBACK_GO_NO_GO_COMMUNICATIONS_PLAN.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| User/access readiness | Practice owner | Access review accepted / readiness go recorded | User/access review is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| Smoke/regression testing | Technical owner | Safe CI evidence recorded / accepted for readiness tracking | Safe non-production CI smoke/regression status is recorded as pass; production target acceptance is recorded as yes | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
+| UAT/practice workflow testing | Practice owner | Passed / accepted for readiness tracking | UAT/practice workflow evidence is recorded as pass using classification-only owner/operator evidence | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
+| Data migration scope | Owner plus migration owner | Accepted for readiness tracking | Data migration scope decision is recorded as yes using classification-only evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then final readiness gate record | Readiness input accepted; execution still requires separate instruction |
+| Opening-balance live-import decision | Owner | Approved for readiness tracking / execution not run | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; `finance_import_ready=false` remains in force until a separate execution slice changes it | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
+| Patient data migration decision | Owner plus migration owner | Approved by category for readiness tracking / execution not run | Patient data migration decision is recorded as approved by category; no patient data import has run | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
+| Appointments/treatments/recalls migration decision | Owner plus migration owner | Accepted for readiness tracking / execution not run | Appointments/treatments/recalls migration decision is recorded as yes; no migration/import execution has run | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
+| Monitoring/support readiness | Support owner | Accepted / readiness go recorded | Monitoring/support readiness is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| Cutover communications | Owner plus support owner | Accepted / readiness go recorded | Cutover communications acceptance is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
+| Final go/no-go approval | Owner | Go recorded for readiness status / cutover not executed | Final owner go/no-go approval is recorded as go for readiness status only; production cutover still requires separate explicit execution instruction | Explicit go/no-go decision record, then separate execution instruction | Readiness gate accepted; cutover execution still requires separate instruction |
 
 ## Immediate Fast-Track Actions
 
@@ -372,21 +383,21 @@ data or start cutover.
 | Backup owner/role | Verified | Project owner / production operator | None for role |
 | Backup schedule/frequency | Owner confirmed / pending implementation proof | Daily; repo scheduler template exists but current production installation is unverified | Actual production schedule evidence |
 | Backup retention policy | Remediated / sign-off accepted | Minimum 30 days target is confirmed; previous retention evidence recorded count-based retention as less than 30 days; repo count-based retention defaults and daily service template are now raised to 30 backups | Final go/no-go |
-| Backup/restore evidence intake and sign-off template | Recorded / pending evidence | `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md` | Outside-Git setup evidence, first backup evidence, latest safe backup timestamp, retention proof, non-live restore proof, backup/restore sign-off, and final go/no-go approval |
+| Backup/restore evidence intake and sign-off template | Recorded / backup evidence accepted | `docs/PRODUCTION_BACKUP_RESTORE_EVIDENCE_INTAKE_AND_SIGNOFF.md`; outside-Git setup evidence, first backup evidence, latest safe backup timestamp, retention proof, non-live restore proof, and backup/restore sign-off are accepted for readiness tracking | Cutover execution still requires separate instruction |
 | First backup execution evidence | Recorded / sign-off accepted | pass at `2026-05-10T14:34:56Z` | Final go/no-go approval |
 | Latest safe backup timestamp | Recorded / sign-off accepted | `2026-05-10T14:34:56Z` | Final go/no-go approval |
 | Restore rehearsal target classification | Owner confirmed / pending implementation proof | Local non-live restore rehearsal environment | Specific non-live target evidence before execution |
 | Restore rehearsal status | Recorded / passed after remediation | pass | Final go/no-go |
 | Restore failure classification | Recorded | missing database role/user | None for classification; final go/no-go still pending |
 | Restore remediation status | Recorded | missing role/user remediated in non-live target | None for remediation status; final go/no-go still pending |
-| Backup/restore sign-off | Accepted | accepted by owner/operator for backup/restore readiness tracking only | Production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approvals, and final go/no-go remain unresolved |
+| Backup/restore sign-off | Accepted | accepted by owner/operator for backup/restore readiness tracking only | None for readiness evidence; cutover execution still requires separate instruction |
 | Monitoring/logging owner role | Verified | Project owner / production operator | None for role |
 | Support contact role | Verified | Project owner | None for role |
-| Rollback/go-no-go communications plan | Owner acceptance recorded / pending final go-no-go | Rollback owner acceptance `yes` | UAT/practice workflow evidence, finance/import approvals, and final go/no-go approval |
-| Production target, user/access, and UAT evidence request | Partial evidence recorded / pending UAT evidence | Smoke/regression evidence `pass`; production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `not checked` | UAT/practice workflow evidence, finance/import approvals, and final go/no-go approval |
-| Data migration scope and import-decision evidence request | Recorded / pending evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md` | Patient/import scope decisions, opening-balance/live finance import approval, invoice/payment/staging import approval, backup/restore proof, UAT/access evidence, rollback owner acceptance, and final go/no-go approval |
-| Domain migration, monitoring/support, and cutover communications evidence request | Partial evidence recorded / pending final gates | Monitoring/support readiness `yes`; cutover communications acceptance `yes`; appointments/treatments/recalls migration decision `yes` | UAT/practice workflow evidence, finance/import approvals, and final go/no-go approval |
-| Consolidated production readiness evidence packet and final gate register | Recorded / all external gates pending | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md` | All external evidence gates remain pending until owner/operator evidence is supplied and final go/no-go approval is recorded |
+| Rollback/go-no-go communications plan | Owner acceptance recorded / readiness gate accepted | Rollback owner acceptance `yes`; final owner go/no-go approval `go` for readiness status only | Cutover execution still requires separate instruction |
+| Production target, user/access, and UAT evidence request | Evidence recorded / readiness gate accepted | Smoke/regression evidence `pass`; production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `pass` | Cutover execution still requires separate instruction |
+| Data migration scope and import-decision evidence request | Evidence recorded / import decisions approved for readiness tracking | Data migration scope decision `yes`; patient data migration decision `approved by category`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved` | Import execution still requires separate instruction |
+| Domain migration, monitoring/support, and cutover communications evidence request | Evidence recorded / readiness gate accepted | Monitoring/support readiness `yes`; cutover communications acceptance `yes`; appointments/treatments/recalls migration decision `yes` | Cutover execution still requires separate instruction |
+| Consolidated production readiness evidence packet and final gate register | Recorded / readiness gate evidence accepted | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md`; final owner go/no-go approval `go` for readiness status only | Production cutover still requires separate explicit execution instruction |
 | Owner/operator readiness evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup `blocked`; latest safe backup timestamp `pending`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending`; data migration scope `yes`; patient data migration `approved by category`; appointments/treatments/recalls migration `yes`; finance/import decisions `pending`; final go/no-go `hold` | First backup, retention, restore, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | First backup execution evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup execution evidence `pass`; latest safe backup timestamp `2026-05-10T14:34:56Z`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending` | Minimum 30-day retention proof, non-live restore proof, backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | Retention/restore evidence status | Recorded / restore failed | Minimum 30-day retention proof `pending`; non-live restore rehearsal/proof `fail`; backup/restore sign-off `no` | Retention proof, restore remediation, repeat non-live restore proof, backup/restore sign-off, and final go/no-go remain unresolved |
@@ -394,7 +405,8 @@ data or start cutover.
 | Retention sign-off evidence status | Recorded / retention proof failed | Minimum 30-day retention proof `no`; retention mechanism classification `count-based`; retention target classification `less than 30 days`; backup/restore sign-off `pending` | Retention remediation, backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | Backup retention remediation | Recorded / sign-off accepted | Minimum 30-day retention proof `yes`; retention mechanism classification `count-based`; retention target classification `at least 30 days`; backup/restore sign-off `yes` | Production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | Backup/restore sign-off status | Recorded / accepted for readiness tracking only | Backup upload evidence, minimum 30-day retention remediation, and non-live restore proof accepted by owner/operator | Production cutover, finance import, patient import, backup deletion, retention cleanup, R4 replacement, Dental PMS live/main PMS status, and final go/no-go remain unauthorised |
-| Production target/access/UAT evidence status | Partial evidence recorded / incomplete gates remain | Production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `not checked`; smoke/regression evidence `pass`; monitoring/support readiness `yes`; cutover communications acceptance `yes`; rollback owner acceptance `yes`; final owner go/no-go `hold` | UAT/practice workflow evidence, finance/import approvals, and final go/no-go remain unresolved |
+| Production target/access/UAT evidence status | Partial evidence recorded / superseded by final gate status | Production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `not checked`; smoke/regression evidence `pass`; monitoring/support readiness `yes`; cutover communications acceptance `yes`; rollback owner acceptance `yes`; final owner go/no-go `hold` | Superseded by final readiness gate evidence status |
+| Final readiness gate evidence status | Recorded / go for readiness status only | UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` | Production cutover, import execution, Dental PMS live/main PMS status, deployment, and live/default writes still require separate explicit execution instruction |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -662,11 +674,40 @@ does not authorise finance import, opening-balance import, patient data import,
 invoice/payment/staging import, Dental PMS live/main PMS status, deployment,
 or production cutover.
 
+## Final Readiness Gate Evidence Status Record - 2026-05-10
+
+Classification-only status:
+
+| Gate | Recorded status |
+| --- | --- |
+| UAT/practice workflow evidence | pass |
+| Opening-balance/live finance import decision | approved |
+| Invoice/payment/staging import decision | approved |
+| Final owner go/no-go approval | go |
+
+Reason classification: owner/operator accepts UAT/practice workflow evidence
+and approves remaining finance/import decisions for readiness tracking; final
+go/no-go is go for readiness status only.
+
+Blocker classification: no remaining readiness evidence blocker recorded;
+production cutover still requires separate explicit execution instruction.
+
+Safety confirmations: no secrets exposed, no patient data exposed, no private
+paths exposed, and no backup contents exposed.
+
+This evidence-status update does not run imports, does not execute cutover,
+does not access production, R4, PMS databases, patient data, credentials,
+private paths, private URLs, logs, screenshots, database output, or backup
+contents, and does not make Dental PMS the live/main PMS. R4 remains the
+live/main PMS. `finance_import_ready=false` remains in force until a separate
+explicit execution slice changes it.
+
 ## Explicit Blockers
 
-- No production rehearsal has been completed.
+- No production cutover execution instruction has been given.
+- No production cutover has been performed.
 - Backup/restore proof is accepted for backup/restore readiness tracking only;
-  final go/no-go has not been accepted.
+  final go/no-go is now recorded as go for readiness status only.
 - First backup execution evidence and latest safe backup timestamp are
   recorded, and repo retention is remediated to retain 30 backups.
 - No Google Workspace / owner-controlled online storage implementation proof
@@ -684,29 +725,34 @@ or production cutover.
 - No backup automation credential handling proof has been recorded.
 - Non-live restore rehearsal/proof is recorded as pass after remediation, and
   backup/restore sign-off is accepted for readiness tracking only.
-- No UAT/practice workflow execution evidence has been recorded.
+- UAT/practice workflow evidence is recorded as pass for readiness tracking.
 - Safe CI smoke/regression evidence is recorded as pass, but production target
   acceptance and owner/operator production target/access/support/rollback
   acceptance are now recorded for readiness tracking only.
-- No final live import approval has been given.
-- No cutover go/no-go approval has been given.
+- Opening-balance/live finance import and invoice/payment/staging import
+  decisions are approved for readiness tracking only; import execution has not
+  run and still requires separate explicit execution instruction.
+- Final owner go/no-go approval is recorded as go for readiness status only;
+  production cutover still requires separate explicit execution instruction.
 - R4 is still the live/main PMS.
 
 ## Still Unauthorised
 
-The following remain unauthorised and require separate explicit owner approval:
+The following remain unauthorised and require separate explicit owner execution
+instruction:
 
 - live/default PMS DB writes;
 - actual PMS Postgres writes;
 - production execution;
 - production cutover;
-- live finance import;
-- invoice/payment/staging import;
+- live finance import execution;
+- invoice/payment/staging import execution;
 - Dental PMS becoming the live/main PMS.
 
 ## Current Interpretation
 
-Production readiness is not complete. The safe acceleration path is to close
-the pending evidence gaps in parallel while keeping R4 live/main PMS and
-keeping all live writes, imports, and cutover actions blocked behind a later
-explicit go/no-go decision.
+Production readiness evidence gates are recorded as accepted for readiness
+status only. No production execution, import execution, live/default write, or
+cutover has been performed. The safe acceleration path now requires a separate
+explicit execution instruction before any live finance import, invoice/payment
+staging import, production cutover, or Dental PMS live/main PMS status change.

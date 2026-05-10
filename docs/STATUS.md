@@ -72,6 +72,14 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Final readiness gate evidence status recorded.
+  - Scope: evidence-status recording only. It records classification-only owner/operator final readiness gate evidence without production access or execution.
+  - Evidence status: UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` for readiness status only.
+  - Reason classification: owner/operator accepts UAT/practice workflow evidence and approves remaining finance/import decisions for readiness tracking; final go/no-go is go for readiness status only.
+  - Blocker classification: no remaining readiness evidence blocker recorded; production cutover still requires separate explicit execution instruction.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Non-execution: no import, migration, deployment, production cutover, backup, restore, rclone, R4 access, production access, PMS DB connection, or patient data access was performed.
+  - Non-authorisation: this status does not execute production cutover, does not make Dental PMS live/main PMS, does not run finance import, does not run opening-balance import, does not run patient import, and does not run invoice/payment/staging import. R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false` remains in force until a separate explicit execution slice changes it.
 - 2026-05-10: Target/access/monitoring/cutover/rollback evidence status recorded.
   - Scope: evidence-status recording only. It records classification-only owner/operator readiness acceptance without production access.
   - Evidence status: production target acceptance `yes`; user/access review `yes`; monitoring/support readiness `yes`; cutover communications acceptance `yes`; rollback owner acceptance `yes`; UAT/practice workflow evidence remains `not checked`; final owner go/no-go remains `hold`.
