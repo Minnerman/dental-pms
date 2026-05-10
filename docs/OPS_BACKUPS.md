@@ -3,7 +3,7 @@
 ## Scope
 - DB logical backup: PostgreSQL `pg_dump` from compose `db`.
 - Attachments backup: backend `/data` mount (volume or bind), with `ATTACHMENTS_PATH` override.
-- Rotation: keep last `BACKUP_KEEP` files per stream (default `14`).
+- Rotation: keep last `BACKUP_KEEP` files per stream (default `30`).
 
 ## Backup location
 - Default resolution order:
@@ -22,8 +22,8 @@ bash ops/backup_run.sh
 
 Optional overrides:
 ```bash
-BACKUP_DIR=/srv/dental-pms/backups BACKUP_KEEP=21 bash ops/backup_run.sh
-ATTACHMENTS_PATH=/srv/dental-pms/attachments BACKUP_KEEP=14 bash ops/backup_attachments.sh
+BACKUP_DIR=/srv/dental-pms/backups BACKUP_KEEP=30 bash ops/backup_run.sh
+ATTACHMENTS_PATH=/srv/dental-pms/attachments BACKUP_KEEP=30 bash ops/backup_attachments.sh
 ```
 
 ## Success criteria
@@ -31,6 +31,7 @@ ATTACHMENTS_PATH=/srv/dental-pms/attachments BACKUP_KEEP=14 bash ops/backup_atta
 - Output contains `backup_run_status=ok`.
 - Latest files exist and are non-empty.
 - Retention deletes older files when count exceeds `BACKUP_KEEP`.
+- Production backup retention should keep `BACKUP_KEEP` at `30` or higher.
 
 ## Restore quick steps (minimal)
 Reference: Stage 53 drill entry (`2026-02-03`) in `docs/STATUS.md` and local evidence in `.run/stage53/REPORT.md`.

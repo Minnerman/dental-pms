@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Backup retention minimum remediation recorded.
+  - Scope: repo configuration/template remediation only. Count-based database and attachments backup defaults and the daily backup service template now keep `30` backups.
+  - Evidence status: minimum 30-day retention proof `yes`; retention mechanism classification `count-based`; retention target classification `at least 30 days`; backup/restore sign-off `pending`.
+  - No backup execution, restore execution, rclone execution, destructive retention cleanup, backup deletion, production access, R4 access, PMS DB access, finance import, opening-balance import, patient data import, invoice/payment/staging import, deployment, or production cutover was performed by this change.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, or database output are recorded.
+  - Remaining gates: backup/restore sign-off remains pending, production target/access/UAT/smoke/monitoring/cutover evidence remains pending, and final go/no-go remains hold.
+  - Non-authorisation: R4 remains the live/main PMS; Dental PMS is not live/main PMS; `finance_import_ready=false`; production readiness remains incomplete; live/default PMS writes, actual PMS Postgres writes, production execution/cutover, live finance import, opening-balance import, patient data import, Dental PMS live/main PMS status, and invoice/payment/staging import remain unauthorised.
 - 2026-05-10: Retention sign-off evidence status recorded.
   - Scope: evidence-status recording only. It records classification-only retention and sign-off status in `docs/PRODUCTION_READINESS_EXECUTION_TRACKER.md`.
   - Evidence status: minimum 30-day retention proof `no`; retention mechanism classification `count-based`; retention target classification `less than 30 days`; backup/restore sign-off `pending`.
