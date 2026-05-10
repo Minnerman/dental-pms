@@ -72,6 +72,13 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-10: Guarded finance import execution status recorded.
+  - Scope: evidence-status recording only for the explicitly authorised guarded opening-balance/live finance import execution slice.
+  - Execution status: guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `blocked`; opening-balance/live finance import execution result `fail`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`; rollback required `yes`; rollback executed `no`.
+  - Reason classification: opening-balance category supported; production execution gate accepted; apply confirmation accepted; dry-run report confirmed; import-ready false confirmed; finance-import-ready false confirmed; report hash and eligible-row checks confirmed; mapping coverage confirmed.
+  - Blocker classification: mapped patient missing in target.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
+  - Current boundary: Dental PMS remains live/main PMS, R4 remains available for rollback, `finance_import_ready=false`, invoice/payment/staging import remains blocked, and another guarded execution slice requires remediation of the target mapping blocker.
 - 2026-05-10: Live guarded opening-balance import executor added.
   - Scope: repo implementation and docs for the guarded opening-balance finance import executor. It does not run import, connect to PMS databases, access R4, access production, access patient data, or expose sensitive material in this PR.
   - Readiness status: guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `not checked`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false`.
