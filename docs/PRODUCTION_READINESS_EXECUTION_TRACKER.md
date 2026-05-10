@@ -106,6 +106,14 @@ runner, upload backups, run restores, access Google Workspace, create or
 inspect credentials, connect to production, or claim backup readiness is
 complete.
 
+Rclone credential/setup and first-backup evidence request is recorded in
+`docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`.
+That request defines outside-Git setup steps for the owner/operator and the
+non-sensitive evidence to provide later. It does not create credentials,
+inspect credentials, access Google Workspace, run backups, run restores,
+connect to production, connect to PMS databases, or claim backup readiness is
+complete.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -115,7 +123,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | --- | --- | --- | --- | --- | --- |
 | Business reconciliation closure | Owner/business | Complete | None for non-live evidence closure | Business reconciliation sign-off record | Required input is complete for readiness planning; does not authorise live import or cutover |
 | Production environment readiness | Ops owner | Partially verified / pending target acceptance | Environment label supplied and read-only frontend/backend/app health checks passed; deployment target remains pending verification and owner/operator independent availability status was not yet verified | `docs/PRODUCTION_ENV_VERIFICATION_EVIDENCE_COLLECTION.md`, then deployment target acceptance | No-go until accepted |
-| Backup readiness | Ops owner | Runner scaffolded / blocked on first backup proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credentials, upload execution, encryption proof, current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
+| Backup readiness | Ops owner | Credential/setup evidence requested / blocked on first backup proof | Repo backup helpers, backup docs, and scheduler templates exist; backup owner/role supplied; storage label supplied as Dental PMS Production Backups; automated service account preferred; daily backup and minimum 30 days retention confirmed; local backup, archive, scheduler, and restore foundations exist; rclone is recorded as the candidate Google Workspace/Drive upload mechanism; rclone crypt is recorded as the candidate client-side encryption mechanism; first-backup prerequisites and evidence plan are recorded; non-secret runner scaffolding is recorded; credential/setup and first-backup evidence request is recorded; credentials, upload execution, encryption proof, current production schedule implementation, storage implementation, latest safe backup timestamp, and backup integrity evidence are unavailable | `docs/PRODUCTION_BACKUP_DISCOVERY_AND_SETUP_PLAN.md`, `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_READINESS.md`, `docs/PRODUCTION_BACKUP_AUTOMATION_IMPLEMENTATION_GAP.md`, `docs/PRODUCTION_BACKUP_RCLONE_SCAFFOLDING.md`, `docs/PRODUCTION_BACKUP_EXECUTION_READINESS.md`, `docs/PRODUCTION_BACKUP_RCLONE_RUNNER.md`, `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`, then latest safe backup timestamp and backup integrity evidence | No-go until accepted |
 | Restore proof | Ops owner | Restore target supplied / pending execution evidence | Restore procedure is documented; supplied restore target classification is local non-live restore rehearsal environment; restore rehearsal is not yet performed | `docs/PRODUCTION_BACKUP_IMPLEMENTATION_PROOF_PREP.md`, `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, then non-live restore rehearsal status/evidence | No-go until accepted |
 | Rollback plan | Owner plus ops owner | Pending evidence | Rollback owner, triggers, and communication path not accepted | Written rollback plan with triggers, decision owner, and operator notices | No-go until accepted |
 | User/access readiness | Practice owner | Pending evidence | User roles and access review not recorded | Role/access review for admin, reception, clinical, finance, and support users | No-go for live use until accepted |
@@ -168,7 +176,11 @@ data or start cutover.
    `ops/backup_rclone_upload.sh` only in a later explicitly authorised
    first-backup execution slice after external credentials and rclone remotes
    are configured outside Git.
-14. Keep live import blocked until final go/no-go approval explicitly authorises
+14. Use
+   `docs/PRODUCTION_BACKUP_RCLONE_CREDENTIAL_SETUP_AND_FIRST_BACKUP_REQUEST.md`
+   to collect non-sensitive owner/operator setup evidence before any
+   first-backup execution slice.
+15. Keep live import blocked until final go/no-go approval explicitly authorises
    it.
 
 ## Production Evidence Item Status
@@ -204,6 +216,8 @@ data or start cutover.
   has not been recorded.
 - Rclone backup runner scaffolding is recorded, but the runner has not been
   executed and no backup upload evidence has been recorded.
+- Rclone credential/setup evidence has been requested, but outside-Git setup
+  evidence has not been recorded.
 - No backup automation credential handling proof has been recorded.
 - No non-live restore rehearsal has been executed.
 - No UAT/practice workflow execution evidence has been recorded.
