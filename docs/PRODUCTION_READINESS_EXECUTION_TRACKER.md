@@ -326,6 +326,16 @@ result remain `blocked`; `finance_import_ready=false` remains in force.
 Rollback required is recorded as `yes`, and rollback executed is recorded as
 `no`.
 
+Guarded finance/import mapped-patient target remediation was recorded on
+2026-05-10. The failed guarded opening-balance import is now classified as
+`no writes` because the mapped-patient target blocker occurred before ledger
+row creation; rollback required is corrected to `no`, and rollback executed is
+corrected to `not required`. The guarded executor now checks mapped-patient
+target coverage before the write helper runs, so this blocker fails closed
+before any apply/write path. Mapped patient target remediation remains
+`blocked` because patient-level mapping remediation requires owner/operator
+safe handling. `finance_import_ready=false` remains in force.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -342,7 +352,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Smoke/regression testing | Technical owner | Safe CI evidence recorded / accepted for readiness tracking | Safe non-production CI smoke/regression status is recorded as pass; production target acceptance is recorded as yes | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
 | UAT/practice workflow testing | Practice owner | Passed / accepted for readiness tracking | UAT/practice workflow evidence is recorded as pass using classification-only owner/operator evidence | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
 | Data migration scope | Owner plus migration owner | Accepted for readiness tracking | Data migration scope decision is recorded as yes using classification-only evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then final readiness gate record | Readiness input accepted; execution still requires separate instruction |
-| Opening-balance live-import decision | Owner | Approved for readiness tracking / guarded execution failed closed | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; a classification-only guarded executor is available; explicit guarded opening-balance execution was attempted and failed closed with blocker classification `mapped_patient_missing_in_target`; `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`, then guarded execution status record | Target mapping remediation is required before another guarded opening-balance execution slice |
+| Opening-balance live-import decision | Owner | Approved for readiness tracking / target mapping blocked | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; a classification-only guarded executor is available; explicit guarded opening-balance execution failed closed with blocker classification `mapped_patient_missing_in_target`; failed-run write state is classified as `no writes`; rollback is not required; `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`, then guarded execution status record | Patient-level target mapping remediation requires owner/operator safe handling before another guarded opening-balance execution slice |
 | Patient data migration decision | Owner plus migration owner | Approved by category for readiness tracking / execution not run | Patient data migration decision is recorded as approved by category; no patient data import has run | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
 | Appointments/treatments/recalls migration decision | Owner plus migration owner | Accepted for readiness tracking / execution not run | Appointments/treatments/recalls migration decision is recorded as yes; no migration/import execution has run | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
 | Monitoring/support readiness | Support owner | Accepted / readiness go recorded | Monitoring/support readiness is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
@@ -451,7 +461,7 @@ data or start cutover.
 | Final readiness gate evidence status | Recorded / go for readiness status only | UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` | Production cutover, import execution, Dental PMS live/main PMS status, deployment, and live/default writes still require separate explicit execution instruction |
 | Production execution/cutover status | Recorded / cutover complete, finance blocked | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=false`; finance/import execution `blocked`; rollback required `no`; rollback executed `not required` | Finance/import execution still requires a separate explicit execution slice |
 | Guarded finance/import execution readiness path | Recorded / opening-balance executor ready | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `not checked`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false` | Import execution has not run; invoice/payment/staging import remains unsupported by this guarded path |
-| Guarded finance/import execution status | Recorded / opening-balance execution failed closed | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `blocked`; opening-balance/live finance import execution result `fail`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`; rollback required `yes`; rollback executed `no` | Target mapping remediation is required before another guarded opening-balance execution slice; invoice/payment/staging remains unsupported by this guarded path |
+| Guarded finance/import execution status | Recorded / opening-balance execution blocked before write | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `blocked`; opening-balance/live finance import execution result `blocked`; mapped patient target remediation status `blocked`; import write-state after failed run `no writes`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`; rollback required `no`; rollback executed `not required` | Patient-level mapping remediation requires owner/operator safe handling; invoice/payment/staging remains unsupported by this guarded path |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -838,8 +848,8 @@ contents.
   acceptance are now recorded for readiness tracking only.
 - Opening-balance/live finance import and invoice/payment/staging import
   decisions are approved for readiness tracking. A classification-only guarded
-  opening-balance executor is recorded as available, and the first guarded
-  opening-balance execution failed closed with blocker classification
+  opening-balance executor is recorded as available. The first guarded
+  opening-balance execution is classified as no-write and blocked by
   `mapped_patient_missing_in_target`; invoice/payment/staging import remains
   blocked.
 - Final owner go/no-go approval is recorded as go, and cutover execution is
@@ -866,6 +876,8 @@ Production deployment and smoke are recorded as passed, cutover is recorded as
 executed, and Dental PMS is recorded as live/main PMS. R4 remains available for
 rollback. A guarded opening-balance finance/import executor is recorded as
 available. The first guarded opening-balance execution failed closed with
-blocker classification `mapped_patient_missing_in_target`, and
+blocker classification `mapped_patient_missing_in_target`; the failed-run write
+state is classified as `no writes`, rollback is not required, and
 `finance_import_ready=false` remains in force. The next step must remediate the
-target mapping blocker before another explicit guarded execution slice.
+target mapping blocker through owner/operator safe handling before another
+explicit guarded execution slice.

@@ -302,6 +302,8 @@ def build_guarded_finance_import_execution_result(
     execution_result = "not checked"
     rollback_required = "no"
     rollback_executed = "not required"
+    import_write_state_after_failed_run = "unknown"
+    mapped_patient_target_remediation_status = "pending"
 
     if apply_requested:
         if actor_id is None:
@@ -312,6 +314,12 @@ def build_guarded_finance_import_execution_result(
             execution_result = "blocked"
         else:
             try:
+                _check_opening_balance_target_patient_coverage(
+                    database_url=str(database_url),
+                    adjustments=adjustments,
+                )
+                mapped_patient_target_remediation_status = "remediated"
+                reasons.append("mapped_patient_target_coverage_confirmed")
                 created, skipped = _apply_opening_balance_adjustments(
                     database_url=str(database_url),
                     adjustments=adjustments,
@@ -328,10 +336,18 @@ def build_guarded_finance_import_execution_result(
                 execution_result = "pass"
                 reasons.append("opening_balance_live_import_apply_completed")
             except GuardedFinanceImportExecutionError as exc:
-                execution_result = "fail"
-                rollback_required = "yes"
-                rollback_executed = "no"
-                blockers.append(str(exc))
+                error_classification = str(exc)
+                if error_classification == "mapped_patient_missing_in_target":
+                    execution_result = "blocked"
+                    rollback_required = "no"
+                    rollback_executed = "not required"
+                    import_write_state_after_failed_run = "no writes"
+                    mapped_patient_target_remediation_status = "blocked"
+                else:
+                    execution_result = "fail"
+                    rollback_required = "yes"
+                    rollback_executed = "no"
+                blockers.append(error_classification)
     elif blockers:
         execution_result = "blocked"
 
@@ -356,6 +372,10 @@ def build_guarded_finance_import_execution_result(
         ),
         "Rollback required": rollback_required,
         "Rollback executed": rollback_executed,
+        "Import write-state after failed run": import_write_state_after_failed_run,
+        "Mapped patient target remediation status": (
+            mapped_patient_target_remediation_status
+        ),
         "Result counts classification": dict(result_counts),
         "Reason classification": (
             "; ".join(dict.fromkeys(reasons))
@@ -558,6 +578,34 @@ def _opening_balance_adjustments(
     return tuple(adjustments)
 
 
+def _check_opening_balance_target_patient_coverage(
+    *,
+    database_url: str,
+    adjustments: tuple[_OpeningBalanceAdjustment, ...],
+) -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    import app.models  # noqa: F401 - register ORM relationship targets
+    from app.models.patient import Patient
+
+    engine = create_engine(database_url, pool_pre_ping=True)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
+    try:
+        patient_ids = {row.patient_id for row in adjustments}
+        existing_patients = set(
+            session.execute(
+                select(Patient.id).where(Patient.id.in_(patient_ids))
+            ).scalars()
+        )
+        if patient_ids - existing_patients:
+            raise GuardedFinanceImportExecutionError("mapped_patient_missing_in_target")
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def _apply_opening_balance_adjustments(
     *,
     database_url: str,
@@ -571,7 +619,6 @@ def _apply_opening_balance_adjustments(
 
     import app.models  # noqa: F401 - register ORM relationship targets
     from app.models.ledger import PatientLedgerEntry
-    from app.models.patient import Patient
 
     engine = create_engine(database_url, pool_pre_ping=True)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -593,14 +640,6 @@ def _apply_opening_balance_adjustments(
             raise GuardedFinanceImportExecutionError(
                 "existing_opening_balance_marker_refused"
             )
-        patient_ids = {row.patient_id for row in adjustments}
-        existing_patients = set(
-            session.execute(
-                select(Patient.id).where(Patient.id.in_(patient_ids))
-            ).scalars()
-        )
-        if patient_ids - existing_patients:
-            raise GuardedFinanceImportExecutionError("mapped_patient_missing_in_target")
 
         existing_rows = {
             row.reference: row
