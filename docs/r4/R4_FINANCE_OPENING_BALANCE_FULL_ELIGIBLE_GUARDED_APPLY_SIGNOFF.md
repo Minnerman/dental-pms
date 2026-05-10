@@ -97,3 +97,6 @@ separate explicit owner decision and a new scoped slice. Live/default PMS DB
 writes, actual PMS Postgres writes, production execution, live finance import,
 invoice/payment/staging import, and committing raw artefact or patient-level
 contents remain unauthorised.
+
+Final non-live pathway status and next-decision boundaries are recorded in
+`docs/r4/R4_FINANCE_OPENING_BALANCE_FULL_ELIGIBLE_COMPLETION_SUMMARY.md`.
