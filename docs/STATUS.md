@@ -72,6 +72,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-11: Production backup schedule proof status recorded.
+  - Scope: classification-only post-launch status. It does not run backup,
+    restore, rclone, backup deletion, retention cleanup, rollback, R4 access,
+    import retry, invoice/payment/staging import, or unguarded DB writes.
+  - Evidence packet date: 2026-05-11.
+  - Responder role: Codex local operator / classification-only post-launch
+    status.
+  - Evidence packet: production backup schedule proof `yes`; backup schedule
+    status `yes`; backup retention status `no`; rollback required `no`;
+    rollback executed `not required`; deferred finance backlog count `1017`;
+    invoice/payment/staging import status `blocked`;
+    `finance_import_ready=true` for the accepted mapped-only/deferred-row
+    opening-balance scope only.
+  - Reason classification: production backup scheduling is installed,
+    enabled, active, and has run successfully under the configured timer;
+    scheduled backup retention is not configured to the accepted 30-backup
+    retention model.
+  - Blocker classification: production backup schedule proof is no longer
+    pending, but scheduled backup retention configuration needs
+    owner/operator remediation to match the accepted 30-backup model.
+  - Safety confirmations: no secrets exposed `yes`; no patient data exposed
+    `yes`; no private paths exposed `yes`; no backup contents exposed `yes`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private
+    URLs, exact private paths, raw dumps, generated rclone config, OAuth
+    material, service-account material, crypt passwords or salts, backup
+    contents, backup filenames, Google Workspace URLs, patient data,
+    patient-level identifiers, row values, private contacts, private
+    infrastructure details, logs, screenshots, configs, or database output are
+    recorded.
 - 2026-05-11: Post-launch stabilization status recorded.
   - Scope: classification-only post-launch status. It does not rerun
     opening-balance import, run invoice/payment/staging import, access R4,
