@@ -72,6 +72,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-11: Opening-balance import deferral result recorded.
+  - Scope: classification-only evidence status for the owner/operator decision to defer/exclude unresolved target-mapping rows from the current guarded opening-balance/live finance import slice. It does not run import, access R4, use unguarded DB writes, or run invoice/payment/staging import.
+  - Evidence packet date: 2026-05-11.
+  - Responder role: Codex local operator / classification-only execution status.
+  - Evidence packet: guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `blocked`; opening-balance/live finance import execution result `blocked`; mapped patient target remediation status `blocked`; missing target mapping count `1017`; rows imported `0`; rows deferred/excluded `1017`; import write-state after previous failed run `no writes`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`.
+  - Reason classification: owner/operator deferral decision accepted for unresolved target mappings, but a guarded mapped-only live execution scope was not safely prepared; no opening-balance import was run.
+  - Blocker classification: mapped-only opening-balance execution remains blocked until patient-level target mapping or an approved target-present mapped/eligible scope is safely prepared through owner/operator handling.
+  - Safety confirmations: no secrets exposed `yes`; no patient data exposed `yes`; no private paths exposed `yes`; no backup contents exposed `yes`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, row values, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
 - 2026-05-11: Opening-balance import mapping blocker recorded.
   - Scope: classification-only evidence status for the guarded opening-balance/live finance import blocker. It does not run import, access R4, use unguarded DB writes, or run invoice/payment/staging import.
   - Evidence packet date: 2026-05-11.

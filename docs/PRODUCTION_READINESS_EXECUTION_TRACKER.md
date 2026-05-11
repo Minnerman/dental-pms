@@ -353,6 +353,27 @@ target mapping requires owner/operator safe handling. Safety confirmations:
 no secrets exposed, no patient data exposed, no private paths exposed, and no
 backup contents exposed. No import or R4 access was run.
 
+Opening-balance import deferral-scope evidence was recorded on 2026-05-11
+using Codex local operator / classification-only execution status. The
+owner/operator scope decision explicitly defers/excludes the `1017`
+unresolved target-mapping rows from the current guarded opening-balance import
+execution slice. Guarded finance/import process availability remains `yes`;
+opening-balance/live finance import execution readiness is `blocked`;
+opening-balance/live finance import execution result is `blocked`; mapped
+patient target remediation status is `blocked`; missing target mapping count
+is `1017`; rows imported are `0`; rows deferred/excluded are `1017`; import
+write-state after the previous failed run remains `no writes`; rollback
+required is `no`; rollback executed is `not required`; invoice/payment/staging
+import execution readiness and result remain `blocked`;
+`finance_import_ready=false` remains in force. Reason classification:
+owner/operator deferral decision accepted for unresolved target mappings, but
+a guarded mapped-only live execution scope was not safely prepared; no
+opening-balance import was run. Blocker classification: mapped-only
+opening-balance execution remains blocked until patient-level target mapping
+or an approved target-present mapped/eligible scope is safely prepared through
+owner/operator handling. Safety confirmations: no secrets exposed, no patient
+data exposed, no private paths exposed, and no backup contents exposed.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -478,7 +499,7 @@ data or start cutover.
 | Final readiness gate evidence status | Recorded / go for readiness status only | UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` | Production cutover, import execution, Dental PMS live/main PMS status, deployment, and live/default writes still require separate explicit execution instruction |
 | Production execution/cutover status | Recorded / cutover complete, finance blocked | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=false`; finance/import execution `blocked`; rollback required `no`; rollback executed `not required` | Finance/import execution still requires a separate explicit execution slice |
 | Guarded finance/import execution readiness path | Recorded / opening-balance executor ready | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `not checked`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false` | Import execution has not run; invoice/payment/staging import remains unsupported by this guarded path |
-| Guarded finance/import execution status | Recorded / opening-balance execution blocked before write | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only execution status; guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `blocked`; opening-balance/live finance import execution result `blocked`; mapped patient target remediation status `blocked`; missing target mapping count `1017`; import write-state after previous failed run `no writes`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`; no secrets, patient data, private paths, or backup contents exposed | Reason classification: target legacy mapping incomplete; safe patient-preparation evidence unavailable without R4 access; unresolved rows deferred pending owner/operator mapping/preparation. Blocker classification: patient-level target mapping requires owner/operator safe handling; invoice/payment/staging remains unsupported by this guarded path |
+| Guarded finance/import execution status | Recorded / opening-balance execution blocked before write | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only execution status; guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `blocked`; opening-balance/live finance import execution result `blocked`; mapped patient target remediation status `blocked`; missing target mapping count `1017`; rows imported `0`; rows deferred/excluded `1017`; import write-state after previous failed run `no writes`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`; no secrets, patient data, private paths, or backup contents exposed | Reason classification: owner/operator defers/excludes unresolved target mappings, but a guarded mapped-only live execution scope was not safely prepared; no opening-balance import was run. Blocker classification: mapped-only opening-balance execution remains blocked until patient-level target mapping or an approved target-present mapped/eligible scope is safely prepared; invoice/payment/staging remains unsupported by this guarded path |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -899,6 +920,12 @@ state is classified as `no writes`, rollback is not required, and
 classification-only blocker record confirms target legacy mapping incomplete,
 missing target mapping count `1017`, safe patient-preparation evidence
 unavailable without R4 access, and unresolved rows deferred pending
-owner/operator mapping/preparation. The next step must remediate patient-level
-target mapping through owner/operator safe handling before another explicit
+owner/operator mapping/preparation. A later 2026-05-11 owner/operator scope
+decision explicitly defers/excludes the `1017` unresolved rows from the
+current slice, but mapped-only opening-balance execution remains blocked
+because an approved target-present mapped/eligible live scope was not safely
+prepared; rows imported remain `0`, rollback remains not required, and
+`finance_import_ready=false` remains in force. The next step must remediate
+patient-level target mapping or safely prepare an approved target-present
+mapped/eligible scope through owner/operator handling before another explicit
 guarded execution slice.
