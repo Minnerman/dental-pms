@@ -1,9 +1,9 @@
 # Dental PMS Production Readiness Execution Tracker
 
-Status date: 2026-05-10
+Status date: 2026-05-11
 
 Baseline:
-`origin/master@719c5c8290950cc673d19e20528f5e3f6b2b293a`
+`origin/master@16ee12dd55adf01f56e24e5f11815e5a512efa1a`
 
 This is a docs-only production readiness execution tracker and gap
 assessment. It records classification-only production execution status, but it
@@ -13,15 +13,18 @@ apply/write, finance import, or invoice/payment/staging import.
 
 Dental PMS is recorded as live/main PMS after successful production smoke. R4
 remains available for rollback.
-`finance_import_ready=false`.
+`finance_import_ready=true` applies only to the accepted
+mapped-only/deferred-row opening-balance scope. Invoice/payment/staging import
+remains blocked.
 
 The R4 opening-balance full eligible-row non-live evidence track is complete
 through signed-off guarded apply/write proof, and the independent
 business/accounting reconciliation sign-off is recorded. That evidence track
 does not authorise live finance import, opening-balance import,
 invoice/payment/staging import, patient data import, or uncontrolled PMS DB
-writes. Finance/import execution remains blocked until a live-safe guarded
-process is available.
+writes. Invoice/payment/staging import remains blocked; the accepted
+mapped-only opening-balance scope has passed with unresolved rows
+deferred/excluded.
 
 Production-environment, backup, and restore verification planning is recorded
 in `docs/PRODUCTION_ENV_BACKUP_RESTORE_VERIFICATION_PLAN.md`. That plan does
@@ -410,6 +413,25 @@ by the guarded path, and the deferred rows remain outside this execution
 slice. Safety confirmations: no secrets exposed, no patient data exposed, no
 private paths exposed, and no backup contents exposed.
 
+Post-launch stabilization status was recorded on 2026-05-11 using Codex local
+operator / classification-only post-launch status. Dental PMS live/main PMS is
+`yes`; R4 remains rollback fallback is `yes`; production smoke status is
+`pass`; backup schedule status is `pending`; support/monitoring status is
+`yes`; rollback required is `no`; rollback executed is `not required`;
+opening-balance accepted scope status is `pass`; deferred finance backlog
+count is `1017`; invoice/payment/staging import status is `blocked`;
+`finance_import_ready=true` applies only to the accepted
+mapped-only/deferred-row opening-balance scope. Reason classification:
+production smoke and cutover evidence are recorded as pass/yes; backup/restore
+readiness evidence is accepted while production backup schedule installation
+proof remains pending; support/monitoring evidence is accepted; guarded
+mapped-only opening-balance scope passed; invoice/payment/staging and deferred
+finance rows remain backlog. Blocker classification: deferred finance backlog
+requires later owner/operator mapping/reconciliation; invoice/payment/staging
+import remains blocked; production backup schedule proof remains pending.
+Safety confirmations: no secrets exposed, no patient data exposed, no private
+paths exposed, and no backup contents exposed.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -426,7 +448,7 @@ production passwords, live credentials, or secrets belong in this tracker.
 | Smoke/regression testing | Technical owner | Safe CI evidence recorded / accepted for readiness tracking | Safe non-production CI smoke/regression status is recorded as pass; production target acceptance is recorded as yes | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
 | UAT/practice workflow testing | Practice owner | Passed / accepted for readiness tracking | UAT/practice workflow evidence is recorded as pass using classification-only owner/operator evidence | `docs/BACKUP_RESTORE_UAT_READINESS_PLAN.md`, `docs/PRODUCTION_TARGET_USER_ACCESS_UAT_EVIDENCE_REQUEST.md`, then final readiness gate record | Required input accepted for readiness tracking; cutover execution still requires separate instruction |
 | Data migration scope | Owner plus migration owner | Accepted for readiness tracking | Data migration scope decision is recorded as yes using classification-only evidence | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then final readiness gate record | Readiness input accepted; execution still requires separate instruction |
-| Opening-balance live-import decision | Owner | Approved for readiness tracking / target mapping blocked / mapped-only guard available | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; a classification-only guarded executor is available; explicit guarded opening-balance execution failed closed before write; follow-up classification-only evidence records target legacy mapping incomplete, missing target mapping count `1017`, unresolved rows deferred by owner/operator decision, and guarded mapped-only scope availability `yes`; failed-run write state is classified as `no writes`; rollback is not required; `finance_import_ready=false` remains in force | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`, then guarded execution status records | Patient-level target mapping or an approved target-present mapped/eligible execution scope is still required before guarded opening-balance apply |
+| Opening-balance live-import decision | Owner | Approved for readiness tracking / target mapping blocked / mapped-only accepted scope passed | Opening-balance/live finance import decision is recorded as approved for readiness tracking only; a classification-only guarded executor is available; explicit guarded opening-balance execution failed closed before write; follow-up classification-only evidence records target legacy mapping incomplete, missing target mapping count `1017`, unresolved rows deferred by owner/operator decision, guarded mapped-only scope availability `yes`, and guarded mapped-only opening-balance apply pass for the accepted target-present scope with `1` row imported and `1017` rows deferred/excluded; failed-run write state is classified as `no writes`; rollback is not required; `finance_import_ready=true` applies only to the accepted mapped-only/deferred-row opening-balance scope | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, `docs/PRODUCTION_GUARDED_FINANCE_IMPORT_EXECUTION_READINESS.md`, then guarded execution status records | Accepted mapped-only opening-balance scope passed; deferred rows and invoice/payment/staging remain backlog |
 | Patient data migration decision | Owner plus migration owner | Approved by category for readiness tracking / execution not run | Patient data migration decision is recorded as approved by category; no patient data import has run | `docs/PRODUCTION_DATA_MIGRATION_SCOPE_AND_IMPORT_DECISION_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
 | Appointments/treatments/recalls migration decision | Owner plus migration owner | Accepted for readiness tracking / execution not run | Appointments/treatments/recalls migration decision is recorded as yes; no migration/import execution has run | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then separate explicit execution instruction before any import | Import execution still requires separate instruction |
 | Monitoring/support readiness | Support owner | Accepted / readiness go recorded | Monitoring/support readiness is recorded as yes for readiness tracking only; final go is recorded for readiness status only | `docs/PRODUCTION_DOMAIN_MIGRATION_SUPPORT_CUTOVER_EVIDENCE_REQUEST.md`, then final readiness gate record | Readiness input accepted; cutover execution still requires separate instruction |
@@ -523,7 +545,7 @@ data or start cutover.
 | Production target, user/access, and UAT evidence request | Evidence recorded / readiness gate accepted | Smoke/regression evidence `pass`; production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `pass` | Cutover execution still requires separate instruction |
 | Data migration scope and import-decision evidence request | Evidence recorded / import decisions approved for readiness tracking | Data migration scope decision `yes`; patient data migration decision `approved by category`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved` | Import execution still requires separate instruction |
 | Domain migration, monitoring/support, and cutover communications evidence request | Evidence recorded / readiness gate accepted | Monitoring/support readiness `yes`; cutover communications acceptance `yes`; appointments/treatments/recalls migration decision `yes` | Cutover execution still requires separate instruction |
-| Consolidated production readiness evidence packet and final gate register | Recorded / readiness gate evidence accepted | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md`; final owner go/no-go approval `go` for readiness status only | Superseded by production execution status for cutover; finance/import execution remains blocked |
+| Consolidated production readiness evidence packet and final gate register | Recorded / readiness gate evidence accepted | `docs/PRODUCTION_READINESS_EVIDENCE_PACKET_AND_FINAL_GATE_REGISTER.md`; final owner go/no-go approval `go` for readiness status only | Superseded by production execution and post-launch stabilization status; finance backlog remains |
 | Owner/operator readiness evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup `blocked`; latest safe backup timestamp `pending`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending`; data migration scope `yes`; patient data migration `approved by category`; appointments/treatments/recalls migration `yes`; finance/import decisions `pending`; final go/no-go `hold` | First backup, retention, restore, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | First backup execution evidence status | Recorded / incomplete gates remain | Outside-Git rclone setup evidence `yes`; first backup execution evidence `pass`; latest safe backup timestamp `2026-05-10T14:34:56Z`; retention proof `pending`; non-live restore `blocked`; backup/restore sign-off `pending` | Minimum 30-day retention proof, non-live restore proof, backup/restore sign-off, production target, access, UAT, smoke, monitoring/support, cutover communications, rollback acceptance, finance/import approval, and final go/no-go remain unresolved |
 | Retention/restore evidence status | Recorded / restore failed | Minimum 30-day retention proof `pending`; non-live restore rehearsal/proof `fail`; backup/restore sign-off `no` | Retention proof, restore remediation, repeat non-live restore proof, backup/restore sign-off, and final go/no-go remain unresolved |
@@ -533,9 +555,10 @@ data or start cutover.
 | Backup/restore sign-off status | Recorded / accepted for readiness tracking only | Backup upload evidence, minimum 30-day retention remediation, and non-live restore proof accepted by owner/operator | Production cutover, finance import, patient import, backup deletion, retention cleanup, R4 replacement, Dental PMS live/main PMS status, and final go/no-go remain unauthorised |
 | Production target/access/UAT evidence status | Partial evidence recorded / superseded by final gate status | Production target acceptance `yes`; user/access review `yes`; UAT/practice workflow evidence `not checked`; smoke/regression evidence `pass`; monitoring/support readiness `yes`; cutover communications acceptance `yes`; rollback owner acceptance `yes`; final owner go/no-go `hold` | Superseded by final readiness gate evidence status |
 | Final readiness gate evidence status | Recorded / go for readiness status only | UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` | Production cutover, import execution, Dental PMS live/main PMS status, deployment, and live/default writes still require separate explicit execution instruction |
-| Production execution/cutover status | Recorded / cutover complete, finance blocked | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=false`; finance/import execution `blocked`; rollback required `no`; rollback executed `not required` | Finance/import execution still requires a separate explicit execution slice |
+| Production execution/cutover status | Recorded / cutover complete, mapped-only finance scope passed | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=true` only for the accepted mapped-only/deferred-row opening-balance scope; invoice/payment/staging import `blocked`; rollback required `no`; rollback executed `not required` | Deferred finance backlog and invoice/payment/staging import remain outside the accepted scope |
 | Guarded finance/import execution readiness path | Recorded / opening-balance executor ready | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `not checked`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false` | Import execution has not run; invoice/payment/staging import remains unsupported by this guarded path |
 | Guarded finance/import execution status | Recorded / mapped-only opening-balance import passed | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only execution status; guarded finance/import process available `yes`; guarded mapped-only scope available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `pass`; mapped patient target remediation status `partially remediated`; missing target mapping count `1017`; rows imported `1`; rows deferred/excluded `1017`; import write-state after previous failed run `no writes`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope; no secrets, patient data, private paths, or backup contents exposed | Reason classification: owner/operator deferral accepted; missing target mapping count confirmed as `1017`; unresolved rows deferred/excluded; target-present mapped-only scope prepared; guarded opening-balance apply completed for that scope. Blocker classification: invoice/payment/staging import remains unsupported by this guarded path; deferred rows remain outside this execution slice |
+| Post-launch stabilization status | Recorded / stable with finance backlog | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only post-launch status; Dental PMS live/main PMS `yes`; R4 remains rollback fallback `yes`; production smoke status `pass`; backup schedule status `pending`; support/monitoring status `yes`; rollback required `no`; rollback executed `not required`; opening-balance accepted scope status `pass`; deferred finance backlog count `1017`; invoice/payment/staging import status `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope only; no secrets, patient data, private paths, or backup contents exposed | Reason classification: production smoke and cutover evidence are recorded as pass/yes; backup/restore readiness evidence is accepted while production backup schedule installation proof remains pending; support/monitoring evidence is accepted; guarded mapped-only opening-balance scope passed; invoice/payment/staging and deferred finance rows remain backlog. Blocker classification: deferred finance backlog requires later owner/operator mapping/reconciliation; invoice/payment/staging import remains blocked; production backup schedule proof remains pending |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 

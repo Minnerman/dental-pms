@@ -72,6 +72,38 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-11: Post-launch stabilization status recorded.
+  - Scope: classification-only post-launch status. It does not rerun
+    opening-balance import, run invoice/payment/staging import, access R4,
+    perform rollback, use unguarded DB writes, or expose sensitive material.
+  - Evidence packet date: 2026-05-11.
+  - Responder role: Codex local operator / classification-only post-launch
+    status.
+  - Evidence packet: Dental PMS live/main PMS `yes`; R4 remains rollback
+    fallback `yes`; production smoke status `pass`; backup schedule status
+    `pending`; support/monitoring status `yes`; rollback required `no`;
+    rollback executed `not required`; opening-balance accepted scope status
+    `pass`; deferred finance backlog count `1017`; invoice/payment/staging
+    import status `blocked`; `finance_import_ready=true` for the accepted
+    mapped-only/deferred-row opening-balance scope only.
+  - Reason classification: production smoke and cutover evidence are recorded
+    as pass/yes; backup/restore readiness evidence is accepted while
+    production backup schedule installation proof remains pending;
+    support/monitoring evidence is accepted; guarded mapped-only
+    opening-balance scope passed; invoice/payment/staging and deferred finance
+    rows remain backlog.
+  - Blocker classification: deferred finance backlog requires later
+    owner/operator mapping/reconciliation; invoice/payment/staging import
+    remains blocked; production backup schedule proof remains pending.
+  - Safety confirmations: no secrets exposed `yes`; no patient data exposed
+    `yes`; no private paths exposed `yes`; no backup contents exposed `yes`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private
+    URLs, exact private paths, raw dumps, generated rclone config, OAuth
+    material, service-account material, crypt passwords or salts, backup
+    contents, backup filenames, Google Workspace URLs, patient data,
+    patient-level identifiers, row values, private contacts, private
+    infrastructure details, logs, screenshots, configs, or database output are
+    recorded.
 - 2026-05-11: Mapped-only opening-balance import result recorded.
   - Scope: classification-only execution status for the owner/operator-approved mapped-only opening-balance import slice. It does not access R4, use unguarded DB writes, import deferred rows, or run invoice/payment/staging import.
   - Evidence packet date: 2026-05-11.
