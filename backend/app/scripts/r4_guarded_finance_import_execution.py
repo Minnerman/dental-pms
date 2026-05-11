@@ -72,6 +72,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-eligible-count", type=int, default=None)
     parser.add_argument("--expected-repo-sha", default=None)
     parser.add_argument(
+        "--defer-missing-target-mappings",
+        action="store_true",
+        help=(
+            "Accept an owner/operator deferral decision for unresolved target "
+            "mappings and prepare a target-present mapped-only scope. This "
+            "still defaults to dry-run/no-write unless --apply is also passed."
+        ),
+    )
+    parser.add_argument(
+        "--expected-missing-target-mapping-count",
+        type=int,
+        default=None,
+        help=(
+            "Required with --defer-missing-target-mappings. The guarded scope "
+            "is refused unless the observed missing target count matches."
+        ),
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="Request future apply/write mode. Still does not execute import here.",
@@ -126,7 +144,11 @@ def main(argv: list[str] | None = None) -> int:
             manifest=manifest,
             opening_balance_report=opening_balance_report,
             target_classification=args.target_classification,
-            database_url=os.getenv(args.database_url_env) if args.apply else None,
+            database_url=(
+                os.getenv(args.database_url_env)
+                if args.apply or args.defer_missing_target_mappings
+                else None
+            ),
             apply_requested=args.apply,
             apply_confirmation=args.confirm,
             production_execution_gate=args.production_execution_gate,
@@ -136,6 +158,10 @@ def main(argv: list[str] | None = None) -> int:
             expected_total_balance=args.expected_total_balance,
             expected_eligible_count=args.expected_eligible_count,
             expected_repo_sha=args.expected_repo_sha,
+            defer_missing_target_mappings=args.defer_missing_target_mappings,
+            expected_missing_target_mapping_count=(
+                args.expected_missing_target_mapping_count
+            ),
             no_secrets_exposed=args.confirm_no_secret_output,
             no_patient_data_exposed=args.confirm_no_patient_data_output,
             no_private_paths_exposed=args.confirm_no_private_path_output,

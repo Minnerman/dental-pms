@@ -295,6 +295,93 @@ def test_opening_balance_execution_preflight_requires_full_report_and_keeps_no_w
     }
 
 
+def test_mapped_only_scope_defers_expected_missing_target_rows(monkeypatch):
+    def fake_mapped_only_scope(**kwargs):
+        return execution_service._MappedOnlyScope(
+            adjustments=kwargs["adjustments"][:1],
+            missing_target_mapping_count=1,
+        )
+
+    monkeypatch.setattr(
+        execution_service,
+        "_prepare_target_present_mapped_only_scope",
+        fake_mapped_only_scope,
+    )
+
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=report(),
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        database_url="safe-test-db-url",
+        apply_requested=False,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        expected_total_balance="5.75",
+        expected_eligible_count=2,
+        expected_repo_sha="test-sha",
+        defer_missing_target_mappings=True,
+        expected_missing_target_mapping_count=1,
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert packet["Guarded mapped-only scope available"] == "yes"
+    assert packet["Missing target mapping count"] == 1
+    assert packet["Rows deferred/excluded"] == 1
+    assert packet["Rows eligible for mapped-only guarded import"] == 1
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "ready"
+    )
+    assert packet["Opening-balance/live finance import execution result"] == "not checked"
+    assert packet["Mapped patient target remediation status"] == "partially remediated"
+    assert packet["finance_import_ready"] is False
+    assert (
+        "target_present_mapped_only_scope_prepared"
+        in packet["Reason classification"]
+    )
+
+
+def test_mapped_only_scope_refuses_missing_target_count_mismatch(monkeypatch):
+    def fake_mapped_only_scope(**kwargs):
+        return execution_service._MappedOnlyScope(
+            adjustments=kwargs["adjustments"][:1],
+            missing_target_mapping_count=2,
+        )
+
+    monkeypatch.setattr(
+        execution_service,
+        "_prepare_target_present_mapped_only_scope",
+        fake_mapped_only_scope,
+    )
+
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=report(),
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        database_url="safe-test-db-url",
+        apply_requested=False,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        expected_total_balance="5.75",
+        expected_eligible_count=2,
+        expected_repo_sha="test-sha",
+        defer_missing_target_mappings=True,
+        expected_missing_target_mapping_count=1,
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert packet["Guarded mapped-only scope available"] == "no"
+    assert packet["Missing target mapping count"] == 2
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "blocked"
+    )
+    assert "missing_target_mapping_count_mismatch" in packet["Blocker classification"]
+    assert packet["finance_import_ready"] is False
+
+
 def test_opening_balance_execution_blocks_incomplete_report_source():
     incomplete = report(
         eligibility_summary={
@@ -483,3 +570,71 @@ def test_cli_with_report_prints_classification_only_without_paths_or_rows(
     assert str(report_path) not in stdout
     assert "PRIVATE-SHOULD-NOT-PRINT" not in stdout
     assert "mapped_patient_id" not in stdout
+
+
+def test_cli_mapped_only_scope_smoke_outputs_counts_only(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    def fake_mapped_only_scope(**kwargs):
+        return execution_service._MappedOnlyScope(
+            adjustments=kwargs["adjustments"][:1],
+            missing_target_mapping_count=1,
+        )
+
+    monkeypatch.setattr(
+        execution_service,
+        "_prepare_target_present_mapped_only_scope",
+        fake_mapped_only_scope,
+    )
+    monkeypatch.setenv("SAFE_DATABASE_URL", "safe-test-db-url")
+    manifest_path = tmp_path / "manifest.json"
+    report_path = tmp_path / "report.json"
+    manifest_path.write_text(json.dumps(manifest()), encoding="utf-8")
+    report_path.write_text(json.dumps(report()), encoding="utf-8")
+
+    assert (
+        execution_script.main(
+            [
+                "--manifest-json",
+                str(manifest_path),
+                "--opening-balance-report-json",
+                str(report_path),
+                "--category",
+                "opening-balance",
+                "--target-classification",
+                LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+                "--production-execution-gate",
+                GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+                "--expected-total-balance",
+                "5.75",
+                "--expected-eligible-count",
+                "2",
+                "--expected-repo-sha",
+                "test-sha",
+                "--database-url-env",
+                "SAFE_DATABASE_URL",
+                "--defer-missing-target-mappings",
+                "--expected-missing-target-mapping-count",
+                "1",
+                "--confirm-no-secret-output",
+                "--confirm-no-patient-data-output",
+                "--confirm-no-private-path-output",
+                "--confirm-no-backup-content-output",
+            ]
+        )
+        == 0
+    )
+
+    stdout = capsys.readouterr().out
+    packet = json.loads(stdout)
+    assert packet["Guarded mapped-only scope available"] == "yes"
+    assert packet["Missing target mapping count"] == 1
+    assert packet["Rows deferred/excluded"] == 1
+    assert packet["Rows eligible for mapped-only guarded import"] == 1
+    assert str(manifest_path) not in stdout
+    assert str(report_path) not in stdout
+    assert "PRIVATE-SHOULD-NOT-PRINT" not in stdout
+    assert "mapped_patient_id" not in stdout
+    assert "safe-test-db-url" not in stdout
