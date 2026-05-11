@@ -72,6 +72,15 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-11: Mapped-only opening-balance import result recorded.
+  - Scope: classification-only execution status for the owner/operator-approved mapped-only opening-balance import slice. It does not access R4, use unguarded DB writes, import deferred rows, or run invoice/payment/staging import.
+  - Evidence packet date: 2026-05-11.
+  - Responder role: Codex local operator / classification-only execution status.
+  - Evidence packet: guarded finance/import process available `yes`; guarded mapped-only scope available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `pass`; mapped patient target remediation status `partially remediated`; missing target mapping count `1017`; rows imported `1`; rows deferred/excluded `1017`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope.
+  - Reason classification: owner/operator deferral accepted; missing target mapping count confirmed as `1017`; unresolved rows deferred/excluded; target-present mapped-only scope prepared; guarded opening-balance apply completed for that scope.
+  - Blocker classification: invoice/payment/staging import remains blocked by this guarded path; deferred rows remain outside this execution slice.
+  - Safety confirmations: no secrets exposed `yes`; no patient data exposed `yes`; no private paths exposed `yes`; no backup contents exposed `yes`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private URLs, exact private paths, raw dumps, generated rclone config, OAuth material, service-account material, crypt passwords or salts, backup contents, backup filenames, Google Workspace URLs, patient data, patient-level identifiers, row values, private contacts, private infrastructure details, logs, screenshots, configs, or database output are recorded.
 - 2026-05-11: Guarded opening-balance mapped-only scope added.
   - Scope: repo implementation and classification-only status for a default dry-run/no-write mapped-only opening-balance scope. It does not run import, access R4, use unguarded DB writes, or run invoice/payment/staging import.
   - Evidence packet date: 2026-05-11.
