@@ -389,6 +389,27 @@ deferred/excluded are `1017`; rows eligible for mapped-only guarded import are
 `blocked`; `finance_import_ready=false` remains in force until an actual
 guarded apply passes. No import was run by this implementation record.
 
+Mapped-only opening-balance import execution evidence was recorded on
+2026-05-11 using Codex local operator / classification-only execution status.
+The guarded mapped-only dry-run/preflight passed, and the guarded
+opening-balance apply then ran only for the accepted target-present
+mapped/eligible scope. Guarded finance/import process availability is `yes`;
+guarded mapped-only scope availability is `yes`; opening-balance/live finance
+import execution readiness is `ready`; opening-balance/live finance import
+execution result is `pass`; mapped patient target remediation status is
+`partially remediated`; missing target mapping count is `1017`; rows imported
+are `1`; rows deferred/excluded are `1017`; rollback required is `no`;
+rollback executed is `not required`; invoice/payment/staging import execution
+readiness and result remain `blocked`; `finance_import_ready=true` applies
+only to the accepted mapped-only/deferred-row opening-balance scope. Reason
+classification: owner/operator deferral accepted; missing target mapping count
+confirmed as `1017`; unresolved rows deferred/excluded; target-present
+mapped-only scope prepared; guarded opening-balance apply completed for that
+scope. Blocker classification: invoice/payment/staging import remains blocked
+by the guarded path, and the deferred rows remain outside this execution
+slice. Safety confirmations: no secrets exposed, no patient data exposed, no
+private paths exposed, and no backup contents exposed.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -514,7 +535,7 @@ data or start cutover.
 | Final readiness gate evidence status | Recorded / go for readiness status only | UAT/practice workflow evidence `pass`; opening-balance/live finance import decision `approved`; invoice/payment/staging import decision `approved`; final owner go/no-go approval `go` | Production cutover, import execution, Dental PMS live/main PMS status, deployment, and live/default writes still require separate explicit execution instruction |
 | Production execution/cutover status | Recorded / cutover complete, finance blocked | Production execution started `yes`; deployment `pass`; smoke `pass`; cutover executed `yes`; Dental PMS live/main PMS `yes`; R4 remains available for rollback `yes`; `finance_import_ready=false`; finance/import execution `blocked`; rollback required `no`; rollback executed `not required` | Finance/import execution still requires a separate explicit execution slice |
 | Guarded finance/import execution readiness path | Recorded / opening-balance executor ready | Guarded finance/import process available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `not checked`; invoice/payment/staging import execution readiness `blocked`; `finance_import_ready=false` | Import execution has not run; invoice/payment/staging import remains unsupported by this guarded path |
-| Guarded finance/import execution status | Recorded / mapped-only scope guard available, execution not run | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only execution status; guarded finance/import process available `yes`; guarded mapped-only scope available `yes`; missing target mapping count `1017`; rows deferred/excluded `1017`; rows eligible for mapped-only guarded import `not disclosed`; opening-balance/live finance import execution readiness `pending`; opening-balance/live finance import execution result `blocked`; mapped patient target remediation status `blocked`; rows imported `0`; import write-state after previous failed run `no writes`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=false`; no secrets, patient data, private paths, or backup contents exposed | Reason classification: guarded mapped-only scope path now accepts owner/operator deferral only when the observed missing target mapping count is exactly `1017`, excludes unresolved rows, validates target-present mapped/eligible rows, and emits counts/classifications only. Blocker classification: actual guarded mapped-only dry-run/apply has not run; invoice/payment/staging remains unsupported by this guarded path |
+| Guarded finance/import execution status | Recorded / mapped-only opening-balance import passed | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only execution status; guarded finance/import process available `yes`; guarded mapped-only scope available `yes`; opening-balance/live finance import execution readiness `ready`; opening-balance/live finance import execution result `pass`; mapped patient target remediation status `partially remediated`; missing target mapping count `1017`; rows imported `1`; rows deferred/excluded `1017`; import write-state after previous failed run `no writes`; rollback required `no`; rollback executed `not required`; invoice/payment/staging import execution readiness `blocked`; invoice/payment/staging import execution result `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope; no secrets, patient data, private paths, or backup contents exposed | Reason classification: owner/operator deferral accepted; missing target mapping count confirmed as `1017`; unresolved rows deferred/excluded; target-present mapped-only scope prepared; guarded opening-balance apply completed for that scope. Blocker classification: invoice/payment/staging import remains unsupported by this guarded path; deferred rows remain outside this execution slice |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
@@ -903,20 +924,19 @@ contents.
   decisions are approved for readiness tracking. A classification-only guarded
   opening-balance executor is recorded as available. The first guarded
   opening-balance execution is classified as no-write and blocked by
-  `mapped_patient_missing_in_target`; invoice/payment/staging import remains
-  blocked.
+  `mapped_patient_missing_in_target`; the later mapped-only/deferred-row
+  guarded opening-balance execution passed for the accepted scope;
+  invoice/payment/staging import remains blocked.
 - Final owner go/no-go approval is recorded as go, and cutover execution is
   recorded as complete.
 - R4 remains available for rollback.
 
 ## Still Unauthorised
 
-The following remain blocked or unauthorised until target mapping remediation
-is complete, the guarded process receives separate explicit execution
-instruction, and safe execution evidence is recorded:
+The following remain blocked or unauthorised outside the accepted
+mapped-only/deferred-row opening-balance execution scope:
 
-- live finance import execution;
-- opening-balance import execution;
+- deferred opening-balance rows;
 - invoice/payment/staging import execution;
 - patient data import execution;
 - uncontrolled PMS DB writes;
@@ -944,6 +964,10 @@ prepared; rows imported remain `0`, rollback remains not required, and
 guarded mapped-only scope path that can accept the owner/operator deferral
 only when the observed missing target mapping count is exactly `1017`, exclude
 those rows, and validate a target-present mapped/eligible scope with
-counts/classifications only. The next step is a separate explicit guarded
-mapped-only dry-run/preflight and, only if it passes, guarded opening-balance
-apply for the accepted scope.
+counts/classifications only. That subsequent guarded mapped-only
+dry-run/preflight passed, and guarded opening-balance apply completed for the
+accepted mapped-only/deferred-row scope: rows imported `1`, rows
+deferred/excluded `1017`, rollback required `no`, rollback executed `not
+required`, invoice/payment/staging remains blocked, and
+`finance_import_ready=true` only for the accepted mapped-only/deferred-row
+opening-balance scope.
