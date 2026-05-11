@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 
 from app.scripts import r4_guarded_finance_import_execution as execution_script
+from app.services.r4_import import guarded_finance_import_execution as execution_service
 from app.services.r4_import.guarded_finance_import_execution import (
     GUARDED_FINANCE_IMPORT_APPLY_CONFIRMATION_TOKEN,
     GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
     LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+    GuardedFinanceImportExecutionError,
     build_guarded_finance_import_execution_result,
     build_guarded_finance_import_execution_packet,
 )
@@ -339,6 +341,100 @@ def test_apply_execution_requires_database_env_actor_and_confirmation():
     )
     assert "actor_id_required" in packet["Blocker classification"]
     assert "database_url_env_missing" in packet["Blocker classification"]
+
+
+def test_apply_target_coverage_blocks_before_write(monkeypatch):
+    def fake_target_coverage(**_kwargs):
+        raise GuardedFinanceImportExecutionError("mapped_patient_missing_in_target")
+
+    def fake_apply(**_kwargs):  # pragma: no cover - should not be reached
+        raise AssertionError("apply should not run before target coverage passes")
+
+    monkeypatch.setattr(
+        execution_service,
+        "_check_opening_balance_target_patient_coverage",
+        fake_target_coverage,
+    )
+    monkeypatch.setattr(
+        execution_service,
+        "_apply_opening_balance_adjustments",
+        fake_apply,
+    )
+
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=report(),
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        database_url="safe-test-db-url",
+        apply_requested=True,
+        apply_confirmation=GUARDED_FINANCE_IMPORT_APPLY_CONFIRMATION_TOKEN,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        actor_id=1,
+        expected_total_balance="5.75",
+        expected_eligible_count=2,
+        expected_repo_sha="test-sha",
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert (
+        packet["Opening-balance/live finance import execution readiness"] == "blocked"
+    )
+    assert (
+        packet["Opening-balance/live finance import execution result"] == "blocked"
+    )
+    assert "mapped_patient_missing_in_target" in packet["Blocker classification"]
+    assert packet["Import write-state after failed run"] == "no writes"
+    assert packet["Rollback required"] == "no"
+    assert packet["Rollback executed"] == "not required"
+    assert packet["Mapped patient target remediation status"] == "blocked"
+
+
+def test_apply_success_requires_target_coverage_first(monkeypatch):
+    calls = []
+
+    def fake_target_coverage(**_kwargs):
+        calls.append("coverage")
+
+    def fake_apply(**_kwargs):
+        calls.append("apply")
+        return 2, 0
+
+    monkeypatch.setattr(
+        execution_service,
+        "_check_opening_balance_target_patient_coverage",
+        fake_target_coverage,
+    )
+    monkeypatch.setattr(
+        execution_service,
+        "_apply_opening_balance_adjustments",
+        fake_apply,
+    )
+
+    packet = build_guarded_finance_import_execution_result(
+        manifest=manifest(),
+        opening_balance_report=report(),
+        target_classification=LIVE_DENTAL_PMS_TARGET_CLASSIFICATION,
+        database_url="safe-test-db-url",
+        apply_requested=True,
+        apply_confirmation=GUARDED_FINANCE_IMPORT_APPLY_CONFIRMATION_TOKEN,
+        production_execution_gate=GUARDED_FINANCE_IMPORT_PRODUCTION_GATE_TOKEN,
+        actor_id=1,
+        expected_total_balance="5.75",
+        expected_eligible_count=2,
+        expected_repo_sha="test-sha",
+        no_secrets_exposed=True,
+        no_patient_data_exposed=True,
+        no_private_paths_exposed=True,
+        no_backup_contents_exposed=True,
+    )
+
+    assert calls == ["coverage", "apply"]
+    assert packet["Opening-balance/live finance import execution result"] == "pass"
+    assert packet["Mapped patient target remediation status"] == "remediated"
+    assert packet["finance_import_ready"] is True
 
 
 def test_cli_with_report_prints_classification_only_without_paths_or_rows(
