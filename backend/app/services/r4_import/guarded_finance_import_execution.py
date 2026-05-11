@@ -82,6 +82,12 @@ class _OpeningBalanceAdjustment:
         }
 
 
+@dataclass(frozen=True)
+class _MappedOnlyScope:
+    adjustments: tuple[_OpeningBalanceAdjustment, ...]
+    missing_target_mapping_count: int
+
+
 def load_execution_manifest(path: str | Path) -> Mapping[str, Any]:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -257,6 +263,8 @@ def build_guarded_finance_import_execution_result(
     expected_total_balance: str | None = None,
     expected_eligible_count: int | None = None,
     expected_repo_sha: str | None = None,
+    defer_missing_target_mappings: bool = False,
+    expected_missing_target_mapping_count: int | None = None,
     no_secrets_exposed: bool = False,
     no_patient_data_exposed: bool = False,
     no_private_paths_exposed: bool = False,
@@ -304,6 +312,52 @@ def build_guarded_finance_import_execution_result(
     rollback_executed = "not required"
     import_write_state_after_failed_run = "unknown"
     mapped_patient_target_remediation_status = "pending"
+    guarded_mapped_only_scope_available = "pending"
+    missing_target_mapping_count: int | str = "not checked"
+    rows_deferred_excluded: int | str = 0
+    rows_eligible_for_mapped_only_guarded_import: int | str = "not checked"
+    scoped_adjustments = adjustments
+
+    if defer_missing_target_mappings:
+        reasons.append("owner_operator_deferral_decision_supplied")
+        guarded_mapped_only_scope_available = "no"
+        if expected_missing_target_mapping_count is None:
+            blockers.append("expected_missing_target_mapping_count_required")
+        elif expected_missing_target_mapping_count < 0:
+            blockers.append("expected_missing_target_mapping_count_invalid")
+        if not database_url:
+            blockers.append("database_url_env_missing_for_mapped_only_scope")
+        if not adjustments:
+            blockers.append("mapped_only_scope_source_rows_missing")
+        if not blockers:
+            try:
+                mapped_only_scope = _prepare_target_present_mapped_only_scope(
+                    database_url=str(database_url),
+                    adjustments=adjustments,
+                )
+                missing_target_mapping_count = (
+                    mapped_only_scope.missing_target_mapping_count
+                )
+                rows_deferred_excluded = missing_target_mapping_count
+                scoped_adjustments = mapped_only_scope.adjustments
+                rows_eligible_for_mapped_only_guarded_import = len(
+                    scoped_adjustments
+                )
+                if missing_target_mapping_count != expected_missing_target_mapping_count:
+                    blockers.append("missing_target_mapping_count_mismatch")
+                else:
+                    reasons.append("missing_target_mapping_count_confirmed")
+                    reasons.append("unresolved_rows_deferred_excluded")
+                if not scoped_adjustments:
+                    blockers.append("mapped_only_scope_empty_refused")
+                if not blockers:
+                    guarded_mapped_only_scope_available = "yes"
+                    mapped_patient_target_remediation_status = (
+                        "partially remediated"
+                    )
+                    reasons.append("target_present_mapped_only_scope_prepared")
+            except GuardedFinanceImportExecutionError as exc:
+                blockers.append(str(exc))
 
     if apply_requested:
         if actor_id is None:
@@ -316,13 +370,14 @@ def build_guarded_finance_import_execution_result(
             try:
                 _check_opening_balance_target_patient_coverage(
                     database_url=str(database_url),
-                    adjustments=adjustments,
+                    adjustments=scoped_adjustments,
                 )
-                mapped_patient_target_remediation_status = "remediated"
+                if not defer_missing_target_mappings:
+                    mapped_patient_target_remediation_status = "remediated"
                 reasons.append("mapped_patient_target_coverage_confirmed")
                 created, skipped = _apply_opening_balance_adjustments(
                     database_url=str(database_url),
-                    adjustments=adjustments,
+                    adjustments=scoped_adjustments,
                     manifest_id=str(manifest_id),
                     actor_id=int(actor_id),
                     report_sha256=observed_report_sha256 or "not-recorded",
@@ -375,6 +430,12 @@ def build_guarded_finance_import_execution_result(
         "Import write-state after failed run": import_write_state_after_failed_run,
         "Mapped patient target remediation status": (
             mapped_patient_target_remediation_status
+        ),
+        "Guarded mapped-only scope available": guarded_mapped_only_scope_available,
+        "Missing target mapping count": missing_target_mapping_count,
+        "Rows deferred/excluded": rows_deferred_excluded,
+        "Rows eligible for mapped-only guarded import": (
+            rows_eligible_for_mapped_only_guarded_import
         ),
         "Result counts classification": dict(result_counts),
         "Reason classification": (
@@ -604,6 +665,41 @@ def _check_opening_balance_target_patient_coverage(
     finally:
         session.close()
         engine.dispose()
+
+
+def _prepare_target_present_mapped_only_scope(
+    *,
+    database_url: str,
+    adjustments: tuple[_OpeningBalanceAdjustment, ...],
+) -> _MappedOnlyScope:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    import app.models  # noqa: F401 - register ORM relationship targets
+    from app.models.patient import Patient
+
+    engine = create_engine(database_url, pool_pre_ping=True)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
+    try:
+        patient_ids = {row.patient_id for row in adjustments}
+        existing_patients = set(
+            session.execute(
+                select(Patient.id).where(Patient.id.in_(patient_ids))
+            ).scalars()
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+    scoped_adjustments = tuple(
+        row for row in adjustments if row.patient_id in existing_patients
+    )
+    missing_count = len(adjustments) - len(scoped_adjustments)
+    return _MappedOnlyScope(
+        adjustments=scoped_adjustments,
+        missing_target_mapping_count=missing_count,
+    )
 
 
 def _apply_opening_balance_adjustments(
