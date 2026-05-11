@@ -72,6 +72,35 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-05-11: Production backup retention remediation status recorded.
+  - Scope: classification-only post-launch status. It does not run backup,
+    restore, rclone, backup deletion, retention cleanup, rollback, R4 access,
+    import retry, invoice/payment/staging import, or unguarded DB writes.
+  - Evidence packet date: 2026-05-11.
+  - Responder role: Owner/operator + Codex local operator /
+    classification-only post-launch status.
+  - Evidence packet: production backup schedule proof `yes`; backup schedule
+    status `yes`; backup retention status `yes`; backup retention target
+    `30 backups`; privileged retention update performed `yes`; backup run
+    executed `no`; backup deletion/cleanup executed `no`; rollback required `no`;
+    rollback executed `not required`; deferred finance backlog count `1017`;
+    invoice/payment/staging import status `blocked`;
+    `finance_import_ready=true` for the accepted mapped-only/deferred-row
+    opening-balance scope only.
+  - Reason classification: installed production backup retention now matches
+    the accepted 30-backup model; schedule is enabled and active; no backup
+    run, deletion, cleanup, restore, rclone, import, or rollback executed.
+  - Blocker classification: deferred finance backlog remains `1017`;
+    invoice/payment/staging import remains blocked.
+  - Safety confirmations: no secrets exposed `yes`; no patient data exposed
+    `yes`; no private paths exposed `yes`; no backup contents exposed `yes`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private
+    URLs, exact private paths, raw dumps, generated rclone config, OAuth
+    material, service-account material, crypt passwords or salts, backup
+    contents, backup filenames, Google Workspace URLs, patient data,
+    patient-level identifiers, row values, private contacts, private
+    infrastructure details, logs, screenshots, configs, or database output are
+    recorded.
 - 2026-05-11: Production backup schedule proof status recorded.
   - Scope: classification-only post-launch status. It does not run backup,
     restore, rclone, backup deletion, retention cleanup, rollback, R4 access,
