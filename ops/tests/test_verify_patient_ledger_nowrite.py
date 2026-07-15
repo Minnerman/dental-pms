@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[3] / "ops" / "verify_patient_ledger_nowrite.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "verify_patient_ledger_nowrite.py"
 SPEC = importlib.util.spec_from_file_location("verify_patient_ledger_nowrite", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 SMOKE = importlib.util.module_from_spec(SPEC)
