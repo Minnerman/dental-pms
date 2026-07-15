@@ -7,7 +7,7 @@ from app.models.user import Role
 from app.services.users import create_user, get_user_by_id, update_user
 
 
-def test_disabling_user_invalidates_existing_token_and_blocks_login(api_client):
+def test_disabling_user_rejects_existing_token_and_blocks_login(api_client):
     email = f"disabled-auth-{uuid4().hex[:8]}@example.com"
     password = "ChangeMe123!444"
 
