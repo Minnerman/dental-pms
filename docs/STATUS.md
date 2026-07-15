@@ -72,6 +72,37 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-07-15: First scheduled backup post-retention status recorded.
+  - Scope: classification-only post-pause status. It does not run backup,
+    restore, rclone, backup deletion, retention cleanup, rollback, R4 access,
+    import retry, invoice/payment/staging import, or unguarded DB writes.
+  - Evidence packet date: 2026-07-15.
+  - Responder role: Codex local operator / classification-only post-pause
+    status.
+  - Evidence packet: Dental PMS live/main PMS `yes`; R4 remains rollback
+    fallback `yes`; post-launch stability `pass`; backup schedule status `yes`;
+    backup retention status `yes`; backup retention target `30 backups`; first
+    scheduled backup after retention remediation `pass`; backup run type
+    `scheduled`; backup deletion/cleanup executed by this inspection `no`;
+    rollback required `no`; rollback executed `not required`; deferred finance
+    backlog count `1017`; deferred finance backlog status `pending`;
+    invoice/payment/staging import status `blocked`;
+    `finance_import_ready=true` for the accepted mapped-only/deferred-row
+    opening-balance scope only.
+  - Reason classification: the installed schedule remains enabled and active,
+    a natural scheduled backup ran after retention remediation and completed
+    successfully with the accepted 30-backup setting, and current post-launch
+    service stability checks pass.
+  - Blocker classification: deferred finance backlog remains `1017` and
+    pending; invoice/payment/staging import remains blocked.
+  - Safety confirmations: no secrets exposed `yes`; no patient data exposed
+    `yes`; no private paths exposed `yes`; no backup contents exposed `yes`.
+  - No sensitive material is recorded. No credentials, tokens, DSNs, private
+    URLs, exact private paths, raw dumps, generated rclone config, OAuth
+    material, service-account material, crypt passwords or salts, backup
+    contents, backup filenames, patient data, patient-level identifiers, row
+    values, private contacts, private infrastructure details, logs,
+    screenshots, configs, or database output are recorded.
 - 2026-05-11: Production backup retention remediation status recorded.
   - Scope: classification-only post-launch status. It does not run backup,
     restore, rclone, backup deletion, retention cleanup, rollback, R4 access,

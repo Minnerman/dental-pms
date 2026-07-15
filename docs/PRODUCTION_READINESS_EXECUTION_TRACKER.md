@@ -1,9 +1,9 @@
 # Dental PMS Production Readiness Execution Tracker
 
-Status date: 2026-05-11
+Status date: 2026-07-15
 
 Baseline:
-`origin/master@16986e52f99d10790928bc5c174299e46327a9c5`
+`origin/master@b8539403997fc707271bb9243bd23e3a2d13a5ba`
 
 This is a docs-only production readiness execution tracker and gap
 assessment. It records classification-only production execution status, but it
@@ -465,6 +465,27 @@ classification: deferred finance backlog remains `1017`; invoice/payment/staging
 import remains blocked. Safety confirmations: no secrets exposed, no patient
 data exposed, no private paths exposed, and no backup contents exposed.
 
+First scheduled backup post-retention status was recorded on 2026-07-15 using
+Codex local operator / classification-only post-pause status. Dental PMS
+live/main PMS is `yes`; R4 remains rollback fallback is `yes`; post-launch
+stability is `pass`; backup schedule status is `yes`; backup retention status
+is `yes`; backup retention target is `30 backups`; first scheduled backup after
+retention remediation is `pass`; backup run type is `scheduled`; backup
+deletion/cleanup executed by this inspection is `no`; rollback required is
+`no`; rollback executed is `not required`; deferred finance backlog count is
+`1017`; deferred finance backlog status is `pending`; invoice/payment/staging
+import status is `blocked`; `finance_import_ready=true` applies only to the
+accepted mapped-only/deferred-row opening-balance scope. Reason classification:
+the installed schedule remains enabled and active, a natural scheduled backup
+ran after retention remediation and completed successfully with the accepted
+30-backup setting, and current post-launch service stability checks pass.
+Blocker classification: deferred finance backlog remains `1017` and pending;
+invoice/payment/staging import remains blocked. Safety confirmations: no
+secrets exposed, no patient data exposed, no private paths exposed, and no
+backup contents exposed. This inspection did not run a backup, deletion,
+cleanup, restore, rclone, rollback, R4 access, import retry, or unguarded DB
+write.
+
 No patient-level contents, raw artefact contents, exact artefact paths, DSNs,
 production passwords, live credentials, or secrets belong in this tracker.
 
@@ -594,6 +615,7 @@ data or start cutover.
 | Post-launch stabilization status | Recorded / stable with finance backlog | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only post-launch status; Dental PMS live/main PMS `yes`; R4 remains rollback fallback `yes`; production smoke status `pass`; backup schedule status `pending`; support/monitoring status `yes`; rollback required `no`; rollback executed `not required`; opening-balance accepted scope status `pass`; deferred finance backlog count `1017`; invoice/payment/staging import status `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope only; no secrets, patient data, private paths, or backup contents exposed | Reason classification: production smoke and cutover evidence are recorded as pass/yes; backup/restore readiness evidence is accepted while production backup schedule installation proof remains pending; support/monitoring evidence is accepted; guarded mapped-only opening-balance scope passed; invoice/payment/staging and deferred finance rows remain backlog. Blocker classification: deferred finance backlog requires later owner/operator mapping/reconciliation; invoice/payment/staging import remains blocked; production backup schedule proof remains pending |
 | Production backup schedule proof status | Recorded / schedule proven, retention mismatch | Evidence packet date `2026-05-11`; responder role Codex local operator / classification-only post-launch status; production backup schedule proof `yes`; backup schedule status `yes`; backup retention status `no`; rollback required `no`; rollback executed `not required`; deferred finance backlog count `1017`; invoice/payment/staging import status `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope only; no secrets, patient data, private paths, or backup contents exposed | Reason classification: production backup scheduling is installed, enabled, active, and has run successfully under the configured timer; scheduled backup retention is not configured to the accepted 30-backup retention model. Blocker classification: production backup schedule proof is no longer pending, but scheduled backup retention configuration needs owner/operator remediation to match the accepted 30-backup model |
 | Production backup retention remediation status | Recorded / schedule and retention proven | Evidence packet date `2026-05-11`; responder role Owner/operator + Codex local operator / classification-only post-launch status; production backup schedule proof `yes`; backup schedule status `yes`; backup retention status `yes`; backup retention target `30 backups`; privileged retention update performed `yes`; backup run executed `no`; backup deletion/cleanup executed `no`; rollback required `no`; rollback executed `not required`; deferred finance backlog count `1017`; invoice/payment/staging import status `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope only; no secrets, patient data, private paths, or backup contents exposed | Reason classification: installed production backup retention now matches the accepted 30-backup model; schedule is enabled and active; no backup run, deletion, cleanup, restore, rclone, import, or rollback executed. Blocker classification: deferred finance backlog remains `1017`; invoice/payment/staging import remains blocked |
+| First scheduled backup post-retention status | Recorded / scheduled backup passed | Evidence packet date `2026-07-15`; responder role Codex local operator / classification-only post-pause status; Dental PMS live/main PMS `yes`; R4 remains rollback fallback `yes`; post-launch stability `pass`; backup schedule status `yes`; backup retention status `yes`; backup retention target `30 backups`; first scheduled backup after retention remediation `pass`; backup run type `scheduled`; backup deletion/cleanup executed by this inspection `no`; rollback required `no`; rollback executed `not required`; deferred finance backlog count `1017`; deferred finance backlog status `pending`; invoice/payment/staging import status `blocked`; `finance_import_ready=true` for the accepted mapped-only/deferred-row opening-balance scope only; no secrets, patient data, private paths, or backup contents exposed | Reason classification: the installed schedule remains enabled and active, a natural scheduled backup ran after retention remediation and completed successfully with the accepted 30-backup setting, and current post-launch service stability checks pass. Blocker classification: deferred finance backlog remains `1017` and pending; invoice/payment/staging import remains blocked |
 
 ## Owner/Operator Evidence Status Record - 2026-05-10
 
