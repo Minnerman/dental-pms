@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_capability
 from app.models.appointment import Appointment
 from app.models.invoice import Invoice, InvoiceLine, InvoiceStatus, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
@@ -443,7 +443,7 @@ def add_payment(
     payload: PaymentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("billing.payments.write")),
     request_id: str | None = Header(default=None),
 ):
     invoice = db.get(Invoice, invoice_id)

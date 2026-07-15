@@ -457,6 +457,11 @@ test("patient ledger save shows in-flight state and guards repeat submit", async
     last_name: `LEDGER${unique}`,
   });
   const token = await primePageAuth(page, request);
+  const currentUserResponse = await request.get(`${baseUrl}/api/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(currentUserResponse.ok()).toBeTruthy();
+  const currentUserEmail = ((await currentUserResponse.json()) as { email: string }).email;
   const reference = `LEDGER-${unique}`;
   const note = `Patient ledger proof ${unique}`;
 
@@ -541,6 +546,13 @@ test("patient ledger save shows in-flight state and guards repeat submit", async
   await expect(page.getByRole("heading", { name: "Add payment" })).toHaveCount(0, {
     timeout: 15_000,
   });
+
+  await page.getByTestId("patient-tab-Financial").click();
+  await page.getByTestId("patient-financial-ledger").click();
+  const createdRow = page.locator("tbody tr").filter({ hasText: reference });
+  await expect(createdRow).toContainText("Card");
+  await expect(createdRow).toContainText(note);
+  await expect(createdRow).toContainText(currentUserEmail);
 
   const verifyResponse = await request.get(`${baseUrl}/api/patients/${patientId}/ledger?limit=200`, {
     headers: { Authorization: `Bearer ${token}` },

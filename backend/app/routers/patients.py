@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, literal, nullslast, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_capability
 from app.models.audit_log import AuditLog
 from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
@@ -1011,7 +1011,7 @@ def add_patient_payment(
     payload: LedgerPaymentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("billing.payments.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
@@ -1019,6 +1019,13 @@ def add_patient_payment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if payload.amount_pence <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be positive")
+    if payload.related_invoice_id is not None:
+        related_invoice = db.get(Invoice, payload.related_invoice_id)
+        if not related_invoice or related_invoice.patient_id != patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Related invoice does not belong to this patient",
+            )
 
     entry = PatientLedgerEntry(
         patient_id=patient_id,
@@ -1055,7 +1062,7 @@ def add_patient_charge(
     payload: LedgerChargeCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("billing.payments.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
@@ -1065,6 +1072,13 @@ def add_patient_charge(
         raise HTTPException(status_code=400, detail="Charge amount must be positive")
     if payload.entry_type not in (LedgerEntryType.charge, LedgerEntryType.adjustment):
         raise HTTPException(status_code=400, detail="Invalid ledger entry type")
+    if payload.related_invoice_id is not None:
+        related_invoice = db.get(Invoice, payload.related_invoice_id)
+        if not related_invoice or related_invoice.patient_id != patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Related invoice does not belong to this patient",
+            )
 
     entry = PatientLedgerEntry(
         patient_id=patient_id,
@@ -1081,7 +1095,11 @@ def add_patient_charge(
     log_event(
         db,
         actor=user,
-        action="ledger.charge_recorded",
+        action=(
+            "ledger.adjustment_recorded"
+            if payload.entry_type == LedgerEntryType.adjustment
+            else "ledger.charge_recorded"
+        ),
         entity_type="patient",
         entity_id=str(patient_id),
         before_obj=None,

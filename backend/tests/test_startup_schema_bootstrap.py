@@ -44,11 +44,6 @@ def test_startup_does_not_call_metadata_create_all(monkeypatch):
         calls.append("ensure_capabilities")
         return []
 
-    def fake_backfill_user_capabilities(db):
-        assert db is session
-        calls.append("backfill_user_capabilities")
-        return 0
-
     def fake_ensure_default_templates(db, *, actor):
         assert db is session
         assert actor is session.actor
@@ -62,7 +57,6 @@ def test_startup_does_not_call_metadata_create_all(monkeypatch):
     monkeypatch.setattr(app_main, "SessionLocal", fake_session_local)
     monkeypatch.setattr(app_main, "seed_initial_admin", fake_seed_initial_admin)
     monkeypatch.setattr(app_main, "ensure_capabilities", fake_ensure_capabilities)
-    monkeypatch.setattr(app_main, "backfill_user_capabilities", fake_backfill_user_capabilities)
     monkeypatch.setattr(app_main, "ensure_default_templates", fake_ensure_default_templates)
     monkeypatch.setattr(MetaData, "create_all", fake_create_all)
 
@@ -74,7 +68,6 @@ def test_startup_does_not_call_metadata_create_all(monkeypatch):
         "session_open",
         "seed_initial_admin",
         "ensure_capabilities",
-        "backfill_user_capabilities",
         "ensure_default_templates",
     ]
     assert session.scalar_calls == 1
