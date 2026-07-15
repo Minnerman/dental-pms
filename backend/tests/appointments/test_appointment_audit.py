@@ -99,12 +99,13 @@ def test_appointment_audit_captures_reschedule_and_cancel_details(api_client, au
     entries = audit_res.json()
 
     actions = [entry["action"] for entry in entries]
-    assert actions.count("appointment.updated") >= 2
+    assert "appointment.rescheduled" in actions
+    assert "appointment.cancelled" in actions
 
     reschedule_entry = next(
         entry
         for entry in entries
-        if entry["action"] == "appointment.updated"
+        if entry["action"] == "appointment.rescheduled"
         and entry.get("before_json", {}).get("starts_at") == start.isoformat()
         and entry.get("after_json", {}).get("starts_at") == moved_start.isoformat()
     )
@@ -113,7 +114,7 @@ def test_appointment_audit_captures_reschedule_and_cancel_details(api_client, au
     cancel_entry = next(
         entry
         for entry in entries
-        if entry["action"] == "appointment.updated"
+        if entry["action"] == "appointment.cancelled"
         and entry.get("after_json", {}).get("status") == "cancelled"
     )
     assert cancel_entry["after_json"]["cancel_reason"] == cancel_reason

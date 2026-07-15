@@ -3,11 +3,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_capability
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.audit_log import AuditLog
 from app.models.estimate import Estimate
@@ -23,8 +23,9 @@ from app.schemas.audit_log import AuditLogOut
 from app.schemas.estimate import EstimateOut
 from app.services.appointments_snapshot import build_appointments_snapshot
 from app.services.audit import log_event, snapshot_model
+from app.services.capabilities import get_user_capabilities
 from app.services.run_sheet_pdf import build_run_sheet_pdf
-from app.services.schedule import load_schedule, validate_appointment_window
+from app.services.schedule import LOCAL_TZ, load_schedule, validate_appointment_window
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -34,14 +35,24 @@ def find_conflicting_appointments(
     clinician_user_id: int | None,
     starts_at: datetime,
     ends_at: datetime,
+    location_type: AppointmentLocationType | None = None,
+    location: str | None = None,
     exclude_id: int | None = None,
 ) -> list[Appointment]:
-    if not clinician_user_id:
+    resource_filters = []
+    if clinician_user_id:
+        resource_filters.append(Appointment.clinician_user_id == clinician_user_id)
+    normalized_location = (location or "").strip().lower()
+    if location_type == AppointmentLocationType.clinic and normalized_location:
+        resource_filters.append(
+            func.lower(func.trim(Appointment.location)) == normalized_location
+        )
+    if not resource_filters:
         return []
     stmt = (
         select(Appointment)
         .where(Appointment.deleted_at.is_(None))
-        .where(Appointment.clinician_user_id == clinician_user_id)
+        .where(or_(*resource_filters))
         .where(Appointment.starts_at < ends_at, Appointment.ends_at > starts_at)
         .where(Appointment.status.notin_([AppointmentStatus.cancelled, AppointmentStatus.no_show]))
         .options(selectinload(Appointment.patient))
@@ -49,6 +60,93 @@ def find_conflicting_appointments(
     if exclude_id is not None:
         stmt = stmt.where(Appointment.id != exclude_id)
     return list(db.scalars(stmt))
+
+
+def _require_user_capabilities(db: Session, user: User, *codes: str) -> None:
+    available = {capability.code for capability in get_user_capabilities(db, user.id)}
+    if any(code not in available for code in codes):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+def _validate_basic_appointment_window(starts_at: datetime, ends_at: datetime) -> None:
+    if starts_at.tzinfo is None or starts_at.utcoffset() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Appointment start time must include a timezone.",
+        )
+    if ends_at.tzinfo is None or ends_at.utcoffset() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Appointment end time must include a timezone.",
+        )
+    if ends_at <= starts_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Appointment end time must be after start time.",
+        )
+    if starts_at.astimezone(LOCAL_TZ).date() != ends_at.astimezone(LOCAL_TZ).date():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Appointments must start and end on the same day.",
+        )
+
+
+def _target_value(payload: AppointmentUpdate, field: str, current):
+    if field not in payload.model_fields_set:
+        return current
+    value = getattr(payload, field)
+    if value is None and field in {"starts_at", "ends_at", "status", "location_type"}:
+        return current
+    return value
+
+
+def _update_capability_codes(
+    appointment: Appointment,
+    payload: AppointmentUpdate,
+) -> set[str]:
+    fields = payload.model_fields_set
+    target_status = _target_value(payload, "status", appointment.status)
+    required: set[str] = set()
+
+    reschedule_fields = {
+        "starts_at",
+        "ends_at",
+        "clinician_user_id",
+        "location",
+        "location_type",
+        "location_text",
+        "is_domiciliary",
+        "visit_address",
+    }
+    if any(
+        field in fields
+        and _target_value(payload, field, getattr(appointment, field))
+        != getattr(appointment, field)
+        for field in reschedule_fields
+    ):
+        required.add("appointments.reschedule")
+
+    status_changed = target_status != appointment.status
+    cancel_reason_changed = (
+        "cancel_reason" in fields and payload.cancel_reason != appointment.cancel_reason
+    )
+    if target_status in {AppointmentStatus.cancelled, AppointmentStatus.no_show} and (
+        status_changed or cancel_reason_changed
+    ):
+        required.add("appointments.cancel")
+    elif status_changed or cancel_reason_changed:
+        required.add("appointments.write")
+
+    general_fields = {"appointment_type", "clinician"}
+    if any(
+        field in fields and getattr(payload, field) != getattr(appointment, field)
+        for field in general_fields
+    ):
+        required.add("appointments.write")
+
+    if not required:
+        required.add("appointments.write")
+    return required
 
 
 def conflict_response(conflicts: list[Appointment]) -> JSONResponse:
@@ -82,7 +180,7 @@ def list_appointments_range(
     end: date,
     location: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
 ):
     start_dt = datetime.combine(start, time.min, tzinfo=timezone.utc)
     end_dt = datetime.combine(end, time.min, tzinfo=timezone.utc)
@@ -107,7 +205,7 @@ def appointments_snapshot(
     view: Literal["day", "week"] = Query(default="day"),
     mask_names: bool = Query(default=True),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
 ):
     return build_appointments_snapshot(
         db,
@@ -120,7 +218,7 @@ def appointments_snapshot(
 @router.get("", response_model=list[AppointmentOut])
 def list_appointments(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
     patient_id: int | None = Query(default=None),
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
@@ -168,12 +266,21 @@ def create_appointment(
     payload: AppointmentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("appointments.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, payload.patient_id)
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    if payload.clinician_user_id is not None:
+        clinician = db.get(User, payload.clinician_user_id)
+        if not clinician or not clinician.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Clinician not found",
+            )
+
+    _validate_basic_appointment_window(payload.starts_at, payload.ends_at)
 
     location_type = payload.location_type
     if location_type is None:
@@ -245,7 +352,7 @@ def create_appointment(
 def get_appointment(
     appointment_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
 ):
     appt = db.get(Appointment, appointment_id)
     if not appt or appt.deleted_at is not None:
@@ -266,9 +373,48 @@ def update_appointment(
     if not appt or appt.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
 
-    if payload.starts_at is not None or payload.ends_at is not None:
-        starts_at = payload.starts_at or appt.starts_at
-        ends_at = payload.ends_at or appt.ends_at
+    required_capabilities = _update_capability_codes(appt, payload)
+    _require_user_capabilities(db, user, *sorted(required_capabilities))
+
+    fields = payload.model_fields_set
+    starts_at = _target_value(payload, "starts_at", appt.starts_at)
+    ends_at = _target_value(payload, "ends_at", appt.ends_at)
+    target_status = _target_value(payload, "status", appt.status)
+    target_clinician_user_id = _target_value(
+        payload,
+        "clinician_user_id",
+        appt.clinician_user_id,
+    )
+    target_location_type = _target_value(
+        payload,
+        "location_type",
+        appt.location_type,
+    )
+    target_location = _target_value(payload, "location", appt.location)
+    target_location_text = _target_value(
+        payload,
+        "location_text",
+        appt.location_text,
+    )
+    if "location_type" not in fields and "is_domiciliary" in fields:
+        target_location_type = (
+            AppointmentLocationType.visit
+            if payload.is_domiciliary
+            else AppointmentLocationType.clinic
+        )
+    if "location_text" not in fields and "visit_address" in fields:
+        target_location_text = payload.visit_address
+
+    if "clinician_user_id" in fields and target_clinician_user_id is not None:
+        clinician = db.get(User, target_clinician_user_id)
+        if not clinician or not clinician.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Clinician not found",
+            )
+
+    if "starts_at" in fields or "ends_at" in fields:
+        _validate_basic_appointment_window(starts_at, ends_at)
         allow_outside = bool(payload.allow_outside_hours) and user.role == Role.superadmin
         if not allow_outside:
             hours, closures, overrides = load_schedule(db)
@@ -276,83 +422,121 @@ def update_appointment(
             if not ok:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
-    if payload.starts_at is not None or payload.ends_at is not None or payload.clinician_user_id is not None:
-        starts_at = payload.starts_at or appt.starts_at
-        ends_at = payload.ends_at or appt.ends_at
-        clinician_user_id = (
-            payload.clinician_user_id
-            if payload.clinician_user_id is not None
-            else appt.clinician_user_id
+    target_cancel_reason = (
+        payload.cancel_reason if "cancel_reason" in fields else appt.cancel_reason
+    )
+    if target_status == AppointmentStatus.cancelled and not (
+        target_cancel_reason or ""
+    ).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cancellation reason is required.",
         )
+
+    reschedule_fields = {
+        "starts_at",
+        "ends_at",
+        "clinician_user_id",
+        "location",
+        "location_type",
+        "location_text",
+        "is_domiciliary",
+        "visit_address",
+    }
+    reschedule_changed = any(
+        field in fields
+        and _target_value(payload, field, getattr(appt, field)) != getattr(appt, field)
+        for field in reschedule_fields
+    )
+    if reschedule_changed and target_status not in {
+        AppointmentStatus.cancelled,
+        AppointmentStatus.no_show,
+    }:
         conflicts = find_conflicting_appointments(
             db,
-            clinician_user_id,
+            target_clinician_user_id,
             starts_at,
             ends_at,
+            location_type=target_location_type,
+            location=target_location,
             exclude_id=appt.id,
         )
         if conflicts:
             return conflict_response(conflicts)
 
     before_data = snapshot_model(appt)
-    if payload.starts_at is not None:
-        appt.starts_at = payload.starts_at
-    if payload.ends_at is not None:
-        appt.ends_at = payload.ends_at
-    if payload.status is not None:
-        appt.status = payload.status
-        if appt.status in (AppointmentStatus.cancelled, AppointmentStatus.no_show):
-            if payload.cancel_reason is not None:
-                appt.cancel_reason = payload.cancel_reason
-            if not appt.cancelled_at:
-                appt.cancelled_at = datetime.now(timezone.utc)
-            appt.cancelled_by_user_id = user.id
+    previous_status = appt.status
+    if "starts_at" in fields:
+        appt.starts_at = starts_at
+    if "ends_at" in fields:
+        appt.ends_at = ends_at
+    if "clinician" in fields:
+        appt.clinician = payload.clinician
+    if "clinician_user_id" in fields:
+        appt.clinician_user_id = target_clinician_user_id
+    if "appointment_type" in fields:
+        appt.appointment_type = payload.appointment_type
+
+    location_fields = {
+        "location",
+        "location_type",
+        "location_text",
+        "is_domiciliary",
+        "visit_address",
+    }
+    location_changed = bool(fields & location_fields)
+    if location_changed:
+        appt.location = target_location
+        appt.location_type = target_location_type
+        appt.location_text = target_location_text
+        if appt.location_type == AppointmentLocationType.visit:
+            if not (appt.location_text or "").strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Visit address required",
+                )
+            appt.is_domiciliary = True
+            appt.visit_address = appt.location_text
         else:
-            if payload.cancel_reason is not None:
-                appt.cancel_reason = None
+            appt.is_domiciliary = False
+            appt.visit_address = None
+            appt.location_text = None
+
+    if "status" in fields:
+        appt.status = target_status
+    if "status" in fields or "cancel_reason" in fields:
+        if target_status in {AppointmentStatus.cancelled, AppointmentStatus.no_show}:
+            appt.cancel_reason = target_cancel_reason
+            if previous_status != target_status or not appt.cancelled_at:
+                appt.cancelled_at = datetime.now(timezone.utc)
+                appt.cancelled_by_user_id = user.id
+        else:
+            appt.cancel_reason = None
             appt.cancelled_at = None
             appt.cancelled_by_user_id = None
-    if payload.clinician is not None:
-        appt.clinician = payload.clinician
-    if payload.clinician_user_id is not None:
-        appt.clinician_user_id = payload.clinician_user_id
-    if payload.appointment_type is not None:
-        appt.appointment_type = payload.appointment_type
-    if payload.location is not None:
-        appt.location = payload.location
-    if payload.location_type is not None:
-        appt.location_type = payload.location_type
-    if payload.location_text is not None:
-        appt.location_text = payload.location_text
-    if payload.is_domiciliary is not None:
-        appt.is_domiciliary = payload.is_domiciliary
-    if payload.visit_address is not None:
-        appt.visit_address = payload.visit_address
-    if payload.cancel_reason is not None and payload.status is None:
-        appt.cancel_reason = payload.cancel_reason
-    if payload.location_type is None and payload.is_domiciliary is not None:
-        appt.location_type = (
-            AppointmentLocationType.visit
-            if appt.is_domiciliary
-            else AppointmentLocationType.clinic
+
+    if appt.location_type == AppointmentLocationType.visit and not (
+        appt.location_text or ""
+    ).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Visit address required",
         )
-    if payload.location_text is None and payload.visit_address is not None:
-        appt.location_text = appt.visit_address
-    if appt.location_type == AppointmentLocationType.visit:
-        if not (appt.location_text or "").strip():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visit address required")
-        appt.is_domiciliary = True
-        appt.visit_address = appt.location_text
+
+    if target_status == AppointmentStatus.cancelled and previous_status != target_status:
+        audit_action = "appointment.cancelled"
+    elif target_status == AppointmentStatus.no_show and previous_status != target_status:
+        audit_action = "appointment.no_show_recorded"
+    elif reschedule_changed:
+        audit_action = "appointment.rescheduled"
     else:
-        appt.is_domiciliary = False
-        appt.visit_address = None
-        appt.location_text = None
+        audit_action = "appointment.updated"
     appt.updated_by_user_id = user.id
     db.add(appt)
     log_event(
         db,
         actor=user,
-        action="appointment.updated",
+        action=audit_action,
         entity_type="appointment",
         entity_id=str(appt.id),
         before_data=before_data,
@@ -370,7 +554,7 @@ def archive_appointment(
     appointment_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("appointments.write")),
     request_id: str | None = Header(default=None),
 ):
     appt = db.get(Appointment, appointment_id)
@@ -405,7 +589,7 @@ def restore_appointment(
     appointment_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("appointments.write")),
     request_id: str | None = Header(default=None),
 ):
     appt = db.get(Appointment, appointment_id)
@@ -439,7 +623,7 @@ def restore_appointment(
 def appointment_audit(
     appointment_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
@@ -460,7 +644,7 @@ def appointment_audit(
 def appointment_estimates(
     appointment_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
 ):
     appt = db.get(Appointment, appointment_id)
     if not appt or appt.deleted_at is not None:
@@ -475,7 +659,7 @@ def attach_estimate_to_appointment(
     estimate_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("appointments.write")),
     request_id: str | None = Header(default=None),
 ):
     appt = db.get(Appointment, appointment_id)
@@ -514,7 +698,7 @@ def get_run_sheet_pdf(
     end: date | None = Query(default=None),
     location: str | None = Query(default="visit"),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("appointments.view")),
 ):
     end_date = end or date
     start_dt = datetime.combine(date, time.min, tzinfo=timezone.utc)

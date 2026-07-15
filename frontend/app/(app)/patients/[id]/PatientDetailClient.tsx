@@ -989,6 +989,7 @@ export default function PatientDetailClient({
   const [bookingLocationText, setBookingLocationText] = useState("");
   const [bookingSaving, setBookingSaving] = useState(false);
   const [bookingMarkRecall, setBookingMarkRecall] = useState(false);
+  const [bookingNotice, setBookingNotice] = useState<string | null>(null);
   const [recallInterval, setRecallInterval] = useState("6");
   const [recallDueDate, setRecallDueDate] = useState("");
   const [recallStatus, setRecallStatus] = useState<RecallStatus>("due");
@@ -1187,6 +1188,9 @@ export default function PatientDetailClient({
     {}
   );
   const [chartingUrlApplied, setChartingUrlApplied] = useState(false);
+  const canWriteAppointments = Boolean(
+    ledgerCapabilities?.includes("appointments.write")
+  );
   const chartingFiltersKey = useMemo(
     () =>
       JSON.stringify({
@@ -3751,6 +3755,11 @@ export default function PatientDetailClient({
   }, []);
 
   const openBookingModal = useCallback(() => {
+    if (!canWriteAppointments) {
+      setBookingNotice("You do not have permission to create appointments.");
+      return;
+    }
+    setBookingNotice(null);
     const slot = getDefaultBookingSlot();
     setBookingDate(slot.date);
     setBookingTime(slot.time);
@@ -3766,7 +3775,7 @@ export default function PatientDetailClient({
       setBookingLocationText("");
     }
     setShowBookingModal(true);
-  }, [patient]);
+  }, [canWriteAppointments, patient]);
 
   useEffect(() => {
     if (!patient) return;
@@ -3783,12 +3792,25 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (!patient || handledBookParam) return;
     if (searchParams?.get("book") === "1") {
+      if (ledgerCapabilities === null) return;
       activateContentTab("summary");
-      openBookingModal();
-      setPendingScrollTarget("patient-book-appointment");
+      if (canWriteAppointments) {
+        openBookingModal();
+        setPendingScrollTarget("patient-book-appointment");
+      } else {
+        setBookingNotice("You do not have permission to create appointments.");
+      }
       setHandledBookParam(true);
     }
-  }, [patient, handledBookParam, searchParams, openBookingModal, activateContentTab]);
+  }, [
+    activateContentTab,
+    canWriteAppointments,
+    handledBookParam,
+    ledgerCapabilities,
+    openBookingModal,
+    patient,
+    searchParams,
+  ]);
 
   useEffect(() => {
     if (!pendingScrollTarget) return;
@@ -5513,6 +5535,10 @@ export default function PatientDetailClient({
 
   async function createBooking(e: React.FormEvent) {
     e.preventDefault();
+    if (!canWriteAppointments) {
+      setError("You do not have permission to create appointments.");
+      return;
+    }
     if (!bookingDate || !bookingTime) return;
     const start = new Date(`${bookingDate}T${bookingTime}`);
     if (Number.isNaN(start.getTime())) return;
@@ -5553,8 +5579,9 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to create appointment (HTTP ${res.status})`);
+        throw new Error(
+          await ledgerResponseError(res, "Failed to create appointment.")
+        );
       }
       const created = (await res.json()) as AppointmentSummary;
       setShowBookingModal(false);
@@ -6028,16 +6055,18 @@ export default function PatientDetailClient({
                           ? "unavailable"
                           : formatCurrency(financeBalance)}
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => {
-                          openBookingModal();
-                          setPendingScrollTarget("patient-book-appointment");
-                        }}
-                      >
-                        Book appointment
-                      </button>
+                      {canWriteAppointments && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            openBookingModal();
+                            setPendingScrollTarget("patient-book-appointment");
+                          }}
+                        >
+                          Book appointment
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-secondary"
@@ -6050,6 +6079,7 @@ export default function PatientDetailClient({
                       </button>
                     </div>
                   </div>
+                  {bookingNotice && <div className="notice">{bookingNotice}</div>}
 
                   <div className="summary-grid">
                     <div className="stack">
@@ -11509,7 +11539,7 @@ export default function PatientDetailClient({
             </div>
           )}
 
-          {showBookingModal && (
+          {showBookingModal && canWriteAppointments && (
             <div
               className="card"
               id="patient-book-appointment"

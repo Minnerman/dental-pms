@@ -493,6 +493,30 @@ function parseConflictResponse(raw: string): ConflictApiResponse | null {
   }
 }
 
+async function appointmentResponseError(response: Response, fallback: string) {
+  try {
+    const data = (await response.json()) as {
+      detail?: string | Array<{ msg?: string }>;
+      message?: string;
+    };
+    if (typeof data.detail === "string" && data.detail.trim()) {
+      return data.detail;
+    }
+    if (Array.isArray(data.detail)) {
+      const messages = data.detail
+        .map((item) => item.msg?.trim())
+        .filter(Boolean);
+      if (messages.length > 0) return messages.join(" ");
+    }
+    if (typeof data.message === "string" && data.message.trim()) {
+      return data.message;
+    }
+  } catch {
+    // Keep unexpected backend responses out of the user-facing error surface.
+  }
+  return fallback;
+}
+
 function toConflictItems(conflicts: ConflictApiItem[]) {
   return conflicts
     .map((conflict) => {
@@ -663,13 +687,19 @@ export default function AppointmentsPage() {
   const [endsAt, setEndsAt] = useState("");
   const [durationMinutes, setDurationMinutes] = useState<number | null>(30);
   const bookIntent = searchParams?.get("book") === "1";
-  const [showNewModal, setShowNewModal] = useState(bookIntent);
+  const [showNewModal, setShowNewModal] = useState(false);
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [downloadingRunSheet, setDownloadingRunSheet] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [appointmentCapabilities, setAppointmentCapabilities] = useState<string[] | null>(
+    null
+  );
+  const [appointmentCapabilityError, setAppointmentCapabilityError] = useState<
+    string | null
+  >(null);
   const [diaryUndo, setDiaryUndo] = useState<DiaryUndoState | null>(null);
   const [conflictChecking, setConflictChecking] = useState(false);
   const conflictCheckKeyRef = useRef<string>("");
@@ -769,6 +799,17 @@ export default function AppointmentsPage() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [auditEntries, setAuditEntries] = useState<AppointmentAuditEntry[]>([]);
+  const canWriteAppointments = Boolean(
+    appointmentCapabilities?.includes("appointments.write")
+  );
+  const canCancelAppointments = Boolean(
+    appointmentCapabilities?.includes("appointments.cancel")
+  );
+  const canRescheduleAppointments = Boolean(
+    appointmentCapabilities?.includes("appointments.reschedule")
+  );
+  const canEditAppointments =
+    canWriteAppointments || canCancelAppointments || canRescheduleAppointments;
   const diaryUndoTokenRef = useRef(0);
   // Keyboard bindings are intentionally constrained for predictable diary shortcuts.
   useEffect(() => {
@@ -805,7 +846,7 @@ export default function AppointmentsPage() {
         return;
       }
       if (isEditableTarget(event.target)) return;
-      if (key === "n") {
+      if (key === "n" && canWriteAppointments) {
         event.preventDefault();
         setShowNewModal(true);
         return;
@@ -826,7 +867,7 @@ export default function AppointmentsPage() {
     return () => {
       window.removeEventListener("keydown", handleShortcut);
     };
-  }, [showNewModal]);
+  }, [canWriteAppointments, showNewModal]);
 
   useEffect(() => {
     if (!showNewModal) return;
@@ -1185,7 +1226,8 @@ export default function AppointmentsPage() {
       .map((item) => item.id);
   }, [diaryFilteredAppointments]);
 
-  const isRescheduleLocked = rescheduleSavingId !== null;
+  const isRescheduleLocked =
+    rescheduleSavingId !== null || !canRescheduleAppointments;
 
   const highlightScrollTime = useMemo(() => {
     if (!highlightedAppointmentId) return undefined;
@@ -1477,6 +1519,7 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (didAutoOpen.current) return;
     if (!searchParams || searchParams.get("book") !== "1") return;
+    if (appointmentCapabilities === null) return;
     didAutoOpen.current = true;
     const startParam = searchParams.get("start");
     if (startParam) {
@@ -1517,7 +1560,12 @@ export default function AppointmentsPage() {
       setClinicianUserId(clinicianIdParam);
       setModalClinicianUserId(clinicianIdParam);
     }
-    setShowNewModal(true);
+    if (canWriteAppointments) {
+      setShowNewModal(true);
+    } else {
+      setShowNewModal(false);
+      setNotice("You can view appointments, but you cannot create them.");
+    }
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("book");
     nextParams.delete("reason");
@@ -1526,7 +1574,7 @@ export default function AppointmentsPage() {
     router.replace(nextQuery ? `/appointments?${nextQuery}` : "/appointments", {
       scroll: false,
     });
-  }, [router, searchParams]);
+  }, [appointmentCapabilities, canWriteAppointments, router, searchParams]);
 
   useEffect(() => {
     if (!showNewModal) {
@@ -1622,7 +1670,7 @@ export default function AppointmentsPage() {
   ]);
 
   useEffect(() => {
-    if (!isEditingAppointment || !selectedAppointment) {
+    if (!canRescheduleAppointments || !isEditingAppointment || !selectedAppointment) {
       setEditConflictWarning(null);
       return;
     }
@@ -1656,6 +1704,7 @@ export default function AppointmentsPage() {
     setEditConflictWarning(buildConflictWarning(conflicts, clinicianId));
   }, [
     buildConflictWarning,
+    canRescheduleAppointments,
     editClinicianUserId,
     editEndsAt,
     editStartsAt,
@@ -1818,6 +1867,29 @@ export default function AppointmentsPage() {
     }
   }, [router]);
 
+  const loadAppointmentCapabilities = useCallback(async () => {
+    setAppointmentCapabilityError(null);
+    try {
+      const res = await apiFetch("/api/me/capabilities");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error("Appointment permissions could not be verified.");
+      }
+      setAppointmentCapabilities((await res.json()) as string[]);
+    } catch (err) {
+      setAppointmentCapabilities([]);
+      setAppointmentCapabilityError(
+        err instanceof Error
+          ? err.message
+          : "Appointment permissions could not be verified."
+      );
+    }
+  }, [router]);
+
   async function ensureNotesLoaded(appointmentId: number) {
     if (noteCache[appointmentId]) return;
     try {
@@ -1949,6 +2021,14 @@ export default function AppointmentsPage() {
     cancelReasonText?: string,
     button?: HTMLButtonElement | null
   ): Promise<boolean> {
+    const allowed =
+      status === "cancelled" || status === "no_show"
+        ? canCancelAppointments
+        : canWriteAppointments;
+    if (!allowed) {
+      setError("You do not have permission to change this appointment status.");
+      return false;
+    }
     if (appointmentsStatusActionLocks.has(appointmentId) || button?.disabled) {
       return false;
     }
@@ -1969,8 +2049,9 @@ export default function AppointmentsPage() {
         return false;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+        throw new Error(
+          await appointmentResponseError(res, "Failed to update appointment.")
+        );
       }
       const updated = (await res.json()) as Appointment;
       setAppointments((prev) => prev.map((appt) => (appt.id === updated.id ? updated : appt)));
@@ -1992,6 +2073,9 @@ export default function AppointmentsPage() {
       endsAt: Date,
       lanePatch?: AppointmentLanePatch
     ) => {
+      if (!canRescheduleAppointments) {
+        throw new Error("You do not have permission to reschedule appointments.");
+      }
       const payload: Record<string, unknown> = {
         starts_at: startsAt.toISOString(),
         ends_at: endsAt.toISOString(),
@@ -2038,11 +2122,14 @@ export default function AppointmentsPage() {
             conflictData.detail || conflictData.message || "Conflicts detected."
           );
         }
-        throw new Error(raw || `Failed to update appointment (HTTP ${res.status})`);
+        const parsed = parseConflictResponse(raw);
+        throw new Error(
+          parsed?.detail || parsed?.message || "Failed to update appointment."
+        );
       }
       return (await res.json()) as Appointment;
     },
-    [buildConflictWarning, router]
+    [buildConflictWarning, canRescheduleAppointments, router]
   );
 
   async function undoDiaryReschedule(
@@ -2180,10 +2267,11 @@ export default function AppointmentsPage() {
   }
 
   useEffect(() => {
+    void loadAppointmentCapabilities();
     void loadSchedule();
     void loadPatients();
     void loadUsers();
-  }, [loadSchedule, loadPatients, loadUsers]);
+  }, [loadAppointmentCapabilities, loadSchedule, loadPatients, loadUsers]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -2273,6 +2361,10 @@ export default function AppointmentsPage() {
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
+    if (!canWriteAppointments) {
+      setBookingSubmitError("You do not have permission to create appointments.");
+      return;
+    }
     const submitter = (e.nativeEvent as SubmitEvent).submitter;
     const button = submitter instanceof HTMLButtonElement ? submitter : null;
     if (bookingValidationError) return;
@@ -2340,7 +2432,7 @@ export default function AppointmentsPage() {
             const data = JSON.parse(raw) as { detail?: string; message?: string };
             message = data.detail || data.message || message;
           } catch {
-            message = raw;
+            message = `Failed to create appointment (HTTP ${res.status})`;
           }
         }
         throw new Error(message);
@@ -2689,6 +2781,10 @@ export default function AppointmentsPage() {
   async function saveAppointmentDetails(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selectedAppointment) return;
+    if (!canRescheduleAppointments) {
+      setError("You do not have permission to change appointment locations.");
+      return;
+    }
     const submitter =
       e.nativeEvent instanceof SubmitEvent
         ? e.nativeEvent.submitter
@@ -2725,8 +2821,9 @@ export default function AppointmentsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+        throw new Error(
+          await appointmentResponseError(res, "Failed to update appointment.")
+        );
       }
       const updated = (await res.json()) as Appointment;
       setSelectedAppointment(updated);
@@ -2786,7 +2883,7 @@ export default function AppointmentsPage() {
       setError("Start and end times are required.");
       return;
     }
-    if (editConflictWarning) {
+    if (editConflictWarning && canRescheduleAppointments) {
       setError("Conflicts detected. Choose a different time.");
       return;
     }
@@ -2840,7 +2937,10 @@ export default function AppointmentsPage() {
           );
           return;
         }
-        throw new Error(msg || `Failed to update appointment (HTTP ${res.status})`);
+        const parsed = parseConflictResponse(msg);
+        throw new Error(
+          parsed?.detail || parsed?.message || "Failed to update appointment."
+        );
       }
       const updated = (await res.json()) as Appointment;
       setSelectedAppointment(updated);
@@ -3215,7 +3315,17 @@ export default function AppointmentsPage() {
     if (!slotInfo.start || !slotInfo.end) return;
     setLastSelectedSlot(slotInfo.start);
     if (clipboard) {
+      const canPaste =
+        clipboard.mode === "cut" ? canRescheduleAppointments : canWriteAppointments;
+      if (!canPaste) {
+        setError("You do not have permission to change this appointment.");
+        return;
+      }
       void pasteAppointment(slotInfo.start);
+      return;
+    }
+    if (!canWriteAppointments) {
+      setError("You can view appointments, but you cannot create them.");
       return;
     }
     if (!isRangeWithinSchedule(slotInfo.start, slotInfo.end, schedule)) {
@@ -3675,13 +3785,15 @@ export default function AppointmentsPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowNewModal(true)}
-              data-testid="new-appointment"
-            >
-              New appointment
-            </button>
+            {canWriteAppointments && (
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowNewModal(true)}
+                data-testid="new-appointment"
+              >
+                New appointment
+              </button>
+            )}
             <div style={{ display: "flex", gap: 6 }}>
               <button
                 className={viewMode === "day_sheet" ? "btn btn-primary" : "btn btn-secondary"}
@@ -3742,6 +3854,11 @@ export default function AppointmentsPage() {
           </div>
         </div>
 
+        {appointmentCapabilityError && (
+          <div className="notice" data-testid="appointments-permissions-error">
+            {appointmentCapabilityError}
+          </div>
+        )}
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
         {diaryUndo && (
@@ -3986,8 +4103,8 @@ export default function AppointmentsPage() {
               events={calendarEvents}
               startAccessor="start"
               endAccessor="end"
-              selectable
-              resizable
+              selectable={canWriteAppointments}
+              resizable={canRescheduleAppointments}
               step={DIARY_TIME_STEP_MINUTES}
               timeslots={1}
               resources={calendarResources}
@@ -4089,7 +4206,9 @@ export default function AppointmentsPage() {
                             );
                           }
                         }}
-                        onDoubleClick={() => openAppointment(appt, "edit")}
+                        onDoubleClick={() =>
+                          openAppointment(appt, canEditAppointments ? "edit" : "view")
+                        }
                         onContextMenu={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -4183,107 +4302,122 @@ export default function AppointmentsPage() {
             >
               Open
             </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-arrived"
-              onClick={(event) => {
-                void updateAppointmentStatus(
-                  contextMenu.appointment.id,
-                  "arrived",
-                  undefined,
-                  event.currentTarget
-                );
-                setContextMenu(null);
-              }}
-            >
-              Mark arrived
-            </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-in-progress"
-              onClick={(event) => {
-                void updateAppointmentStatus(
-                  contextMenu.appointment.id,
-                  "in_progress",
-                  undefined,
-                  event.currentTarget
-                );
-                setContextMenu(null);
-              }}
-            >
-              Mark seated
-            </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-completed"
-              onClick={(event) => {
-                void updateAppointmentStatus(
-                  contextMenu.appointment.id,
-                  "completed",
-                  undefined,
-                  event.currentTarget
-                );
-                setContextMenu(null);
-              }}
-            >
-              Mark completed
-            </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-no-show"
-              onClick={(event) => {
-                void updateAppointmentStatus(
-                  contextMenu.appointment.id,
-                  "no_show",
-                  undefined,
-                  event.currentTarget
-                );
-                setContextMenu(null);
-              }}
-            >
-              Did not attend
-            </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-cancel"
-              onClick={() => {
-                setCancelTarget(contextMenu.appointment);
-                setCancelReason("");
-                setShowCancelModal(true);
-                setContextMenu(null);
-              }}
-            >
-              Cancel…
-            </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-move"
-              onClick={() => {
-                setClipboard({ mode: "cut", appointment: contextMenu.appointment });
-                setDaySheetPasteTargetAppointmentId(null);
-                setNotice(`Move mode enabled. ${clipboardPasteInstruction}`);
-                setContextMenu(null);
-              }}
-            >
-              Move
-            </button>
-            <button
-              className="btn btn-secondary"
-              data-testid="appointments-context-copy"
-              onClick={() => {
-                setClipboard({ mode: "copy", appointment: contextMenu.appointment });
-                setDaySheetPasteTargetAppointmentId(null);
-                setNotice(`Copied appointment. ${clipboardPasteInstruction}`);
-                setContextMenu(null);
-              }}
-            >
-              Copy
-            </button>
+            {canWriteAppointments && (
+              <>
+                <button
+                  className="btn btn-secondary"
+                  data-testid="appointments-context-arrived"
+                  onClick={(event) => {
+                    void updateAppointmentStatus(
+                      contextMenu.appointment.id,
+                      "arrived",
+                      undefined,
+                      event.currentTarget
+                    );
+                    setContextMenu(null);
+                  }}
+                >
+                  Mark arrived
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  data-testid="appointments-context-in-progress"
+                  onClick={(event) => {
+                    void updateAppointmentStatus(
+                      contextMenu.appointment.id,
+                      "in_progress",
+                      undefined,
+                      event.currentTarget
+                    );
+                    setContextMenu(null);
+                  }}
+                >
+                  Mark seated
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  data-testid="appointments-context-completed"
+                  onClick={(event) => {
+                    void updateAppointmentStatus(
+                      contextMenu.appointment.id,
+                      "completed",
+                      undefined,
+                      event.currentTarget
+                    );
+                    setContextMenu(null);
+                  }}
+                >
+                  Mark completed
+                </button>
+              </>
+            )}
+            {canCancelAppointments && (
+              <>
+                <button
+                  className="btn btn-secondary"
+                  data-testid="appointments-context-no-show"
+                  onClick={(event) => {
+                    void updateAppointmentStatus(
+                      contextMenu.appointment.id,
+                      "no_show",
+                      undefined,
+                      event.currentTarget
+                    );
+                    setContextMenu(null);
+                  }}
+                >
+                  Did not attend
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  data-testid="appointments-context-cancel"
+                  onClick={() => {
+                    setCancelTarget(contextMenu.appointment);
+                    setCancelReason("");
+                    setShowCancelModal(true);
+                    setContextMenu(null);
+                  }}
+                >
+                  Cancel…
+                </button>
+              </>
+            )}
+            {canRescheduleAppointments && (
+              <button
+                className="btn btn-secondary"
+                data-testid="appointments-context-move"
+                onClick={() => {
+                  setClipboard({ mode: "cut", appointment: contextMenu.appointment });
+                  setDaySheetPasteTargetAppointmentId(null);
+                  setNotice(`Move mode enabled. ${clipboardPasteInstruction}`);
+                  setContextMenu(null);
+                }}
+              >
+                Move
+              </button>
+            )}
+            {canWriteAppointments && (
+              <button
+                className="btn btn-secondary"
+                data-testid="appointments-context-copy"
+                onClick={() => {
+                  setClipboard({ mode: "copy", appointment: contextMenu.appointment });
+                  setDaySheetPasteTargetAppointmentId(null);
+                  setNotice(`Copied appointment. ${clipboardPasteInstruction}`);
+                  setContextMenu(null);
+                }}
+              >
+                Copy
+              </button>
+            )}
             <button
               className="btn btn-secondary"
               data-testid="appointments-context-notes"
               onClick={() => {
-                openAppointment(contextMenu.appointment, "edit");
+                openAppointment(
+                  contextMenu.appointment,
+                  canEditAppointments ? "edit" : "view"
+                );
                 setNotice("Appointment detail opened for notes/editing.");
                 setContextMenu(null);
               }}
@@ -4457,8 +4591,11 @@ export default function AppointmentsPage() {
                   </select>
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Clinician (optional)</label>
+                  <label className="label" htmlFor="booking-clinician">
+                    Clinician (optional)
+                  </label>
                   <select
+                    id="booking-clinician"
                     className="input"
                     value={activeClinicianUserId}
                     onChange={(e) => {
@@ -4587,12 +4724,15 @@ export default function AppointmentsPage() {
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setIsEditingAppointment((prev) => !prev)}
-                  >
-                    {isEditingAppointment ? "View" : "Edit"}
-                  </button>
+                  {canEditAppointments && (
+                    <button
+                      className="btn btn-secondary"
+                      data-testid="appointment-detail-edit"
+                      onClick={() => setIsEditingAppointment((prev) => !prev)}
+                    >
+                      {isEditingAppointment ? "View" : "Edit"}
+                    </button>
+                  )}
                   <button
                     className="btn btn-secondary"
                     data-testid="appointment-detail-close"
@@ -4617,6 +4757,7 @@ export default function AppointmentsPage() {
                         className="input"
                         type="datetime-local"
                         value={editStartsAt}
+                        disabled={!canRescheduleAppointments}
                         onChange={(event) => handleEditStartChange(event.target.value)}
                         step={600}
                         required
@@ -4628,6 +4769,7 @@ export default function AppointmentsPage() {
                         className="input"
                         type="datetime-local"
                         value={editEndsAt}
+                        disabled={!canRescheduleAppointments}
                         onChange={(event) => handleEditEndChange(event.target.value)}
                         step={600}
                         required
@@ -4639,6 +4781,7 @@ export default function AppointmentsPage() {
                     <select
                       className="input"
                       value={editDuration}
+                      disabled={!canRescheduleAppointments}
                       onChange={(event) => handleEditDurationChange(event.target.value)}
                     >
                       {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map(
@@ -4656,6 +4799,7 @@ export default function AppointmentsPage() {
                       className="input"
                       data-testid="edit-appointment-type"
                       value={editAppointmentType}
+                      disabled={!canWriteAppointments}
                       onChange={(event) => setEditAppointmentType(event.target.value)}
                     />
                   </div>
@@ -4664,6 +4808,7 @@ export default function AppointmentsPage() {
                     <select
                       className="input"
                       value={editClinicianUserId}
+                      disabled={!canRescheduleAppointments}
                       onChange={(event) => setEditClinicianUserId(event.target.value)}
                     >
                       <option value="">Unassigned</option>
@@ -4679,6 +4824,7 @@ export default function AppointmentsPage() {
                     <input
                       className="input"
                       value={editLocation}
+                      disabled={!canRescheduleAppointments}
                       onChange={(event) => setEditLocation(event.target.value)}
                     />
                   </div>
@@ -4687,6 +4833,7 @@ export default function AppointmentsPage() {
                     <select
                       className="input"
                       value={editLocationType}
+                      disabled={!canRescheduleAppointments}
                       onChange={(event) => {
                         const next = event.target.value as AppointmentLocationType;
                         setEditLocationType(next);
@@ -4704,6 +4851,7 @@ export default function AppointmentsPage() {
                         className="input"
                         rows={3}
                         value={editLocationText}
+                        disabled={!canRescheduleAppointments}
                         onChange={(event) => setEditLocationText(event.target.value)}
                       />
                     </div>
@@ -4713,16 +4861,17 @@ export default function AppointmentsPage() {
                     <select
                       className="input"
                       value={editStatus}
+                      disabled={!canWriteAppointments && !canCancelAppointments}
                       onChange={(event) =>
                         setEditStatus(event.target.value as AppointmentStatus)
                       }
                     >
-                      <option value="booked">Booked</option>
-                      <option value="arrived">Arrived</option>
-                      <option value="in_progress">In progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="no_show">No show</option>
+                      <option value="booked" disabled={!canWriteAppointments}>Booked</option>
+                      <option value="arrived" disabled={!canWriteAppointments}>Arrived</option>
+                      <option value="in_progress" disabled={!canWriteAppointments}>In progress</option>
+                      <option value="completed" disabled={!canWriteAppointments}>Completed</option>
+                      <option value="cancelled" disabled={!canCancelAppointments}>Cancelled</option>
+                      <option value="no_show" disabled={!canCancelAppointments}>No show</option>
                     </select>
                   </div>
                   {(editStatus === "cancelled" || editStatus === "no_show") && (
@@ -4732,6 +4881,7 @@ export default function AppointmentsPage() {
                         className="input"
                         rows={3}
                         value={editCancelReason}
+                        disabled={!canCancelAppointments}
                         onChange={(event) => setEditCancelReason(event.target.value)}
                       />
                     </div>
@@ -4750,7 +4900,14 @@ export default function AppointmentsPage() {
                     <button
                       className="btn btn-primary"
                       data-testid="appointment-edit-save"
-                      disabled={savingDetail || Boolean(editConflictWarning)}
+                      disabled={
+                        savingDetail ||
+                        Boolean(editConflictWarning && canRescheduleAppointments)
+                      }
+                      aria-disabled={
+                        savingDetail ||
+                        Boolean(editConflictWarning && canRescheduleAppointments)
+                      }
                     >
                       {savingDetail ? "Saving..." : "Save changes"}
                     </button>
@@ -4951,71 +5108,76 @@ export default function AppointmentsPage() {
 
                   <div className="stack" style={{ gap: 8 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={(event) =>
-                          updateAppointmentStatus(
-                            selectedAppointment.id,
-                            "arrived",
-                            undefined,
-                            event.currentTarget
-                          )
-                        }
-                      >
-                        Arrived
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={(event) =>
-                          updateAppointmentStatus(
-                            selectedAppointment.id,
-                            "in_progress",
-                            undefined,
-                            event.currentTarget
-                          )
-                        }
-                      >
-                        In progress
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={(event) =>
-                          updateAppointmentStatus(
-                            selectedAppointment.id,
-                            "completed",
-                            undefined,
-                            event.currentTarget
-                          )
-                        }
-                      >
-                        Completed
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={(event) =>
-                          updateAppointmentStatus(
-                            selectedAppointment.id,
-                            "cancelled",
-                            undefined,
-                            event.currentTarget
-                          )
-                        }
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={(event) =>
-                          updateAppointmentStatus(
-                            selectedAppointment.id,
-                            "no_show",
-                            undefined,
-                            event.currentTarget
-                          )
-                        }
-                      >
-                        No show
-                      </button>
+                      {canWriteAppointments && (
+                        <>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={(event) =>
+                              updateAppointmentStatus(
+                                selectedAppointment.id,
+                                "arrived",
+                                undefined,
+                                event.currentTarget
+                              )
+                            }
+                          >
+                            Arrived
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={(event) =>
+                              updateAppointmentStatus(
+                                selectedAppointment.id,
+                                "in_progress",
+                                undefined,
+                                event.currentTarget
+                              )
+                            }
+                          >
+                            In progress
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={(event) =>
+                              updateAppointmentStatus(
+                                selectedAppointment.id,
+                                "completed",
+                                undefined,
+                                event.currentTarget
+                              )
+                            }
+                          >
+                            Completed
+                          </button>
+                        </>
+                      )}
+                      {canCancelAppointments && (
+                        <>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              setCancelTarget(selectedAppointment);
+                              setCancelReason("");
+                              setShowCancelModal(true);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={(event) =>
+                              updateAppointmentStatus(
+                                selectedAppointment.id,
+                                "no_show",
+                                undefined,
+                                event.currentTarget
+                              )
+                            }
+                          >
+                            No show
+                          </button>
+                        </>
+                      )}
                       <button
                         className="btn btn-secondary"
                         data-testid="appointment-create-estimate"
@@ -5040,7 +5202,8 @@ export default function AppointmentsPage() {
                     </div>
                   </div>
 
-                  <form onSubmit={saveAppointmentDetails} className="stack">
+                  {canRescheduleAppointments && (
+                    <form onSubmit={saveAppointmentDetails} className="stack">
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">Location type</label>
                       <select
@@ -5074,7 +5237,8 @@ export default function AppointmentsPage() {
                     >
                       {savingDetail ? "Saving..." : "Save details"}
                     </button>
-                  </form>
+                    </form>
+                  )}
 
                   <form onSubmit={addAppointmentNote} className="stack">
                     <label className="label">Quick note</label>

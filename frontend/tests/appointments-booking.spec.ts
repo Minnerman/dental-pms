@@ -1475,7 +1475,7 @@ test("appointment detail save shows in-flight state and guards repeat submit", a
   await expect(detailPanel).toContainText(visitAddress);
 });
 
-test("appointment detail history shows created and updated entries", async ({
+test("appointment detail history shows created and rescheduled entries", async ({
   page,
   request,
 }) => {
@@ -1526,7 +1526,7 @@ test("appointment detail history shows created and updated entries", async ({
 
   const actionLabels = historyRows.locator("span:nth-of-type(2)");
   await expect(actionLabels.filter({ hasText: /^created$/i }).first()).toBeVisible();
-  await expect(actionLabels.filter({ hasText: /^updated$/i }).first()).toBeVisible();
+  await expect(actionLabels.filter({ hasText: /^rescheduled$/i }).first()).toBeVisible();
 });
 
 test("appointment detail create estimate shows in-flight state and guards repeat submit", async ({
