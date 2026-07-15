@@ -3,6 +3,14 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
+- The 2026-07-15 deployment batch containing PRs #693 and #694 passed build,
+  immediate health, authentication, capability, and version checks, then was
+  rolled back after the patient-ledger no-write smoke failed. Investigation
+  reproduced the failure as a smoke-harness navigation defect: the nested
+  Ledger control was queried before opening the parent Financial tab. The
+  corrected candidate smoke and focused ledger Playwright tests pass. A
+  deterministic checkpointed no-write smoke is being added; deployment retry
+  remains separately gated and is not authorised by this investigation.
 - The pre-PR #694 authoritative continuity baseline is
   `origin/master@9be8d34614eb5cb437f085ae52bbecf121a0b101`.
 - Dental PMS is the live/main PMS and post-launch stability is recorded as
