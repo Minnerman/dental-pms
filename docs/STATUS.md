@@ -2,7 +2,7 @@
 
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
-## Current pause / handover
+## Current continuity / handover
 - The authoritative continuity baseline is
   `origin/master@5129f8721a6a0d32ae7b1d61c46b467803e65427`.
 - Dental PMS is the live/main PMS and post-launch stability is recorded as
