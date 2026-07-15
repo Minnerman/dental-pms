@@ -2,7 +2,18 @@
 
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
-## Pause / handover
+## Current continuity / handover
+- The authoritative continuity baseline is
+  `origin/master@5129f8721a6a0d32ae7b1d61c46b467803e65427`.
+- Dental PMS is the live/main PMS and post-launch stability is recorded as
+  `pass`; rollback is not required.
+- The active tests-only slice adds focused patient create, edit, archive, and
+  restore API regression coverage without changing product behaviour.
+- R4 investigation is stopped. R4 access is not authorised for execution;
+  the deferred finance backlog remains blocked at `1017`, and
+  invoice/payment/staging import remains blocked.
+
+## Historical pause / handover (superseded)
 - The authoritative continuity baseline is `origin/master@26e2dc14d9af0620388b9b1db9ba25a522fa434e`.
 - Current repo `master` is `26e2dc14d9af0620388b9b1db9ba25a522fa434e`; it includes merged R4 charting continuity through PR #567, appointment readiness through PR #585, PR #586's R4 finance source discovery, PR #588's unrelated frontend-only patient-notes smoke fix, PR #587's backend-only SELECT-only finance inventory command/report, PR #590's finance sign/cancellation/allocation policy, PR #591's backend-only finance classification/sign helper proof, PR #593's backend-only SELECT-only opening balance reconciliation command/report tooling, PR #596's backend-only SELECT-only cancellation/refund/allocation reconciliation proof tooling and live evidence, PR #597's docs/evidence refresh after PR #596, PR #598's refund-allocation/charge-ref semantics decision, PR #599's backend-only SELECT-only cash-event staging proof tooling, PR #600's docs refresh after PR #599, PR #601's docs/evidence after the live cash-event staging proof, PR #602's finance invoice/charge-ref source decision, PR #603's opening-balance snapshot design, PR #604's backend-only pure opening-balance snapshot plan helper proof, PR #605's docs refresh after PR #604, PR #606's scratch-only opening-balance dry-run/report design, PR #607's backend-only opening-balance dry-run/report tooling, PR #608's docs refresh after PR #607, PR #609's scratch-only opening-balance dry-run execution evidence, PR #610's cleanup-status refresh, PR #611's guarded scratch-only opening-balance apply design, PR #612's guarded scratch apply planning/preflight helper proof, PR #613's docs refresh after PR #612, PR #614's guarded scratch apply CLI prototype, PR #615's bounded synthetic scratch execution proof, PR #616's preserved-evidence scratch execution plan, PR #617's execution package decision, PR #618's bounded fixture package, PR #619's bounded fixture approval record, PR #620's bounded fixture execution-readiness verification, PR #621's validation/no-write evidence, PR #622's owner sign-off for that no-write evidence, PR #623's guarded apply/write readiness check, PR #624's bounded fixture guarded apply/write proof evidence, PR #625's owner sign-off for that proof evidence, PR #626's final bounded-fixture pathway status summary, PR #627's full eligible-row artefact plan, PR #628's provenance/redaction governance proposal, PR #629's owner sign-off for that governance proposal, PR #630's full eligible-row package request/template, PR #631's owner sign-off for that package request/template, PR #632's package request readiness/gap assessment, PR #633's candidate full eligible-row package request record, PR #634's owner-authorised full eligible-row package request record, PR #635's standing owner authorisation record, PR #636's full eligible-row artefact package evidence, PR #637's owner sign-off for that package evidence, PR #638's full eligible-row validation/no-write evidence, PR #639's owner sign-off for that validation/no-write evidence, PR #640's full eligible-row scratch/test-only guarded apply/write proof evidence, PR #641's owner sign-off for that guarded apply/write proof evidence, and PR #642's full eligible-row non-live completion summary.
 - There is no active implementation slice on current master; the appointments UTC deep-link proof line from PR #506 is already merged and is no longer deferred.
@@ -72,6 +83,20 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 - Permissions + audit plan: `docs/PERMISSIONS_AND_AUDIT.md`
 
 ## Recent fixes
+- 2026-07-15: Core patient lifecycle regression coverage added.
+  - Scope: tests-only coverage for authenticated patient creation, partial
+    edit persistence, archive visibility rules, archived-patient edit refusal,
+    and restore behaviour.
+  - Baseline:
+    `origin/master@5129f8721a6a0d32ae7b1d61c46b467803e65427`.
+  - Added test:
+    `backend/tests/patients/test_patient_lifecycle_api.py`.
+  - Validation: the new targeted test passed (`1 passed`); the directly
+    relevant existing patient ledger audit test passed (`1 passed`); Python
+    compilation and Git diff checks passed.
+  - Safety: isolated synthetic test data and a disposable test database only;
+    no product code change, R4 access, production database access, production
+    write, deployment, migration, import, or sensitive-data exposure.
 - 2026-07-15: First scheduled backup post-retention status recorded.
   - Scope: classification-only post-pause status. It does not run backup,
     restore, rclone, backup deletion, retention cleanup, rollback, R4 access,
