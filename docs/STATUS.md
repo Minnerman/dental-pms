@@ -3,16 +3,21 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
-- The authoritative continuity baseline is
-  `origin/master@275456a8eb96110e0608ab4737ddab2ab25d741a`.
+- The pre-PR #694 authoritative continuity baseline is
+  `origin/master@9be8d34614eb5cb437f085ae52bbecf121a0b101`.
 - Dental PMS is the live/main PMS and post-launch stability is recorded as
   `pass`; rollback is not required.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
   merged code under a separate deployment instruction.
-- The active implementation slice improves ordinary patient-ledger
-  reliability and permissions across the backend, frontend, and focused tests.
+- PR #693's patient-ledger reliability and permissions feature is merged and
+  remains undeployed. The appointment reliability, permissions, conflict, and
+  audit feature is complete in PR #694 across the backend, frontend, and
+  focused regression tests.
+- Deployment batch 1 contains PR #693 and PR #694. Deployment remains pending
+  and requires a separate controlled deployment instruction after both PRs
+  are merged.
 - R4 research is a separately gated, parallel, batched, strictly read-only
   track. R4 writes are permanently prohibited. The deferred finance backlog
   remains blocked at `1017`, and invoice/payment/staging import remains blocked.
