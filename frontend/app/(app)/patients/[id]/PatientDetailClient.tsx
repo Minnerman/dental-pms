@@ -40,6 +40,42 @@ type AppointmentStatus =
   | "no_show";
 type LedgerEntryType = "charge" | "payment" | "adjustment";
 type PaymentMethod = "cash" | "card" | "bank_transfer" | "other";
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  card: "Card",
+  bank_transfer: "Bank transfer",
+  other: "Other",
+};
+
+async function ledgerResponseError(response: Response, fallback: string) {
+  if (response.status === 403) {
+    return "You do not have permission to change this patient's ledger.";
+  }
+  if (response.status === 422) {
+    return "Please check the ledger entry details and try again.";
+  }
+  try {
+    const payload = (await response.json()) as { detail?: unknown };
+    if (typeof payload.detail === "string" && payload.detail.trim()) {
+      return payload.detail;
+    }
+  } catch {
+    // Use the safe caller-provided fallback for non-JSON or unexpected errors.
+  }
+  return fallback;
+}
+
+function positiveCurrencyPence(raw: string) {
+  const normalized = raw.trim();
+  if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(normalized)) {
+    return null;
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return Math.round(parsed * 100);
+}
 
 type Patient = {
   id: number;
@@ -966,7 +1002,10 @@ export default function PatientDetailClient({
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
-  const [ledgerBalance, setLedgerBalance] = useState<number>(0);
+  const [ledgerBalance, setLedgerBalance] = useState<number | null>(null);
+  const [ledgerBalanceError, setLedgerBalanceError] = useState<string | null>(null);
+  const [ledgerCapabilities, setLedgerCapabilities] = useState<string[] | null>(null);
+  const [ledgerCapabilityError, setLedgerCapabilityError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TreatmentTransaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
@@ -1387,8 +1426,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to load ledger (HTTP ${res.status})`);
+        throw new Error(await ledgerResponseError(res, "Failed to load patient ledger."));
       }
       const data = (await res.json()) as LedgerEntry[];
       setLedgerEntries(data);
@@ -1401,6 +1439,7 @@ export default function PatientDetailClient({
   }, [patientId, router]);
 
   const loadLedgerBalance = useCallback(async () => {
+    setLedgerBalanceError(null);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/balance`);
       if (res.status === 401) {
@@ -1409,15 +1448,38 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to load balance (HTTP ${res.status})`);
+        throw new Error(await ledgerResponseError(res, "Failed to load ledger balance."));
       }
       const data = (await res.json()) as { balance_pence: number };
       setLedgerBalance(data.balance_pence ?? 0);
-    } catch {
-      setLedgerBalance(0);
+    } catch (err) {
+      setLedgerBalance(null);
+      setLedgerBalanceError(
+        err instanceof Error ? err.message : "Failed to load ledger balance."
+      );
     }
   }, [patientId, router]);
+
+  const loadLedgerCapabilities = useCallback(async () => {
+    setLedgerCapabilityError(null);
+    try {
+      const res = await apiFetch("/api/me/capabilities");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error("Ledger permissions could not be verified.");
+      }
+      setLedgerCapabilities((await res.json()) as string[]);
+    } catch (err) {
+      setLedgerCapabilities([]);
+      setLedgerCapabilityError(
+        err instanceof Error ? err.message : "Ledger permissions could not be verified."
+      );
+    }
+  }, [router]);
 
   const loadTransactions = useCallback(
     async (options?: {
@@ -3189,6 +3251,7 @@ export default function PatientDetailClient({
     void loadEstimates();
     void loadAppointments();
     void loadUsers();
+    void loadLedgerCapabilities();
     void loadLedger();
     void loadLedgerBalance();
     void loadFinanceSummary();
@@ -3199,6 +3262,7 @@ export default function PatientDetailClient({
     loadEstimates,
     loadFinanceSummary,
     loadInvoices,
+    loadLedgerCapabilities,
     loadLedger,
     loadLedgerBalance,
     loadNotes,
@@ -4240,7 +4304,16 @@ export default function PatientDetailClient({
 
   const financeItems = financeSummary?.items ?? [];
   const financeBalance =
-    financeSummary?.outstanding_balance_pence ?? ledgerBalance ?? 0;
+    financeSummary?.outstanding_balance_pence ?? ledgerBalance;
+  const canWriteLedger = Boolean(
+    ledgerCapabilities?.includes("billing.payments.write")
+  );
+  const ledgerReadOnly = Boolean(patient?.deleted_at) || !canWriteLedger;
+  const ledgerReadOnlyMessage = patient?.deleted_at
+    ? "Archived patients have a read-only ledger."
+    : ledgerCapabilities === null
+    ? "Checking ledger permissions…"
+    : "You can view this ledger, but you cannot add entries.";
 
   const toothHistoryEntries = useMemo(() => {
     const entries = [
@@ -4652,9 +4725,13 @@ export default function PatientDetailClient({
 
   async function submitLedgerEntry(button?: HTMLButtonElement | null) {
     if (!patient) return;
-    const parsed = Number(ledgerAmount);
-    if (Number.isNaN(parsed) || parsed <= 0) {
-      setLedgerError("Amount must be greater than 0.");
+    if (ledgerReadOnly) {
+      setLedgerError(ledgerReadOnlyMessage);
+      return;
+    }
+    const amountPence = positiveCurrencyPence(ledgerAmount);
+    if (amountPence === null) {
+      setLedgerError("Enter an amount greater than £0 with no more than two decimal places.");
       return;
     }
     if (!button || ledgerSaving || savingLedgerEntryPatientIds.has(patientId) || button.disabled) {
@@ -4672,13 +4749,13 @@ export default function PatientDetailClient({
       const payload =
         ledgerMode === "payment"
           ? {
-              amount_pence: Math.round(parsed * 100),
+              amount_pence: amountPence,
               method: ledgerMethod,
               reference: ledgerReference.trim() || undefined,
               note: ledgerNote.trim() || undefined,
             }
           : {
-              amount_pence: Math.round(parsed * 100),
+              amount_pence: amountPence,
               entry_type: ledgerMode,
               reference: ledgerReference.trim() || undefined,
               note: ledgerNote.trim() || undefined,
@@ -4693,8 +4770,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to save entry (HTTP ${res.status})`);
+        throw new Error(await ledgerResponseError(res, "Failed to save ledger entry."));
       }
       setShowLedgerModal(false);
       setLedgerAmount("");
@@ -5050,6 +5126,10 @@ export default function PatientDetailClient({
 
   async function addPayment(button?: HTMLButtonElement | null) {
     if (!selectedInvoice) return;
+    if (ledgerReadOnly) {
+      setInvoiceError(ledgerReadOnlyMessage);
+      return;
+    }
     if (
       !button ||
       paymentLocked ||
@@ -5059,9 +5139,9 @@ export default function PatientDetailClient({
     ) {
       return;
     }
-    const amountPence = toPence(paymentAmount);
-    if (amountPence === null || amountPence <= 0) {
-      setInvoiceError("Payment amount must be a number.");
+    const amountPence = positiveCurrencyPence(paymentAmount);
+    if (amountPence === null) {
+      setInvoiceError("Enter an amount greater than £0 with no more than two decimal places.");
       return;
     }
     recordingPaymentInvoiceIds.add(selectedInvoice.id);
@@ -5088,8 +5168,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to add payment (HTTP ${res.status})`);
+        throw new Error(await ledgerResponseError(res, "Failed to record invoice payment."));
       }
       setPaymentAmount("");
       setPaymentReference("");
@@ -5838,6 +5917,34 @@ export default function PatientDetailClient({
                     );
                   })}
                 </div>
+                {activeLockedTab === "financial" && (
+                  <div
+                    style={tabRowStyle}
+                    role="tablist"
+                    aria-label="Financial tabs"
+                  >
+                    <button
+                      type="button"
+                      style={tabStyle(tab === "invoices", true)}
+                      role="tab"
+                      aria-selected={tab === "invoices"}
+                      data-testid="patient-financial-invoices"
+                      onClick={() => activateContentTab("invoices")}
+                    >
+                      Invoices
+                    </button>
+                    <button
+                      type="button"
+                      style={tabStyle(tab === "ledger", true)}
+                      role="tab"
+                      aria-selected={tab === "ledger"}
+                      data-testid="patient-financial-ledger"
+                      onClick={() => activateContentTab("ledger")}
+                    >
+                      Ledger
+                    </button>
+                  </div>
+                )}
                 <div
                   style={{
                     display: "flex",
@@ -5917,7 +6024,9 @@ export default function PatientDetailClient({
                           : "not set"}
                       </div>
                       <div className="badge">
-                        Balance: {formatCurrency(financeBalance)}
+                        Balance: {financeBalance === null
+                          ? "unavailable"
+                          : formatCurrency(financeBalance)}
                       </div>
                       <button
                         type="button"
@@ -6045,7 +6154,9 @@ export default function PatientDetailClient({
                             <div>
                               <h4 style={{ marginTop: 0 }}>Finance summary</h4>
                               <div style={{ color: "var(--muted)" }}>
-                                Outstanding {formatCurrency(financeBalance)}
+                                Outstanding {financeBalance === null
+                                  ? "unavailable"
+                                  : formatCurrency(financeBalance)}
                               </div>
                             </div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6058,26 +6169,30 @@ export default function PatientDetailClient({
                               >
                                 Create invoice
                               </button>
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                onClick={() => {
-                                  setLedgerMode("payment");
-                                  setShowLedgerModal(true);
-                                }}
-                              >
-                                Add payment
-                              </button>
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                onClick={() => {
-                                  setLedgerMode("adjustment");
-                                  setShowLedgerModal(true);
-                                }}
-                              >
-                                Add adjustment
-                              </button>
+                              {!ledgerReadOnly && (
+                                <>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => {
+                                      setLedgerMode("payment");
+                                      setShowLedgerModal(true);
+                                    }}
+                                  >
+                                    Add payment
+                                  </button>
+                                  <button
+                                    className="btn btn-secondary"
+                                    type="button"
+                                    onClick={() => {
+                                      setLedgerMode("adjustment");
+                                      setShowLedgerModal(true);
+                                    }}
+                                  >
+                                    Add adjustment
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                           {financeSummaryError && (
@@ -9663,26 +9778,30 @@ export default function PatientDetailClient({
                 <div className="stack">
                   <div className="row">
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-primary"
-                        type="button"
-                        onClick={() => {
-                          setLedgerMode("payment");
-                          setShowLedgerModal(true);
-                        }}
-                      >
-                        Add payment
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        onClick={() => {
-                          setLedgerMode("adjustment");
-                          setShowLedgerModal(true);
-                        }}
-                      >
-                        Add adjustment
-                      </button>
+                      {!ledgerReadOnly && (
+                        <>
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={() => {
+                              setLedgerMode("payment");
+                              setShowLedgerModal(true);
+                            }}
+                          >
+                            Add payment
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => {
+                              setLedgerMode("adjustment");
+                              setShowLedgerModal(true);
+                            }}
+                          >
+                            Add adjustment
+                          </button>
+                        </>
+                      )}
                       <button
                         className="btn btn-secondary"
                         type="button"
@@ -9694,8 +9813,15 @@ export default function PatientDetailClient({
                         Refresh
                       </button>
                     </div>
-                    <div className="badge">Balance {formatCurrency(ledgerBalance)}</div>
+                    <div className="badge" data-testid="patient-ledger-balance">
+                      Balance {ledgerBalance === null
+                        ? "unavailable"
+                        : formatCurrency(ledgerBalance)}
+                    </div>
                   </div>
+                  {ledgerReadOnly && <div className="notice">{ledgerReadOnlyMessage}</div>}
+                  {ledgerCapabilityError && <div className="notice">{ledgerCapabilityError}</div>}
+                  {ledgerBalanceError && <div className="notice">{ledgerBalanceError}</div>}
                   {ledgerError && <div className="notice">{ledgerError}</div>}
                   {ledgerLoading ? (
                     <div className="badge">Loading ledger…</div>
@@ -9707,7 +9833,9 @@ export default function PatientDetailClient({
                         <tr>
                           <th>Date</th>
                           <th>Type</th>
+                          <th>Method</th>
                           <th>Reference</th>
+                          <th>Created by</th>
                           <th>Charge</th>
                           <th>Payment</th>
                           <th>Balance</th>
@@ -9725,9 +9853,13 @@ export default function PatientDetailClient({
                                 : "Adjustment"}
                             </td>
                             <td>
+                              {entry.method ? paymentMethodLabels[entry.method] : "—"}
+                            </td>
+                            <td>
                               {entry.reference || "—"}
                               {entry.note ? ` · ${entry.note}` : ""}
                             </td>
+                            <td>{entry.created_by.email}</td>
                             <td>
                               {entry.amount_pence > 0
                                 ? formatCurrency(entry.amount_pence)
@@ -11110,70 +11242,66 @@ export default function PatientDetailClient({
                               </table>
                             )}
 
-                            <div className="grid grid-3">
-                              <div className="stack" style={{ gap: 8 }}>
-                                <label className="label">Amount (£)</label>
-                                <input
-                                  className="input"
-                                  data-testid="payment-amount"
-                                  value={paymentAmount}
-                                  onChange={(e) => setPaymentAmount(e.target.value)}
-                                  disabled={
-                                    paymentLocked || recordingPayment
-                                  }
-                                />
-                              </div>
-                              <div className="stack" style={{ gap: 8 }}>
-                                <label className="label">Method</label>
-                                <select
-                                  className="input"
-                                  value={paymentMethod}
-                                  onChange={(e) => setPaymentMethod(e.target.value)}
-                                  disabled={
-                                    paymentLocked || recordingPayment
-                                  }
+                            {!ledgerReadOnly ? (
+                              <>
+                                <div className="grid grid-3">
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <label className="label">Amount (£)</label>
+                                    <input
+                                      className="input"
+                                      data-testid="payment-amount"
+                                      value={paymentAmount}
+                                      onChange={(e) => setPaymentAmount(e.target.value)}
+                                      disabled={paymentLocked || recordingPayment}
+                                    />
+                                  </div>
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <label className="label">Method</label>
+                                    <select
+                                      className="input"
+                                      value={paymentMethod}
+                                      onChange={(e) => setPaymentMethod(e.target.value)}
+                                      disabled={paymentLocked || recordingPayment}
+                                    >
+                                      <option value="card">Card</option>
+                                      <option value="cash">Cash</option>
+                                      <option value="bank_transfer">Bank transfer</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                  </div>
+                                  <div className="stack" style={{ gap: 8 }}>
+                                    <label className="label">Paid date</label>
+                                    <input
+                                      className="input"
+                                      type="date"
+                                      value={paymentDate}
+                                      onChange={(e) => setPaymentDate(e.target.value)}
+                                      disabled={paymentLocked || recordingPayment}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="stack" style={{ gap: 8 }}>
+                                  <label className="label">Reference</label>
+                                  <input
+                                    className="input"
+                                    value={paymentReference}
+                                    onChange={(e) => setPaymentReference(e.target.value)}
+                                    disabled={paymentLocked || recordingPayment}
+                                  />
+                                </div>
+                                <button
+                                  className="btn btn-primary"
+                                  type="button"
+                                  onClick={(event) => addPayment(event.currentTarget)}
+                                  disabled={recordingPayment || paymentLocked}
+                                  data-testid="record-payment"
                                 >
-                                  <option value="card">Card</option>
-                                  <option value="cash">Cash</option>
-                                  <option value="bank_transfer">Bank transfer</option>
-                                  <option value="other">Other</option>
-                                </select>
-                              </div>
-                              <div className="stack" style={{ gap: 8 }}>
-                                <label className="label">Paid date</label>
-                                <input
-                                  className="input"
-                                  type="date"
-                                  value={paymentDate}
-                                  onChange={(e) => setPaymentDate(e.target.value)}
-                                  disabled={
-                                    paymentLocked || recordingPayment
-                                  }
-                                />
-                              </div>
-                            </div>
-                            <div className="stack" style={{ gap: 8 }}>
-                              <label className="label">Reference</label>
-                              <input
-                                className="input"
-                                value={paymentReference}
-                                onChange={(e) => setPaymentReference(e.target.value)}
-                                disabled={
-                                  paymentLocked || recordingPayment
-                                }
-                              />
-                            </div>
-                            <button
-                              className="btn btn-primary"
-                              type="button"
-                              onClick={(event) => addPayment(event.currentTarget)}
-                              disabled={
-                                recordingPayment || paymentLocked
-                              }
-                              data-testid="record-payment"
-                            >
-                              {recordingPayment ? "Recording..." : "Record payment"}
-                            </button>
+                                  {recordingPayment ? "Recording..." : "Record payment"}
+                                </button>
+                              </>
+                            ) : (
+                              <div className="notice">{ledgerReadOnlyMessage}</div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -11529,7 +11657,7 @@ export default function PatientDetailClient({
             </div>
           )}
 
-          {showLedgerModal && (
+          {showLedgerModal && !ledgerReadOnly && (
             <div className="card" style={{ margin: 0 }}>
               <div className="stack">
                 <div className="row">

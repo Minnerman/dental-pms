@@ -35,7 +35,7 @@ from app.routers.patient_documents import (
 from app.routers.capabilities import router as capabilities_router
 from app.routers.config import router as config_router
 from app.services.users import seed_initial_admin
-from app.services.capabilities import backfill_user_capabilities, ensure_capabilities
+from app.services.capabilities import ensure_capabilities
 from app.services.document_templates import ensure_default_templates
 from app.models.user import User
 from sqlalchemy import select
@@ -73,9 +73,6 @@ def startup():
         ensured = ensure_capabilities(db)
         if ensured:
             logger.info("Capabilities ensured (%s total).", len(ensured))
-        backfilled = backfill_user_capabilities(db)
-        if backfilled:
-            logger.info("Capabilities backfilled for existing users (%s grants).", backfilled)
         actor = db.scalar(select(User).order_by(User.id.asc()).limit(1))
         if actor:
             created_templates = ensure_default_templates(db, actor=actor)
