@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { patientMutationError } from "@/lib/patientErrors";
 
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
 type CareSetting = "CLINIC" | "HOME" | "CARE_HOME" | "HOSPITAL";
@@ -30,6 +31,36 @@ export default function NewPatientPage() {
   const [referralNotes, setReferralNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const canWritePatients = Boolean(capabilities?.includes("patients.write"));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCapabilities() {
+      try {
+        const response = await apiFetch("/api/me/capabilities");
+        if (response.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!response.ok) {
+          throw new Error("Patient permissions could not be verified.");
+        }
+        const payload = (await response.json()) as string[];
+        if (!cancelled) setCapabilities(payload);
+      } catch {
+        if (!cancelled) {
+          setCapabilities([]);
+          setError("Patient permissions could not be verified.");
+        }
+      }
+    }
+    void loadCapabilities();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -37,6 +68,18 @@ export default function NewPatientPage() {
       e.nativeEvent instanceof SubmitEvent ? e.nativeEvent.submitter : null;
     const submitButton = submitter instanceof HTMLButtonElement ? submitter : null;
     if (saving || submitButton?.disabled) return;
+    if (!canWritePatients) {
+      setError("You do not have permission to create patients.");
+      return;
+    }
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First name and last name are required.");
+      return;
+    }
+    if (dob && dob > new Date().toISOString().slice(0, 10)) {
+      setError("Date of birth cannot be in the future.");
+      return;
+    }
     if (submitButton) {
       submitButton.disabled = true;
     }
@@ -46,8 +89,8 @@ export default function NewPatientPage() {
       const res = await apiFetch("/api/patients", {
         method: "POST",
         body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           email: email || null,
           phone: phone || null,
           date_of_birth: dob || null,
@@ -72,8 +115,7 @@ export default function NewPatientPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to create patient (HTTP ${res.status})`);
+        throw new Error(await patientMutationError(res, "Failed to create patient."));
       }
       const data = await res.json();
       router.push(`/patients/${data.id}`);
@@ -82,6 +124,19 @@ export default function NewPatientPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (capabilities === null) {
+    return <div className="badge">Checking patient permissions…</div>;
+  }
+
+  if (!canWritePatients) {
+    return (
+      <section className="card" style={{ maxWidth: 720 }}>
+        <h2 style={{ marginTop: 0 }}>New patient</h2>
+        <div className="notice">You do not have permission to create patients.</div>
+      </section>
+    );
   }
 
   return (
@@ -134,6 +189,7 @@ export default function NewPatientPage() {
           <input
             className="input"
             type="date"
+            max={new Date().toISOString().slice(0, 10)}
             value={dob}
             onChange={(e) => setDob(e.target.value)}
           />

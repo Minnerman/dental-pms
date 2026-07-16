@@ -45,7 +45,10 @@ export default function PatientsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const canWritePatients = Boolean(capabilities?.includes("patients.write"));
 
   const loadPatients = useCallback(async (filters?: {
     query?: string;
@@ -70,8 +73,11 @@ export default function PatientsPage() {
         router.replace("/login");
         return;
       }
+      if (res.status === 403) {
+        throw new Error("You do not have permission to view patients.");
+      }
       if (!res.ok) {
-        throw new Error(`Failed to load patients (HTTP ${res.status})`);
+        throw new Error("Failed to load patients.");
       }
       const data = (await res.json()) as Patient[];
       setPatients(data);
@@ -90,6 +96,32 @@ export default function PatientsPage() {
   }, [loadPatients]);
 
   useEffect(() => {
+    let cancelled = false;
+    async function loadCapabilities() {
+      try {
+        const response = await apiFetch("/api/me/capabilities");
+        if (response.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!response.ok) throw new Error();
+        const payload = (await response.json()) as string[];
+        if (!cancelled) setCapabilities(payload);
+      } catch {
+        if (!cancelled) {
+          setCapabilities([]);
+          setCapabilityError("Patient permissions could not be verified.");
+        }
+      }
+    }
+    void loadCapabilities();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  useEffect(() => {
     searchRef.current?.focus();
   }, []);
 
@@ -100,11 +132,18 @@ export default function PatientsPage() {
           title="Patients"
           subtitle="Search, create, and view patient records."
           actions={
-            <Link className="btn btn-primary" href="/patients/new">
-              New patient
-            </Link>
+            canWritePatients ? (
+              <Link className="btn btn-primary" href="/patients/new">
+                New patient
+              </Link>
+            ) : null
           }
         />
+
+        {capabilities !== null && !canWritePatients && (
+          <div className="notice">You can view patients, but you cannot change them.</div>
+        )}
+        {capabilityError && <div className="notice">{capabilityError}</div>}
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <input

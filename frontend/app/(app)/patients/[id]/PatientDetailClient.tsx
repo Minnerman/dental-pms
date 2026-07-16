@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { patientMutationError } from "@/lib/patientErrors";
 import { fdiToChartToothKey } from "@/lib/charting/fdiToChartToothKey";
 import {
   r4SurfaceCodeToSurfaceKey,
@@ -1005,8 +1006,8 @@ export default function PatientDetailClient({
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerBalance, setLedgerBalance] = useState<number | null>(null);
   const [ledgerBalanceError, setLedgerBalanceError] = useState<string | null>(null);
-  const [ledgerCapabilities, setLedgerCapabilities] = useState<string[] | null>(null);
-  const [ledgerCapabilityError, setLedgerCapabilityError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TreatmentTransaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
@@ -1189,8 +1190,9 @@ export default function PatientDetailClient({
   );
   const [chartingUrlApplied, setChartingUrlApplied] = useState(false);
   const canWriteAppointments = Boolean(
-    ledgerCapabilities?.includes("appointments.write")
+    capabilities?.includes("appointments.write")
   );
+  const canWritePatients = Boolean(capabilities?.includes("patients.write"));
   const chartingFiltersKey = useMemo(
     () =>
       JSON.stringify({
@@ -1333,8 +1335,11 @@ export default function PatientDetailClient({
         router.replace("/__notfound__");
         return;
       }
+      if (res.status === 403) {
+        throw new Error("You do not have permission to view this patient.");
+      }
       if (!res.ok) {
-        throw new Error(`Failed to load patient (HTTP ${res.status})`);
+        throw new Error("Failed to load patient.");
       }
       const data = (await res.json()) as Patient;
       setPatient(data);
@@ -1464,8 +1469,8 @@ export default function PatientDetailClient({
     }
   }, [patientId, router]);
 
-  const loadLedgerCapabilities = useCallback(async () => {
-    setLedgerCapabilityError(null);
+  const loadCapabilities = useCallback(async () => {
+    setCapabilityError(null);
     try {
       const res = await apiFetch("/api/me/capabilities");
       if (res.status === 401) {
@@ -1474,13 +1479,13 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        throw new Error("Ledger permissions could not be verified.");
+        throw new Error("Patient permissions could not be verified.");
       }
-      setLedgerCapabilities((await res.json()) as string[]);
+      setCapabilities((await res.json()) as string[]);
     } catch (err) {
-      setLedgerCapabilities([]);
-      setLedgerCapabilityError(
-        err instanceof Error ? err.message : "Ledger permissions could not be verified."
+      setCapabilities([]);
+      setCapabilityError(
+        err instanceof Error ? err.message : "Patient permissions could not be verified."
       );
     }
   }, [router]);
@@ -3255,7 +3260,7 @@ export default function PatientDetailClient({
     void loadEstimates();
     void loadAppointments();
     void loadUsers();
-    void loadLedgerCapabilities();
+    void loadCapabilities();
     void loadLedger();
     void loadLedgerBalance();
     void loadFinanceSummary();
@@ -3266,7 +3271,7 @@ export default function PatientDetailClient({
     loadEstimates,
     loadFinanceSummary,
     loadInvoices,
-    loadLedgerCapabilities,
+    loadCapabilities,
     loadLedger,
     loadLedgerBalance,
     loadNotes,
@@ -3792,7 +3797,7 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (!patient || handledBookParam) return;
     if (searchParams?.get("book") === "1") {
-      if (ledgerCapabilities === null) return;
+      if (capabilities === null) return;
       activateContentTab("summary");
       if (canWriteAppointments) {
         openBookingModal();
@@ -3806,7 +3811,7 @@ export default function PatientDetailClient({
     activateContentTab,
     canWriteAppointments,
     handledBookParam,
-    ledgerCapabilities,
+    capabilities,
     openBookingModal,
     patient,
     searchParams,
@@ -4328,12 +4333,12 @@ export default function PatientDetailClient({
   const financeBalance =
     financeSummary?.outstanding_balance_pence ?? ledgerBalance;
   const canWriteLedger = Boolean(
-    ledgerCapabilities?.includes("billing.payments.write")
+    capabilities?.includes("billing.payments.write")
   );
   const ledgerReadOnly = Boolean(patient?.deleted_at) || !canWriteLedger;
   const ledgerReadOnlyMessage = patient?.deleted_at
     ? "Archived patients have a read-only ledger."
-    : ledgerCapabilities === null
+    : capabilities === null
     ? "Checking ledger permissions…"
     : "You can view this ledger, but you cannot add entries.";
 
@@ -4637,6 +4642,10 @@ export default function PatientDetailClient({
   async function savePatient(e: React.FormEvent) {
     e.preventDefault();
     if (!patient) return;
+    if (!canWritePatients || patient.deleted_at) {
+      setError("You do not have permission to change this patient.");
+      return;
+    }
     const submitter = (e.nativeEvent as SubmitEvent).submitter;
     const button = submitter instanceof HTMLButtonElement ? submitter : null;
     if (savingPatient || savingPatientIds.has(patientId) || button?.disabled) return;
@@ -4690,8 +4699,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update patient (HTTP ${res.status})`);
+        throw new Error(await patientMutationError(res, "Failed to update patient."));
       }
       const data = (await res.json()) as Patient;
       setPatient(data);
@@ -5499,6 +5507,10 @@ export default function PatientDetailClient({
     action: "archive" | "restore",
     button?: HTMLButtonElement | null
   ) {
+    if (!canWritePatients) {
+      setError("You do not have permission to change this patient.");
+      return;
+    }
     if (
       !button ||
       savingPatient ||
@@ -5521,8 +5533,9 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to ${action} patient (HTTP ${res.status})`);
+        throw new Error(
+          await patientMutationError(res, `Failed to ${action} patient.`)
+        );
       }
       await loadPatient();
     } catch (err) {
@@ -5686,6 +5699,15 @@ export default function PatientDetailClient({
                   <span style={patientHeaderMetaPillStyle}>
                     Care {careSettingLabels[patient.care_setting]}
                   </span>
+                  {patient.deleted_at && (
+                    <span
+                      className="badge"
+                      data-testid="patient-archived-badge"
+                      style={{ background: "#b07b24", color: "white" }}
+                    >
+                      Archived
+                    </span>
+                  )}
                   <span style={patientHeaderMetaPillStyle}>Created by {patient.created_by.email}</span>
                   <span
                     style={patientHeaderMetaPillStyle}
@@ -6517,6 +6539,16 @@ export default function PatientDetailClient({
                     <summary className="label">Patient details</summary>
                     <div className="stack" style={{ marginTop: 12 }}>
                       <form onSubmit={savePatient} className="stack">
+                  {patient.deleted_at ? (
+                    <div className="notice">Archived patient details are read-only until restored.</div>
+                  ) : capabilities !== null && !canWritePatients ? (
+                    <div className="notice">You can view this patient, but you cannot change it.</div>
+                  ) : null}
+                  <fieldset
+                    data-testid="patient-details-fields"
+                    disabled={!canWritePatients || Boolean(patient.deleted_at)}
+                    style={{ border: 0, padding: 0, margin: 0, display: "contents" }}
+                  >
                   <div className="grid grid-2">
                     <div className="stack" style={{ gap: 8 }}>
                       <label className="label">First name</label>
@@ -6937,34 +6969,40 @@ export default function PatientDetailClient({
                     />
                   </div>
 
+                  </fieldset>
+
                   <div className="row">
-                    <button
-                      className="btn btn-primary"
-                      data-testid="patient-save-changes"
-                      disabled={savingPatient}
-                    >
-                      {savingPatient ? "Saving..." : "Save changes"}
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      onClick={(event) =>
-                        void updatePatientArchiveState(
-                          patient.deleted_at ? "restore" : "archive",
-                          event.currentTarget
-                        )
-                      }
-                      disabled={savingPatient || patientArchiveAction !== null}
-                      data-testid="patient-archive-toggle"
-                    >
-                      {patientArchiveAction === "archive"
-                        ? "Archiving..."
-                        : patientArchiveAction === "restore"
-                          ? "Restoring..."
-                          : patient.deleted_at
-                            ? "Restore patient"
-                            : "Archive patient"}
-                    </button>
+                    {canWritePatients && !patient.deleted_at && (
+                      <button
+                        className="btn btn-primary"
+                        data-testid="patient-save-changes"
+                        disabled={savingPatient}
+                      >
+                        {savingPatient ? "Saving..." : "Save changes"}
+                      </button>
+                    )}
+                    {canWritePatients && (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={(event) =>
+                          void updatePatientArchiveState(
+                            patient.deleted_at ? "restore" : "archive",
+                            event.currentTarget
+                          )
+                        }
+                        disabled={savingPatient || patientArchiveAction !== null}
+                        data-testid="patient-archive-toggle"
+                      >
+                        {patientArchiveAction === "archive"
+                          ? "Archiving..."
+                          : patientArchiveAction === "restore"
+                            ? "Restoring..."
+                            : patient.deleted_at
+                              ? "Restore patient"
+                              : "Archive patient"}
+                      </button>
+                    )}
                   </div>
                   </form>
                 </div>
@@ -9850,7 +9888,7 @@ export default function PatientDetailClient({
                     </div>
                   </div>
                   {ledgerReadOnly && <div className="notice">{ledgerReadOnlyMessage}</div>}
-                  {ledgerCapabilityError && <div className="notice">{ledgerCapabilityError}</div>}
+                  {capabilityError && <div className="notice">{capabilityError}</div>}
                   {ledgerBalanceError && <div className="notice">{ledgerBalanceError}</div>}
                   {ledgerError && <div className="notice">{ledgerError}</div>}
                   {ledgerLoading ? (

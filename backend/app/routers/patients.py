@@ -169,7 +169,7 @@ def _log_recall_timeline(
 @router.get("", response_model=list[PatientOut])
 def list_patients(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("patients.view")),
     query: str | None = Query(default=None, alias="query"),
     q: str | None = Query(default=None, alias="q"),
     email: str | None = Query(default=None),
@@ -207,7 +207,7 @@ def list_patients(
 @router.get("/search", response_model=list[PatientSearchOut])
 def search_patients(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("patients.view")),
     q: str = Query(min_length=1),
     limit: int = Query(default=20, ge=1, le=50),
 ):
@@ -233,7 +233,7 @@ def create_patient(
     payload: PatientCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("patients.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = Patient(
@@ -297,7 +297,7 @@ def create_patient(
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("patients.view")),
     include_deleted: bool = Query(default=False),
 ):
     patient = db.get(Patient, patient_id)
@@ -314,7 +314,7 @@ def update_patient(
     payload: PatientUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("patients.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
@@ -323,11 +323,20 @@ def update_patient(
     if patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
 
+    updates = payload.model_dump(exclude_unset=True)
+    changed_updates = {
+        field: value
+        for field, value in updates.items()
+        if getattr(patient, field) != value
+    }
+    if not changed_updates:
+        return patient
+
     before_data = snapshot_model(patient)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    for field, value in changed_updates.items():
         setattr(patient, field, value)
     if any(
-        field in payload.model_fields_set
+        field in changed_updates
         for field in ("recall_due_date", "recall_interval_months", "recall_status")
     ):
         patient.recall_last_set_at = datetime.now(timezone.utc)
@@ -360,7 +369,7 @@ def archive_patient(
     patient_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("patients.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
@@ -377,7 +386,7 @@ def archive_patient(
     log_event(
         db,
         actor=user,
-        action="delete",
+        action="archive",
         entity_type="patient",
         entity_id=str(patient.id),
         before_data=before_data,
@@ -395,7 +404,7 @@ def restore_patient(
     patient_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("patients.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
@@ -482,10 +491,13 @@ def set_patient_recall(
 def patient_audit(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("patients.view")),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    patient = db.get(Patient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     stmt = (
         select(AuditLog)
         .where(AuditLog.entity_type == "patient", AuditLog.entity_id == str(patient_id))

@@ -3,29 +3,17 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
-- The 2026-07-15 deployment batch containing PRs #693 and #694 remains rolled
-  back. Its hardened patient-ledger smoke now passes all 18 checkpoints. The
-  next retry stopped because an ad hoc appointment smoke used single-click,
-  which selects an appointment but intentionally does not open detail. Isolated
-  old-versus-candidate comparison proved double-click and context-menu Open both
-  render detail and history without API, browser, or write failures. A
-  deterministic context-menu-based appointment no-write smoke is being added;
-  another deployment retry remains separately gated and is not authorised.
-- The pre-PR #694 authoritative continuity baseline is
-  `origin/master@9be8d34614eb5cb437f085ae52bbecf121a0b101`.
-- Dental PMS is the live/main PMS and post-launch stability is recorded as
-  `pass`; rollback is not required.
+- Deployment batch 1 passed on 2026-07-16. Production is stable on
+  `20767bc5c303d5bb467cf343123379ffadbf42c1`; PR #693 patient-ledger reliability
+  and PR #694 appointment reliability are live, and rollback is not required.
+- The deterministic patient-ledger and appointment no-write smokes both passed
+  all 18 checkpoints, and the production 404 smoke passed.
+- Patient-record reliability, permissions, lifecycle validation, and audit are
+  the active coherent feature-sized implementation slice.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
   merged code under a separate deployment instruction.
-- PR #693's patient-ledger reliability and permissions feature is merged and
-  remains undeployed. The appointment reliability, permissions, conflict, and
-  audit feature is complete in PR #694 across the backend, frontend, and
-  focused regression tests.
-- Deployment batch 1 contains PR #693 and PR #694. Deployment remains pending
-  and requires a separate controlled deployment instruction after both PRs
-  are merged.
 - R4 research is a separately gated, parallel, batched, strictly read-only
   track. R4 writes are permanently prohibited. The deferred finance backlog
   remains blocked at `1017`, and invoice/payment/staging import remains blocked.
