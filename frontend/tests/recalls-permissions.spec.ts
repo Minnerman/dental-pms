@@ -117,6 +117,60 @@ test("patient recall controls respect read, write, and export permissions", asyn
 });
 
 
+test("patient recall details stay hidden without recall view permission", async ({
+  page,
+  request,
+}) => {
+  const baseUrl = getBaseUrl();
+  const token = await ensureAuthReady(request);
+  const patientId = await createPatient(request, {
+    first_name: "Recall",
+    last_name: `Redaction ${Date.now()}`,
+  });
+  const seeded = await request.post(`${baseUrl}/api/patients/${patientId}/recall`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      interval_months: 9,
+      due_date: "2035-10-20",
+      status: "booked",
+      recall_type: "hygiene",
+      notes: "synthetic restricted recall note",
+    },
+  });
+  expect(seeded.ok()).toBeTruthy();
+
+  await primePageAuth(page, request);
+  await page.route("**/api/me/capabilities", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(["patients.view"]),
+    });
+  });
+  const patientResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === `/api/patients/${patientId}`;
+  });
+  await page.goto(`${baseUrl}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  const patientResponse = await patientResponsePromise;
+  const rawPatient = (await patientResponse.json()) as {
+    recall_due_date: string | null;
+    recall_status: string | null;
+  };
+  expect(rawPatient.recall_due_date).toBe("2035-10-20");
+  expect(rawPatient.recall_status).toBe("booked");
+
+  await expect(page.getByTestId("patient-header-card")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("patient-header-recall")).toHaveCount(0);
+  await expect(page.getByTestId("patient-overview-recall-due")).toHaveCount(0);
+  await expect(page.getByTestId("patient-overview-recall-status")).toHaveCount(0);
+  await expect(page.getByTestId("patient-summary-recall")).toHaveCount(0);
+  await expect(page.getByText("20/10/2035", { exact: true })).toHaveCount(0);
+});
+
+
 test("capability verification failure blocks recall data with a safe message", async ({
   page,
   request,

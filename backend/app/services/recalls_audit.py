@@ -102,6 +102,10 @@ def log_recall_changes(
                 ("status", "completed_at"),
             )
         )
+    elif before.get("completed_at") != after.get("completed_at"):
+        action_fields.append(
+            ("recall.completion_time_changed", ("completed_at",))
+        )
     if before.get("due_date") != after.get("due_date"):
         action_fields.append(("recall.due_date_changed", ("due_date",)))
     if before.get("kind") != after.get("kind"):

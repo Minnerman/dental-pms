@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.deps import get_current_user, require_capability
 from app.models.audit_log import AuditLog
 from app.models.appointment import Appointment
+from app.models.capability import Capability, UserCapability
 from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
@@ -60,6 +61,48 @@ from app.routers.recalls import bump_export_count_cache_epoch
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
+PATIENT_RECALL_FIELDS = {
+    "recall_interval_months",
+    "recall_due_date",
+    "recall_status",
+    "recall_type",
+    "recall_last_contacted_at",
+    "recall_notes",
+}
+PATIENT_RECALL_RESPONSE_FIELDS = PATIENT_RECALL_FIELDS | {
+    "recall_last_set_at",
+    "recall_last_set_by_user_id",
+}
+
+
+def _user_has_capability(db: Session, user: User, code: str) -> bool:
+    return (
+        db.scalar(
+            select(UserCapability.capability_id)
+            .join(Capability, Capability.id == UserCapability.capability_id)
+            .where(UserCapability.user_id == user.id, Capability.code == code)
+        )
+        is not None
+    )
+
+
+def _require_recall_write_for_patient_fields(
+    db: Session, user: User, fields: set[str]
+) -> None:
+    if fields.intersection(PATIENT_RECALL_FIELDS) and not _user_has_capability(
+        db, user, "recalls.write"
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+def _patient_response(patient: Patient, *, can_view_recalls: bool) -> PatientOut:
+    response = PatientOut.model_validate(patient)
+    if can_view_recalls:
+        return response
+    return response.model_copy(
+        update={field: None for field in PATIENT_RECALL_RESPONSE_FIELDS}
+    )
+
 
 def add_months(base_date: date, months: int) -> date:
     month_index = base_date.month - 1 + months
@@ -98,7 +141,7 @@ def _decode_tx_cursor(cursor: str) -> tuple[datetime, int]:
 @router.get("", response_model=list[PatientOut])
 def list_patients(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_capability("patients.view")),
+    user: User = Depends(require_capability("patients.view")),
     query: str | None = Query(default=None, alias="query"),
     q: str | None = Query(default=None, alias="q"),
     email: str | None = Query(default=None),
@@ -130,7 +173,11 @@ def list_patients(
     if category:
         stmt = stmt.where(Patient.patient_category == category)
     stmt = stmt.limit(limit).offset(offset)
-    return list(db.scalars(stmt))
+    can_view_recalls = _user_has_capability(db, user, "recalls.view")
+    return [
+        _patient_response(patient, can_view_recalls=can_view_recalls)
+        for patient in db.scalars(stmt)
+    ]
 
 
 @router.get("/search", response_model=list[PatientSearchOut])
@@ -165,6 +212,7 @@ def create_patient(
     user: User = Depends(require_capability("patients.write")),
     request_id: str | None = Header(default=None),
 ):
+    _require_recall_write_for_patient_fields(db, user, payload.model_fields_set)
     patient = Patient(
         nhs_number=payload.nhs_number,
         title=payload.title,
@@ -219,14 +267,17 @@ def create_patient(
     )
     db.commit()
     db.refresh(patient)
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_capability("patients.view")),
+    user: User = Depends(require_capability("patients.view")),
     include_deleted: bool = Query(default=False),
 ):
     patient = db.get(Patient, patient_id)
@@ -234,7 +285,10 @@ def get_patient(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if patient.deleted_at is not None and not include_deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.patch("/{patient_id}", response_model=PatientOut)
@@ -252,6 +306,7 @@ def update_patient(
     if patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
 
+    _require_recall_write_for_patient_fields(db, user, payload.model_fields_set)
     updates = payload.model_dump(exclude_unset=True)
     changed_updates = {
         field: value
@@ -259,7 +314,10 @@ def update_patient(
         if getattr(patient, field) != value
     }
     if not changed_updates:
-        return patient
+        return _patient_response(
+            patient,
+            can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+        )
 
     before_data = snapshot_model(patient)
     for field, value in changed_updates.items():
@@ -290,7 +348,10 @@ def update_patient(
     )
     db.commit()
     db.refresh(patient)
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.post("/{patient_id}/archive", response_model=PatientOut)
@@ -305,7 +366,10 @@ def archive_patient(
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if patient.deleted_at is not None:
-        return patient
+        return _patient_response(
+            patient,
+            can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+        )
 
     before_data = snapshot_model(patient)
     patient.deleted_at = datetime.now(timezone.utc)
@@ -326,7 +390,10 @@ def archive_patient(
     db.commit()
     db.refresh(patient)
     bump_export_count_cache_epoch("patients.archive_patient")
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.post("/{patient_id}/restore", response_model=PatientOut)
@@ -341,7 +408,10 @@ def restore_patient(
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if patient.deleted_at is None:
-        return patient
+        return _patient_response(
+            patient,
+            can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+        )
 
     before_data = snapshot_model(patient)
     patient.deleted_at = None
@@ -362,7 +432,10 @@ def restore_patient(
     db.commit()
     db.refresh(patient)
     bump_export_count_cache_epoch("patients.restore_patient")
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.post("/{patient_id}/recall", response_model=PatientOut)
@@ -909,7 +982,9 @@ def update_patient_recall(
     if target_status == PatientRecallStatus.completed:
         if recall.status != PatientRecallStatus.completed:
             recall.status = PatientRecallStatus.completed
-        if before_data["status"] != PatientRecallStatus.completed.value:
+        if "completed_at" in fields and payload.completed_at is not None:
+            recall.completed_at = payload.completed_at
+        elif before_data["status"] != PatientRecallStatus.completed.value:
             recall.completed_at = payload.completed_at or datetime.now(timezone.utc)
         elif recall.completed_at is None:
             recall.completed_at = payload.completed_at or datetime.now(timezone.utc)

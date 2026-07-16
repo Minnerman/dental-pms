@@ -232,6 +232,102 @@ def test_recall_capabilities_are_authoritative_and_denials_are_side_effect_free(
     assert _side_effect_counts(patient_id, recall_id) == baseline
 
 
+def test_patient_routes_cannot_bypass_or_disclose_recall_capabilities(
+    api_client,
+    auth_headers,
+):
+    label = f"Patient-boundary-{uuid4().hex[:8]}"
+    patient_id = _create_patient(api_client, auth_headers, label)
+    seeded = api_client.post(
+        f"/patients/{patient_id}/recall",
+        headers=auth_headers,
+        json={
+            "interval_months": 9,
+            "due_date": "2035-10-20",
+            "status": "booked",
+            "recall_type": "hygiene",
+            "last_contacted_at": "2035-01-02T09:30:00Z",
+            "notes": "synthetic restricted recall note",
+        },
+    )
+    assert seeded.status_code == 200, seeded.text
+
+    user_id, _email, user_headers = _create_user_headers()
+    _set_capabilities(user_id, ["patients.view", "patients.write"])
+    redacted_fields = {
+        "recall_interval_months",
+        "recall_due_date",
+        "recall_status",
+        "recall_type",
+        "recall_last_contacted_at",
+        "recall_notes",
+        "recall_last_set_at",
+        "recall_last_set_by_user_id",
+    }
+
+    detail = api_client.get(f"/patients/{patient_id}", headers=user_headers)
+    assert detail.status_code == 200, detail.text
+    assert all(detail.json()[field] is None for field in redacted_fields)
+
+    listing = api_client.get(
+        "/patients",
+        headers=user_headers,
+        params={"q": label},
+    )
+    assert listing.status_code == 200, listing.text
+    assert len(listing.json()) == 1
+    assert all(listing.json()[0][field] is None for field in redacted_fields)
+
+    general_update = api_client.patch(
+        f"/patients/{patient_id}",
+        headers=user_headers,
+        json={"city": "Synthetic City"},
+    )
+    assert general_update.status_code == 200, general_update.text
+    assert all(general_update.json()[field] is None for field in redacted_fields)
+    audit_count = len(_patient_audits(patient_id))
+
+    denied_update = api_client.patch(
+        f"/patients/{patient_id}",
+        headers=user_headers,
+        json={
+            "recall_due_date": "2036-01-15",
+            "recall_status": "contacted",
+            "recall_notes": "must not persist",
+        },
+    )
+    assert denied_update.status_code == 403, denied_update.text
+    assert len(_patient_audits(patient_id)) == audit_count
+
+    denied_label = f"Denied-recall-create-{uuid4().hex[:8]}"
+    denied_create = api_client.post(
+        "/patients",
+        headers=user_headers,
+        json={
+            "first_name": "Denied",
+            "last_name": denied_label,
+            "recall_due_date": "2036-01-15",
+        },
+    )
+    assert denied_create.status_code == 403, denied_create.text
+    session = SessionLocal()
+    try:
+        assert (
+            session.scalar(
+                select(func.count(Patient.id)).where(Patient.last_name == denied_label)
+            )
+            == 0
+        )
+    finally:
+        session.close()
+
+    unchanged = api_client.get(f"/patients/{patient_id}", headers=auth_headers)
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["recall_due_date"] == "2035-10-20"
+    assert unchanged.json()["recall_status"] == "booked"
+    assert unchanged.json()["recall_notes"] == "synthetic restricted recall note"
+
+
 def test_recall_lifecycle_partial_updates_audit_and_idempotency(
     api_client,
     auth_headers,
@@ -304,6 +400,40 @@ def test_recall_lifecycle_partial_updates_audit_and_idempotency(
     assert repeated_completion.status_code == 200, repeated_completion.text
     assert repeated_completion.json()["completed_at"] == completed_at
     assert len(_patient_audits(patient_id)) == completed_audit_count
+
+    corrected_at = datetime.now(timezone.utc) - timedelta(days=2)
+    corrected = api_client.patch(
+        f"/patients/{patient_id}/recalls/{recall_id}",
+        headers=auth_headers,
+        json={"completed_at": corrected_at.isoformat()},
+    )
+    assert corrected.status_code == 200, corrected.text
+    corrected_value = datetime.fromisoformat(
+        corrected.json()["completed_at"].replace("Z", "+00:00")
+    )
+    assert corrected_value == corrected_at
+    correction_audits = _patient_audits(patient_id)
+    assert correction_audits[-1].action == "recall.completion_time_changed"
+    audited_before = datetime.fromisoformat(
+        correction_audits[-1].before_json["completed_at"].replace("Z", "+00:00")
+    )
+    audited_after = datetime.fromisoformat(
+        correction_audits[-1].after_json["completed_at"].replace("Z", "+00:00")
+    )
+    original_completed_at = datetime.fromisoformat(
+        completed_at.replace("Z", "+00:00")
+    )
+    assert audited_before == original_completed_at
+    assert audited_after == corrected_at
+
+    corrected_audit_count = len(correction_audits)
+    repeated_correction = api_client.patch(
+        f"/patients/{patient_id}/recalls/{recall_id}",
+        headers=auth_headers,
+        json={"completed_at": corrected_at.isoformat()},
+    )
+    assert repeated_correction.status_code == 200, repeated_correction.text
+    assert len(_patient_audits(patient_id)) == corrected_audit_count
 
     reopened = api_client.patch(
         f"/patients/{patient_id}/recalls/{recall_id}",

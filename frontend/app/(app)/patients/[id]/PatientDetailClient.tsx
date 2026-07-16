@@ -3818,7 +3818,13 @@ export default function PatientDetailClient({
   }, [canWriteAppointments, patient]);
 
   useEffect(() => {
-    if (!patient) return;
+    if (!patient || !canViewRecalls) {
+      setRecallInterval("6");
+      setRecallDueDate("");
+      setRecallStatus("due");
+      setBookingMarkRecall(false);
+      return;
+    }
     setRecallInterval(String(patient.recall_interval_months ?? 6));
     setRecallDueDate(patient.recall_due_date ?? "");
     if (patient.recall_status) {
@@ -3827,7 +3833,7 @@ export default function PatientDetailClient({
       setRecallStatus("due");
     }
     setBookingMarkRecall(Boolean(patient.recall_due_date));
-  }, [patient]);
+  }, [canViewRecalls, patient]);
 
   useEffect(() => {
     if (!patient || handledBookParam) return;
@@ -5804,14 +5810,17 @@ export default function PatientDetailClient({
                       {alert.label}
                     </span>
                   ))}
-                  {patient.recall_due_date ? (
-                    <span className="badge">
-                      Recall {recallStatusLabels[patient.recall_status || "due"]} ·{" "}
-                      {formatShortDate(patient.recall_due_date)}
-                    </span>
-                  ) : (
-                    <span className="badge">Recall not set</span>
-                  )}
+                  {canViewRecalls &&
+                    (patient.recall_due_date ? (
+                      <span className="badge" data-testid="patient-header-recall">
+                        Recall {recallStatusLabels[patient.recall_status || "due"]} ·{" "}
+                        {formatShortDate(patient.recall_due_date)}
+                      </span>
+                    ) : (
+                      <span className="badge" data-testid="patient-header-recall">
+                        Recall not set
+                      </span>
+                    ))}
                 </div>
                 {headerAlertFlags.length > 0 && (
                   <div style={{ display: "grid", gap: 6 }}>
@@ -5896,18 +5905,22 @@ export default function PatientDetailClient({
                   <div className="label">Email</div>
                   <div>{patient.email || "—"}</div>
                 </div>
-                <div>
-                  <div className="label">Recall due</div>
-                  <div>{formatShortDate(patient.recall_due_date)}</div>
-                </div>
-                <div>
-                  <div className="label">Recall status</div>
-                  <div>
-                    <span className="badge">
-                      {recallStatusLabels[patient.recall_status || "due"]}
-                    </span>
-                  </div>
-                </div>
+                {canViewRecalls && (
+                  <>
+                    <div data-testid="patient-overview-recall-due">
+                      <div className="label">Recall due</div>
+                      <div>{formatShortDate(patient.recall_due_date)}</div>
+                    </div>
+                    <div data-testid="patient-overview-recall-status">
+                      <div className="label">Recall status</div>
+                      <div>
+                        <span className="badge">
+                          {recallStatusLabels[patient.recall_status || "due"]}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div>
                   <div className="label">Address</div>
                   <div>{buildAddress(patient) || "—"}</div>
@@ -6102,14 +6115,16 @@ export default function PatientDetailClient({
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <div className="badge">
-                        Recall{" "}
-                        {patient.recall_due_date
-                          ? `${recallStatusLabels[patient.recall_status || "due"]} · ${formatShortDate(
-                              patient.recall_due_date
-                            )}`
-                          : "not set"}
-                      </div>
+                      {canViewRecalls && (
+                        <div className="badge" data-testid="patient-summary-recall">
+                          Recall{" "}
+                          {patient.recall_due_date
+                            ? `${recallStatusLabels[
+                                patient.recall_status || "due"
+                              ]} · ${formatShortDate(patient.recall_due_date)}`
+                            : "not set"}
+                        </div>
+                      )}
                       <div className="badge">
                         Balance: {financeBalance === null
                           ? "unavailable"
