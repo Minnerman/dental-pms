@@ -12,6 +12,7 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("appointments.cancel", "Cancel appointments"),
     ("appointments.reschedule", "Reschedule appointments"),
     ("patients.view", "View patients"),
+    ("patients.write", "Create and manage patients"),
     ("notes.write", "Create and edit clinical notes"),
     ("documents.upload", "Upload patient documents"),
     ("documents.download", "Download patient documents"),
@@ -23,6 +24,10 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("admin.users.manage", "Manage users"),
     ("admin.permissions.manage", "Manage user permissions"),
 ]
+
+DEFAULT_GRANT_FROM: dict[str, str] = {
+    "patients.write": "patients.view",
+}
 
 
 def list_capabilities(db: Session) -> list[Capability]:
@@ -47,6 +52,31 @@ def ensure_capabilities(db: Session) -> list[Capability]:
         cap = Capability(code=code, description=description)
         db.add(cap)
         created.append(cap)
+    if created:
+        db.flush()
+        for capability in created:
+            source_code = DEFAULT_GRANT_FROM.get(capability.code)
+            if not source_code:
+                continue
+            source_id = db.scalar(
+                select(Capability.id).where(Capability.code == source_code)
+            )
+            if source_id is None:
+                continue
+            user_ids = list(
+                db.scalars(
+                    select(UserCapability.user_id).where(
+                        UserCapability.capability_id == source_id
+                    )
+                )
+            )
+            for user_id in user_ids:
+                db.add(
+                    UserCapability(
+                        user_id=user_id,
+                        capability_id=capability.id,
+                    )
+                )
     if created or updated:
         db.commit()
     if created:

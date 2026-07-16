@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models.patient import CareSetting, PatientCategory, RecallStatus
 from app.models.patient_recall import (
@@ -15,11 +15,11 @@ from app.schemas.actor import ActorOut
 class PatientBase(BaseModel):
     nhs_number: Optional[str] = None
     title: Optional[str] = None
-    first_name: str
-    last_name: str
+    first_name: str = Field(min_length=1, max_length=120)
+    last_name: str = Field(min_length=1, max_length=120)
     date_of_birth: Optional[date] = None
-    phone: Optional[str] = None
-    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[EmailStr] = Field(default=None, max_length=320)
     address_line1: Optional[str] = None
     address_line2: Optional[str] = None
     city: Optional[str] = None
@@ -50,6 +50,18 @@ class PatientBase(BaseModel):
     recall_last_contacted_at: Optional[datetime] = None
     recall_notes: Optional[str] = None
 
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def normalize_required_names(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def reject_future_date_of_birth(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("Date of birth cannot be in the future.")
+        return value
+
 
 class PatientCreate(PatientBase):
     pass
@@ -58,11 +70,11 @@ class PatientCreate(PatientBase):
 class PatientUpdate(BaseModel):
     nhs_number: Optional[str] = None
     title: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     date_of_birth: Optional[date] = None
-    phone: Optional[str] = None
-    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[EmailStr] = Field(default=None, max_length=320)
     address_line1: Optional[str] = None
     address_line2: Optional[str] = None
     city: Optional[str] = None
@@ -92,6 +104,31 @@ class PatientUpdate(BaseModel):
     recall_type: Optional[str] = None
     recall_last_contacted_at: Optional[datetime] = None
     recall_notes: Optional[str] = None
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def normalize_required_names(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def reject_future_date_of_birth(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("Date of birth cannot be in the future.")
+        return value
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self):
+        required_fields = {
+            "first_name",
+            "last_name",
+            "patient_category",
+            "care_setting",
+        }
+        for field_name in required_fields.intersection(self.model_fields_set):
+            if getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} cannot be null.")
+        return self
 
 
 class PatientOut(PatientBase):
