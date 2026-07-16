@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { recallResponseError, sanitizeRecallFilename } from "@/lib/recallErrors";
 import Table from "@/components/ui/Table";
 
 type RecallStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
@@ -178,8 +179,47 @@ export default function RecallsPage() {
   const [suggestedFilenameZip, setSuggestedFilenameZip] = useState<string | null>(
     null
   );
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const canViewRecalls = Boolean(capabilities?.includes("recalls.view"));
+  const canWriteRecalls = Boolean(capabilities?.includes("recalls.write"));
+  const canExportRecalls = Boolean(capabilities?.includes("recalls.export"));
+  const canWriteAppointments = Boolean(
+    capabilities?.includes("appointments.write")
+  );
+  const canViewPatients = Boolean(capabilities?.includes("patients.view"));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCapabilities() {
+      setCapabilityError(null);
+      try {
+        const response = await apiFetch("/api/me/capabilities");
+        if (response.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!response.ok) throw new Error();
+        const payload = (await response.json()) as string[];
+        if (!cancelled) setCapabilities(payload);
+      } catch {
+        if (!cancelled) {
+          setCapabilities([]);
+          setCapabilityError(
+            "Recall permissions could not be verified. Recall actions are blocked."
+          );
+        }
+      }
+    }
+    void loadCapabilities();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   function handleBook(row: RecallRow) {
+    if (!canWriteAppointments) return;
     const reason = `Recall: ${kindLabels[row.recall_kind]}`;
     const params = new URLSearchParams({
       book: "1",
@@ -303,26 +343,7 @@ export default function RecallsPage() {
   }
 
   function sanitizeExportFilename(value: string, maxLength = 120) {
-    let cleaned = value.replace(/[\x00-\x1f\x7f]+/g, "");
-    cleaned = cleaned.replace(/[<>:"/\\|?*]+/g, "_");
-    cleaned = cleaned.replace(/\s+/g, "_").trim();
-    cleaned = cleaned.replace(/[^a-zA-Z0-9._-]+/g, "_");
-    cleaned = cleaned.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
-    if (cleaned.length <= maxLength) return cleaned;
-    const match = cleaned.match(/(\.[a-zA-Z0-9]{1,10})$/);
-    if (!match) {
-      return cleaned.slice(0, maxLength);
-    }
-    const ext = match[1];
-    const base = cleaned.slice(0, -ext.length);
-    const baseMax = maxLength - ext.length;
-    if (baseMax <= 0) {
-      return cleaned.slice(0, maxLength);
-    }
-    if (baseMax > 3) {
-      return `${base.slice(0, baseMax - 3)}...${ext}`;
-    }
-    return `${base.slice(0, baseMax)}${ext}`;
+    return sanitizeRecallFilename(value, "recalls-export", maxLength);
   }
 
   function buildExportFilename(kind: "csv" | "zip") {
@@ -352,16 +373,16 @@ export default function RecallsPage() {
 
   function getFilenameFromDisposition(res: Response, fallback: string) {
     const header = res.headers.get("content-disposition");
-    if (!header) return fallback;
-    const match = /filename="?([^"]+)"?/i.exec(header);
-    return match?.[1] || fallback;
+    if (!header) return sanitizeRecallFilename(fallback, "recall-download");
+    const match = /filename="?([^";]+)"?/i.exec(header);
+    return sanitizeRecallFilename(match?.[1] || fallback, fallback);
   }
 
   async function downloadRecallLetter(
     row: RecallRow,
     button?: HTMLButtonElement | null
   ) {
-    if (!button || button.disabled) {
+    if (!canExportRecalls || !button || button.disabled) {
       return;
     }
     button.disabled = true;
@@ -377,8 +398,9 @@ export default function RecallsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download letter (HTTP ${res.status})`);
+        throw new Error(
+          await recallResponseError(res, "Failed to download recall letter.")
+        );
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -397,7 +419,13 @@ export default function RecallsPage() {
   }
 
   async function exportCsv(button?: HTMLButtonElement | null) {
-    if (!button || exporting || recallsExportLocks.has("csv") || button.disabled) {
+    if (
+      !canExportRecalls ||
+      !button ||
+      exporting ||
+      recallsExportLocks.has("csv") ||
+      button.disabled
+    ) {
       return;
     }
     recallsExportLocks.add("csv");
@@ -417,17 +445,7 @@ export default function RecallsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        let detail = msg;
-        try {
-          const parsed = JSON.parse(msg);
-          if (parsed?.detail) {
-            detail = parsed.detail;
-          }
-        } catch {
-          // keep original message
-        }
-        throw new Error(detail || `Failed to export CSV (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to export recalls CSV."));
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -450,7 +468,13 @@ export default function RecallsPage() {
   }
 
   async function downloadLettersZip(button?: HTMLButtonElement | null) {
-    if (!button || downloadingZip || getRecallsZipExportLockSnapshot() || button.disabled) {
+    if (
+      !canExportRecalls ||
+      !button ||
+      downloadingZip ||
+      getRecallsZipExportLockSnapshot() ||
+      button.disabled
+    ) {
       return;
     }
     setRecallsZipExportLocked(true);
@@ -469,17 +493,9 @@ export default function RecallsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        let detail = msg;
-        try {
-          const parsed = JSON.parse(msg);
-          if (parsed?.detail) {
-            detail = parsed.detail;
-          }
-        } catch {
-          // keep original message
-        }
-        throw new Error(detail || `Failed to download ZIP (HTTP ${res.status})`);
+        throw new Error(
+          await recallResponseError(res, "Failed to download recall letters ZIP.")
+        );
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -501,6 +517,12 @@ export default function RecallsPage() {
   }
 
   useEffect(() => {
+    if (capabilities === null) return;
+    if (!canViewRecalls) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     let active = true;
     async function loadRecalls() {
       setLoading(true);
@@ -514,8 +536,7 @@ export default function RecallsPage() {
           return;
         }
         if (!res.ok) {
-          const msg = await res.text();
-          throw new Error(msg || `Failed to load recalls (HTTP ${res.status})`);
+          throw new Error(await recallResponseError(res, "Failed to load recalls."));
         }
         const data = (await res.json()) as RecallRow[];
         if (active) {
@@ -536,9 +557,16 @@ export default function RecallsPage() {
     return () => {
       active = false;
     };
-  }, [buildQueryParams, router]);
+  }, [buildQueryParams, canViewRecalls, capabilities, router]);
 
   useEffect(() => {
+    if (capabilities === null) return;
+    if (!canViewRecalls || !canExportRecalls) {
+      setExportCount(null);
+      setExportCountLoading(false);
+      setExportCountError(null);
+      return;
+    }
     let active = true;
     setSuggestedFilenameCsv(null);
     setSuggestedFilenameZip(null);
@@ -547,7 +575,7 @@ export default function RecallsPage() {
     const timer = setTimeout(() => {
       async function loadExportCount() {
         try {
-          const params = buildQueryParams({ includePagination: false });
+          const params = buildQueryParams({ includePagination: exportPageOnly });
           if (exportPageOnly) {
             params.set("page_only", "true");
           }
@@ -558,8 +586,9 @@ export default function RecallsPage() {
             return;
           }
           if (!res.ok) {
-            const msg = await res.text();
-            throw new Error(msg || `Failed to load export count (HTTP ${res.status})`);
+            throw new Error(
+              await recallResponseError(res, "Failed to load recall export count.")
+            );
           }
           const data = (await res.json()) as {
             count: number;
@@ -591,7 +620,14 @@ export default function RecallsPage() {
       active = false;
       clearTimeout(timer);
     };
-  }, [buildQueryParams, exportPageOnly, router]);
+  }, [
+    buildQueryParams,
+    canExportRecalls,
+    canViewRecalls,
+    capabilities,
+    exportPageOnly,
+    router,
+  ]);
 
   useEffect(() => {
     setOffset(0);
@@ -620,7 +656,7 @@ export default function RecallsPage() {
     payload: { status?: RecallStatus; due_date?: string; completed_at?: string | null },
     button?: HTMLButtonElement | null
   ) {
-    if (actionId === row.id || button?.disabled) {
+    if (!canWriteRecalls || actionId === row.id || button?.disabled) {
       return;
     }
     if (button) button.disabled = true;
@@ -638,8 +674,7 @@ export default function RecallsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to update recall."));
       }
       await refreshRecalls();
     } catch (err) {
@@ -660,8 +695,7 @@ export default function RecallsPage() {
     if (refresh.ok) {
       setRows((await refresh.json()) as RecallRow[]);
     } else {
-      const msg = await refresh.text();
-      throw new Error(msg || `Failed to refresh recalls (HTTP ${refresh.status})`);
+      throw new Error(await recallResponseError(refresh, "Failed to refresh recalls."));
     }
   }
 
@@ -697,6 +731,7 @@ export default function RecallsPage() {
   }
 
   function openContactModal(row: RecallRow) {
+    if (!canWriteRecalls) return;
     setContactTarget(row);
     setContactMethodInput("phone");
     setContactOtherDetail("");
@@ -707,7 +742,14 @@ export default function RecallsPage() {
   }
 
   async function saveContact(button?: HTMLButtonElement | null) {
-    if (!contactTarget || !button || contactSaving || button.disabled || otherDetailRequired) {
+    if (
+      !canWriteRecalls ||
+      !contactTarget ||
+      !button ||
+      contactSaving ||
+      button.disabled ||
+      otherDetailRequired
+    ) {
       return;
     }
     button.disabled = true;
@@ -730,8 +772,7 @@ export default function RecallsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to log contact (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to log recall contact."));
       }
       setShowContactModal(false);
       await refreshRecalls();
@@ -745,8 +786,23 @@ export default function RecallsPage() {
   const otherDetailRequired =
     contactMethodInput === "other" && contactOtherDetail.trim().length === 0;
 
+  if (capabilities === null) {
+    return <div className="badge">Checking recall permissions…</div>;
+  }
+
+  if (!canViewRecalls) {
+    return (
+      <div className="stack" data-testid="recalls-page">
+        <h2 style={{ marginTop: 0 }}>Recalls</h2>
+        <div className="notice">
+          {capabilityError || "You do not have permission to view recalls."}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="stack">
+    <div className="stack" data-testid="recalls-page">
       <div className="row" style={{ alignItems: "center" }}>
         <div>
           <h2 style={{ marginTop: 0 }}>Recalls</h2>
@@ -756,7 +812,18 @@ export default function RecallsPage() {
         </div>
       </div>
 
-      <div className="card print-hidden" style={{ margin: 0 }}>
+      {!canWriteRecalls && (
+        <div className="notice" data-testid="recalls-read-only-notice">
+          You can view recalls, but you cannot change them.
+        </div>
+      )}
+      {capabilityError && <div className="notice">{capabilityError}</div>}
+
+      <div
+        className="card print-hidden"
+        style={{ margin: 0 }}
+        data-testid="recalls-filters"
+      >
         <div className="stack">
           <div className="grid grid-3">
             <div className="stack" style={{ gap: 8 }}>
@@ -892,11 +959,13 @@ export default function RecallsPage() {
             >
               Reset filters
             </button>
-            <div className="badge" data-testid="recalls-export-summary">
-              Export will include: {exportCountLabel}
-              {exportPageOnly ? ` (this page: ${rows.length})` : ""}
-            </div>
-            <div className="stack" style={{ gap: 2 }}>
+            {canExportRecalls && (
+              <>
+                <div className="badge" data-testid="recalls-export-summary">
+                  Export will include: {exportCountLabel}
+                  {exportPageOnly ? ` (this page: ${rows.length})` : ""}
+                </div>
+                <div className="stack" style={{ gap: 2 }}>
               <span
                 style={{ color: "var(--muted)", fontSize: 12 }}
                 data-testid="recalls-export-hint"
@@ -915,8 +984,8 @@ export default function RecallsPage() {
               >
                 ZIP filename: {exportFilenameZip}
               </span>
-            </div>
-            <label className="row" style={{ gap: 6, alignItems: "center" }}>
+                </div>
+                <label className="row" style={{ gap: 6, alignItems: "center" }}>
               <input
                 type="checkbox"
                 checked={exportPageOnly}
@@ -924,8 +993,8 @@ export default function RecallsPage() {
                 data-testid="recalls-export-page-only"
               />
               <span>Export this page only</span>
-            </label>
-            <button
+                </label>
+                <button
               className="btn btn-secondary"
               type="button"
               onClick={(event) => void exportCsv(event.currentTarget)}
@@ -939,8 +1008,8 @@ export default function RecallsPage() {
                   : exporting
                     ? "Exporting..."
                     : "Export CSV"}
-            </button>
-            <button
+                </button>
+                <button
               className="btn btn-secondary"
               type="button"
               onClick={(event) => void downloadLettersZip(event.currentTarget)}
@@ -954,10 +1023,12 @@ export default function RecallsPage() {
                   : exportCountError
                   ? "Export unavailable"
                     : "Download letters (ZIP)"}
-            </button>
-            <span style={{ color: "var(--muted)", fontSize: 12 }}>
-              This may take a moment for large lists.
-            </span>
+                </button>
+                <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                  This may take a moment for large lists.
+                </span>
+              </>
+            )}
             <button
               className="btn btn-secondary"
               type="button"
@@ -966,7 +1037,7 @@ export default function RecallsPage() {
               Print
             </button>
           </div>
-          <div className="row">
+          <div className="row" data-testid="recalls-pagination">
             <div className="badge">
               Showing {offset + 1}-{offset + rows.length}
             </div>
@@ -1035,18 +1106,25 @@ export default function RecallsPage() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} data-testid="recalls-row">
                   <td>
-                    <Link href={`/patients/${row.patient_id}?tab=recalls`}>
-                      {row.last_name.toUpperCase()}, {row.first_name}
-                    </Link>
+                    {canViewPatients ? (
+                      <Link
+                        href={`/patients/${row.patient_id}?tab=recalls`}
+                        data-testid="recalls-patient-navigation"
+                      >
+                        {row.last_name.toUpperCase()}, {row.first_name}
+                      </Link>
+                    ) : (
+                      <span>{row.last_name.toUpperCase()}, {row.first_name}</span>
+                    )}
                   </td>
                   <td>{kindLabels[row.recall_kind]}</td>
                   <td>{formatDate(row.due_date)}</td>
                   <td>
                     <span className="badge">{statusLabels[row.status]}</span>
                   </td>
-                  <td>
+                  <td data-testid="recalls-last-contact">
                     {row.last_contacted_at ? (
                       <div
                         style={{ position: "relative", display: "inline-block" }}
@@ -1121,70 +1199,69 @@ export default function RecallsPage() {
                   </td>
                   <td className="recall-actions">
                     <div className="table-actions">
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={actionId === row.id}
-                        onClick={() => handleBook(row)}
-                      >
-                        Book appointment
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        data-testid={`recalls-generate-letter-${row.id}`}
-                        disabled={downloadId === row.id}
-                        onClick={(event) =>
-                          void downloadRecallLetter(row, event.currentTarget)
-                        }
-                      >
-                        {downloadId === row.id ? "Generating..." : "Generate letter"}
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={contactSaving && contactTarget?.id === row.id}
-                        onClick={() => openContactModal(row)}
-                      >
-                        Log contact
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        data-testid={`recalls-complete-${row.id}`}
-                        disabled={
-                          actionId === row.id ||
-                          row.status === "completed" ||
-                          row.status === "cancelled"
-                        }
-                        onClick={(event) => handleComplete(row, event.currentTarget)}
-                      >
-                        {actionId === row.id ? "Updating..." : "Mark completed"}
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={actionId === row.id}
-                        onClick={() => handleSnooze(row, 3)}
-                      >
-                        Snooze 3m
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={actionId === row.id}
-                        onClick={() => handleSnooze(row, 6)}
-                      >
-                        Snooze 6m
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={actionId === row.id}
-                        onClick={() => handleSnooze(row, 12)}
-                      >
-                        Snooze 12m
-                      </button>
+                      {canWriteAppointments && (
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          disabled={actionId === row.id}
+                          onClick={() => handleBook(row)}
+                          data-testid="recalls-book-action"
+                        >
+                          Book appointment
+                        </button>
+                      )}
+                      {canExportRecalls && (
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          data-testid={`recalls-generate-letter-${row.id}`}
+                          disabled={downloadId === row.id}
+                          onClick={(event) =>
+                            void downloadRecallLetter(row, event.currentTarget)
+                          }
+                        >
+                          {downloadId === row.id ? "Generating..." : "Generate letter"}
+                        </button>
+                      )}
+                      {canWriteRecalls && (
+                        <div className="table-actions" data-testid="recalls-mutation-controls">
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            disabled={contactSaving && contactTarget?.id === row.id}
+                            onClick={() => openContactModal(row)}
+                          >
+                            Log contact
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            data-testid={`recalls-complete-${row.id}`}
+                            disabled={
+                              actionId === row.id ||
+                              row.status === "completed" ||
+                              row.status === "cancelled"
+                            }
+                            onClick={(event) => handleComplete(row, event.currentTarget)}
+                          >
+                            {actionId === row.id ? "Updating..." : "Mark completed"}
+                          </button>
+                          {[3, 6, 12].map((months) => (
+                            <button
+                              key={months}
+                              className="btn btn-secondary"
+                              type="button"
+                              disabled={actionId === row.id}
+                              onClick={() => handleSnooze(row, months)}
+                            >
+                              Snooze {months}m
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {!canWriteRecalls && !canWriteAppointments && !canExportRecalls && (
+                        <span className="badge">View only</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1196,11 +1273,15 @@ export default function RecallsPage() {
               <div className="card recall-card" key={row.id}>
                 <div className="row">
                   <div>
-                    <Link href={`/patients/${row.patient_id}?tab=recalls`}>
-                      <strong>
-                        {row.last_name.toUpperCase()}, {row.first_name}
-                      </strong>
-                    </Link>
+                    {canViewPatients ? (
+                      <Link href={`/patients/${row.patient_id}?tab=recalls`}>
+                        <strong>
+                          {row.last_name.toUpperCase()}, {row.first_name}
+                        </strong>
+                      </Link>
+                    ) : (
+                      <strong>{row.last_name.toUpperCase()}, {row.first_name}</strong>
+                    )}
                     <div style={{ color: "var(--muted)" }}>
                       {kindLabels[row.recall_kind]} · Due {formatDate(row.due_date)}
                     </div>
@@ -1270,69 +1351,72 @@ export default function RecallsPage() {
                 ))}
                 <div>{row.notes || "No notes."}</div>
                 <div className="row">
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={actionId === row.id}
-                    onClick={() => handleBook(row)}
-                  >
-                    Book appointment
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    data-testid={`recalls-generate-letter-${row.id}`}
-                    disabled={downloadId === row.id}
-                    onClick={(event) =>
-                      void downloadRecallLetter(row, event.currentTarget)
-                    }
-                  >
-                    {downloadId === row.id ? "Generating..." : "Generate letter"}
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={contactSaving && contactTarget?.id === row.id}
-                    onClick={() => openContactModal(row)}
-                  >
-                    Log contact
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    data-testid={`recalls-complete-${row.id}`}
-                    disabled={
-                      actionId === row.id ||
-                      row.status === "completed" ||
-                      row.status === "cancelled"
-                    }
-                    onClick={(event) => handleComplete(row, event.currentTarget)}
-                  >
-                    {actionId === row.id ? "Updating..." : "Mark completed"}
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={actionId === row.id}
-                    onClick={() => handleSnooze(row, 3)}
-                  >
-                    Snooze 3m
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={actionId === row.id}
-                    onClick={() => handleSnooze(row, 6)}
-                  >
-                    Snooze 6m
-                  </button>
+                  {canWriteAppointments && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      disabled={actionId === row.id}
+                      onClick={() => handleBook(row)}
+                    >
+                      Book appointment
+                    </button>
+                  )}
+                  {canExportRecalls && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      data-testid={`recalls-generate-letter-${row.id}`}
+                      disabled={downloadId === row.id}
+                      onClick={(event) =>
+                        void downloadRecallLetter(row, event.currentTarget)
+                      }
+                    >
+                      {downloadId === row.id ? "Generating..." : "Generate letter"}
+                    </button>
+                  )}
+                  {canWriteRecalls && (
+                    <>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={contactSaving && contactTarget?.id === row.id}
+                        onClick={() => openContactModal(row)}
+                      >
+                        Log contact
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        data-testid={`recalls-complete-${row.id}`}
+                        disabled={
+                          actionId === row.id ||
+                          row.status === "completed" ||
+                          row.status === "cancelled"
+                        }
+                        onClick={(event) => handleComplete(row, event.currentTarget)}
+                      >
+                        {actionId === row.id ? "Updating..." : "Mark completed"}
+                      </button>
+                      {[3, 6].map((months) => (
+                        <button
+                          key={months}
+                          className="btn btn-secondary"
+                          type="button"
+                          disabled={actionId === row.id}
+                          onClick={() => handleSnooze(row, months)}
+                        >
+                          Snooze {months}m
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </>
       )}
-      {showContactModal && (
+      {showContactModal && canWriteRecalls && (
         <div className="card" style={{ margin: 0 }}>
           <div className="stack">
             <div className="row">
@@ -1385,6 +1469,7 @@ export default function RecallsPage() {
                   value={contactOutcome}
                   onChange={(e) => setContactOutcome(e.target.value)}
                   placeholder="Optional outcome"
+                  maxLength={250}
                 />
               </div>
               {contactMethodInput === "other" && (
@@ -1395,6 +1480,7 @@ export default function RecallsPage() {
                     value={contactOtherDetail}
                     onChange={(e) => setContactOtherDetail(e.target.value)}
                     placeholder="e.g. WhatsApp"
+                    maxLength={120}
                   />
                   <p style={{ color: "var(--muted)", margin: 0 }}>
                     Required when method is Other.
@@ -1409,6 +1495,7 @@ export default function RecallsPage() {
                   value={contactNote}
                   onChange={(e) => setContactNote(e.target.value)}
                   placeholder="Optional note"
+                  maxLength={2000}
                 />
               </div>
             </div>

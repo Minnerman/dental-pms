@@ -22,6 +22,7 @@ import {
 } from "date-fns";
 import { enGB } from "date-fns/locale";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { recallResponseError } from "@/lib/recallErrors";
 import StatusIcon from "@/components/ui/StatusIcon";
 
 type Actor = { id: number; email: string; role: string };
@@ -807,6 +808,9 @@ export default function AppointmentsPage() {
   );
   const canRescheduleAppointments = Boolean(
     appointmentCapabilities?.includes("appointments.reschedule")
+  );
+  const canWriteRecalls = Boolean(
+    appointmentCapabilities?.includes("recalls.write")
   );
   const canEditAppointments =
     canWriteAppointments || canCancelAppointments || canRescheduleAppointments;
@@ -2449,7 +2453,7 @@ export default function AppointmentsPage() {
       setDurationMinutes(30);
       setShowNewModal(false);
       setNotice("Appointment created.");
-      if (recallContext) {
+      if (recallContext && canWriteRecalls) {
         setRecallAppointmentId(created?.id ?? null);
         setShowRecallPrompt(true);
       }
@@ -2470,6 +2474,7 @@ export default function AppointmentsPage() {
 
   async function confirmRecallCompletion(button?: HTMLButtonElement | null) {
     if (
+      !canWriteRecalls ||
       !recallContext ||
       recallPromptSaving ||
       appointmentsRecallPromptLocks.has(recallContext.recallId) ||
@@ -2502,8 +2507,7 @@ export default function AppointmentsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to update recall."));
       }
       setShowRecallPrompt(false);
     } catch (err) {
@@ -3892,7 +3896,7 @@ export default function AppointmentsPage() {
             </button>
           </div>
         )}
-        {showRecallPrompt && recallContext && (
+        {showRecallPrompt && recallContext && canWriteRecalls && (
           <div className="card" style={{ margin: 0 }}>
             <div className="stack" data-testid="appointments-recall-prompt">
               <div className="row">

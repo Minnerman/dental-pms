@@ -813,19 +813,19 @@ test("booking-linked recall prompt shows in-flight state and guards repeat submi
     request,
     patientId,
     recallNotes,
-    "2026-03-20"
+    "2036-03-20"
   )) as { id: number };
 
   await openAppointments(
     page,
     request,
-    `/appointments?date=2026-03-20&book=1&patientId=${patientId}&recallId=${recall.id}`
+    `/appointments?date=2036-03-20&book=1&patientId=${patientId}&recallId=${recall.id}`
   );
   await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
 
   await selectBookingPatient(page, patientId, lastName);
-  await page.getByTestId("booking-start").fill("2026-03-20T10:00");
-  await page.getByTestId("booking-end").fill("2026-03-20T10:30");
+  await page.getByTestId("booking-start").fill("2036-03-20T10:00");
+  await page.getByTestId("booking-end").fill("2036-03-20T10:30");
   await page.getByTestId("booking-location-room").fill("Room 6");
 
   const createResponsePromise = page.waitForResponse(
@@ -907,6 +907,76 @@ test("booking-linked recall prompt shows in-flight state and guards repeat submi
   await page.unroute(routePattern);
 
   await expect(page.getByTestId("appointments-recall-prompt")).toHaveCount(0);
+});
+
+test("appointment writers without recall write do not receive a completion prompt", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const lastName = `Recall view only ${unique}`;
+  const patientId = await createPatient(request, {
+    first_name: "Booking",
+    last_name: lastName,
+  });
+  const recall = (await createRecall(
+    request,
+    patientId,
+    `Recall permission ${unique}`,
+    "2036-03-21"
+  )) as { id: number };
+  await page.route("**/api/me/capabilities", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        "appointments.view",
+        "appointments.write",
+        "patients.view",
+        "recalls.view",
+      ]),
+    });
+  });
+  let recallWrites = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "PATCH" &&
+      request.url().endsWith(`/api/patients/${patientId}/recalls/${recall.id}`)
+    ) {
+      recallWrites += 1;
+    }
+  });
+
+  await openAppointments(
+    page,
+    request,
+    `/appointments?date=2036-03-21&book=1&patientId=${patientId}&recallId=${recall.id}`
+  );
+  await expect(page.getByTestId("booking-modal")).toBeVisible({ timeout: 10_000 });
+  await selectBookingPatient(page, patientId, lastName);
+  await page.getByTestId("booking-start").fill("2036-03-21T10:00");
+  await page.getByTestId("booking-end").fill("2036-03-21T10:30");
+  await page.getByTestId("booking-location-room").fill("Room 7");
+
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/api/appointments")
+  );
+  await page.getByTestId("booking-submit").click();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok()).toBeTruthy();
+  await expect(page.getByTestId("appointments-recall-prompt")).toHaveCount(0);
+  expect(recallWrites).toBe(0);
+
+  const token = await ensureAuthReady(request);
+  const recallResponse = await request.get(
+    `${getBaseUrl()}/api/patients/${patientId}/recalls`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  expect(recallResponse.ok()).toBeTruthy();
+  const recalls = (await recallResponse.json()) as Array<{ id: number; status: string }>;
+  expect(recalls.find((item) => item.id === recall.id)?.status).not.toBe("completed");
 });
 
 test("booking conflict check debounces and surfaces latest conflicts", async ({
