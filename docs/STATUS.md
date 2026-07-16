@@ -8,8 +8,10 @@ R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
   and PR #694 appointment reliability are live, and rollback is not required.
 - The deterministic patient-ledger and appointment no-write smokes both passed
   all 18 checkpoints, and the production 404 smoke passed.
-- Patient-record reliability, permissions, lifecycle validation, and audit are
-  the active coherent feature-sized implementation slice.
+- PR #697 patient-record reliability, permissions, lifecycle validation, and
+  audit is merged and awaiting deployment. The deterministic patient-record
+  no-write smoke is prepared, and deployment batch 2 will contain PR #697 and
+  the patient-record smoke PR #698.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
