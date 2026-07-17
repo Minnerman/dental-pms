@@ -3,6 +3,20 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
+- Deployment batch 3 was attempted on 2026-07-17 from merged PR #699 at
+  `bb664c4fc2c2b14a5f27bb0dea305694da279316`. Candidate readiness and the
+  recall (21/21), patient-record (20/20), patient-ledger (18/18), and
+  appointment (18/18) deterministic no-write smokes passed. The preserved
+  production 404 verifier failed, so the application-only rollback passed and
+  production remains healthy on
+  `d6b2319432a320517c58bf3e20afae027d7c5d9e`; PR #699 is merged but not live.
+- Control-versus-candidate investigation reproduced the same backend
+  `200/404` and production Next document `200/200/200` sequence on both
+  SHAs. The preserved verifier incorrectly treated a streamed, client-visible
+  Next not-found page as requiring a 404 document status. Route verification
+  is being hardened to combine authoritative backend status checks, rendered
+  not-found states, image/SHA classification, and write-request blocking.
+- No deployment retry is authorised by this update.
 - Deployment batch 2 passed on 2026-07-16. Production is stable on
   `d6b2319432a320517c58bf3e20afae027d7c5d9e`; PR #697 patient-record
   reliability, permissions, lifecycle validation, and audit is live, and
