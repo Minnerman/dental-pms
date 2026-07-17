@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session, aliased
 from app.db.session import get_db
 from app.deps import get_current_user, require_capability
 from app.models.audit_log import AuditLog
+from app.models.appointment import Appointment
+from app.models.capability import Capability, UserCapability
 from app.models.invoice import Invoice, Payment
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient, PatientCategory, RecallStatus
@@ -47,9 +49,59 @@ from app.schemas.ledger import LedgerChargeCreate, LedgerEntryOut, LedgerPayment
 from app.schemas.r4_treatment_transaction import R4TreatmentTransactionListOut
 from app.models.user import User
 from app.services.recall_communications import log_recall_communication
+from app.services.recalls_audit import (
+    build_patient_recall_settings_snapshot,
+    build_recall_snapshot,
+    log_patient_recall_settings_changes,
+    log_recall_activity,
+    log_recall_changes,
+    log_recall_created,
+)
 from app.routers.recalls import bump_export_count_cache_epoch
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+PATIENT_RECALL_FIELDS = {
+    "recall_interval_months",
+    "recall_due_date",
+    "recall_status",
+    "recall_type",
+    "recall_last_contacted_at",
+    "recall_notes",
+}
+PATIENT_RECALL_RESPONSE_FIELDS = PATIENT_RECALL_FIELDS | {
+    "recall_last_set_at",
+    "recall_last_set_by_user_id",
+}
+
+
+def _user_has_capability(db: Session, user: User, code: str) -> bool:
+    return (
+        db.scalar(
+            select(UserCapability.capability_id)
+            .join(Capability, Capability.id == UserCapability.capability_id)
+            .where(UserCapability.user_id == user.id, Capability.code == code)
+        )
+        is not None
+    )
+
+
+def _require_recall_write_for_patient_fields(
+    db: Session, user: User, fields: set[str]
+) -> None:
+    if fields.intersection(PATIENT_RECALL_FIELDS) and not _user_has_capability(
+        db, user, "recalls.write"
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+def _patient_response(patient: Patient, *, can_view_recalls: bool) -> PatientOut:
+    response = PatientOut.model_validate(patient)
+    if can_view_recalls:
+        return response
+    return response.model_copy(
+        update={field: None for field in PATIENT_RECALL_RESPONSE_FIELDS}
+    )
 
 
 def add_months(base_date: date, months: int) -> date:
@@ -58,16 +110,6 @@ def add_months(base_date: date, months: int) -> date:
     month = month_index % 12 + 1
     day = min(base_date.day, monthrange(year, month)[1])
     return date(year, month, day)
-
-
-def _stringify(value: object | None) -> str:
-    if value is None:
-        return "none"
-    if isinstance(value, str) and not value.strip():
-        return "none"
-    if hasattr(value, "value"):
-        return value.value
-    return str(value)
 
 
 def _encode_tx_cursor(performed_at: datetime, legacy_transaction_id: int) -> str:
@@ -96,80 +138,10 @@ def _decode_tx_cursor(cursor: str) -> tuple[datetime, int]:
     return performed_at, legacy_transaction_id
 
 
-def _log_recall_timeline(
-    db: Session,
-    *,
-    actor: User,
-    patient: Patient,
-    before_data: dict,
-    request_id: str | None,
-    ip_address: str | None,
-) -> None:
-    old_status = _stringify(before_data.get("recall_status"))
-    new_status = _stringify(patient.recall_status)
-    if old_status != new_status:
-        log_event(
-            db,
-            actor=actor,
-            action=f"recall.status: {old_status} -> {new_status}",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_status": new_status},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-    old_type = _stringify(before_data.get("recall_type"))
-    new_type = _stringify(patient.recall_type)
-    if old_type != new_type:
-        log_event(
-            db,
-            actor=actor,
-            action=f"recall.type: {old_type} -> {new_type}",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_type": new_type},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-    old_notes = (before_data.get("recall_notes") or "").strip()
-    new_notes = (patient.recall_notes or "").strip()
-    if old_notes != new_notes:
-        log_event(
-            db,
-            actor=actor,
-            action="recall.notes_updated",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_notes": bool(new_notes)},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-    old_contacted = before_data.get("recall_last_contacted_at")
-    new_contacted = (
-        patient.recall_last_contacted_at.isoformat()
-        if patient.recall_last_contacted_at
-        else None
-    )
-    if not old_contacted and new_contacted:
-        log_event(
-            db,
-            actor=actor,
-            action="recall.contacted",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_last_contacted_at": new_contacted},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-
 @router.get("", response_model=list[PatientOut])
 def list_patients(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_capability("patients.view")),
+    user: User = Depends(require_capability("patients.view")),
     query: str | None = Query(default=None, alias="query"),
     q: str | None = Query(default=None, alias="q"),
     email: str | None = Query(default=None),
@@ -201,7 +173,11 @@ def list_patients(
     if category:
         stmt = stmt.where(Patient.patient_category == category)
     stmt = stmt.limit(limit).offset(offset)
-    return list(db.scalars(stmt))
+    can_view_recalls = _user_has_capability(db, user, "recalls.view")
+    return [
+        _patient_response(patient, can_view_recalls=can_view_recalls)
+        for patient in db.scalars(stmt)
+    ]
 
 
 @router.get("/search", response_model=list[PatientSearchOut])
@@ -236,6 +212,7 @@ def create_patient(
     user: User = Depends(require_capability("patients.write")),
     request_id: str | None = Header(default=None),
 ):
+    _require_recall_write_for_patient_fields(db, user, payload.model_fields_set)
     patient = Patient(
         nhs_number=payload.nhs_number,
         title=payload.title,
@@ -290,14 +267,17 @@ def create_patient(
     )
     db.commit()
     db.refresh(patient)
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_capability("patients.view")),
+    user: User = Depends(require_capability("patients.view")),
     include_deleted: bool = Query(default=False),
 ):
     patient = db.get(Patient, patient_id)
@@ -305,7 +285,10 @@ def get_patient(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if patient.deleted_at is not None and not include_deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.patch("/{patient_id}", response_model=PatientOut)
@@ -323,6 +306,7 @@ def update_patient(
     if patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
 
+    _require_recall_write_for_patient_fields(db, user, payload.model_fields_set)
     updates = payload.model_dump(exclude_unset=True)
     changed_updates = {
         field: value
@@ -330,7 +314,10 @@ def update_patient(
         if getattr(patient, field) != value
     }
     if not changed_updates:
-        return patient
+        return _patient_response(
+            patient,
+            can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+        )
 
     before_data = snapshot_model(patient)
     for field, value in changed_updates.items():
@@ -361,7 +348,10 @@ def update_patient(
     )
     db.commit()
     db.refresh(patient)
-    return patient
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.post("/{patient_id}/archive", response_model=PatientOut)
@@ -376,7 +366,10 @@ def archive_patient(
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if patient.deleted_at is not None:
-        return patient
+        return _patient_response(
+            patient,
+            can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+        )
 
     before_data = snapshot_model(patient)
     patient.deleted_at = datetime.now(timezone.utc)
@@ -396,7 +389,11 @@ def archive_patient(
     )
     db.commit()
     db.refresh(patient)
-    return patient
+    bump_export_count_cache_epoch("patients.archive_patient")
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.post("/{patient_id}/restore", response_model=PatientOut)
@@ -411,7 +408,10 @@ def restore_patient(
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     if patient.deleted_at is None:
-        return patient
+        return _patient_response(
+            patient,
+            can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+        )
 
     before_data = snapshot_model(patient)
     patient.deleted_at = None
@@ -431,7 +431,11 @@ def restore_patient(
     )
     db.commit()
     db.refresh(patient)
-    return patient
+    bump_export_count_cache_epoch("patients.restore_patient")
+    return _patient_response(
+        patient,
+        can_view_recalls=_user_has_capability(db, user, "recalls.view"),
+    )
 
 
 @router.post("/{patient_id}/recall", response_model=PatientOut)
@@ -440,50 +444,62 @@ def set_patient_recall(
     payload: RecallUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
 
-    before_data = snapshot_model(patient)
-    if payload.interval_months is not None:
+    before_data = build_patient_recall_settings_snapshot(patient)
+    before_notes = patient.recall_notes
+    fields = payload.model_fields_set
+    if "interval_months" in fields and payload.interval_months is not None:
         patient.recall_interval_months = payload.interval_months
-    if payload.due_date is not None:
+    if "due_date" in fields:
         patient.recall_due_date = payload.due_date
-    elif payload.interval_months is not None:
+    elif "interval_months" in fields and payload.interval_months is not None:
         patient.recall_due_date = add_months(
             date.today(), max(patient.recall_interval_months, 1)
         )
-    if payload.status is not None:
+    if "status" in fields:
         patient.recall_status = payload.status
-    if payload.recall_type is not None:
+    if "recall_type" in fields:
         patient.recall_type = payload.recall_type
-    if payload.notes is not None:
+    if "notes" in fields:
         patient.recall_notes = payload.notes
-    if payload.last_contacted_at is not None:
+    if "last_contacted_at" in fields:
         patient.recall_last_contacted_at = payload.last_contacted_at
     elif payload.status == RecallStatus.contacted and not patient.recall_last_contacted_at:
         patient.recall_last_contacted_at = datetime.now(timezone.utc)
-    elif patient.recall_due_date and not patient.recall_status:
+    if patient.recall_due_date and not patient.recall_status:
         patient.recall_status = RecallStatus.due
+    if not patient.recall_due_date:
+        patient.recall_status = None
+
+    after_data = build_patient_recall_settings_snapshot(patient)
+    notes_changed = before_notes != patient.recall_notes
+    if before_data == after_data and not notes_changed:
+        return patient
 
     patient.recall_last_set_at = datetime.now(timezone.utc)
     patient.recall_last_set_by_user_id = user.id
     patient.updated_by_user_id = user.id
     patient.updated_at = datetime.now(timezone.utc)
     db.add(patient)
-    _log_recall_timeline(
+    log_patient_recall_settings_changes(
         db,
-        actor=user,
-        patient=patient,
-        before_data=before_data or {},
+        user=user,
+        patient_id=patient.id,
+        before=before_data,
+        after=after_data,
+        notes_changed=notes_changed,
         request_id=request_id,
         ip_address=request.client.host if request else None,
     )
     db.commit()
     db.refresh(patient)
+    bump_export_count_cache_epoch("patients.set_patient_recall")
     return patient
 
 
@@ -798,7 +814,7 @@ def get_patient_finance_summary(
 def list_patient_recalls(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("recalls.view")),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
@@ -828,12 +844,26 @@ def list_patient_recalls(
 def create_patient_recall(
     patient_id: int,
     payload: PatientRecallCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
+    request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    if payload.linked_appointment_id is not None:
+        appointment = db.get(Appointment, payload.linked_appointment_id)
+        if (
+            not appointment
+            or appointment.deleted_at is not None
+            or appointment.patient_id != patient_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Linked appointment must belong to this patient.",
+            )
+
     recall = PatientRecall(
         patient_id=patient_id,
         kind=payload.kind,
@@ -849,8 +879,17 @@ def create_patient_recall(
     if recall.status == PatientRecallStatus.completed and recall.completed_at is None:
         recall.completed_at = datetime.now(timezone.utc)
     db.add(recall)
+    db.flush()
+    log_recall_created(
+        db,
+        user=user,
+        recall=recall,
+        request_id=request_id,
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     db.refresh(recall)
+    bump_export_count_cache_epoch("patients.create_recall")
     resolved_status = resolve_recall_status(recall)
     return PatientRecallOut.model_validate(recall).model_copy(
         update={"status": resolved_status}
@@ -865,8 +904,10 @@ def update_patient_recall(
     patient_id: int,
     recall_id: int,
     payload: PatientRecallUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
+    request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
@@ -875,24 +916,104 @@ def update_patient_recall(
     if not recall or recall.patient_id != patient_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
 
-    if payload.kind is not None:
+    fields = payload.model_fields_set
+    if "kind" in fields and payload.kind is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Recall type cannot be empty.",
+        )
+    if "due_date" in fields and payload.due_date is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Recall due date cannot be empty.",
+        )
+    if "status" in fields and payload.status is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Recall status cannot be empty.",
+        )
+
+    target_status = payload.status if "status" in fields else recall.status
+    if (
+        recall.status in {PatientRecallStatus.completed, PatientRecallStatus.cancelled}
+        and target_status in {PatientRecallStatus.completed, PatientRecallStatus.cancelled}
+        and target_status != recall.status
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Unsupported recall transition.",
+        )
+    if (
+        target_status != PatientRecallStatus.completed
+        and "completed_at" in fields
+        and payload.completed_at is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Completion time is only valid for completed recalls.",
+        )
+    if "linked_appointment_id" in fields and payload.linked_appointment_id is not None:
+        appointment = db.get(Appointment, payload.linked_appointment_id)
+        if (
+            not appointment
+            or appointment.deleted_at is not None
+            or appointment.patient_id != patient_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Linked appointment must belong to this patient.",
+            )
+
+    before_data = build_recall_snapshot(recall)
+    before_notes = recall.notes
+    if "kind" in fields:
         recall.kind = payload.kind
-    if payload.due_date is not None:
+    if "due_date" in fields:
         recall.due_date = payload.due_date
-    if payload.status is not None:
+    if "status" in fields:
         recall.status = payload.status
-    if payload.notes is not None:
+    if "notes" in fields:
         recall.notes = payload.notes
-    if payload.completed_at is not None:
-        recall.completed_at = payload.completed_at
-    if payload.outcome is not None:
+    if "outcome" in fields:
         recall.outcome = payload.outcome
-    if payload.linked_appointment_id is not None:
+    if "linked_appointment_id" in fields:
         recall.linked_appointment_id = payload.linked_appointment_id
-    if payload.status == PatientRecallStatus.completed and payload.completed_at is None:
-        recall.completed_at = datetime.now(timezone.utc)
+
+    if target_status == PatientRecallStatus.completed:
+        if recall.status != PatientRecallStatus.completed:
+            recall.status = PatientRecallStatus.completed
+        if "completed_at" in fields and payload.completed_at is not None:
+            recall.completed_at = payload.completed_at
+        elif before_data["status"] != PatientRecallStatus.completed.value:
+            recall.completed_at = payload.completed_at or datetime.now(timezone.utc)
+        elif recall.completed_at is None:
+            recall.completed_at = payload.completed_at or datetime.now(timezone.utc)
+    else:
+        recall.completed_at = None
+        if before_data["status"] in {
+            PatientRecallStatus.completed.value,
+            PatientRecallStatus.cancelled.value,
+        } and "outcome" not in fields:
+            recall.outcome = None
+
+    after_data = build_recall_snapshot(recall)
+    notes_changed = before_notes != recall.notes
+    if before_data == after_data and not notes_changed:
+        return PatientRecallOut.model_validate(recall).model_copy(
+            update={"status": resolve_recall_status(recall)}
+        )
 
     recall.updated_by_user_id = user.id
+    log_recall_changes(
+        db,
+        user=user,
+        patient_id=patient_id,
+        before=before_data,
+        after=after_data,
+        notes_changed=notes_changed,
+        request_id=request_id,
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     db.refresh(recall)
     bump_export_count_cache_epoch("patients.update_recall")
@@ -910,7 +1031,7 @@ def list_recall_communications(
     patient_id: int,
     recall_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("recalls.view")),
     limit: int = Query(default=3, ge=1, le=50),
 ):
     patient = db.get(Patient, patient_id)
@@ -924,7 +1045,13 @@ def list_recall_communications(
             select(PatientRecallCommunication)
             .where(PatientRecallCommunication.patient_id == patient_id)
             .where(PatientRecallCommunication.recall_id == recall_id)
-            .order_by(PatientRecallCommunication.created_at.desc())
+            .order_by(
+                func.coalesce(
+                    PatientRecallCommunication.contacted_at,
+                    PatientRecallCommunication.created_at,
+                ).desc(),
+                PatientRecallCommunication.id.desc(),
+            )
             .limit(limit)
         )
     )
@@ -940,8 +1067,10 @@ def create_recall_communication(
     patient_id: int,
     recall_id: int,
     payload: RecallCommunicationCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
+    request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
@@ -949,7 +1078,8 @@ def create_recall_communication(
     recall = db.get(PatientRecall, recall_id)
     if not recall or recall.patient_id != patient_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
-    entry = PatientRecallCommunication(
+    entry = log_recall_communication(
+        db,
         patient_id=patient_id,
         recall_id=recall_id,
         channel=payload.channel,
@@ -960,8 +1090,63 @@ def create_recall_communication(
         outcome=payload.outcome,
         contacted_at=payload.contacted_at,
         created_by_user_id=user.id,
+        guard_seconds=60,
     )
-    db.add(entry)
+    if entry is None:
+        existing_query = (
+            select(PatientRecallCommunication)
+            .where(PatientRecallCommunication.patient_id == patient_id)
+            .where(PatientRecallCommunication.recall_id == recall_id)
+            .where(PatientRecallCommunication.channel == payload.channel)
+            .where(
+                PatientRecallCommunication.direction
+                == PatientRecallCommunicationDirection.outbound
+            )
+            .where(
+                PatientRecallCommunication.status
+                == PatientRecallCommunicationStatus.sent
+            )
+            .where(PatientRecallCommunication.notes == payload.notes)
+            .where(PatientRecallCommunication.other_detail == payload.other_detail)
+            .where(PatientRecallCommunication.outcome == payload.outcome)
+            .where(PatientRecallCommunication.created_by_user_id == user.id)
+            .where(
+                PatientRecallCommunication.created_at
+                >= datetime.now(timezone.utc) - timedelta(seconds=60)
+            )
+        )
+        if payload.contacted_at is not None:
+            existing_query = existing_query.where(
+                PatientRecallCommunication.contacted_at == payload.contacted_at
+            )
+        existing = db.scalar(
+            existing_query
+            .order_by(PatientRecallCommunication.created_at.desc())
+            .limit(1)
+        )
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Recall communication could not be recorded.",
+            )
+        return RecallCommunicationOut.model_validate(existing)
+    db.flush()
+    log_recall_activity(
+        db,
+        user=user,
+        patient_id=patient_id,
+        recall_id=recall_id,
+        action="recall.communication_logged",
+        metadata={
+            "channel": payload.channel,
+            "contacted_at": entry.contacted_at,
+            "note_present": bool(payload.notes),
+            "outcome_present": bool(payload.outcome),
+            "other_detail_present": bool(payload.other_detail),
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     db.refresh(entry)
     bump_export_count_cache_epoch("patients.create_recall_communication")
@@ -974,7 +1159,7 @@ def get_recall_letter_pdf(
     recall_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.export")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
@@ -988,7 +1173,7 @@ def get_recall_letter_pdf(
         f"Recall letter generated (PDF) - Type: {recall.kind.value}, "
         f"Due: {recall.due_date.isoformat()}"
     )
-    log_recall_communication(
+    communication = log_recall_communication(
         db,
         patient_id=patient_id,
         recall_id=recall_id,
@@ -999,19 +1184,19 @@ def get_recall_letter_pdf(
         created_by_user_id=user.id if user else None,
         guard_seconds=60,
     )
-    log_event(
-        db,
-        actor=user,
-        action="recall.letter_generated",
-        entity_type="patient",
-        entity_id=str(patient_id),
-        before_obj=None,
-        after_obj=None,
-        request_id=request_id,
-        ip_address=request.client.host if request else None,
-    )
-    db.commit()
-    bump_export_count_cache_epoch("patients.recall_letter_pdf")
+    if communication is not None:
+        log_recall_activity(
+            db,
+            user=user,
+            patient_id=patient_id,
+            recall_id=recall_id,
+            action="recall.letter_generated",
+            metadata={"format": "pdf"},
+            request_id=request_id,
+            ip_address=request.client.host if request.client else None,
+        )
+        db.commit()
+        bump_export_count_cache_epoch("patients.recall_letter_pdf")
     filename = f"recall-{patient_id}-{recall_id}.pdf"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

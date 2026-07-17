@@ -172,12 +172,25 @@ class PatientSearchOut(BaseModel):
 
 
 class RecallUpdate(BaseModel):
-    interval_months: Optional[int] = None
+    interval_months: Optional[int] = Field(default=None, ge=1, le=120)
     due_date: Optional[date] = None
     status: Optional[RecallStatus] = None
-    recall_type: Optional[str] = None
+    recall_type: Optional[str] = Field(default=None, max_length=40)
     last_contacted_at: Optional[datetime] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+    @field_validator("recall_type", "notes", mode="before")
+    @classmethod
+    def normalize_optional_recall_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @model_validator(mode="after")
+    def reject_null_interval(self):
+        if "interval_months" in self.model_fields_set and self.interval_months is None:
+            raise ValueError("Recall interval cannot be null.")
+        return self
 
 
 class PatientRecallSettingsOut(BaseModel):
@@ -219,10 +232,23 @@ class PatientRecallBase(BaseModel):
     kind: PatientRecallKind
     due_date: date
     status: PatientRecallStatus = PatientRecallStatus.upcoming
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
     completed_at: Optional[datetime] = None
     outcome: Optional[PatientRecallOutcome] = None
     linked_appointment_id: Optional[int] = None
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def normalize_recall_notes(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @model_validator(mode="after")
+    def validate_completion_state(self):
+        if self.status != PatientRecallStatus.completed and self.completed_at is not None:
+            raise ValueError("Completion time is only valid for completed recalls.")
+        return self
 
 
 class PatientRecallCreate(PatientRecallBase):
@@ -233,10 +259,17 @@ class PatientRecallUpdate(BaseModel):
     kind: Optional[PatientRecallKind] = None
     due_date: Optional[date] = None
     status: Optional[PatientRecallStatus] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
     completed_at: Optional[datetime] = None
     outcome: Optional[PatientRecallOutcome] = None
     linked_appointment_id: Optional[int] = None
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def normalize_recall_notes(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
 
 
 class PatientRecallOut(PatientRecallBase):

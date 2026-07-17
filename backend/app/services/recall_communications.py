@@ -30,15 +30,28 @@ def log_recall_communication(
 ) -> PatientRecallCommunication | None:
     if guard_seconds:
         threshold = datetime.now(timezone.utc) - timedelta(seconds=guard_seconds)
-        recent = db.scalars(
+        recent_query = (
             select(PatientRecallCommunication)
             .where(PatientRecallCommunication.patient_id == patient_id)
             .where(PatientRecallCommunication.recall_id == recall_id)
             .where(PatientRecallCommunication.channel == channel)
+            .where(PatientRecallCommunication.direction == direction)
+            .where(PatientRecallCommunication.status == status)
             .where(PatientRecallCommunication.notes == notes)
+            .where(PatientRecallCommunication.other_detail == other_detail)
+            .where(PatientRecallCommunication.outcome == outcome)
+            .where(
+                PatientRecallCommunication.created_by_user_id
+                == created_by_user_id
+            )
             .where(PatientRecallCommunication.created_at >= threshold)
             .limit(1)
-        ).first()
+        )
+        if contacted_at is not None:
+            recent_query = recent_query.where(
+                PatientRecallCommunication.contacted_at == contacted_at
+            )
+        recent = db.scalars(recent_query).first()
         if recent:
             return None
 

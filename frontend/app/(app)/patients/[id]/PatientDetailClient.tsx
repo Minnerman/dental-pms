@@ -6,6 +6,7 @@ import Link from "next/link";
 import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { patientMutationError } from "@/lib/patientErrors";
+import { recallResponseError, sanitizeRecallFilename } from "@/lib/recallErrors";
 import { fdiToChartToothKey } from "@/lib/charting/fdiToChartToothKey";
 import {
   r4SurfaceCodeToSurfaceKey,
@@ -1193,6 +1194,9 @@ export default function PatientDetailClient({
     capabilities?.includes("appointments.write")
   );
   const canWritePatients = Boolean(capabilities?.includes("patients.write"));
+  const canViewRecalls = Boolean(capabilities?.includes("recalls.view"));
+  const canWriteRecalls = Boolean(capabilities?.includes("recalls.write"));
+  const canExportRecalls = Boolean(capabilities?.includes("recalls.export"));
   const chartingFiltersKey = useMemo(
     () =>
       JSON.stringify({
@@ -1236,6 +1240,12 @@ export default function PatientDetailClient({
     setActiveLockedTab(nextTab);
     setTab(LOCKED_TAB_TO_CONTENT_TAB[nextTab]);
   }, []);
+
+  useEffect(() => {
+    if (searchParams?.get("tab") === "recalls") {
+      activateContentTab("recalls");
+    }
+  }, [activateContentTab, searchParams]);
 
   const applyChartSelection = useCallback(
     (
@@ -1594,8 +1604,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to load recalls (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to load recalls."));
       }
       const data = (await res.json()) as PatientRecallItem[];
       setRecalls(data);
@@ -1619,8 +1628,9 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to load recall communications (HTTP ${res.status})`);
+        throw new Error(
+          await recallResponseError(res, "Failed to load recall communications.")
+        );
       }
       const data = (await res.json()) as RecallCommunication[];
       setRecallCommMap((prev) => ({ ...prev, [recallId]: data }));
@@ -1634,6 +1644,10 @@ export default function PatientDetailClient({
   }
 
   function openRecallCommModal(recall: PatientRecallItem) {
+    if (!canWriteRecalls) {
+      setRecallCommError("You do not have permission to change recalls.");
+      return;
+    }
     setRecallCommRecallId(recall.id);
     setRecallCommChannel("letter");
     setRecallCommNotes("");
@@ -1643,6 +1657,7 @@ export default function PatientDetailClient({
 
   async function saveRecallCommunication(button?: HTMLButtonElement | null) {
     if (
+      !canWriteRecalls ||
       !recallCommRecallId ||
       !button ||
       recallCommSaving ||
@@ -1674,8 +1689,9 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to log communication (HTTP ${res.status})`);
+        throw new Error(
+          await recallResponseError(res, "Failed to log recall communication.")
+        );
       }
       setShowRecallCommModal(false);
       setRecallCommNotes("");
@@ -3067,6 +3083,10 @@ export default function PatientDetailClient({
   }
 
   function startEditRecall(recall: PatientRecallItem) {
+    if (!canWriteRecalls) {
+      setRecallsError("You do not have permission to change recalls.");
+      return;
+    }
     setEditingRecallId(recall.id);
     setRecallEntryKind(recall.kind);
     setRecallEntryDueDate(recall.due_date || "");
@@ -3075,6 +3095,10 @@ export default function PatientDetailClient({
   }
 
   async function saveRecallEntry(button?: HTMLButtonElement | null) {
+    if (!canWriteRecalls) {
+      setRecallsError("You do not have permission to change recalls.");
+      return;
+    }
     if (!recallEntryDueDate) {
       setRecallsError("Select a due date.");
       return;
@@ -3112,8 +3136,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to save recall (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to save recall."));
       }
       resetRecallForm();
       await loadRecalls();
@@ -3126,6 +3149,9 @@ export default function PatientDetailClient({
   }
 
   async function createNextRecall(recall: PatientRecallItem, months: number) {
+    if (!canWriteRecalls) {
+      throw new Error("You do not have permission to change recalls.");
+    }
     const baseDate = recall.due_date ? new Date(recall.due_date) : new Date();
     const dueDate = formatDateInput(addMonthsToDate(baseDate, months));
     const res = await apiFetch(`/api/patients/${patientId}/recalls`, {
@@ -3143,8 +3169,7 @@ export default function PatientDetailClient({
       return false;
     }
     if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || `Failed to create next recall (HTTP ${res.status})`);
+      throw new Error(await recallResponseError(res, "Failed to create next recall."));
     }
     return true;
   }
@@ -3155,6 +3180,7 @@ export default function PatientDetailClient({
     button?: HTMLButtonElement | null
   ) {
     if (
+      !canWriteRecalls ||
       !button ||
       recallActionId === recall.id ||
       savingRecallActionIds.has(recall.id) ||
@@ -3183,8 +3209,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to complete recall (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to complete recall."));
       }
       if (nextMonths) {
         await createNextRecall(recall, nextMonths);
@@ -3204,14 +3229,22 @@ export default function PatientDetailClient({
       ? `${patient.first_name}_${patient.last_name}`
       : `patient_${patientId}`;
     const safeName = rawName.replace(/[^a-zA-Z0-9-_]+/g, "_");
-    return `Recall_${safeName}_${date}.pdf`;
+    return sanitizeRecallFilename(`Recall_${safeName}_${date}.pdf`, "recall-letter.pdf");
   }
 
   async function downloadRecallLetter(
     recall: PatientRecallItem,
     button?: HTMLButtonElement | null
   ) {
-    if (!button || downloadingRecallLetterIds.has(recall.id) || button.disabled) {
+    if (
+      !canExportRecalls ||
+      !button ||
+      downloadingRecallLetterIds.has(recall.id) ||
+      button.disabled
+    ) {
+      if (!canExportRecalls) {
+        setRecallsError("You do not have permission to export recalls.");
+      }
       return;
     }
     downloadingRecallLetterIds.add(recall.id);
@@ -3228,14 +3261,16 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download letter (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to download recall letter."));
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = getFilenameFromDisposition(res, buildRecallLetterFilename(recall));
+      link.download = sanitizeRecallFilename(
+        getFilenameFromDisposition(res, buildRecallLetterFilename(recall)),
+        "recall-letter.pdf"
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -3783,7 +3818,13 @@ export default function PatientDetailClient({
   }, [canWriteAppointments, patient]);
 
   useEffect(() => {
-    if (!patient) return;
+    if (!patient || !canViewRecalls) {
+      setRecallInterval("6");
+      setRecallDueDate("");
+      setRecallStatus("due");
+      setBookingMarkRecall(false);
+      return;
+    }
     setRecallInterval(String(patient.recall_interval_months ?? 6));
     setRecallDueDate(patient.recall_due_date ?? "");
     if (patient.recall_status) {
@@ -3792,7 +3833,7 @@ export default function PatientDetailClient({
       setRecallStatus("due");
     }
     setBookingMarkRecall(Boolean(patient.recall_due_date));
-  }, [patient]);
+  }, [canViewRecalls, patient]);
 
   useEffect(() => {
     if (!patient || handledBookParam) return;
@@ -4720,6 +4761,10 @@ export default function PatientDetailClient({
   button?: HTMLButtonElement | null
   ) {
     if (!patient) return;
+    if (!canWriteRecalls) {
+      setRecallError("You do not have permission to change recalls.");
+      return;
+    }
     if (!button || recallSaving || savingRecallPatientIds.has(patientId) || button.disabled) {
       return;
     }
@@ -4739,8 +4784,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update recall (HTTP ${res.status})`);
+        throw new Error(await recallResponseError(res, "Failed to update recall."));
       }
       const data = (await res.json()) as Patient;
       setPatient(data);
@@ -5598,7 +5642,7 @@ export default function PatientDetailClient({
       }
       const created = (await res.json()) as AppointmentSummary;
       setShowBookingModal(false);
-      if (bookingMarkRecall) {
+      if (bookingMarkRecall && canWriteRecalls) {
         await updateRecall({ status: "booked" });
       }
       await loadAppointments();
@@ -5766,14 +5810,17 @@ export default function PatientDetailClient({
                       {alert.label}
                     </span>
                   ))}
-                  {patient.recall_due_date ? (
-                    <span className="badge">
-                      Recall {recallStatusLabels[patient.recall_status || "due"]} ·{" "}
-                      {formatShortDate(patient.recall_due_date)}
-                    </span>
-                  ) : (
-                    <span className="badge">Recall not set</span>
-                  )}
+                  {canViewRecalls &&
+                    (patient.recall_due_date ? (
+                      <span className="badge" data-testid="patient-header-recall">
+                        Recall {recallStatusLabels[patient.recall_status || "due"]} ·{" "}
+                        {formatShortDate(patient.recall_due_date)}
+                      </span>
+                    ) : (
+                      <span className="badge" data-testid="patient-header-recall">
+                        Recall not set
+                      </span>
+                    ))}
                 </div>
                 {headerAlertFlags.length > 0 && (
                   <div style={{ display: "grid", gap: 6 }}>
@@ -5858,18 +5905,22 @@ export default function PatientDetailClient({
                   <div className="label">Email</div>
                   <div>{patient.email || "—"}</div>
                 </div>
-                <div>
-                  <div className="label">Recall due</div>
-                  <div>{formatShortDate(patient.recall_due_date)}</div>
-                </div>
-                <div>
-                  <div className="label">Recall status</div>
-                  <div>
-                    <span className="badge">
-                      {recallStatusLabels[patient.recall_status || "due"]}
-                    </span>
-                  </div>
-                </div>
+                {canViewRecalls && (
+                  <>
+                    <div data-testid="patient-overview-recall-due">
+                      <div className="label">Recall due</div>
+                      <div>{formatShortDate(patient.recall_due_date)}</div>
+                    </div>
+                    <div data-testid="patient-overview-recall-status">
+                      <div className="label">Recall status</div>
+                      <div>
+                        <span className="badge">
+                          {recallStatusLabels[patient.recall_status || "due"]}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div>
                   <div className="label">Address</div>
                   <div>{buildAddress(patient) || "—"}</div>
@@ -6064,14 +6115,16 @@ export default function PatientDetailClient({
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <div className="badge">
-                        Recall{" "}
-                        {patient.recall_due_date
-                          ? `${recallStatusLabels[patient.recall_status || "due"]} · ${formatShortDate(
-                              patient.recall_due_date
-                            )}`
-                          : "not set"}
-                      </div>
+                      {canViewRecalls && (
+                        <div className="badge" data-testid="patient-summary-recall">
+                          Recall{" "}
+                          {patient.recall_due_date
+                            ? `${recallStatusLabels[
+                                patient.recall_status || "due"
+                              ]} · ${formatShortDate(patient.recall_due_date)}`
+                            : "not set"}
+                        </div>
+                      )}
                       <div className="badge">
                         Balance: {financeBalance === null
                           ? "unavailable"
@@ -6111,12 +6164,17 @@ export default function PatientDetailClient({
                             <div>
                               <h4 style={{ marginTop: 0 }}>Recall</h4>
                               <div style={{ color: "var(--muted)" }}>
-                                Due {formatShortDate(patient.recall_due_date)} ·{" "}
-                                {recallStatusLabels[patient.recall_status || "due"]}
+                                {canViewRecalls
+                                  ? `Due ${formatShortDate(patient.recall_due_date)} · ${
+                                      recallStatusLabels[patient.recall_status || "due"]
+                                    }`
+                                  : "Recall access unavailable"}
                               </div>
                             </div>
                             {recallError && <span className="badge">{recallError}</span>}
                           </div>
+                          {canViewRecalls && (
+                            <>
                           <div className="grid grid-3">
                             <div className="stack" style={{ gap: 8 }}>
                               <label className="label">Interval (months)</label>
@@ -6125,6 +6183,7 @@ export default function PatientDetailClient({
                                 className="input"
                                 value={recallInterval}
                                 onChange={(e) => setRecallInterval(e.target.value)}
+                                disabled={!canWriteRecalls}
                               />
                             </div>
                             <div className="stack" style={{ gap: 8 }}>
@@ -6135,6 +6194,7 @@ export default function PatientDetailClient({
                                 type="date"
                                 value={recallDueDate}
                                 onChange={(e) => setRecallDueDate(e.target.value)}
+                                disabled={!canWriteRecalls}
                               />
                             </div>
                             <div className="stack" style={{ gap: 8 }}>
@@ -6146,6 +6206,7 @@ export default function PatientDetailClient({
                                 onChange={(e) =>
                                   setRecallStatus(e.target.value as RecallStatus)
                                 }
+                                disabled={!canWriteRecalls}
                               >
                                 <option value="due">Due</option>
                                 <option value="contacted">Contacted</option>
@@ -6154,7 +6215,8 @@ export default function PatientDetailClient({
                               </select>
                             </div>
                           </div>
-                          <div className="row">
+                          {canWriteRecalls ? (
+                          <div className="row" data-testid="patient-recall-write-controls">
                             <button
                               className="btn btn-primary"
                               type="button"
@@ -6197,6 +6259,13 @@ export default function PatientDetailClient({
                               Not required
                             </button>
                           </div>
+                          ) : (
+                            <div className="notice">
+                              {capabilityError || "Recall settings are read-only."}
+                            </div>
+                          )}
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -10119,8 +10188,17 @@ export default function PatientDetailClient({
                 </div>
               ) : tab === "recalls" ? (
                 <div className="stack">
+                  {capabilities === null ? (
+                    <div className="badge">Checking recall permissions…</div>
+                  ) : !canViewRecalls ? (
+                    <div className="notice">
+                      {capabilityError || "You do not have permission to view recalls."}
+                    </div>
+                  ) : (
+                    <>
                   <div className="row">
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {canWriteRecalls && (
                       <button
                         className="btn btn-primary"
                         type="button"
@@ -10135,6 +10213,7 @@ export default function PatientDetailClient({
                       >
                         {showRecallForm ? "Close form" : "Add recall"}
                       </button>
+                      )}
                       <button
                         className="btn btn-secondary"
                         type="button"
@@ -10145,7 +10224,7 @@ export default function PatientDetailClient({
                     </div>
                   </div>
 
-                  {showRecallForm && (
+                  {showRecallForm && canWriteRecalls && (
                     <div className="card" style={{ margin: 0 }}>
                       <div className="stack">
                         <div className="row">
@@ -10207,6 +10286,7 @@ export default function PatientDetailClient({
                             value={recallEntryNotes}
                             onChange={(e) => setRecallEntryNotes(e.target.value)}
                             placeholder="Optional notes for this recall"
+                            maxLength={2000}
                           />
                         </div>
                         <div className="row">
@@ -10286,7 +10366,7 @@ export default function PatientDetailClient({
                                         className="btn btn-secondary"
                                         type="button"
                                         onClick={() => startEditRecall(recall)}
-                                        disabled={recallEntrySaving}
+                                        disabled={!canWriteRecalls || recallEntrySaving}
                                       >
                                         Edit
                                       </button>
@@ -10296,7 +10376,7 @@ export default function PatientDetailClient({
                                         onClick={(event) =>
                                           void downloadRecallLetter(recall, event.currentTarget)
                                         }
-                                        disabled={recallDownloadId === recall.id}
+                                        disabled={!canExportRecalls || recallDownloadId === recall.id}
                                       >
                                         {recallDownloadId === recall.id
                                           ? "Generating..."
@@ -10306,6 +10386,7 @@ export default function PatientDetailClient({
                                         className="btn btn-secondary"
                                         type="button"
                                         onClick={() => openRecallCommModal(recall)}
+                                        disabled={!canWriteRecalls}
                                       >
                                         Log contact
                                       </button>
@@ -10326,7 +10407,11 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={isFinal || recallActionId === recall.id}
+                                        disabled={
+                                          !canWriteRecalls ||
+                                          isFinal ||
+                                          recallActionId === recall.id
+                                        }
                                       >
                                         {recallActionId === recall.id
                                           ? "Updating..."
@@ -10342,7 +10427,11 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={isFinal || recallActionId === recall.id}
+                                        disabled={
+                                          !canWriteRecalls ||
+                                          isFinal ||
+                                          recallActionId === recall.id
+                                        }
                                       >
                                         Complete +6m
                                       </button>
@@ -10356,7 +10445,11 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={isFinal || recallActionId === recall.id}
+                                        disabled={
+                                          !canWriteRecalls ||
+                                          isFinal ||
+                                          recallActionId === recall.id
+                                        }
                                       >
                                         Complete +12m
                                       </button>
@@ -10440,7 +10533,7 @@ export default function PatientDetailClient({
                                   className="btn btn-secondary"
                                   type="button"
                                   onClick={() => startEditRecall(recall)}
-                                  disabled={recallEntrySaving}
+                                  disabled={!canWriteRecalls || recallEntrySaving}
                                 >
                                   Edit
                                 </button>
@@ -10450,7 +10543,7 @@ export default function PatientDetailClient({
                                   onClick={(event) =>
                                     void downloadRecallLetter(recall, event.currentTarget)
                                   }
-                                  disabled={recallDownloadId === recall.id}
+                                  disabled={!canExportRecalls || recallDownloadId === recall.id}
                                 >
                                   {recallDownloadId === recall.id
                                     ? "Generating..."
@@ -10460,6 +10553,7 @@ export default function PatientDetailClient({
                                   className="btn btn-secondary"
                                   type="button"
                                   onClick={() => openRecallCommModal(recall)}
+                                  disabled={!canWriteRecalls}
                                 >
                                   Log contact
                                 </button>
@@ -10480,7 +10574,9 @@ export default function PatientDetailClient({
                                       event.currentTarget
                                     )
                                   }
-                                  disabled={isFinal || recallActionId === recall.id}
+                                  disabled={
+                                    !canWriteRecalls || isFinal || recallActionId === recall.id
+                                  }
                                 >
                                   {recallActionId === recall.id
                                     ? "Updating..."
@@ -10496,7 +10592,9 @@ export default function PatientDetailClient({
                                       event.currentTarget
                                     )
                                   }
-                                  disabled={isFinal || recallActionId === recall.id}
+                                  disabled={
+                                    !canWriteRecalls || isFinal || recallActionId === recall.id
+                                  }
                                 >
                                   Complete +6m
                                 </button>
@@ -10510,7 +10608,9 @@ export default function PatientDetailClient({
                                       event.currentTarget
                                     )
                                   }
-                                  disabled={isFinal || recallActionId === recall.id}
+                                  disabled={
+                                    !canWriteRecalls || isFinal || recallActionId === recall.id
+                                  }
                                 >
                                   Complete +12m
                                 </button>
@@ -10553,6 +10653,8 @@ export default function PatientDetailClient({
                           );
                         })}
                       </div>
+                    </>
+                  )}
                     </>
                   )}
                 </div>
@@ -11505,7 +11607,7 @@ export default function PatientDetailClient({
             </div>
           )}
 
-          {showRecallCommModal && (
+          {showRecallCommModal && canWriteRecalls && (
             <div className="card" style={{ margin: 0 }}>
               <div className="stack">
                 <div className="row">
@@ -11561,6 +11663,7 @@ export default function PatientDetailClient({
                       value={recallCommNotes}
                       onChange={(e) => setRecallCommNotes(e.target.value)}
                       placeholder="Optional notes"
+                      maxLength={2000}
                     />
                   </div>
                 </div>
@@ -11705,6 +11808,7 @@ export default function PatientDetailClient({
                       />
                     </div>
                   )}
+                  {canWriteRecalls && (
                   <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <input
                       type="checkbox"
@@ -11713,6 +11817,7 @@ export default function PatientDetailClient({
                     />
                     Mark recall as booked
                   </label>
+                  )}
                   <button
                     className="btn btn-primary"
                     data-testid="patient-booking-submit"

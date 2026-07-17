@@ -13,7 +13,7 @@ from sqlalchemy import case, false, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import require_capability
 from app.models.patient import Patient, RecallStatus
 from app.models.patient_recall import (
     PatientRecall,
@@ -22,9 +22,6 @@ from app.models.patient_recall import (
 )
 from app.models.patient_recall_communication import (
     PatientRecallCommunication,
-    PatientRecallCommunicationChannel,
-)
-from app.models.patient_recall_communication import (
     PatientRecallCommunicationChannel,
     PatientRecallCommunicationDirection,
     PatientRecallCommunicationStatus,
@@ -35,11 +32,17 @@ from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentO
 from app.schemas.recalls import RecallContactCreate, RecallDashboardRow, RecallKpiOut
 from app.models.document_template import DocumentTemplate
 from app.models.patient_document import PatientDocument
-from app.services.audit import log_event, snapshot_model
+from app.services.audit import log_event
 from app.services.document_render import render_template_with_warnings
 from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recall_communications import log_recall_communication
-from app.services.recalls_audit import build_export_filters, log_recall_export
+from app.services.recalls_audit import (
+    build_export_filters,
+    build_patient_recall_settings_snapshot,
+    log_patient_recall_settings_changes,
+    log_recall_activity,
+    log_recall_export,
+)
 from app.services.recalls import resolve_recall_status
 
 logger = logging.getLogger("uvicorn.error")
@@ -52,85 +55,6 @@ EXPORT_COUNT_CACHE_MAX = 500
 _export_count_cache: OrderedDict[tuple, tuple[float, int]] = OrderedDict()
 _export_count_cache_epoch = 0
 
-
-def _stringify(value: object | None) -> str:
-    if value is None:
-        return "none"
-    if isinstance(value, str) and not value.strip():
-        return "none"
-    if hasattr(value, "value"):
-        return value.value
-    return str(value)
-
-
-def _log_recall_timeline(
-    db: Session,
-    *,
-    actor: User,
-    patient: Patient,
-    before_data: dict,
-    request_id: str | None,
-    ip_address: str | None,
-) -> None:
-    old_status = _stringify(before_data.get("recall_status"))
-    new_status = _stringify(patient.recall_status)
-    if old_status != new_status:
-        log_event(
-            db,
-            actor=actor,
-            action=f"recall.status: {old_status} -> {new_status}",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_status": new_status},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-    old_type = _stringify(before_data.get("recall_type"))
-    new_type = _stringify(patient.recall_type)
-    if old_type != new_type:
-        log_event(
-            db,
-            actor=actor,
-            action=f"recall.type: {old_type} -> {new_type}",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_type": new_type},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-    old_notes = (before_data.get("recall_notes") or "").strip()
-    new_notes = (patient.recall_notes or "").strip()
-    if old_notes != new_notes:
-        log_event(
-            db,
-            actor=actor,
-            action="recall.notes_updated",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_notes": bool(new_notes)},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
-
-    old_contacted = before_data.get("recall_last_contacted_at")
-    new_contacted = (
-        patient.recall_last_contacted_at.isoformat()
-        if patient.recall_last_contacted_at
-        else None
-    )
-    if not old_contacted and new_contacted:
-        log_event(
-            db,
-            actor=actor,
-            action="recall.contacted",
-            entity_type="patient",
-            entity_id=str(patient.id),
-            after_data={"recall_last_contacted_at": new_contacted},
-            request_id=request_id,
-            ip_address=ip_address,
-        )
 
 def _parse_csv_values(raw: str | None) -> list[str]:
     if not raw:
@@ -251,6 +175,67 @@ def _normalize_recall_filters(
     return requested_statuses, requested_type_members, stored_statuses
 
 
+def _validate_recall_filters(
+    *,
+    start: date | None,
+    end: date | None,
+    status_value: str | None,
+    recall_type: str | None,
+    contact_state: str | None,
+    last_contact: str | None,
+    method: str | None,
+    contacted: str | None,
+    contact_channel: str | None,
+) -> None:
+    if start and end and start > end:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Start date must be on or before end date.",
+        )
+
+    allowed_statuses = {item.value for item in PatientRecallStatus}
+    allowed_types = {item.value for item in PatientRecallKind}
+    allowed_channels = {item.value for item in PatientRecallCommunicationChannel}
+    checks = [
+        (status_value, allowed_statuses, "status"),
+        (recall_type, allowed_types, "type"),
+        (method, allowed_channels, "method"),
+        (contact_channel, allowed_channels, "contact channel"),
+    ]
+    for raw, allowed, label in checks:
+        invalid = set(_parse_csv_values(raw)) - allowed
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid recall {label} filter.",
+            )
+
+    if contact_state and contact_state.strip().lower() not in {
+        "yes",
+        "no",
+        "never",
+        "contacted",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid recall contact-state filter.",
+        )
+    if last_contact and last_contact.strip().lower() not in {
+        "7d",
+        "30d",
+        "older30d",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid recall last-contact filter.",
+        )
+    if contacted and contacted.strip().lower() not in {"yes", "no"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid recall contacted filter.",
+        )
+
+
 def _requested_status_members(requested_statuses: set[str]) -> set[PatientRecallStatus]:
     members: set[PatientRecallStatus] = set()
     for value in requested_statuses:
@@ -283,9 +268,10 @@ def _normalize_contact_filters(
 
     within_days = None
     older_than_days = None
-    if last_contact in {"7d", "30d"}:
-        within_days = 7 if last_contact == "7d" else 30
-    elif last_contact == "older30d":
+    last_contact_value = last_contact.strip().lower() if last_contact else None
+    if last_contact_value in {"7d", "30d"}:
+        within_days = 7 if last_contact_value == "7d" else 30
+    elif last_contact_value == "older30d":
         older_than_days = 30
     elif contacted_within_days and contacted_within_days > 0:
         within_days = contacted_within_days
@@ -603,7 +589,7 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
 @router.get("", response_model=list[RecallDashboardRow])
 def list_recalls(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("recalls.view")),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
@@ -618,6 +604,17 @@ def list_recalls(
     offset: int = Query(default=0, ge=0),
 ):
     start_time = time.perf_counter()
+    _validate_recall_filters(
+        start=start,
+        end=end,
+        status_value=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contact_channel=contact_channel,
+    )
     requested_statuses, requested_type_members, stored_statuses = _normalize_recall_filters(
         status, recall_type
     )
@@ -690,22 +687,20 @@ def list_recalls(
 def log_recall_contact(
     recall_id: int,
     payload: RecallContactCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
+    request_id: str | None = Header(default=None),
 ):
     recall = db.get(PatientRecall, recall_id)
     if not recall:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
-    if (
-        payload.method == PatientRecallCommunicationChannel.other
-        and not (payload.other_detail or "").strip()
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Other detail is required when method is other.",
-        )
+    patient = db.get(Patient, recall.patient_id)
+    if not patient or patient.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
 
-    entry = PatientRecallCommunication(
+    entry = log_recall_communication(
+        db,
         patient_id=recall.patient_id,
         recall_id=recall.id,
         channel=payload.method,
@@ -714,12 +709,29 @@ def log_recall_contact(
         notes=payload.note,
         other_detail=payload.other_detail,
         outcome=payload.outcome,
-        contacted_at=payload.contacted_at or datetime.now(timezone.utc),
+        contacted_at=payload.contacted_at,
         created_by_user_id=user.id,
+        guard_seconds=60,
     )
-    db.add(entry)
+    if entry is None:
+        return _load_recall_dashboard_row(db, recall_id)
+    log_recall_activity(
+        db,
+        user=user,
+        patient_id=recall.patient_id,
+        recall_id=recall.id,
+        action="recall.contact_logged",
+        metadata={
+            "channel": payload.method,
+            "contacted_at": entry.contacted_at,
+            "note_present": bool(payload.note),
+            "outcome_present": bool(payload.outcome),
+            "other_detail_present": bool(payload.other_detail),
+        },
+        request_id=request_id,
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
-    db.refresh(entry)
     bump_export_count_cache_epoch("recalls.log_recall_contact")
     return _load_recall_dashboard_row(db, recall_id)
 
@@ -728,7 +740,7 @@ def log_recall_contact(
 def export_recalls_csv(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.export")),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     recall_status: str | None = Query(default=None, alias="status"),
@@ -744,6 +756,17 @@ def export_recalls_csv(
     offset: int = Query(default=0, ge=0),
 ):
     start_time = time.perf_counter()
+    _validate_recall_filters(
+        start=start,
+        end=end,
+        status_value=recall_status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contact_channel=contact_channel,
+    )
     export_filters = build_export_filters(
         start=start,
         end=end,
@@ -847,7 +870,7 @@ def export_recalls_csv(
 @router.get("/export_count")
 def export_recalls_count(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("recalls.export")),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     status: str | None = Query(default=None),
@@ -859,8 +882,21 @@ def export_recalls_count(
     contacted_within_days: int | None = Query(default=None, ge=1, le=3650),
     contact_channel: str | None = Query(default=None),
     page_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ):
     start_time = time.perf_counter()
+    _validate_recall_filters(
+        start=start,
+        end=end,
+        status_value=status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contact_channel=contact_channel,
+    )
     has_filters = _has_export_filters(
         start=start,
         end=end,
@@ -901,8 +937,9 @@ def export_recalls_count(
         logger.info(
             "perf: recalls_export_count_ms=%.2f cache=hit count=%d", elapsed_ms, cached
         )
+        page_count = min(limit, max(cached - offset, 0)) if page_only else cached
         return {
-            "count": cached,
+            "count": page_count,
             "suggested_filename_csv": filename_csv,
             "suggested_filename_zip": filename_zip,
         }
@@ -926,8 +963,9 @@ def export_recalls_count(
     logger.info(
         "perf: recalls_export_count_ms=%.2f cache=miss count=%d", elapsed_ms, total
     )
+    page_count = min(limit, max(total - offset, 0)) if page_only else total
     return {
-        "count": total,
+        "count": page_count,
         "suggested_filename_csv": filename_csv,
         "suggested_filename_zip": filename_zip,
     }
@@ -937,7 +975,7 @@ def export_recalls_count(
 def export_recall_letters_zip(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.export")),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
     recall_status: str | None = Query(default=None, alias="status"),
@@ -953,6 +991,17 @@ def export_recall_letters_zip(
     offset: int = Query(default=0, ge=0),
 ):
     start_time = time.perf_counter()
+    _validate_recall_filters(
+        start=start,
+        end=end,
+        status_value=recall_status,
+        recall_type=recall_type,
+        contact_state=contact_state,
+        last_contact=last_contact,
+        method=method,
+        contacted=contacted,
+        contact_channel=contact_channel,
+    )
     export_filters = build_export_filters(
         start=start,
         end=end,
@@ -1061,10 +1110,15 @@ def export_recall_letters_zip(
 @router.get("/kpis", response_model=RecallKpiOut)
 def recall_kpis(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("recalls.view")),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
 ):
+    if start and end and start > end:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Start date must be on or before end date.",
+        )
     today = date.today()
     range_end = end or today
     range_start = start or (range_end - timedelta(days=30))
@@ -1163,25 +1217,27 @@ def update_recall(
     payload: RecallUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
 
-    before_data = snapshot_model(patient)
-    if payload.interval_months is not None:
+    before_data = build_patient_recall_settings_snapshot(patient)
+    before_notes = patient.recall_notes
+    fields = payload.model_fields_set
+    if "interval_months" in fields and payload.interval_months is not None:
         patient.recall_interval_months = payload.interval_months
-    if payload.due_date is not None:
+    if "due_date" in fields:
         patient.recall_due_date = payload.due_date
-    if payload.status is not None:
+    if "status" in fields:
         patient.recall_status = payload.status
-    if payload.recall_type is not None:
+    if "recall_type" in fields:
         patient.recall_type = payload.recall_type
-    if payload.notes is not None:
+    if "notes" in fields:
         patient.recall_notes = payload.notes
-    if payload.last_contacted_at is not None:
+    if "last_contacted_at" in fields:
         patient.recall_last_contacted_at = payload.last_contacted_at
     elif payload.status == RecallStatus.contacted and not patient.recall_last_contacted_at:
         patient.recall_last_contacted_at = datetime.now(timezone.utc)
@@ -1191,16 +1247,37 @@ def update_recall(
     if not patient.recall_due_date:
         patient.recall_status = None
 
+    after_data = build_patient_recall_settings_snapshot(patient)
+    notes_changed = before_notes != patient.recall_notes
+    if before_data == after_data and not notes_changed:
+        return PatientRecallSettingsOut(
+            id=patient.id,
+            first_name=patient.first_name,
+            last_name=patient.last_name,
+            phone=patient.phone,
+            postcode=patient.postcode,
+            recall_interval_months=patient.recall_interval_months,
+            recall_due_date=patient.recall_due_date,
+            recall_status=patient.recall_status,
+            recall_type=patient.recall_type,
+            recall_last_contacted_at=patient.recall_last_contacted_at,
+            recall_notes=patient.recall_notes,
+            recall_last_set_at=patient.recall_last_set_at,
+            balance_pence=None,
+        )
+
     patient.recall_last_set_at = datetime.now(timezone.utc)
     patient.recall_last_set_by_user_id = user.id
     patient.updated_by_user_id = user.id
     patient.updated_at = datetime.now(timezone.utc)
     db.add(patient)
-    _log_recall_timeline(
+    log_patient_recall_settings_changes(
         db,
-        actor=user,
-        patient=patient,
-        before_data=before_data or {},
+        user=user,
+        patient_id=patient.id,
+        before=before_data,
+        after=after_data,
+        notes_changed=notes_changed,
         request_id=request_id,
         ip_address=request.client.host if request else None,
     )
@@ -1230,7 +1307,7 @@ def generate_recall_document(
     payload: PatientDocumentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("recalls.write")),
     request_id: str | None = Header(default=None),
 ):
     patient = db.get(Patient, patient_id)

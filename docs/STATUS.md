@@ -3,15 +3,16 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
-- Deployment batch 1 passed on 2026-07-16. Production is stable on
-  `20767bc5c303d5bb467cf343123379ffadbf42c1`; PR #693 patient-ledger reliability
-  and PR #694 appointment reliability are live, and rollback is not required.
-- The deterministic patient-ledger and appointment no-write smokes both passed
-  all 18 checkpoints, and the production 404 smoke passed.
-- PR #697 patient-record reliability, permissions, lifecycle validation, and
-  audit is merged and awaiting deployment. The deterministic patient-record
-  no-write smoke is prepared, and deployment batch 2 will contain PR #697 and
-  the patient-record smoke PR #698.
+- Deployment batch 2 passed on 2026-07-16. Production is stable on
+  `d6b2319432a320517c58bf3e20afae027d7c5d9e`; PR #697 patient-record
+  reliability, permissions, lifecycle validation, and audit is live, and
+  rollback is not required.
+- The deterministic patient-record smoke passed all 20 checkpoints, the
+  patient-ledger and appointment no-write smokes each passed all 18
+  checkpoints, and the production 404 smoke passed.
+- Recall workflow reliability, permissions, audit, export, and frontend safety
+  is the active feature-sized slice. Its deterministic recall no-write smoke is
+  included in the same feature PR.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
