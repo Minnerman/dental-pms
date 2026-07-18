@@ -45,6 +45,12 @@ let unexpectedApi = false;
 let unexpectedBrowser = false;
 let writeRequest = false;
 let patientSelection = "unknown";
+let expectedPatientState = "unknown";
+let listCapabilityRequestCompleted = false;
+let detailCapabilityRequestCompleted = false;
+let listControlsConverged = false;
+let detailControlsConverged = false;
+let settledCreateVisible = false;
 
 async function checkedFetch(base, path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
@@ -73,6 +79,15 @@ async function frontendReady(base) {
       if (response.ok) return true;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
+async function waitUntil(predicate, timeout = 15_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return false;
 }
@@ -106,6 +121,8 @@ async function frontendReady(base) {
   ).json();
   checkpoints[3] = Array.isArray(capabilities);
   if (!checkpoints[3]) throw new Error("capabilities unavailable");
+  const canWrite = capabilities.includes("patients.write");
+  expectedPatientState = canWrite ? "write" : "read_only";
 
   const patients = await (
     await checkedFetch(base, "/api/patients?limit=200", { headers })
@@ -168,6 +185,16 @@ async function frontendReady(base) {
       "; Path=/; SameSite=Lax";
   }, token);
 
+  const listCapabilityResponsePromise = page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === "GET" &&
+        url.pathname === "/api/me/capabilities"
+      );
+    },
+    { timeout: 20_000 }
+  );
   const listNavigation = await page.goto(base + "/patients", {
     waitUntil: "domcontentloaded",
   });
@@ -177,10 +204,29 @@ async function frontendReady(base) {
   const firstRow = page.locator("tbody tr").first();
   await firstRow.waitFor({ state: "visible", timeout: 20_000 });
   checkpoints[6] = Boolean(listNavigation && listNavigation.status() < 400);
-  const createVisible = await page
-    .getByRole("link", { name: "New patient", exact: true })
-    .isVisible()
-    .catch(() => false);
+  const listCapabilityResponse = await listCapabilityResponsePromise;
+  listCapabilityRequestCompleted = listCapabilityResponse.ok();
+  if (!listCapabilityRequestCompleted) {
+    throw new Error("list capabilities unavailable");
+  }
+  const createControl = page.getByRole("link", {
+    name: "New patient",
+    exact: true,
+  });
+  const listReadOnlyNotice = page.getByText(
+    "You can view patients, but you cannot change them.",
+    { exact: true }
+  );
+  listControlsConverged = await waitUntil(async () => {
+    const createVisible = await createControl.isVisible().catch(() => false);
+    const readOnlyVisible = await listReadOnlyNotice
+      .isVisible()
+      .catch(() => false);
+    return canWrite
+      ? createVisible && !readOnlyVisible
+      : !createVisible && readOnlyVisible;
+  });
+  settledCreateVisible = await createControl.isVisible().catch(() => false);
 
   const patientLink = firstRow.getByRole("link").first();
   await patientLink.waitFor({ state: "visible", timeout: 10_000 });
@@ -203,8 +249,23 @@ async function frontendReady(base) {
     },
     { timeout: 20_000 }
   );
+  const detailCapabilityResponsePromise = page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === "GET" &&
+        url.pathname === "/api/me/capabilities"
+      );
+    },
+    { timeout: 20_000 }
+  );
   await patientLink.click();
   const patientResponse = await patientResponsePromise;
+  const detailCapabilityResponse = await detailCapabilityResponsePromise;
+  detailCapabilityRequestCompleted = detailCapabilityResponse.ok();
+  if (!detailCapabilityRequestCompleted) {
+    throw new Error("detail capabilities unavailable");
+  }
   const patientPayload = patientResponse.ok() ? await patientResponse.json() : null;
   checkpoints[8] =
     new URL(page.url()).pathname === "/patients/" + patient.id;
@@ -229,26 +290,44 @@ async function frontendReady(base) {
   await auditControl.waitFor({ state: "visible", timeout: 10_000 });
   checkpoints[12] = true;
 
-  const canWrite = capabilities.includes("patients.write");
   try {
     await personalTab.click();
     await page
-      .getByText("Patient details", { exact: true })
+      .locator("summary")
+      .filter({ hasText: /^Patient details$/ })
       .click();
     const fields = page.getByTestId("patient-details-fields");
     await fields.waitFor({ state: "visible", timeout: 10_000 });
+    const saveControl = page.getByTestId("patient-save-changes");
+    const archiveControl = page.getByTestId("patient-archive-toggle");
+    const detailReadOnlyNotice = page.getByText(
+      "You can view this patient, but you cannot change it.",
+      { exact: true }
+    );
+    detailControlsConverged = await waitUntil(async () => {
+      const fieldsDisabled = (await fields.getAttribute("disabled")) !== null;
+      const saveVisible = await saveControl.isVisible().catch(() => false);
+      const archiveVisible = await archiveControl
+        .isVisible()
+        .catch(() => false);
+      const readOnlyVisible = await detailReadOnlyNotice
+        .isVisible()
+        .catch(() => false);
+      return canWrite
+        ? !fieldsDisabled && saveVisible && archiveVisible && !readOnlyVisible
+        : fieldsDisabled && !saveVisible && !archiveVisible && readOnlyVisible;
+    });
     const fieldsDisabled = (await fields.getAttribute("disabled")) !== null;
-    const saveVisible = await page
-      .getByTestId("patient-save-changes")
-      .isVisible()
-      .catch(() => false);
-    const archiveVisible = await page
-      .getByTestId("patient-archive-toggle")
-      .isVisible()
-      .catch(() => false);
-    checkpoints[14] = canWrite
-      ? createVisible && saveVisible && archiveVisible && !fieldsDisabled
-      : !createVisible && !saveVisible && !archiveVisible && fieldsDisabled;
+    const saveVisible = await saveControl.isVisible().catch(() => false);
+    const archiveVisible = await archiveControl.isVisible().catch(() => false);
+    checkpoints[14] =
+      listCapabilityRequestCompleted &&
+      detailCapabilityRequestCompleted &&
+      listControlsConverged &&
+      detailControlsConverged &&
+      (canWrite
+        ? settledCreateVisible && saveVisible && archiveVisible && !fieldsDisabled
+        : !settledCreateVisible && !saveVisible && !archiveVisible && fieldsDisabled);
   } catch {
     checkpoints[14] = false;
   }
@@ -293,6 +372,11 @@ async function frontendReady(base) {
         checkpoints,
         patient_selection: patientSelection,
         archived_patient: "not_checked_safely",
+        expected_patient_state: expectedPatientState,
+        list_capability_request_completed: listCapabilityRequestCompleted,
+        detail_capability_request_completed: detailCapabilityRequestCompleted,
+        list_controls_converged: listControlsConverged,
+        detail_controls_converged: detailControlsConverged,
         unexpected_api: unexpectedApi,
         unexpected_browser: unexpectedBrowser,
         write_request: writeRequest,
@@ -327,6 +411,11 @@ def _empty_result() -> dict[str, Any]:
         "checkpoints": [False] * len(CHECKPOINTS),
         "patient_selection": "unknown",
         "archived_patient": "not_checked_safely",
+        "expected_patient_state": "unknown",
+        "list_capability_request_completed": False,
+        "detail_capability_request_completed": False,
+        "list_controls_converged": False,
+        "detail_controls_converged": False,
         "unexpected_api": True,
         "unexpected_browser": True,
         "write_request": False,
@@ -347,6 +436,19 @@ def _normalise_result(payload: object) -> dict[str, Any]:
             else "unknown"
         ),
         "archived_patient": "not_checked_safely",
+        "expected_patient_state": (
+            payload.get("expected_patient_state")
+            if payload.get("expected_patient_state") in {"write", "read_only", "unknown"}
+            else "unknown"
+        ),
+        "list_capability_request_completed": (
+            payload.get("list_capability_request_completed") is True
+        ),
+        "detail_capability_request_completed": (
+            payload.get("detail_capability_request_completed") is True
+        ),
+        "list_controls_converged": payload.get("list_controls_converged") is True,
+        "detail_controls_converged": payload.get("detail_controls_converged") is True,
         "unexpected_api": payload.get("unexpected_api") is not False,
         "unexpected_browser": payload.get("unexpected_browser") is not False,
         "write_request": payload.get("write_request") is True,
@@ -401,6 +503,34 @@ def main() -> int:
     )
     print("archived_patient_smoke: not checked safely")
     print(
+        "expected_patient_state: "
+        + (
+            "write"
+            if result["expected_patient_state"] == "write"
+            else (
+                "read-only"
+                if result["expected_patient_state"] == "read_only"
+                else "unknown"
+            )
+        )
+    )
+    print(
+        "list_capability_request_completed: "
+        + ("yes" if result["list_capability_request_completed"] else "no")
+    )
+    print(
+        "detail_capability_request_completed: "
+        + ("yes" if result["detail_capability_request_completed"] else "no")
+    )
+    print(
+        "list_controls_converged: "
+        + ("yes" if result["list_controls_converged"] else "no")
+    )
+    print(
+        "detail_controls_converged: "
+        + ("yes" if result["detail_controls_converged"] else "no")
+    )
+    print(
         "unexpected_api_failure: "
         + ("yes" if result["unexpected_api"] else "no")
     )
@@ -412,6 +542,11 @@ def main() -> int:
     passed = (
         all(values)
         and result["patient_selection"] == "active"
+        and result["expected_patient_state"] in {"write", "read_only"}
+        and result["list_capability_request_completed"]
+        and result["detail_capability_request_completed"]
+        and result["list_controls_converged"]
+        and result["detail_controls_converged"]
         and not result["unexpected_api"]
         and not result["unexpected_browser"]
         and not result["write_request"]
