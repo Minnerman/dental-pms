@@ -25,6 +25,11 @@ def smoke_result(
     *,
     failed_checkpoint: int | None = None,
     patient_selection: str = "active",
+    expected_patient_state: str = "write",
+    list_capability_request_completed: bool = True,
+    detail_capability_request_completed: bool = True,
+    list_controls_converged: bool = True,
+    detail_controls_converged: bool = True,
     unexpected_api: bool = False,
     unexpected_browser: bool = False,
     write_request: bool = False,
@@ -36,6 +41,11 @@ def smoke_result(
         "checkpoints": checkpoints,
         "patient_selection": patient_selection,
         "archived_patient": "not_checked_safely",
+        "expected_patient_state": expected_patient_state,
+        "list_capability_request_completed": list_capability_request_completed,
+        "detail_capability_request_completed": detail_capability_request_completed,
+        "list_controls_converged": list_controls_converged,
+        "detail_controls_converged": detail_controls_converged,
         "unexpected_api": unexpected_api,
         "unexpected_browser": unexpected_browser,
         "write_request": write_request,
@@ -62,6 +72,11 @@ def test_main_reports_checkpoint_only_success(monkeypatch, capsys) -> None:
     assert "checkpoint_20 Final application health confirmed: pass" in output
     assert "active_patient_selected: yes" in output
     assert "archived_patient_smoke: not checked safely" in output
+    assert "expected_patient_state: write" in output
+    assert "list_capability_request_completed: yes" in output
+    assert "detail_capability_request_completed: yes" in output
+    assert "list_controls_converged: yes" in output
+    assert "detail_controls_converged: yes" in output
     assert "unexpected_api_failure: no" in output
     assert "unexpected_browser_failure: no" in output
     assert "write_request_issued: no" in output
@@ -139,3 +154,118 @@ def test_embedded_browser_smoke_blocks_write_methods_before_network() -> None:
     assert 'page.route("**/api/**"' in SMOKE.NODE_SMOKE
     assert 'route.abort("blockedbyclient")' in SMOKE.NODE_SMOKE
     assert 'new Set(["POST", "PUT", "PATCH", "DELETE"])' in SMOKE.NODE_SMOKE
+
+
+def test_checkpoint_15_waits_for_delayed_list_capabilities_before_controls() -> None:
+    promise = SMOKE.NODE_SMOKE.index("const listCapabilityResponsePromise")
+    navigation = SMOKE.NODE_SMOKE.index(
+        'const listNavigation = await page.goto(base + "/patients"'
+    )
+    completion = SMOKE.NODE_SMOKE.index(
+        "const listCapabilityResponse = await listCapabilityResponsePromise"
+    )
+    convergence = SMOKE.NODE_SMOKE.index(
+        "listControlsConverged = await waitUntil"
+    )
+
+    assert promise < navigation < completion < convergence
+
+
+def test_checkpoint_15_waits_for_delayed_detail_capabilities_before_controls() -> None:
+    promise = SMOKE.NODE_SMOKE.index("const detailCapabilityResponsePromise")
+    navigation = SMOKE.NODE_SMOKE.index("await patientLink.click()")
+    completion = SMOKE.NODE_SMOKE.index(
+        "const detailCapabilityResponse = await detailCapabilityResponsePromise"
+    )
+    convergence = SMOKE.NODE_SMOKE.index(
+        "detailControlsConverged = await waitUntil"
+    )
+
+    assert promise < navigation < completion < convergence
+
+
+def test_checkpoint_15_preserves_settled_list_state_before_detail_navigation() -> None:
+    settled = SMOKE.NODE_SMOKE.index(
+        "settledCreateVisible = await createControl.isVisible()"
+    )
+    navigation = SMOKE.NODE_SMOKE.index("await patientLink.click()")
+    checkpoint = SMOKE.NODE_SMOKE.index(
+        "? settledCreateVisible && saveVisible"
+    )
+
+    assert settled < navigation < checkpoint
+
+
+def test_write_capable_settled_state_is_classified(monkeypatch, capsys) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(expected_patient_state="write"),
+    )
+
+    assert code == 0
+    assert "expected_patient_state: write" in output
+    assert "list_controls_converged: yes" in output
+    assert "detail_controls_converged: yes" in output
+
+
+def test_view_only_settled_state_is_classified(monkeypatch, capsys) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(expected_patient_state="read_only"),
+    )
+
+    assert code == 0
+    assert "expected_patient_state: read-only" in output
+    assert "list_controls_converged: yes" in output
+    assert "detail_controls_converged: yes" in output
+
+
+def test_inconsistent_settled_controls_fail_checkpoint_15(
+    monkeypatch, capsys
+) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(
+            failed_checkpoint=14,
+            detail_controls_converged=False,
+        ),
+    )
+
+    assert code == 1
+    assert (
+        "checkpoint_15 Capability-aware controls rendered consistently: fail"
+        in output
+    )
+    assert "detail_controls_converged: no" in output
+
+
+def test_capability_endpoint_failure_fails_safely(monkeypatch, capsys) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(
+            failed_checkpoint=14,
+            list_capability_request_completed=False,
+            unexpected_api=True,
+        ),
+    )
+
+    assert code == 1
+    assert "list_capability_request_completed: no" in output
+    assert "unexpected_api_failure: yes" in output
+
+
+def test_capability_classifications_do_not_echo_private_values(
+    monkeypatch, capsys
+) -> None:
+    result = smoke_result(expected_patient_state="read_only")
+    result["capability_response"] = PRIVATE_VALUES
+
+    code, output = output_for(monkeypatch, capsys, result)
+
+    assert code == 0
+    for private_value in PRIVATE_VALUES:
+        assert private_value not in output
