@@ -61,6 +61,7 @@ function getFutureClinicWeekdayDate(seed: number) {
 }
 
 function getClinicSlot(seed: number, attempt: number) {
+  // Keep generated slots in hours for both UTC CI runners and Europe/London validation.
   const starts = [
     "09:10",
     "09:50",
@@ -72,8 +73,6 @@ function getClinicSlot(seed: number, attempt: number) {
     "13:50",
     "14:30",
     "15:10",
-    "15:50",
-    "16:30",
   ];
   const index = (Math.floor(seed / 1000) + attempt) % starts.length;
   const start = starts[index];

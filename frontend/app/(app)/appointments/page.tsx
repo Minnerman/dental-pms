@@ -22,6 +22,7 @@ import {
 } from "date-fns";
 import { enGB } from "date-fns/locale";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { NOTE_BODY_MAX_LENGTH, noteResponseError } from "@/lib/noteErrors";
 import { recallResponseError } from "@/lib/recallErrors";
 import StatusIcon from "@/components/ui/StatusIcon";
 
@@ -725,6 +726,7 @@ export default function AppointmentsPage() {
     action: "edit" | "archive" | "restore";
   } | null>(null);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [detailPatient, setDetailPatient] = useState<PatientDetail | null>(null);
   const [loadingPatientDetail, setLoadingPatientDetail] = useState(false);
   const [detailLocationType, setDetailLocationType] =
@@ -811,6 +813,11 @@ export default function AppointmentsPage() {
   );
   const canWriteRecalls = Boolean(
     appointmentCapabilities?.includes("recalls.write")
+  );
+  const notesCapabilitiesReady = appointmentCapabilities !== null;
+  const canViewNotes = Boolean(appointmentCapabilities?.includes("notes.view"));
+  const canWriteNotes = Boolean(
+    canViewNotes && appointmentCapabilities?.includes("notes.write")
   );
   const canEditAppointments =
     canWriteAppointments || canCancelAppointments || canRescheduleAppointments;
@@ -1823,6 +1830,7 @@ export default function AppointmentsPage() {
     setEditingNoteType("clinical");
     setSavingNoteAction(null);
     setLoadingNotes(false);
+    setNotesError(null);
   }
 
   function openAppointment(appt: Appointment, mode: "view" | "edit" = "view") {
@@ -1836,7 +1844,6 @@ export default function AppointmentsPage() {
     setAuditLoading(false);
     setDetailLocationType(appt.location_type);
     setDetailLocationText(appt.location_text || "");
-    void loadAppointmentNotes(appt.id);
     void loadPatientDetail(appt.patient.id);
     setEditStartsAt(toLocalDateTimeInput(new Date(appt.starts_at)));
     setEditEndsAt(toLocalDateTimeInput(new Date(appt.ends_at)));
@@ -1895,6 +1902,7 @@ export default function AppointmentsPage() {
   }, [router]);
 
   async function ensureNotesLoaded(appointmentId: number) {
+    if (!notesCapabilitiesReady || !canViewNotes) return;
     if (noteCache[appointmentId]) return;
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}/notes`);
@@ -1905,6 +1913,9 @@ export default function AppointmentsPage() {
       }
       if (!res.ok) {
         setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
+        setNotesError(
+          await noteResponseError(res, "Appointment notes could not be loaded.")
+        );
         return;
       }
       const data = (await res.json()) as AppointmentNote[];
@@ -1912,6 +1923,7 @@ export default function AppointmentsPage() {
       setNoteCache((prev) => ({ ...prev, [appointmentId]: bodies }));
     } catch {
       setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
+      setNotesError("Appointment notes could not be loaded.");
     }
   }
 
@@ -2518,13 +2530,19 @@ export default function AppointmentsPage() {
     }
   }
 
-  async function loadAppointmentNotes(
+  const loadAppointmentNotes = useCallback(async (
     appointmentId: number,
     options?: { includeDeleted?: boolean }
-  ) {
+  ) => {
+    if (!notesCapabilitiesReady || !canViewNotes) {
+      setNotes([]);
+      setLoadingNotes(false);
+      return;
+    }
     const requestId = ++loadAppointmentNotesRequestId.current;
     const includeDeleted = options?.includeDeleted ?? showArchivedNotes;
     setLoadingNotes(true);
+    setNotesError(null);
     try {
       const params = new URLSearchParams();
       if (includeDeleted) params.set("include_deleted", "true");
@@ -2550,18 +2568,38 @@ export default function AppointmentsPage() {
         if (requestId !== loadAppointmentNotesRequestId.current) return;
         setNotes([]);
         setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
+        setNotesError(
+          await noteResponseError(res, "Appointment notes could not be loaded.")
+        );
       }
     } catch {
       if (requestId !== loadAppointmentNotesRequestId.current) return;
       setNotes([]);
       setNoteCache((prev) => ({ ...prev, [appointmentId]: [] }));
+      setNotesError("Appointment notes could not be loaded.");
     } finally {
       if (requestId !== loadAppointmentNotesRequestId.current) return;
       setLoadingNotes(false);
     }
-  }
+  }, [canViewNotes, notesCapabilitiesReady, router, showArchivedNotes]);
+
+  useEffect(() => {
+    if (!selectedAppointment || !notesCapabilitiesReady) return;
+    if (!canViewNotes) {
+      setNotes([]);
+      setLoadingNotes(false);
+      return;
+    }
+    void loadAppointmentNotes(selectedAppointment.id);
+  }, [
+    canViewNotes,
+    loadAppointmentNotes,
+    notesCapabilitiesReady,
+    selectedAppointment,
+  ]);
 
   function beginAppointmentNoteEdit(note: AppointmentNote) {
+    if (!canWriteNotes || note.deleted_at) return;
     setEditingNoteId(note.id);
     setEditingNoteBody(note.body);
     setEditingNoteType(note.note_type);
@@ -2573,7 +2611,12 @@ export default function AppointmentsPage() {
     note: AppointmentNote,
     button?: HTMLButtonElement | null
   ) {
-    if (!selectedAppointment || !editingNoteBody.trim()) return;
+    if (!selectedAppointment || !canWriteNotes) return;
+    const nextBody = editingNoteBody.trim();
+    if (!nextBody || nextBody.length > NOTE_BODY_MAX_LENGTH) {
+      setNotesError(`Note text must be between 1 and ${NOTE_BODY_MAX_LENGTH} characters.`);
+      return;
+    }
     const appointmentId = selectedAppointment.id;
     if (
       appointmentsNoteEditLocks.has(note.id) ||
@@ -2586,12 +2629,14 @@ export default function AppointmentsPage() {
     if (button) button.disabled = true;
     setSavingNoteAction({ noteId: note.id, action: "edit" });
     setError(null);
+    setNotesError(null);
     setNotice(null);
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}/notes/${note.id}`, {
         method: "PATCH",
+        headers: { "Request-Id": crypto.randomUUID() },
         body: JSON.stringify({
-          body: editingNoteBody.trim(),
+          body: nextBody,
           note_type: editingNoteType,
         }),
       });
@@ -2601,8 +2646,7 @@ export default function AppointmentsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to update note (HTTP ${res.status})`);
+        throw new Error(await noteResponseError(res, "Failed to update note."));
       }
       setEditingNoteId(null);
       setEditingNoteBody("");
@@ -2610,7 +2654,7 @@ export default function AppointmentsPage() {
       await loadAppointmentNotes(appointmentId, { includeDeleted: showArchivedNotes });
       setNotice("Note updated.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update note");
+      setNotesError(err instanceof Error ? err.message : "Failed to update note.");
     } finally {
       appointmentsNoteEditLocks.delete(note.id);
       setSavingNoteAction(null);
@@ -2621,7 +2665,7 @@ export default function AppointmentsPage() {
     note: AppointmentNote,
     button?: HTMLButtonElement | null
   ) {
-    if (!selectedAppointment) return;
+    if (!selectedAppointment || !canWriteNotes) return;
     const action = note.deleted_at ? "restore" : "archive";
     if (!confirm(`${note.deleted_at ? "Restore" : "Archive"} this note?`)) return;
     const appointmentId = selectedAppointment.id;
@@ -2637,12 +2681,14 @@ export default function AppointmentsPage() {
     if (button) button.disabled = true;
     setSavingNoteAction({ noteId: note.id, action });
     setError(null);
+    setNotesError(null);
     setNotice(null);
     try {
       const res = await apiFetch(
         `/api/appointments/${appointmentId}/notes/${note.id}/${action}`,
         {
           method: "POST",
+          headers: { "Request-Id": crypto.randomUUID() },
         }
       );
       if (res.status === 401) {
@@ -2651,8 +2697,9 @@ export default function AppointmentsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to ${action} note (HTTP ${res.status})`);
+        throw new Error(
+          await noteResponseError(res, `Failed to ${action} note.`)
+        );
       }
       if (editingNoteId === note.id) {
         setEditingNoteId(null);
@@ -2668,7 +2715,9 @@ export default function AppointmentsPage() {
             : "Note archived. Enable Show archived to restore it."
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action} note`);
+      setNotesError(
+        err instanceof Error ? err.message : `Failed to ${action} note.`
+      );
     } finally {
       appointmentsNoteArchiveLocks.delete(note.id);
       setSavingNoteAction(null);
@@ -2724,7 +2773,12 @@ export default function AppointmentsPage() {
 
   async function addAppointmentNote(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!selectedAppointment || !noteBody.trim()) return;
+    if (!selectedAppointment || !canWriteNotes) return;
+    const nextBody = noteBody.trim();
+    if (!nextBody || nextBody.length > NOTE_BODY_MAX_LENGTH) {
+      setNotesError(`Note text must be between 1 and ${NOTE_BODY_MAX_LENGTH} characters.`);
+      return;
+    }
     const submitter =
       e.nativeEvent instanceof SubmitEvent ? e.nativeEvent.submitter : null;
     const button = submitter instanceof HTMLButtonElement ? submitter : null;
@@ -2736,12 +2790,14 @@ export default function AppointmentsPage() {
     if (button) button.disabled = true;
     setSaving(true);
     setError(null);
+    setNotesError(null);
     let savingHandled = false;
     try {
       const res = await apiFetch(`/api/appointments/${appointmentId}/notes`, {
         method: "POST",
+        headers: { "Request-Id": crypto.randomUUID() },
         body: JSON.stringify({
-          body: noteBody.trim(),
+          body: nextBody,
           note_type: "clinical",
         }),
       });
@@ -2751,8 +2807,7 @@ export default function AppointmentsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to add note (HTTP ${res.status})`);
+        throw new Error(await noteResponseError(res, "Failed to add note."));
       }
       const createdNote = (await res.json()) as AppointmentNote;
       setNoteBody("");
@@ -2773,7 +2828,7 @@ export default function AppointmentsPage() {
       savingHandled = true;
       void loadAppointmentNotes(appointmentId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add note");
+      setNotesError(err instanceof Error ? err.message : "Failed to add note.");
     } finally {
       appointmentsNoteSubmitLocks.delete(appointmentId);
       if (!savingHandled) {
@@ -2949,9 +3004,10 @@ export default function AppointmentsPage() {
       const updated = (await res.json()) as Appointment;
       setSelectedAppointment(updated);
       setAppointments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      if (editNoteBody.trim()) {
+      if (editNoteBody.trim() && canWriteNotes) {
         const noteRes = await apiFetch(`/api/appointments/${updated.id}/notes`, {
           method: "POST",
+          headers: { "Request-Id": crypto.randomUUID() },
           body: JSON.stringify({
             body: editNoteBody.trim(),
             note_type: "clinical",
@@ -2963,8 +3019,7 @@ export default function AppointmentsPage() {
           return;
         }
         if (!noteRes.ok) {
-          const msg = await noteRes.text();
-          throw new Error(msg || `Failed to add note (HTTP ${noteRes.status})`);
+          throw new Error(await noteResponseError(noteRes, "Failed to add note."));
         }
         setEditNoteBody("");
         await loadAppointmentNotes(updated.id);
@@ -4890,16 +4945,17 @@ export default function AppointmentsPage() {
                       />
                     </div>
                   )}
-                  <div className="stack" style={{ gap: 8 }}>
+                  {canWriteNotes && <div className="stack" style={{ gap: 8 }}>
                     <label className="label">Add note</label>
                     <textarea
                       className="input"
                       rows={3}
+                      maxLength={NOTE_BODY_MAX_LENGTH}
                       value={editNoteBody}
                       onChange={(event) => setEditNoteBody(event.target.value)}
                       placeholder="Add a note for this appointment"
                     />
-                  </div>
+                  </div>}
                   <div className="row">
                     <button
                       className="btn btn-primary"
@@ -5244,11 +5300,25 @@ export default function AppointmentsPage() {
                     </form>
                   )}
 
-                  <form onSubmit={addAppointmentNote} className="stack">
+                  <div
+                    className="notice"
+                    data-testid="appointment-notes-access"
+                  >
+                    {!notesCapabilitiesReady
+                      ? "Checking note permissions…"
+                      : !canViewNotes
+                        ? "You do not have permission to view appointment notes."
+                        : canWriteNotes
+                          ? "Appointment notes are available."
+                          : "Appointment notes are read-only."}
+                  </div>
+
+                  {canWriteNotes && <form onSubmit={addAppointmentNote} className="stack">
                     <label className="label">Quick note</label>
                     <textarea
                       className="input"
                       rows={3}
+                      maxLength={NOTE_BODY_MAX_LENGTH}
                       value={noteBody}
                       onChange={(e) => setNoteBody(e.target.value)}
                       placeholder="Add a brief clinical note"
@@ -5256,13 +5326,18 @@ export default function AppointmentsPage() {
                     <button
                       className="btn btn-primary"
                       data-testid="appointment-detail-add-note"
-                      disabled={saving}
+                      disabled={
+                        saving ||
+                        !noteBody.trim() ||
+                        noteBody.trim().length > NOTE_BODY_MAX_LENGTH
+                      }
                     >
                       {saving ? "Saving..." : "Add note"}
                     </button>
-                  </form>
+                  </form>}
 
-                  <>
+                  {canViewNotes && <>
+                    {notesError ? <div className="notice error">{notesError}</div> : null}
                     {loadingNotes ? <div className="badge">Loading notes…</div> : null}
                     <div className="stack">
                       <label
@@ -5284,9 +5359,7 @@ export default function AppointmentsPage() {
                             setEditingNoteId(null);
                             setEditingNoteBody("");
                             if (selectedAppointment) {
-                              void loadAppointmentNotes(selectedAppointment.id, {
-                                includeDeleted: next,
-                              });
+                              setNotesError(null);
                             }
                           }}
                         />
@@ -5322,7 +5395,13 @@ export default function AppointmentsPage() {
                               </div>
                               <span className="badge">{noteTypeLabel(note.note_type)}</span>
                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {!note.deleted_at ? (
+                                <Link
+                                  className="btn btn-secondary"
+                                  href={`/notes/${note.id}/audit`}
+                                >
+                                  Audit
+                                </Link>
+                                {canWriteNotes && (!note.deleted_at ? (
                                   <>
                                     <button
                                       type="button"
@@ -5363,10 +5442,10 @@ export default function AppointmentsPage() {
                                       ? "Restoring..."
                                       : "Restore"}
                                   </button>
-                                )}
+                                ))}
                               </div>
                             </div>
-                            {editingNoteId === note.id && !note.deleted_at ? (
+                            {canWriteNotes && editingNoteId === note.id && !note.deleted_at ? (
                               <div className="stack" style={{ gap: 8, marginTop: 10 }}>
                                 <div className="stack" style={{ gap: 8 }}>
                                   <label className="label">Note type</label>
@@ -5388,6 +5467,7 @@ export default function AppointmentsPage() {
                                 <textarea
                                   className="input"
                                   rows={3}
+                                  maxLength={NOTE_BODY_MAX_LENGTH}
                                   data-testid={`appointment-note-edit-body-${note.id}`}
                                   value={editingNoteBody}
                                   onChange={(event) =>
@@ -5403,7 +5483,9 @@ export default function AppointmentsPage() {
                                       void saveAppointmentNoteEdit(note, event.currentTarget)
                                     }
                                     disabled={
-                                      !editingNoteBody.trim() || Boolean(savingNoteAction)
+                                      !editingNoteBody.trim() ||
+                                      editingNoteBody.trim().length > NOTE_BODY_MAX_LENGTH ||
+                                      Boolean(savingNoteAction)
                                     }
                                   >
                                     {savingNoteAction?.noteId === note.id &&
@@ -5439,7 +5521,7 @@ export default function AppointmentsPage() {
                         ))
                       )}
                     </div>
-                  </>
+                  </>}
                 </>
               )}
             </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuditTable from "@/components/audit/AuditTable";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { noteResponseError } from "@/lib/noteErrors";
 
 type AuditRow = {
   id: number | string;
@@ -33,6 +34,25 @@ export default function NoteAuditClient({ id }: { id: string }) {
   useEffect(() => {
     (async () => {
       try {
+        const capabilitiesResponse = await apiFetch("/api/me/capabilities");
+        if (capabilitiesResponse.status === 401) {
+          clearToken();
+          router.replace("/login");
+          return;
+        }
+        if (!capabilitiesResponse.ok) {
+          setError("Note permissions could not be verified.");
+          return;
+        }
+        const capabilities = (await capabilitiesResponse.json()) as unknown;
+        if (
+          !Array.isArray(capabilities) ||
+          !capabilities.every((item) => typeof item === "string") ||
+          !capabilities.includes("notes.view")
+        ) {
+          setError("You do not have permission to view note audit history.");
+          return;
+        }
         const res = await apiFetch(`/api/notes/${noteId}/audit`);
         setStatus(res.status);
         if (res.status === 401) {
@@ -41,7 +61,7 @@ export default function NoteAuditClient({ id }: { id: string }) {
           return;
         }
         if (res.status === 403) {
-          setError("Not authorised.");
+          setError("You do not have permission to view note audit history.");
           return;
         }
         if (res.status === 404) {
@@ -49,7 +69,7 @@ export default function NoteAuditClient({ id }: { id: string }) {
           return;
         }
         if (!res.ok) {
-          throw new Error(`Failed to load audit (HTTP ${res.status})`);
+          throw new Error(await noteResponseError(res, "Failed to load note audit history."));
         }
         const data = (await res.json()) as AuditRowApi[];
         const mapped = data.map((row) => ({
