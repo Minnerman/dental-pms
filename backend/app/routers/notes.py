@@ -23,6 +23,16 @@ NOTES_VIEW = require_capability("notes.view")
 NOTES_WRITE = require_capability("notes.write")
 
 
+def require_notes_mutation(
+    user: User = Depends(NOTES_WRITE),
+    _viewer: User = Depends(NOTES_VIEW),
+) -> User:
+    return user
+
+
+NOTES_MUTATE = require_notes_mutation
+
+
 def _require_patient(
     db: Session,
     patient_id: int,
@@ -304,7 +314,7 @@ def create_patient_note(
     payload: NoteCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     _require_patient(db, patient_id)
@@ -344,7 +354,7 @@ def create_appointment_note(
     payload: AppointmentNoteCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     appointment = _require_appointment(db, appointment_id)
@@ -367,7 +377,7 @@ def update_appointment_note(
     payload: NoteUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     _require_appointment(db, appointment_id)
@@ -388,7 +398,7 @@ def archive_appointment_note(
     note_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     _require_appointment(db, appointment_id)
@@ -415,7 +425,7 @@ def restore_appointment_note(
     note_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     _require_appointment(db, appointment_id)
@@ -442,7 +452,7 @@ def archive_note(
     note_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     _require_patient(db, patient_id)
@@ -469,7 +479,7 @@ def restore_note(
     note_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     _require_patient(db, patient_id)
@@ -513,7 +523,7 @@ def create_note_global(
     payload: NoteCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     if payload.patient_id is None:
@@ -542,7 +552,7 @@ def update_note(
     payload: NoteUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     note = _require_note(db, note_id, for_update=True)
@@ -561,7 +571,7 @@ def archive_note_global(
     note_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     note = _require_note(db, note_id, include_deleted=True, for_update=True)
@@ -580,7 +590,7 @@ def restore_note_global(
     note_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(NOTES_WRITE),
+    user: User = Depends(NOTES_MUTATE),
     request_id: str | None = Header(default=None, max_length=120),
 ):
     note = _require_note(db, note_id, include_deleted=True, for_update=True)

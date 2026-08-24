@@ -184,6 +184,53 @@ def test_note_capabilities_are_authoritative_and_denials_are_side_effect_free(
     assert _note_count(patient_id) == baseline_count
     assert len(_note_audits(note_id)) == baseline_audits
 
+    _set_capabilities(user_id, ["notes.write"])
+    write_only_responses = [
+        api_client.post(
+            f"/patients/{patient_id}/notes",
+            headers=user_headers,
+            json={"body": "Synthetic write-only patient note"},
+        ),
+        api_client.post(
+            f"/appointments/{appointment_id}/notes",
+            headers=user_headers,
+            json={"body": "Synthetic write-only appointment note"},
+        ),
+        api_client.post(
+            "/notes",
+            headers=user_headers,
+            json={"patient_id": patient_id, "body": "Synthetic write-only global note"},
+        ),
+        api_client.patch(f"/notes/{note_id}", headers=user_headers, json={}),
+        api_client.post(f"/notes/{note_id}/archive", headers=user_headers),
+        api_client.post(f"/notes/{note_id}/restore", headers=user_headers),
+        api_client.patch(
+            f"/appointments/{appointment_id}/notes/{note_id}",
+            headers=user_headers,
+            json={},
+        ),
+        api_client.post(
+            f"/appointments/{appointment_id}/notes/{note_id}/archive",
+            headers=user_headers,
+        ),
+        api_client.post(
+            f"/appointments/{appointment_id}/notes/{note_id}/restore",
+            headers=user_headers,
+        ),
+        api_client.post(
+            f"/patients/{patient_id}/notes/{note_id}/archive",
+            headers=user_headers,
+        ),
+        api_client.post(
+            f"/patients/{patient_id}/notes/{note_id}/restore",
+            headers=user_headers,
+        ),
+    ]
+    assert {response.status_code for response in write_only_responses} == {403}
+    assert all("Synthetic existing note" not in response.text for response in write_only_responses)
+    assert _note_count(patient_id) == baseline_count
+    assert len(_note_audits(note_id)) == baseline_audits
+
     _set_capabilities(user_id, ["notes.view"])
     assert all(
         response.status_code == 200
