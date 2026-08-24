@@ -3,15 +3,14 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
-- Deployment batch 3 passed on 24 August 2026. Production is healthy and stable
-  on `6c9065ff405a956c93d364cdc3812f851b35a951`; rollback was not required.
-- PR #699 recall workflow reliability, permissions, audit, export, and
-  frontend safety is live.
-- The deterministic recall, patient-record, patient-ledger, appointment, and
-  patient-route no-write checks all passed during deployment batch 3.
-- Clinical chart and treatment-plan reliability is the active feature-sized
-  slice. Deterministic clinical no-write verification is included in the same
-  feature PR.
+- Deployment batch 4 passed on 24 August 2026. Production is healthy and stable
+  on `7c9a6883fcdef7090161da1d094a1b1d652824e7`; rollback was not required.
+- PR #702 clinical chart and treatment-plan reliability is live.
+- The deterministic clinical, recall, patient-record, patient-ledger,
+  appointment, and patient-route no-write checks all passed during deployment
+  batch 4.
+- Clinical notes reliability is the active feature-sized slice. Deterministic
+  notes no-write verification is included in the same feature PR.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from

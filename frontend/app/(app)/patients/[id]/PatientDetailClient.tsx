@@ -7,6 +7,7 @@ import Timeline from "@/components/timeline/Timeline";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { patientMutationError } from "@/lib/patientErrors";
 import { recallResponseError, sanitizeRecallFilename } from "@/lib/recallErrors";
+import { NOTE_BODY_MAX_LENGTH, noteResponseError } from "@/lib/noteErrors";
 import { fdiToChartToothKey } from "@/lib/charting/fdiToChartToothKey";
 import {
   r4SurfaceCodeToSurfaceKey,
@@ -964,6 +965,7 @@ export default function PatientDetailClient({
   const [savingPatient, setSavingPatient] = useState(false);
   const [patientArchiveAction, setPatientArchiveAction] = useState<"archive" | "restore" | null>(null);
   const [showArchivedNotes, setShowArchivedNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
@@ -1236,6 +1238,10 @@ export default function PatientDetailClient({
     capabilities?.includes("appointments.write")
   );
   const canWritePatients = Boolean(capabilities?.includes("patients.write"));
+  const notesCapabilitiesReady = capabilities !== null;
+  const canViewNotes = Boolean(capabilities?.includes("notes.view"));
+  const canWriteNotes = Boolean(canViewNotes && capabilities?.includes("notes.write"));
+  const notesPatientUnavailable = Boolean(patient?.deleted_at);
   const clinicalCapabilitiesReady = capabilities !== null;
   const canViewClinical = Boolean(capabilities?.includes("clinical.view"));
   const canWriteClinical = Boolean(
@@ -1419,6 +1425,12 @@ export default function PatientDetailClient({
 
   const loadNotes = useCallback(
     async (includeDeleted: boolean = showArchivedNotes) => {
+      if (!notesCapabilitiesReady) return;
+      if (!canViewNotes || notesPatientUnavailable) {
+        setNotes([]);
+        return;
+      }
+      setNotesError(null);
       try {
         const params = new URLSearchParams();
         if (includeDeleted) params.set("include_deleted", "1");
@@ -1430,15 +1442,26 @@ export default function PatientDetailClient({
           router.replace("/login");
           return;
         }
-        if (res.ok) {
-          const data = (await res.json()) as Note[];
-          setNotes(data);
+        if (!res.ok) {
+          throw new Error(await noteResponseError(res, "Failed to load patient notes."));
         }
-      } catch {
+        const data = (await res.json()) as Note[];
+        setNotes(data);
+      } catch (caught) {
         setNotes([]);
+        setNotesError(
+          caught instanceof Error ? caught.message : "Failed to load patient notes."
+        );
       }
     },
-    [patientId, router, showArchivedNotes]
+    [
+      canViewNotes,
+      notesCapabilitiesReady,
+      notesPatientUnavailable,
+      patientId,
+      router,
+      showArchivedNotes,
+    ]
   );
 
   const loadAppointments = useCallback(async () => {
@@ -3469,7 +3492,6 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (!isValidPatientId) return;
     void loadPatient();
-    void loadNotes();
     void loadTimeline();
     void loadInvoices();
     void loadTreatments();
@@ -3490,12 +3512,26 @@ export default function PatientDetailClient({
     loadCapabilities,
     loadLedger,
     loadLedgerBalance,
-    loadNotes,
     loadPatient,
     loadRecalls,
     loadTimeline,
     loadTreatments,
     loadUsers,
+  ]);
+
+  useEffect(() => {
+    if (!patient || !notesCapabilitiesReady) return;
+    if (!canViewNotes || notesPatientUnavailable) {
+      setNotes([]);
+      return;
+    }
+    void loadNotes();
+  }, [
+    canViewNotes,
+    loadNotes,
+    notesCapabilitiesReady,
+    notesPatientUnavailable,
+    patient,
   ]);
 
   useEffect(() => {
@@ -5073,17 +5109,27 @@ export default function PatientDetailClient({
   }
 
   async function addNote(button?: HTMLButtonElement | null) {
-    if (!noteBody.trim()) return;
+    if (!canWriteNotes || notesPatientUnavailable) {
+      setNotesError("Patient notes are read-only.");
+      return;
+    }
+    const normalizedBody = noteBody.trim();
+    if (!normalizedBody || normalizedBody.length > NOTE_BODY_MAX_LENGTH) {
+      setNotesError(`Enter a note between 1 and ${NOTE_BODY_MAX_LENGTH} characters.`);
+      return;
+    }
     if (!button || savingNote || savingPatientNoteIds.has(patientId) || button.disabled) {
       return;
     }
     savingPatientNoteIds.add(patientId);
     button.disabled = true;
     setSavingNote(true);
+    setNotesError(null);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/notes`, {
         method: "POST",
-        body: JSON.stringify({ body: noteBody, note_type: noteType }),
+        headers: { "Request-Id": crypto.randomUUID() },
+        body: JSON.stringify({ body: normalizedBody, note_type: noteType }),
       });
       if (res.status === 401) {
         clearToken();
@@ -5091,15 +5137,14 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to add note (HTTP ${res.status})`);
+        throw new Error(await noteResponseError(res, "Failed to add patient note."));
       }
       setNoteBody("");
       setNoteType("clinical");
       await loadNotes();
       await loadTimeline();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add note");
+      setNotesError(err instanceof Error ? err.message : "Failed to add patient note.");
     } finally {
       savingPatientNoteIds.delete(patientId);
       setSavingNote(false);
@@ -10132,86 +10177,131 @@ export default function PatientDetailClient({
                   <PatientAttachments patientId={patientIdNum} />
                 </div>
               ) : tab === "notes" ? (
-                <div className="stack">
-                  <div className="row">
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      onClick={() => {
-                        setShowArchivedNotes((prev) => !prev);
-                        void loadNotes(!showArchivedNotes);
-                      }}
-                    >
-                      {showArchivedNotes ? "Hide archived" : "Show archived"}
-                    </button>
-                  </div>
-
-                  <div className="card">
-                    <div className="stack">
-                      <label className="label">Add a note</label>
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="label">Note type</label>
-                        <select
-                          className="input"
-                          data-testid="patient-note-type-select"
-                          value={noteType}
-                          onChange={(e) =>
-                            setNoteType(e.target.value as Note["note_type"])
-                          }
-                        >
-                          <option value="clinical">Clinical</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </div>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={noteBody}
-                        onChange={(e) => setNoteBody(e.target.value)}
-                        placeholder="Write a clinical or admin note..."
-                      />
-                      <button
-                        className="btn btn-primary"
-                        onClick={(event) => void addNote(event.currentTarget)}
-                        disabled={savingNote}
-                        data-testid="patient-note-add"
-                      >
-                        {savingNote ? "Saving..." : "Add note"}
-                      </button>
+                <div
+                  className="stack"
+                  data-testid="patient-notes-access"
+                  data-state={
+                    !notesCapabilitiesReady
+                      ? "loading"
+                      : notesPatientUnavailable
+                        ? "unavailable"
+                        : canViewNotes
+                          ? canWriteNotes
+                            ? "write"
+                            : "read-only"
+                          : "denied"
+                  }
+                >
+                  {!notesCapabilitiesReady ? (
+                    <div className="badge">Checking note permissions…</div>
+                  ) : notesPatientUnavailable ? (
+                    <div className="notice">Notes are unavailable for an archived patient.</div>
+                  ) : !canViewNotes ? (
+                    <div className="notice">
+                      {capabilityError || "You do not have permission to view patient notes."}
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="row">
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => {
+                            setShowArchivedNotes((prev) => !prev);
+                          }}
+                        >
+                          {showArchivedNotes ? "Hide archived" : "Show archived"}
+                        </button>
+                      </div>
 
-                  <div className="stack">
-                    {notes.length === 0 ? (
-                      <div className="notice">No notes yet.</div>
-                    ) : (
-                      notes.map((note) => (
-                        <div className="card" key={note.id}>
-                          <div className="row">
-                            <div>
-                              <strong>{patientNoteTypeLabel(note.note_type)}</strong>
-                              <div style={{ color: "var(--muted)" }}>
-                                {formatDateTime(note.created_at)} • {note.created_by.email}
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", gap: 8 }}>
-                              <Link
-                                className="btn btn-secondary"
-                                href={`/notes?note=${note.id}${note.deleted_at ? "&include_deleted=1" : ""}`}
-                                data-testid={`patient-note-open-${note.id}`}
+                      {!canWriteNotes ? (
+                        <div className="notice">Patient notes are read-only.</div>
+                      ) : (
+                        <div className="card">
+                          <div className="stack">
+                            <label className="label">Add a note</label>
+                            <div className="stack" style={{ gap: 8 }}>
+                              <label className="label">Note type</label>
+                              <select
+                                className="input"
+                                data-testid="patient-note-type-select"
+                                value={noteType}
+                                onChange={(event) =>
+                                  setNoteType(event.target.value as Note["note_type"])
+                                }
+                                disabled={savingNote}
                               >
-                                Open in notes
-                              </Link>
-                              <Link className="btn btn-secondary" href={`/notes/${note.id}/audit`}>
-                                View audit
-                              </Link>
+                                <option value="clinical">Clinical</option>
+                                <option value="admin">Admin</option>
+                              </select>
                             </div>
+                            <textarea
+                              className="input"
+                              rows={3}
+                              value={noteBody}
+                              maxLength={NOTE_BODY_MAX_LENGTH}
+                              onChange={(event) => setNoteBody(event.target.value)}
+                              placeholder="Write a clinical or admin note..."
+                              disabled={savingNote}
+                            />
+                            <button
+                              className="btn btn-primary"
+                              onClick={(event) => void addNote(event.currentTarget)}
+                              disabled={
+                                savingNote ||
+                                !noteBody.trim() ||
+                                noteBody.trim().length > NOTE_BODY_MAX_LENGTH
+                              }
+                              data-testid="patient-note-add"
+                            >
+                              {savingNote ? "Saving..." : "Add note"}
+                            </button>
                           </div>
-                          <p style={{ marginBottom: 0 }}>{note.body}</p>
                         </div>
-                      ))
-                    )}
-                  </div>
+                      )}
+
+                      {notesError && <div className="notice">{notesError}</div>}
+                      <div className="stack">
+                        {notes.length === 0 ? (
+                          <div className="notice">No notes yet.</div>
+                        ) : (
+                          notes.map((note) => (
+                            <div
+                              className="card"
+                              key={note.id}
+                              style={{ opacity: note.deleted_at ? 0.72 : 1 }}
+                            >
+                              <div className="row">
+                                <div>
+                                  <strong>{patientNoteTypeLabel(note.note_type)}</strong>
+                                  <div style={{ color: "var(--muted)" }}>
+                                    {formatDateTime(note.created_at)} • {note.created_by.email}
+                                    {note.deleted_at ? " • Archived" : ""}
+                                  </div>
+                                </div>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <Link
+                                    className="btn btn-secondary"
+                                    href={`/notes?note=${note.id}${note.deleted_at ? "&include_deleted=1" : ""}`}
+                                    data-testid={`patient-note-open-${note.id}`}
+                                  >
+                                    Open in notes
+                                  </Link>
+                                  <Link
+                                    className="btn btn-secondary"
+                                    href={`/notes/${note.id}/audit`}
+                                  >
+                                    View audit
+                                  </Link>
+                                </div>
+                              </div>
+                              <p style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>{note.body}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : tab === "ledger" ? (
                 <div className="stack">
