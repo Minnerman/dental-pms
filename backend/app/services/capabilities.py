@@ -13,6 +13,8 @@ CAPABILITIES: list[tuple[str, str]] = [
     ("appointments.reschedule", "Reschedule appointments"),
     ("patients.view", "View patients"),
     ("patients.write", "Create and manage patients"),
+    ("clinical.view", "View clinical charting and treatment plans"),
+    ("clinical.write", "Record and update clinical charting and treatment plans"),
     ("notes.write", "Create and edit clinical notes"),
     ("documents.upload", "Upload patient documents"),
     ("documents.download", "Download patient documents"),
@@ -29,6 +31,8 @@ CAPABILITIES: list[tuple[str, str]] = [
 
 DEFAULT_GRANT_FROM: dict[str, str] = {
     "patients.write": "patients.view",
+    "clinical.view": "patients.view",
+    "clinical.write": "notes.write",
     "recalls.view": "patients.view",
     "recalls.write": "patients.write",
 }

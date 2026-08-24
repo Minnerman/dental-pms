@@ -1,16 +1,69 @@
+import re
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.clinical import ProcedureStatus, TreatmentPlanStatus
 from app.schemas.actor import ActorOut
+
+MAX_CLINICAL_TEXT_LENGTH = 2_000
+MAX_FEE_PENCE = 100_000_000
+TOOTH_PATTERN = re.compile(r"^(UR|UL|LR|LL)[1-8]$")
+SURFACES = {"M", "O", "D", "B", "L", "I"}
+BPE_SCORE_PATTERN = re.compile(r"^[0-4]\*?$")
+
+
+def _required_text(value: str) -> str:
+    value = value.strip()
+    if not value:
+        raise ValueError("must not be blank")
+    return value
+
+
+def _tooth(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip().upper()
+    if not TOOTH_PATTERN.fullmatch(value):
+        raise ValueError("must use permanent tooth notation UR1-UL8 or LR1-LL8")
+    return value
+
+
+def _surface(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip().upper()
+    if value not in SURFACES:
+        raise ValueError("must be one of M, O, D, B, L or I")
+    return value
+
+
+def validate_tooth_surface(tooth: str | None, surface: str | None) -> None:
+    if surface is None:
+        return
+    if tooth is None:
+        raise ValueError("surface requires a tooth")
+    tooth_number = int(tooth[-1])
+    if surface == "I" and tooth_number > 3:
+        raise ValueError("incisal surface is only valid for anterior teeth")
+    if surface == "O" and tooth_number <= 3:
+        raise ValueError("occlusal surface is only valid for posterior teeth")
 
 
 class ToothNoteCreate(BaseModel):
     tooth: str
     surface: Optional[str] = None
-    note: str
+    note: str = Field(max_length=MAX_CLINICAL_TEXT_LENGTH)
+
+    _normalize_tooth = field_validator("tooth", mode="before")(_tooth)
+    _normalize_surface = field_validator("surface", mode="before")(_surface)
+    _normalize_note = field_validator("note")(_required_text)
+
+    @model_validator(mode="after")
+    def check_tooth_surface(self):
+        validate_tooth_surface(self.tooth, self.surface)
+        return self
 
 
 class ToothNoteOut(BaseModel):
@@ -29,10 +82,20 @@ class ProcedureCreate(BaseModel):
     appointment_id: Optional[int] = None
     tooth: Optional[str] = None
     surface: Optional[str] = None
-    procedure_code: str
-    description: str
-    fee_pence: Optional[int] = None
+    procedure_code: str = Field(max_length=50)
+    description: str = Field(max_length=MAX_CLINICAL_TEXT_LENGTH)
+    fee_pence: Optional[int] = Field(default=None, ge=0, le=MAX_FEE_PENCE)
     performed_at: Optional[datetime] = None
+
+    _normalize_tooth = field_validator("tooth", mode="before")(_tooth)
+    _normalize_surface = field_validator("surface", mode="before")(_surface)
+    _normalize_code = field_validator("procedure_code")(_required_text)
+    _normalize_description = field_validator("description")(_required_text)
+
+    @model_validator(mode="after")
+    def check_tooth_surface(self):
+        validate_tooth_surface(self.tooth, self.surface)
+        return self
 
 
 class ProcedureOut(BaseModel):
@@ -55,19 +118,46 @@ class TreatmentPlanItemCreate(BaseModel):
     appointment_id: Optional[int] = None
     tooth: Optional[str] = None
     surface: Optional[str] = None
-    procedure_code: str
-    description: str
-    fee_pence: Optional[int] = None
+    procedure_code: str = Field(max_length=50)
+    description: str = Field(max_length=MAX_CLINICAL_TEXT_LENGTH)
+    fee_pence: Optional[int] = Field(default=None, ge=0, le=MAX_FEE_PENCE)
+
+    _normalize_tooth = field_validator("tooth", mode="before")(_tooth)
+    _normalize_surface = field_validator("surface", mode="before")(_surface)
+    _normalize_code = field_validator("procedure_code")(_required_text)
+    _normalize_description = field_validator("description")(_required_text)
+
+    @model_validator(mode="after")
+    def check_tooth_surface(self):
+        validate_tooth_surface(self.tooth, self.surface)
+        return self
 
 
 class TreatmentPlanItemUpdate(BaseModel):
     appointment_id: Optional[int] = None
     tooth: Optional[str] = None
     surface: Optional[str] = None
-    procedure_code: Optional[str] = None
-    description: Optional[str] = None
-    fee_pence: Optional[int] = None
+    procedure_code: Optional[str] = Field(default=None, max_length=50)
+    description: Optional[str] = Field(default=None, max_length=MAX_CLINICAL_TEXT_LENGTH)
+    fee_pence: Optional[int] = Field(default=None, ge=0, le=MAX_FEE_PENCE)
     status: Optional[TreatmentPlanStatus] = None
+
+    _normalize_tooth = field_validator("tooth", mode="before")(_tooth)
+    _normalize_surface = field_validator("surface", mode="before")(_surface)
+
+    @field_validator("procedure_code", "description")
+    @classmethod
+    def normalize_optional_required_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _required_text(value)
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self):
+        for field in ("procedure_code", "description", "status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} must not be null")
+        return self
 
 
 class TreatmentPlanItemOut(BaseModel):
@@ -91,6 +181,17 @@ class TreatmentPlanItemOut(BaseModel):
 class BpeUpdate(BaseModel):
     scores: list[str]
     recorded_at: Optional[datetime] = None
+
+    @field_validator("scores")
+    @classmethod
+    def validate_scores(cls, scores: list[str]) -> list[str]:
+        if len(scores) != 6:
+            raise ValueError("BPE scores must have 6 values")
+        normalized = [score.strip() for score in scores]
+        for score in normalized:
+            if score and score != "*" and not BPE_SCORE_PATTERN.fullmatch(score):
+                raise ValueError("BPE scores must be blank, *, or 0-4 with optional *")
+        return normalized
 
 
 class BpeOut(BaseModel):

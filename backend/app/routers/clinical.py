@@ -1,13 +1,21 @@
 from datetime import datetime, timezone
+from typing import Iterable, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
-from app.models.appointment import Appointment
-from app.models.clinical import Procedure, ProcedureStatus, ToothNote, TreatmentPlanItem
+from app.deps import require_capability
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.audit_log import AuditLog
+from app.models.clinical import (
+    Procedure,
+    ProcedureStatus,
+    ToothNote,
+    TreatmentPlanItem,
+    TreatmentPlanStatus,
+)
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.clinical import (
@@ -16,22 +24,51 @@ from app.schemas.clinical import (
     ClinicalSummaryOut,
     ProcedureCreate,
     ProcedureOut,
+    TOOTH_PATTERN,
     ToothHistoryOut,
     ToothNoteCreate,
     ToothNoteOut,
     TreatmentPlanItemCreate,
     TreatmentPlanItemOut,
     TreatmentPlanItemUpdate,
+    validate_tooth_surface,
 )
 from app.services.audit import log_event
 
 patient_router = APIRouter(prefix="/patients/{patient_id}", tags=["clinical"])
 router = APIRouter(prefix="/treatment-plan", tags=["clinical"])
 
+CLINICAL_VIEW = require_capability("clinical.view")
+CLINICAL_WRITE = require_capability("clinical.write")
+ACTIVE_APPOINTMENT_STATUSES = {
+    AppointmentStatus.booked,
+    AppointmentStatus.arrived,
+    AppointmentStatus.in_progress,
+}
+PLAN_TRANSITIONS = {
+    TreatmentPlanStatus.proposed: {
+        TreatmentPlanStatus.accepted,
+        TreatmentPlanStatus.declined,
+        TreatmentPlanStatus.completed,
+        TreatmentPlanStatus.cancelled,
+    },
+    TreatmentPlanStatus.accepted: {
+        TreatmentPlanStatus.completed,
+        TreatmentPlanStatus.cancelled,
+    },
+    TreatmentPlanStatus.declined: set(),
+    TreatmentPlanStatus.completed: set(),
+    TreatmentPlanStatus.cancelled: set(),
+}
+T = TypeVar("T", ToothNote, Procedure, TreatmentPlanItem)
 
-def get_patient_or_404(db: Session, patient_id: int) -> Patient:
-    patient = db.get(Patient, patient_id)
-    if not patient or patient.deleted_at is not None:
+
+def get_patient_or_404(db: Session, patient_id: int, *, for_update: bool = False) -> Patient:
+    stmt = select(Patient).where(Patient.id == patient_id, Patient.deleted_at.is_(None))
+    if for_update:
+        stmt = stmt.with_for_update(of=Patient)
+    patient = db.scalar(stmt)
+    if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     return patient
 
@@ -40,10 +77,15 @@ def validate_appointment(db: Session, patient_id: int, appointment_id: int | Non
     if appointment_id is None:
         return
     appointment = db.get(Appointment, appointment_id)
-    if not appointment or appointment.patient_id != patient_id:
+    if (
+        not appointment
+        or appointment.deleted_at is not None
+        or appointment.patient_id != patient_id
+        or appointment.status not in ACTIVE_APPOINTMENT_STATUSES
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Appointment does not match patient",
+            detail="Appointment must be active and belong to the patient",
         )
 
 
@@ -56,20 +98,64 @@ def split_bpe_scores(scores: str | None) -> list[str] | None:
     return parts[:6]
 
 
-def normalize_bpe_scores(scores: list[str]) -> list[str]:
-    if len(scores) != 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="BPE scores must have 6 values",
+def _duplicate_audit(
+    db: Session,
+    *,
+    patient_id: int,
+    request_id: str | None,
+    actions: Iterable[str],
+) -> AuditLog | None:
+    if not request_id:
+        return None
+    return db.scalar(
+        select(AuditLog)
+        .where(
+            AuditLog.entity_type == "patient",
+            AuditLog.entity_id == str(patient_id),
+            AuditLog.request_id == request_id,
+            AuditLog.action.in_(list(actions)),
         )
-    return [score.strip() for score in scores]
+        .order_by(AuditLog.id.desc())
+    )
+
+
+def _duplicate_created_entity(
+    db: Session,
+    *,
+    patient_id: int,
+    request_id: str | None,
+    action: str,
+    model: type[T],
+    id_key: str,
+) -> T | None:
+    audit = _duplicate_audit(
+        db, patient_id=patient_id, request_id=request_id, actions=[action]
+    )
+    entity_id = (audit.after_json or {}).get(id_key) if audit else None
+    if not isinstance(entity_id, int):
+        return None
+    entity = db.get(model, entity_id)
+    if entity is None or entity.patient_id != patient_id:
+        return None
+    return entity
+
+
+def _safe_plan_values(item: TreatmentPlanItem, fields: set[str]) -> dict:
+    values: dict[str, object] = {"treatment_plan_item_id": item.id}
+    for field in sorted(fields - {"description"}):
+        value = getattr(item, field)
+        values[field] = value.value if isinstance(value, TreatmentPlanStatus) else value
+    if "description" in fields:
+        values["description_changed"] = True
+    values["changed_fields"] = sorted(fields)
+    return values
 
 
 @patient_router.get("/clinical/summary", response_model=ClinicalSummaryOut)
 def get_clinical_summary(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(CLINICAL_VIEW),
     limit: int = Query(default=20, ge=1, le=200),
 ):
     patient = get_patient_or_404(db, patient_id)
@@ -110,21 +196,53 @@ def update_bpe(
     patient_id: int,
     payload: BpeUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(CLINICAL_WRITE),
+    request_id: str | None = Header(default=None, max_length=120),
 ):
-    patient = get_patient_or_404(db, patient_id)
-    scores = normalize_bpe_scores(payload.scores)
-    has_scores = any(score for score in scores)
+    patient = get_patient_or_404(db, patient_id, for_update=True)
+    duplicate = _duplicate_audit(
+        db,
+        patient_id=patient_id,
+        request_id=request_id,
+        actions=["clinical.bpe.recorded", "clinical.bpe.cleared"],
+    )
+    if duplicate:
+        return BpeOut(
+            bpe_scores=split_bpe_scores(patient.bpe_scores),
+            bpe_recorded_at=patient.bpe_recorded_at,
+        )
+
+    scores = payload.scores
+    current_scores = split_bpe_scores(patient.bpe_scores) or [""] * 6
+    has_scores = any(scores)
+    if scores == current_scores and (
+        payload.recorded_at is None or payload.recorded_at == patient.bpe_recorded_at
+    ):
+        return BpeOut(
+            bpe_scores=split_bpe_scores(patient.bpe_scores),
+            bpe_recorded_at=patient.bpe_recorded_at,
+        )
+
+    before_data = {
+        "scores": current_scores if any(current_scores) else None,
+        "recorded_at": patient.bpe_recorded_at.isoformat()
+        if patient.bpe_recorded_at
+        else None,
+    }
     if has_scores:
         patient.bpe_scores = ",".join(scores)
         patient.bpe_recorded_at = payload.recorded_at or datetime.now(timezone.utc)
         action = "clinical.bpe.recorded"
-        after_data = {"bpe_recorded": True}
     else:
         patient.bpe_scores = None
         patient.bpe_recorded_at = None
         action = "clinical.bpe.cleared"
-        after_data = {"bpe_cleared": True}
+    after_data = {
+        "scores": scores if has_scores else None,
+        "recorded_at": patient.bpe_recorded_at.isoformat()
+        if patient.bpe_recorded_at
+        else None,
+    }
     db.add(patient)
     log_event(
         db,
@@ -132,6 +250,8 @@ def update_bpe(
         action=action,
         entity_type="patient",
         entity_id=str(patient.id),
+        request_id=request_id,
+        before_data=before_data,
         after_data=after_data,
     )
     db.commit()
@@ -144,9 +264,9 @@ def update_bpe(
 @patient_router.get("/tooth-history", response_model=ToothHistoryOut)
 def get_tooth_history(
     patient_id: int,
-    tooth: str = Query(min_length=1),
+    tooth: str = Query(min_length=3, max_length=3, pattern=TOOTH_PATTERN.pattern),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(CLINICAL_VIEW),
 ):
     get_patient_or_404(db, patient_id)
     notes = list(
@@ -171,9 +291,20 @@ def create_tooth_note(
     patient_id: int,
     payload: ToothNoteCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(CLINICAL_WRITE),
+    request_id: str | None = Header(default=None, max_length=120),
 ):
-    get_patient_or_404(db, patient_id)
+    get_patient_or_404(db, patient_id, for_update=True)
+    duplicate = _duplicate_created_entity(
+        db,
+        patient_id=patient_id,
+        request_id=request_id,
+        action="clinical.tooth_note.created",
+        model=ToothNote,
+        id_key="tooth_note_id",
+    )
+    if duplicate:
+        return duplicate
     note = ToothNote(
         patient_id=patient_id,
         tooth=payload.tooth,
@@ -189,6 +320,7 @@ def create_tooth_note(
         action="clinical.tooth_note.created",
         entity_type="patient",
         entity_id=str(patient_id),
+        request_id=request_id,
         after_data={"tooth_note_id": note.id, "tooth": note.tooth, "surface": note.surface},
     )
     db.commit()
@@ -201,9 +333,20 @@ def create_procedure(
     patient_id: int,
     payload: ProcedureCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(CLINICAL_WRITE),
+    request_id: str | None = Header(default=None, max_length=120),
 ):
-    get_patient_or_404(db, patient_id)
+    get_patient_or_404(db, patient_id, for_update=True)
+    duplicate = _duplicate_created_entity(
+        db,
+        patient_id=patient_id,
+        request_id=request_id,
+        action="clinical.procedure.completed",
+        model=Procedure,
+        id_key="procedure_id",
+    )
+    if duplicate:
+        return duplicate
     validate_appointment(db, patient_id, payload.appointment_id)
     performed_at = payload.performed_at or datetime.now(timezone.utc)
     procedure = Procedure(
@@ -219,6 +362,23 @@ def create_procedure(
         created_by_user_id=user.id,
     )
     db.add(procedure)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action="clinical.procedure.completed",
+        entity_type="patient",
+        entity_id=str(patient_id),
+        request_id=request_id,
+        after_data={
+            "procedure_id": procedure.id,
+            "appointment_id": procedure.appointment_id,
+            "tooth": procedure.tooth,
+            "surface": procedure.surface,
+            "procedure_code": procedure.procedure_code,
+            "fee_pence": procedure.fee_pence,
+        },
+    )
     db.commit()
     db.refresh(procedure)
     return procedure
@@ -231,9 +391,20 @@ def create_treatment_plan_item(
     patient_id: int,
     payload: TreatmentPlanItemCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(CLINICAL_WRITE),
+    request_id: str | None = Header(default=None, max_length=120),
 ):
-    get_patient_or_404(db, patient_id)
+    get_patient_or_404(db, patient_id, for_update=True)
+    duplicate = _duplicate_created_entity(
+        db,
+        patient_id=patient_id,
+        request_id=request_id,
+        action="clinical.treatment_plan.item.created",
+        model=TreatmentPlanItem,
+        id_key="treatment_plan_item_id",
+    )
+    if duplicate:
+        return duplicate
     validate_appointment(db, patient_id, payload.appointment_id)
     item = TreatmentPlanItem(
         patient_id=patient_id,
@@ -251,10 +422,19 @@ def create_treatment_plan_item(
     log_event(
         db,
         actor=user,
-        action="clinical.treatment_plan.added",
+        action="clinical.treatment_plan.item.created",
         entity_type="patient",
         entity_id=str(patient_id),
-        after_data={"treatment_plan_item_id": item.id, "tooth": item.tooth},
+        request_id=request_id,
+        after_data={
+            "treatment_plan_item_id": item.id,
+            "appointment_id": item.appointment_id,
+            "tooth": item.tooth,
+            "surface": item.surface,
+            "procedure_code": item.procedure_code,
+            "fee_pence": item.fee_pence,
+            "status": item.status.value,
+        },
     )
     db.commit()
     db.refresh(item)
@@ -266,28 +446,100 @@ def update_treatment_plan_item(
     item_id: int,
     payload: TreatmentPlanItemUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(CLINICAL_WRITE),
+    request_id: str | None = Header(default=None, max_length=120),
 ):
-    item = db.get(TreatmentPlanItem, item_id)
+    item = db.scalar(
+        select(TreatmentPlanItem)
+        .where(TreatmentPlanItem.id == item_id)
+        .with_for_update(of=TreatmentPlanItem)
+    )
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Treatment plan item not found"
         )
-    if payload.appointment_id is not None:
-        validate_appointment(db, item.patient_id, payload.appointment_id)
+    get_patient_or_404(db, item.patient_id)
+    duplicate = _duplicate_audit(
+        db,
+        patient_id=item.patient_id,
+        request_id=request_id,
+        actions=[
+            "clinical.treatment_plan.item.updated",
+            "clinical.treatment_plan.status.changed",
+        ],
+    )
+    if duplicate and (duplicate.after_json or {}).get("treatment_plan_item_id") == item.id:
+        return item
+
+    updates = payload.model_dump(exclude_unset=True)
+    merged_tooth = updates.get("tooth", item.tooth)
+    merged_surface = updates.get("surface", item.surface)
+    try:
+        validate_tooth_surface(merged_tooth, merged_surface)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    if "appointment_id" in updates:
+        validate_appointment(db, item.patient_id, updates["appointment_id"])
+
     before_status = item.status
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(item, field, value)
+    requested_status = updates.get("status")
+    if requested_status is not None and requested_status != before_status:
+        if requested_status not in PLAN_TRANSITIONS[before_status]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Treatment plan status transition is not permitted",
+            )
+
+    changed_fields = {
+        field for field, value in updates.items() if getattr(item, field) != value
+    }
+    if not changed_fields:
+        return item
+    non_status_fields = changed_fields - {"status"}
+    if non_status_fields and before_status in {
+        TreatmentPlanStatus.declined,
+        TreatmentPlanStatus.completed,
+        TreatmentPlanStatus.cancelled,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Final treatment plan items cannot be edited",
+        )
+
+    before_values = _safe_plan_values(item, non_status_fields)
+    for field in changed_fields:
+        setattr(item, field, updates[field])
     item.updated_by_user_id = user.id
     db.add(item)
-    if payload.status is not None and payload.status != before_status:
+
+    if non_status_fields:
         log_event(
             db,
             actor=user,
-            action=f"clinical.treatment_plan.status: {before_status.value} -> {payload.status.value}",
+            action="clinical.treatment_plan.item.updated",
             entity_type="patient",
             entity_id=str(item.patient_id),
-            after_data={"treatment_plan_item_id": item.id, "status": payload.status.value},
+            request_id=request_id,
+            before_data=before_values,
+            after_data=_safe_plan_values(item, non_status_fields),
+        )
+    if "status" in changed_fields:
+        log_event(
+            db,
+            actor=user,
+            action="clinical.treatment_plan.status.changed",
+            entity_type="patient",
+            entity_id=str(item.patient_id),
+            request_id=request_id,
+            before_data={
+                "treatment_plan_item_id": item.id,
+                "status": before_status.value,
+            },
+            after_data={
+                "treatment_plan_item_id": item.id,
+                "status": item.status.value,
+            },
         )
     db.commit()
     db.refresh(item)
