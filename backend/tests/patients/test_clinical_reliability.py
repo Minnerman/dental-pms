@@ -5,6 +5,8 @@ from uuid import uuid4
 
 from sqlalchemy import func, select
 
+from app.core.security import create_access_token
+from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.audit_log import AuditLog
@@ -25,6 +27,7 @@ def _create_patient(api_client, headers, label: str) -> int:
 
 
 def _create_user_headers(api_client, *, active: bool = True) -> tuple[int, dict[str, str]]:
+    del api_client
     suffix = uuid4().hex[:10]
     email = f"clinical-reliability-{suffix}@example.com"
     password = "ClinicalReliability123!"
@@ -43,9 +46,14 @@ def _create_user_headers(api_client, *, active: bool = True) -> tuple[int, dict[
         session.close()
     if not active:
         return user_id, {}
-    login = api_client.post("/auth/login", json={"email": email, "password": password})
-    assert login.status_code == 200, login.text
-    return user_id, {"Authorization": f"Bearer {login.json()['access_token']}"}
+    token = create_access_token(
+        subject=str(user_id),
+        secret=settings.secret_key,
+        alg=settings.jwt_alg,
+        expires_minutes=settings.access_token_expire_minutes,
+        extra={"role": Role.reception.value, "email": email},
+    )
+    return user_id, {"Authorization": f"Bearer {token}"}
 
 
 def _set_capabilities(user_id: int, codes: list[str]) -> None:
