@@ -167,6 +167,48 @@ const recordingPaymentInvoiceIds = new Set<number>();
 const chartingExportPatientIds = new Set<string>();
 const chartingReviewPackPatientIds = new Set<string>();
 
+const clinicalTextMaxLength = 2_000;
+const clinicalFeeMaxPence = 100_000_000;
+
+function clinicalMutationHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "Request-Id": crypto.randomUUID(),
+  };
+}
+
+function clinicalRequestError(status: number, action: string) {
+  if (status === 403) return `You do not have permission to ${action}.`;
+  if (status === 404) return "This clinical record is unavailable.";
+  if (status === 409) return "The clinical record changed. Refresh and try again.";
+  if (status === 422) return "Check the clinical details and try again.";
+  return `Unable to ${action} (HTTP ${status}).`;
+}
+
+function clinicalFeeIsValid(value: string) {
+  if (!value.trim()) return true;
+  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return false;
+  const pence = Math.round(Number(value) * 100);
+  return Number.isSafeInteger(pence) && pence >= 0 && pence <= clinicalFeeMaxPence;
+}
+
+function clinicalSurfaceIsValid(tooth: string | null, surface: string) {
+  const normalized = surface.trim().toUpperCase();
+  if (!normalized) return true;
+  if (!tooth || !["M", "O", "D", "B", "L", "I"].includes(normalized)) return false;
+  const toothNumber = Number(tooth.slice(-1));
+  if (normalized === "I") return toothNumber <= 3;
+  if (normalized === "O") return toothNumber >= 4;
+  return true;
+}
+
+function bpeScoresAreValid(scores: string[]) {
+  return scores.length === 6 && scores.every((score) => {
+    const normalized = score.trim();
+    return !normalized || normalized === "*" || /^[0-4]\*?$/.test(normalized);
+  });
+}
+
 function patientNoteTypeLabel(noteType: Note["note_type"]) {
   return noteType === "admin" ? "Admin" : "Clinical";
 }
@@ -1194,6 +1236,21 @@ export default function PatientDetailClient({
     capabilities?.includes("appointments.write")
   );
   const canWritePatients = Boolean(capabilities?.includes("patients.write"));
+  const clinicalCapabilitiesReady = capabilities !== null;
+  const canViewClinical = Boolean(capabilities?.includes("clinical.view"));
+  const canWriteClinical = Boolean(
+    canViewClinical && capabilities?.includes("clinical.write")
+  );
+  const clinicalPatientUnavailable = Boolean(patient?.deleted_at);
+  const clinicalAccessMode = !clinicalCapabilitiesReady
+    ? "loading"
+    : clinicalPatientUnavailable
+      ? "unavailable"
+      : canViewClinical
+        ? canWriteClinical
+          ? "write"
+          : "read-only"
+        : "denied";
   const canViewRecalls = Boolean(capabilities?.includes("recalls.view"));
   const canWriteRecalls = Boolean(capabilities?.includes("recalls.write"));
   const canExportRecalls = Boolean(capabilities?.includes("recalls.export"));
@@ -2076,6 +2133,9 @@ export default function PatientDetailClient({
   }
 
   const loadClinicalSummary = useCallback(async () => {
+    if (!clinicalCapabilitiesReady || !canViewClinical || clinicalPatientUnavailable) {
+      return;
+    }
     setClinicalLoading(true);
     setClinicalError(null);
     try {
@@ -2085,8 +2145,11 @@ export default function PatientDetailClient({
         router.replace("/login");
         return;
       }
+      if (res.status === 403 || res.status === 404) {
+        throw new Error(clinicalRequestError(res.status, "view clinical records"));
+      }
       if (!res.ok) {
-        throw new Error(`Failed to load clinical summary (HTTP ${res.status})`);
+        throw new Error(clinicalRequestError(res.status, "load clinical records"));
       }
       const data = (await res.json()) as ClinicalSummary;
       setClinicalNotes(data.recent_tooth_notes ?? []);
@@ -2100,7 +2163,13 @@ export default function PatientDetailClient({
     } finally {
       setClinicalLoading(false);
     }
-  }, [patientId, router]);
+  }, [
+    canViewClinical,
+    clinicalCapabilitiesReady,
+    clinicalPatientUnavailable,
+    patientId,
+    router,
+  ]);
 
   const loadTreatmentPlanOverlay = useCallback(async () => {
     setR4TreatmentOverlayLoading(true);
@@ -2158,11 +2227,23 @@ export default function PatientDetailClient({
     }
   }, [patientId, router]);
 
-  const refreshClinicalData = useCallback(() => {
-    void loadClinicalSummary();
-    void loadTreatmentPlanOverlay();
-    void loadToothState();
-  }, [loadClinicalSummary, loadTreatmentPlanOverlay, loadToothState]);
+  const refreshClinicalData = useCallback(async () => {
+    if (!clinicalCapabilitiesReady || !canViewClinical || clinicalPatientUnavailable) {
+      return;
+    }
+    await Promise.all([
+      loadClinicalSummary(),
+      loadTreatmentPlanOverlay(),
+      loadToothState(),
+    ]);
+  }, [
+    canViewClinical,
+    clinicalCapabilitiesReady,
+    clinicalPatientUnavailable,
+    loadClinicalSummary,
+    loadTreatmentPlanOverlay,
+    loadToothState,
+  ]);
 
   async function loadChartingConfig() {
     try {
@@ -2708,7 +2789,11 @@ export default function PatientDetailClient({
 
   const loadToothHistory = useCallback(
     async (tooth: string) => {
+      if (!clinicalCapabilitiesReady || !canViewClinical || clinicalPatientUnavailable) {
+        return;
+      }
       setToothHistoryLoading(true);
+      setClinicalError(null);
       try {
         const res = await apiFetch(
           `/api/patients/${patientId}/tooth-history?tooth=${encodeURIComponent(tooth)}`
@@ -2718,25 +2803,48 @@ export default function PatientDetailClient({
           router.replace("/login");
           return;
         }
+        if (res.status === 403 || res.status === 404) {
+          throw new Error(clinicalRequestError(res.status, "view tooth history"));
+        }
         if (!res.ok) {
-          throw new Error(`Failed to load tooth history (HTTP ${res.status})`);
+          throw new Error(clinicalRequestError(res.status, "load tooth history"));
         }
         const data = (await res.json()) as ToothHistory;
         setToothHistory({
           notes: data.notes ?? [],
           procedures: data.procedures ?? [],
         });
-      } catch {
+      } catch (err) {
         setToothHistory({ notes: [], procedures: [] });
+        setClinicalError(
+          err instanceof Error ? err.message : "Unable to load tooth history."
+        );
       } finally {
         setToothHistoryLoading(false);
       }
     },
-    [patientId, router]
+    [
+      canViewClinical,
+      clinicalCapabilitiesReady,
+      clinicalPatientUnavailable,
+      patientId,
+      router,
+    ]
   );
 
   async function submitChartNote(button?: HTMLButtonElement | null) {
+    if (!canWriteClinical || clinicalPatientUnavailable) {
+      setClinicalError("Clinical records are read-only.");
+      return;
+    }
     if (!selectedTooth || !chartNoteBody.trim()) return;
+    if (
+      chartNoteBody.trim().length > clinicalTextMaxLength ||
+      !clinicalSurfaceIsValid(selectedTooth, chartNoteSurface)
+    ) {
+      setClinicalError("Check the tooth note and surface before saving.");
+      return;
+    }
     if (
       !button ||
       savingToothNote ||
@@ -2751,7 +2859,7 @@ export default function PatientDetailClient({
     try {
       const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: clinicalMutationHeaders(),
         body: JSON.stringify({
           tooth: selectedTooth,
           surface: chartNoteSurface || null,
@@ -2764,13 +2872,12 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to save note (HTTP ${res.status})`);
+        throw new Error(clinicalRequestError(res.status, "save the tooth note"));
       }
       setChartNoteBody("");
       setChartNoteSurface("");
       setChartNoteNotice("Note saved.");
-      await loadClinicalSummary();
-      await loadToothHistory(selectedTooth);
+      await Promise.all([refreshClinicalData(), loadToothHistory(selectedTooth)]);
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save note");
     } finally {
@@ -2780,7 +2887,20 @@ export default function PatientDetailClient({
   }
 
   async function submitProcedure(button?: HTMLButtonElement | null) {
+    if (!canWriteClinical || clinicalPatientUnavailable) {
+      setClinicalError("Clinical records are read-only.");
+      return;
+    }
     if (!selectedTooth || !procedureCode || !procedureDescription.trim()) return;
+    if (
+      procedureCode.trim().length > 50 ||
+      procedureDescription.trim().length > clinicalTextMaxLength ||
+      !clinicalSurfaceIsValid(selectedTooth, chartNoteSurface) ||
+      !clinicalFeeIsValid(procedureFee)
+    ) {
+      setClinicalError("Check the procedure details, surface and fee before saving.");
+      return;
+    }
     if (
       !button ||
       savingProcedure ||
@@ -2795,11 +2915,11 @@ export default function PatientDetailClient({
     try {
       const res = await apiFetch(`/api/patients/${patientId}/procedures`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: clinicalMutationHeaders(),
         body: JSON.stringify({
           tooth: selectedTooth,
           surface: chartNoteSurface || null,
-          procedure_code: procedureCode,
+          procedure_code: procedureCode.trim(),
           description: procedureDescription.trim(),
           fee_pence: parseCurrencyToPence(procedureFee),
           performed_at: new Date().toISOString(),
@@ -2811,13 +2931,12 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to save procedure (HTTP ${res.status})`);
+        throw new Error(clinicalRequestError(res.status, "save the procedure"));
       }
       setProcedureCode("");
       setProcedureDescription("");
       setProcedureFee("");
-      await loadClinicalSummary();
-      await loadToothHistory(selectedTooth);
+      await Promise.all([refreshClinicalData(), loadToothHistory(selectedTooth)]);
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save procedure");
     } finally {
@@ -2827,6 +2946,7 @@ export default function PatientDetailClient({
   }
 
   function openPlanFromChart() {
+    if (!canWriteClinical || clinicalPatientUnavailable) return;
     if (!selectedTooth || !procedureCode || !procedureDescription.trim()) return;
     setEditingTreatmentPlanId(null);
     setPlanTooth(selectedTooth);
@@ -2848,11 +2968,13 @@ export default function PatientDetailClient({
   }
 
   function openTreatmentPlanModal() {
+    if (!canWriteClinical || clinicalPatientUnavailable) return;
     resetTreatmentPlanForm();
     setShowPlanModal(true);
   }
 
   function startEditTreatmentPlanItem(item: TreatmentPlanItem) {
+    if (!canWriteClinical || clinicalPatientUnavailable) return;
     setEditingTreatmentPlanId(item.id);
     setPlanTooth(item.tooth ?? "");
     setPlanSurface(item.surface ?? "");
@@ -2863,6 +2985,14 @@ export default function PatientDetailClient({
   }
 
   async function submitBpe(button?: HTMLButtonElement | null) {
+    if (!canWriteClinical || clinicalPatientUnavailable) {
+      setClinicalError("Clinical records are read-only.");
+      return;
+    }
+    if (!bpeScoresAreValid(bpeScores)) {
+      setClinicalError("BPE scores must be blank, *, or 0-4 with an optional *.");
+      return;
+    }
     if (!button || bpeSaving || savingBpePatientIds.has(patientId) || button.disabled) {
       return;
     }
@@ -2873,7 +3003,7 @@ export default function PatientDetailClient({
     try {
       const res = await apiFetch(`/api/patients/${patientId}/clinical/bpe`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: clinicalMutationHeaders(),
         body: JSON.stringify({ scores: bpeScores }),
       });
       if (res.status === 401) {
@@ -2882,7 +3012,7 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to save BPE (HTTP ${res.status})`);
+        throw new Error(clinicalRequestError(res.status, "save BPE"));
       }
       const data = (await res.json()) as {
         bpe_scores?: string[] | null;
@@ -2891,7 +3021,7 @@ export default function PatientDetailClient({
       setBpeScores(normalizeBpeScores(data.bpe_scores));
       setBpeRecordedAt(data.bpe_recorded_at ?? null);
       setBpeNotice(data.bpe_scores ? "BPE saved." : "BPE cleared.");
-      await loadClinicalSummary();
+      await refreshClinicalData();
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save BPE");
     } finally {
@@ -2901,7 +3031,18 @@ export default function PatientDetailClient({
   }
 
   async function submitClinicalNote(button?: HTMLButtonElement | null) {
+    if (!canWriteClinical || clinicalPatientUnavailable) {
+      setClinicalError("Clinical records are read-only.");
+      return;
+    }
     if (!notesTooth.trim() || !notesBody.trim()) return;
+    if (
+      notesBody.trim().length > clinicalTextMaxLength ||
+      !clinicalSurfaceIsValid(notesTooth.trim(), notesSurface)
+    ) {
+      setClinicalError("Check the clinical note and surface before saving.");
+      return;
+    }
     if (
       !button ||
       savingClinicalNote ||
@@ -2916,7 +3057,7 @@ export default function PatientDetailClient({
     try {
       const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: clinicalMutationHeaders(),
         body: JSON.stringify({
           tooth: notesTooth.trim(),
           surface: notesSurface || null,
@@ -2929,12 +3070,17 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to save clinical note (HTTP ${res.status})`);
+        throw new Error(clinicalRequestError(res.status, "save the clinical note"));
       }
       setNotesBody("");
       setNotesSurface("");
       setClinicalNoteNotice("Note saved.");
-      await loadClinicalSummary();
+      await Promise.all([
+        refreshClinicalData(),
+        selectedTooth === notesTooth.trim()
+          ? loadToothHistory(notesTooth.trim())
+          : Promise.resolve(),
+      ]);
     } catch (err) {
       setClinicalError(err instanceof Error ? err.message : "Failed to save clinical note");
     } finally {
@@ -2944,7 +3090,20 @@ export default function PatientDetailClient({
   }
 
   async function submitTreatmentPlanItem(button?: HTMLButtonElement | null) {
+    if (!canWriteClinical || clinicalPatientUnavailable) {
+      setClinicalError("Clinical records are read-only.");
+      return;
+    }
     if (!planCode.trim() || !planDescription.trim()) return;
+    if (
+      planCode.trim().length > 50 ||
+      planDescription.trim().length > clinicalTextMaxLength ||
+      !clinicalSurfaceIsValid(planTooth.trim() || null, planSurface) ||
+      !clinicalFeeIsValid(planFee)
+    ) {
+      setClinicalError("Check the treatment plan details, surface and fee before saving.");
+      return;
+    }
     if (!button || planSaving || savingTreatmentPlanPatientIds.has(patientId) || button.disabled) {
       return;
     }
@@ -2961,7 +3120,7 @@ export default function PatientDetailClient({
           : `/api/patients/${patientId}/treatment-plan`,
         {
           method: isEditing ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: clinicalMutationHeaders(),
           body: JSON.stringify({
             tooth: planTooth.trim() || null,
             surface: planSurface || null,
@@ -2978,7 +3137,10 @@ export default function PatientDetailClient({
       }
       if (!res.ok) {
         throw new Error(
-          `Failed to ${isEditing ? "update" : "save"} treatment plan item (HTTP ${res.status})`
+          clinicalRequestError(
+            res.status,
+            `${isEditing ? "update" : "save"} the treatment plan item`
+          )
         );
       }
       resetTreatmentPlanForm();
@@ -3000,6 +3162,11 @@ export default function PatientDetailClient({
     status: TreatmentPlanStatus,
     button?: HTMLButtonElement | null
   ) {
+    if (!canWriteClinical || clinicalPatientUnavailable) {
+      setClinicalError("Clinical records are read-only.");
+      return;
+    }
+    if (item.status === status) return;
     if (!button || savingTreatmentPlanStatusIds.has(item.id) || button.disabled) {
       return;
     }
@@ -3009,7 +3176,7 @@ export default function PatientDetailClient({
     try {
       const res = await apiFetch(`/api/treatment-plan/${item.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: clinicalMutationHeaders(),
         body: JSON.stringify({ status }),
       });
       if (res.status === 401) {
@@ -3018,16 +3185,16 @@ export default function PatientDetailClient({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to update treatment plan (HTTP ${res.status})`);
+        throw new Error(clinicalRequestError(res.status, "update the treatment plan"));
       }
       if (status === "completed") {
         const shouldCreate = window.confirm(
           "Create a completed procedure record for this item?"
         );
         if (shouldCreate) {
-          await apiFetch(`/api/patients/${patientId}/procedures`, {
+          const procedureRes = await apiFetch(`/api/patients/${patientId}/procedures`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: clinicalMutationHeaders(),
             body: JSON.stringify({
               tooth: item.tooth,
               surface: item.surface,
@@ -3038,9 +3205,23 @@ export default function PatientDetailClient({
               appointment_id: item.appointment_id ?? null,
             }),
           });
+          if (!procedureRes.ok) {
+            await refreshClinicalData();
+            throw new Error(
+              `Treatment plan status changed, but ${clinicalRequestError(
+                procedureRes.status,
+                "record the completed procedure"
+              ).toLowerCase()}`
+            );
+          }
         }
       }
-      await loadClinicalSummary();
+      await Promise.all([
+        refreshClinicalData(),
+        selectedTooth && item.tooth === selectedTooth
+          ? loadToothHistory(selectedTooth)
+          : Promise.resolve(),
+      ]);
     } catch (err) {
       setClinicalError(
         err instanceof Error ? err.message : "Failed to update treatment plan"
@@ -3408,12 +3589,27 @@ export default function PatientDetailClient({
   }, [tab, chartingViewerEnabled, isChartingRoute, activateContentTab]);
 
   useEffect(() => {
-    if (tab !== "clinical") return;
-    refreshClinicalData();
+    if (
+      tab !== "clinical" ||
+      !clinicalCapabilitiesReady ||
+      !canViewClinical ||
+      clinicalPatientUnavailable
+    ) {
+      return;
+    }
+    void refreshClinicalData();
     if (!selectedTooth) {
       applyChartSelection(upperTeeth[0], null, { trackHistory: false });
     }
-  }, [tab, refreshClinicalData, selectedTooth, applyChartSelection]);
+  }, [
+    applyChartSelection,
+    canViewClinical,
+    clinicalCapabilitiesReady,
+    clinicalPatientUnavailable,
+    refreshClinicalData,
+    selectedTooth,
+    tab,
+  ]);
 
   useEffect(() => {
     if (tab !== "transactions") return;
@@ -3767,9 +3963,24 @@ export default function PatientDetailClient({
   }, [searchParams]);
 
   useEffect(() => {
-    if (tab !== "clinical" || !selectedTooth) return;
+    if (
+      tab !== "clinical" ||
+      !selectedTooth ||
+      !clinicalCapabilitiesReady ||
+      !canViewClinical ||
+      clinicalPatientUnavailable
+    ) {
+      return;
+    }
     void loadToothHistory(selectedTooth);
-  }, [tab, selectedTooth, loadToothHistory]);
+  }, [
+    canViewClinical,
+    clinicalCapabilitiesReady,
+    clinicalPatientUnavailable,
+    loadToothHistory,
+    selectedTooth,
+    tab,
+  ]);
 
   function getDefaultBookingSlot() {
     const next = new Date();
@@ -8435,7 +8646,31 @@ export default function PatientDetailClient({
                   )}
                 </div>
               ) : tab === "clinical" ? (
-                <div className="stack">
+                <div
+                  className="stack"
+                  data-testid="patient-clinical-section"
+                  data-clinical-mode={clinicalAccessMode}
+                >
+                  {!clinicalCapabilitiesReady ? (
+                    <div className="notice" data-testid="patient-clinical-loading">
+                      Checking clinical permissions…
+                    </div>
+                  ) : clinicalPatientUnavailable ? (
+                    <div className="notice" data-testid="patient-clinical-unavailable">
+                      Clinical charting is unavailable for an archived patient.
+                    </div>
+                  ) : !canViewClinical ? (
+                    <div className="notice" data-testid="patient-clinical-denied">
+                      {capabilityError || "You do not have permission to view clinical records."}
+                    </div>
+                  ) : (
+                    <>
+                  {!canWriteClinical && (
+                    <div className="notice" data-testid="patient-clinical-read-only">
+                      Clinical records are read-only. You can review the chart, BPE, tooth
+                      history and treatment plan, but cannot make changes.
+                    </div>
+                  )}
                   <div className="tabs">
                     <button
                       className={`tab ${clinicalTab === "chart" ? "active" : ""}`}
@@ -8500,7 +8735,12 @@ export default function PatientDetailClient({
                   {showClinicalLoadingPlaceholder ? (
                     <div className="badge">Loading clinical…</div>
                   ) : clinicalTab === "chart" ? (
-                <div className="stack">
+                <div
+                  className="stack"
+                  data-testid="clinical-chart-content"
+                  data-planned-state={plannedTeeth.size > 0 ? "present" : "absent"}
+                  data-completed-state={historyTeeth.size > 0 ? "present" : "absent"}
+                >
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                     <div className="label">View mode</div>
                     <div style={tabRowStyle} data-testid="clinical-chart-toggle">
@@ -8721,6 +8961,7 @@ export default function PatientDetailClient({
                                 <div className="label">Upper</div>
                                 <div
                                   className="patient-route-odontogram-grid"
+                                  data-testid="clinical-upper-arch"
                                   style={{
                                     display: "grid",
                                     gap: 6,
@@ -8925,6 +9166,7 @@ export default function PatientDetailClient({
                                 <div className="label">Lower</div>
                                 <div
                                   className="patient-route-odontogram-grid"
+                                  data-testid="clinical-lower-arch"
                                   style={{
                                     display: "grid",
                                     gap: 6,
@@ -9178,7 +9420,11 @@ export default function PatientDetailClient({
                           </Panel>
 
                           <Panel title="BPE">
-                            <div className="stack" style={{ gap: 12 }}>
+                            <div
+                              className="stack"
+                              style={{ gap: 12 }}
+                              data-testid="patient-bpe-panel"
+                            >
                               <div
                                 style={{
                                   display: "grid",
@@ -9193,8 +9439,10 @@ export default function PatientDetailClient({
                                       data-testid={`patient-bpe-score-${label}`}
                                       className="input"
                                       value={bpeScores[index] ?? ""}
+                                      maxLength={2}
+                                      disabled={!canWriteClinical || bpeSaving}
                                       onChange={(e) => {
-                                        const value = e.target.value;
+                                        const value = e.target.value.toUpperCase();
                                         setBpeScores((prev) => {
                                           const next = [...prev];
                                           next[index] = value;
@@ -9216,7 +9464,7 @@ export default function PatientDetailClient({
                                   type="button"
                                   data-testid="patient-bpe-save"
                                   onClick={(event) => void submitBpe(event.currentTarget)}
-                                  disabled={bpeSaving}
+                                  disabled={bpeSaving || !canWriteClinical}
                                 >
                                   {bpeSaving ? "Saving..." : "Save BPE"}
                                 </button>
@@ -9240,14 +9488,19 @@ export default function PatientDetailClient({
                                     gridTemplateColumns: "1fr 1fr",
                                   }}
                                 >
-                                  <div className="stack" style={{ gap: 8 }}>
+                                  <div
+                                    className="stack"
+                                    style={{ gap: 8 }}
+                                  >
                                     <label className="label">Surface (optional)</label>
                                     <input
                                       className="input"
                                       data-testid="patient-chart-note-surface"
                                       value={chartNoteSurface}
-                                      onChange={(e) => setChartNoteSurface(e.target.value)}
-                                      placeholder="O / M / D / B / L"
+                                      onChange={(e) => setChartNoteSurface(e.target.value.toUpperCase())}
+                                      placeholder="O / I / M / D / B / L"
+                                      maxLength={1}
+                                      disabled={!canWriteClinical}
                                     />
                                   </div>
                                 </div>
@@ -9258,6 +9511,8 @@ export default function PatientDetailClient({
                                     data-testid="patient-chart-note-body"
                                     rows={3}
                                     value={chartNoteBody}
+                                    maxLength={clinicalTextMaxLength}
+                                    disabled={!canWriteClinical}
                                     onChange={(e) => {
                                       setChartNoteBody(e.target.value);
                                       setChartNoteNotice(null);
@@ -9270,7 +9525,11 @@ export default function PatientDetailClient({
                                   type="button"
                                   data-testid="patient-chart-note-add"
                                   onClick={(event) => void submitChartNote(event.currentTarget)}
-                                  disabled={savingToothNote || !chartNoteBody.trim()}
+                                  disabled={
+                                    savingToothNote ||
+                                    !canWriteClinical ||
+                                    !chartNoteBody.trim()
+                                  }
                                 >
                                   {savingToothNote ? "Saving..." : "Add note"}
                                 </button>
@@ -9285,6 +9544,7 @@ export default function PatientDetailClient({
                                     className="input"
                                     data-testid="patient-chart-procedure-code"
                                     value={procedureCode}
+                                    disabled={!canWriteClinical}
                                     onChange={(e) => {
                                       const code = e.target.value;
                                       setProcedureCode(code);
@@ -9308,6 +9568,8 @@ export default function PatientDetailClient({
                                     className="input"
                                     data-testid="patient-chart-procedure-description"
                                     value={procedureDescription}
+                                    maxLength={clinicalTextMaxLength}
+                                    disabled={!canWriteClinical}
                                     onChange={(e) => setProcedureDescription(e.target.value)}
                                     placeholder="Procedure description"
                                   />
@@ -9318,6 +9580,8 @@ export default function PatientDetailClient({
                                     className="input"
                                     data-testid="patient-chart-procedure-fee"
                                     value={procedureFee}
+                                    inputMode="decimal"
+                                    disabled={!canWriteClinical}
                                     onChange={(e) => setProcedureFee(e.target.value)}
                                     placeholder="0.00"
                                   />
@@ -9329,6 +9593,7 @@ export default function PatientDetailClient({
                                   onClick={(event) => void submitProcedure(event.currentTarget)}
                                   disabled={
                                     savingProcedure ||
+                                    !canWriteClinical ||
                                     !procedureCode ||
                                     !procedureDescription.trim()
                                   }
@@ -9339,7 +9604,11 @@ export default function PatientDetailClient({
                                   className="btn btn-secondary"
                                   type="button"
                                   onClick={openPlanFromChart}
-                                  disabled={!procedureCode || !procedureDescription.trim()}
+                                  disabled={
+                                    !canWriteClinical ||
+                                    !procedureCode ||
+                                    !procedureDescription.trim()
+                                  }
                                 >
                                   Add to plan
                                 </button>
@@ -9454,7 +9723,11 @@ export default function PatientDetailClient({
                               <div className="stack" style={{ gap: 10 }}>
                                 <div className="label">Tooth timeline</div>
                                 {clinicalViewMode !== "planned" && (
-                                  <div className="stack" style={{ gap: 8 }}>
+                                  <div
+                                    className="stack"
+                                    style={{ gap: 8 }}
+                                    data-testid="patient-tooth-history"
+                                  >
                                     <div className="label">History</div>
                                     {toothHistoryLoading ? (
                                       <div className="badge">Loading history…</div>
@@ -9516,7 +9789,7 @@ export default function PatientDetailClient({
                       </div>
                     </div>
                   ) : clinicalTab === "treatment" ? (
-                    <div className="stack">
+                    <div className="stack" data-testid="patient-treatment-plan-section">
                       <div className="row">
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
@@ -9524,6 +9797,7 @@ export default function PatientDetailClient({
                             type="button"
                             data-testid="patient-treatment-plan-open"
                             onClick={openTreatmentPlanModal}
+                            disabled={!canWriteClinical}
                           >
                             Add item
                           </button>
@@ -9608,6 +9882,7 @@ export default function PatientDetailClient({
                                         onClick={() => startEditTreatmentPlanItem(item)}
                                         disabled={
                                           planSaving ||
+                                          !canWriteClinical ||
                                           rowActionPending ||
                                           isFinal ||
                                           item.status !== "proposed"
@@ -9626,7 +9901,12 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={rowActionPending || isFinal || item.status !== "proposed"}
+                                        disabled={
+                                          !canWriteClinical ||
+                                          rowActionPending ||
+                                          isFinal ||
+                                          item.status !== "proposed"
+                                        }
                                       >
                                         {rowActionPending &&
                                         treatmentPlanStatusAction?.status === "accepted"
@@ -9644,7 +9924,12 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={rowActionPending || isFinal || item.status !== "proposed"}
+                                        disabled={
+                                          !canWriteClinical ||
+                                          rowActionPending ||
+                                          isFinal ||
+                                          item.status !== "proposed"
+                                        }
                                       >
                                         {rowActionPending &&
                                         treatmentPlanStatusAction?.status === "declined"
@@ -9662,7 +9947,12 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={rowActionPending || isFinal || item.status === "declined"}
+                                        disabled={
+                                          !canWriteClinical ||
+                                          rowActionPending ||
+                                          isFinal ||
+                                          item.status === "declined"
+                                        }
                                       >
                                         {rowActionPending &&
                                         treatmentPlanStatusAction?.status === "completed"
@@ -9680,7 +9970,7 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           )
                                         }
-                                        disabled={rowActionPending || isFinal}
+                                        disabled={!canWriteClinical || rowActionPending || isFinal}
                                       >
                                         {rowActionPending &&
                                         treatmentPlanStatusAction?.status === "cancelled"
@@ -9714,6 +10004,7 @@ export default function PatientDetailClient({
                                 data-testid="patient-clinical-note-tooth"
                                 value={notesTooth}
                                 onChange={(e) => setNotesTooth(e.target.value)}
+                                disabled={!canWriteClinical}
                               >
                                 <option value="">Select tooth</option>
                                 {allTeeth.map((tooth) => (
@@ -9728,8 +10019,10 @@ export default function PatientDetailClient({
                               <input
                                 className="input"
                                 value={notesSurface}
-                                onChange={(e) => setNotesSurface(e.target.value)}
-                                placeholder="O / M / D / B / L"
+                                onChange={(e) => setNotesSurface(e.target.value.toUpperCase())}
+                                placeholder="O / I / M / D / B / L"
+                                maxLength={1}
+                                disabled={!canWriteClinical}
                               />
                             </div>
                           </div>
@@ -9740,6 +10033,8 @@ export default function PatientDetailClient({
                               data-testid="patient-clinical-note-body"
                               rows={3}
                               value={notesBody}
+                              maxLength={clinicalTextMaxLength}
+                              disabled={!canWriteClinical}
                               onChange={(e) => {
                                 setNotesBody(e.target.value);
                                 setClinicalNoteNotice(null);
@@ -9752,7 +10047,12 @@ export default function PatientDetailClient({
                             type="button"
                             data-testid="patient-clinical-note-add"
                             onClick={(event) => void submitClinicalNote(event.currentTarget)}
-                            disabled={savingClinicalNote || !notesTooth || !notesBody.trim()}
+                            disabled={
+                              savingClinicalNote ||
+                              !canWriteClinical ||
+                              !notesTooth ||
+                              !notesBody.trim()
+                            }
                           >
                             {savingClinicalNote ? "Saving..." : "Add note"}
                           </button>
@@ -9816,6 +10116,8 @@ export default function PatientDetailClient({
                         )}
                       </Panel>
                     </div>
+                  )}
+                    </>
                   )}
                 </div>
               ) : tab === "documents" ? (
@@ -11482,7 +11784,7 @@ export default function PatientDetailClient({
             </div>
           </div>
 
-          {showPlanModal && (
+          {showPlanModal && canWriteClinical && !clinicalPatientUnavailable && (
             <div className="card" style={{ margin: 0 }}>
               <div className="stack">
                 <div className="row">
@@ -11535,8 +11837,9 @@ export default function PatientDetailClient({
                         data-testid="patient-treatment-plan-surface"
                         className="input"
                         value={planSurface}
-                        onChange={(e) => setPlanSurface(e.target.value)}
-                        placeholder="O / M / D / B / L"
+                        onChange={(e) => setPlanSurface(e.target.value.toUpperCase())}
+                        placeholder="O / I / M / D / B / L"
+                        maxLength={1}
                       />
                     </div>
                   </div>
@@ -11547,6 +11850,7 @@ export default function PatientDetailClient({
                       className="input"
                       list="procedure-codes"
                       value={planCode}
+                      maxLength={50}
                       onChange={(e) => {
                         const code = e.target.value;
                         setPlanCode(code);
@@ -11572,6 +11876,7 @@ export default function PatientDetailClient({
                       className="input"
                       rows={3}
                       value={planDescription}
+                      maxLength={clinicalTextMaxLength}
                       onChange={(e) => setPlanDescription(e.target.value)}
                     />
                   </div>
@@ -11581,6 +11886,7 @@ export default function PatientDetailClient({
                       data-testid="patient-treatment-plan-fee"
                       className="input"
                       value={planFee}
+                      inputMode="decimal"
                       onChange={(e) => setPlanFee(e.target.value)}
                       placeholder="0.00"
                     />

@@ -3,40 +3,21 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
-- Deployment batch 3 was retried on 2026-07-18 from merged PRs #699 and #700 at
-  `2dc840e6080d92842d996871524c63d9aa27217f`. Candidate readiness and recall
-  (21/21) passed, then patient-record checkpoint 15 failed before ledger,
-  appointment, or route verification ran. The application-only rollback
-  passed, production remains healthy on
-  `d6b2319432a320517c58bf3e20afae027d7c5d9e`, and PRs #699 and #700 remain
-  merged but not live.
-- Control-versus-candidate investigation established a patient-record smoke
-  synchronisation defect rather than a candidate product regression. The
-  original write-capable sequence can evaluate controls before the page's own
-  capability request settles; the corrected sequence waits separately for
-  list and detail capabilities and their settled controls. Both SHAs and both
-  write-capable/read-only states converge consistently with write blocking.
-- No deployment retry is authorised by this update.
-- Deployment batch 2 passed on 2026-07-16. Production is stable on
-  `d6b2319432a320517c58bf3e20afae027d7c5d9e`; PR #697 patient-record
-  reliability, permissions, lifecycle validation, and audit is live, and
-  rollback is not required.
-- The deterministic patient-record smoke passed all 20 checkpoints, the
-  patient-ledger and appointment no-write smokes each passed all 18
-  checkpoints, and the production 404 smoke passed.
-- Recall workflow reliability, permissions, audit, export, and frontend safety
-  is the active feature-sized slice. Its deterministic recall no-write smoke is
-  included in the same feature PR.
+- Deployment batch 3 passed on 24 August 2026. Production is healthy and stable
+  on `6c9065ff405a956c93d364cdc3812f851b35a951`; rollback was not required.
+- PR #699 recall workflow reliability, permissions, audit, export, and
+  frontend safety is live.
+- The deterministic recall, patient-record, patient-ledger, appointment, and
+  patient-route no-write checks all passed during deployment batch 3.
+- Clinical chart and treatment-plan reliability is the active feature-sized
+  slice. Deterministic clinical no-write verification is included in the same
+  feature PR.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
   merged code under a separate deployment instruction.
-- R4 research is a separately gated, parallel, batched, strictly read-only
-  track. R4 writes are permanently prohibited. The deferred finance backlog
-  remains blocked at `1017`, and invoice/payment/staging import remains blocked.
-- The current R4 metadata-only permission audit did not positively confirm the
-  read-only boundary, so patient and operational tables were not queried and
-  batched R4 research remains blocked.
+- R4 research remains blocked. R4 writes are permanently prohibited, and the
+  deferred finance and invoice/payment/staging import work remains blocked.
 
 ## Historical pause / handover (superseded)
 - The authoritative continuity baseline is `origin/master@26e2dc14d9af0620388b9b1db9ba25a522fa434e`.
