@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { createPatient } from "./helpers/api";
 import { ensureAuthReady, getBaseUrl, primePageAuth } from "./helpers/auth";
@@ -20,6 +20,32 @@ function buildFilterParams(entries: Record<string, string | null | undefined>) {
     params.set(key, value);
   }
   return params;
+}
+
+function buildListFilterParams(entries: Record<string, string | null | undefined>) {
+  const params = buildFilterParams(entries);
+  params.set("limit", "200");
+  params.set("offset", "0");
+  return params;
+}
+
+function sortedParams(params: URLSearchParams) {
+  return [...params.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+    const keyOrder = leftKey.localeCompare(rightKey);
+    return keyOrder === 0 ? leftValue.localeCompare(rightValue) : keyOrder;
+  });
+}
+
+async function waitForRecallListResponse(page: Page, expectedParams: URLSearchParams) {
+  const expected = sortedParams(expectedParams);
+  const response = await page.waitForResponse((candidate) => {
+    if (candidate.request().method() !== "GET") return false;
+    const url = new URL(candidate.url());
+    if (url.pathname !== "/api/recalls") return false;
+    return JSON.stringify(sortedParams(url.searchParams)) === JSON.stringify(expected);
+  });
+  expect(response.ok()).toBeTruthy();
+  return response;
 }
 
 async function fetchExportCount(
@@ -120,10 +146,31 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   const uncontactedRow = page.locator("table tbody tr").filter({ hasText: uncontactedNotes });
   const contactedRow = page.locator("table tbody tr").filter({ hasText: contactedNotes });
 
+  const pageSizeResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({ status: "due,overdue" })
+  );
   await pageSize.selectOption("200");
+  await pageSizeResponse;
   await expect(pageSize).toHaveValue("200");
+
+  const startDateResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({ status: "due,overdue", start: startDate })
+  );
   await startDateFilter.fill(startDate);
+  await startDateResponse;
+
+  const endDateResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({
+      status: "due,overdue",
+      start: startDate,
+      end: endDate,
+    })
+  );
   await endDateFilter.fill(endDate);
+  await endDateResponse;
 
   const baseParams = buildFilterParams({
     status: "due,overdue",
@@ -136,7 +183,17 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   await expect(contactedRow).toBeVisible({ timeout: 15_000 });
   await expect(exportSummary).toContainText(`${allCount} recalls`, { timeout: 15_000 });
 
+  const hygieneListResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({
+      status: "due,overdue",
+      start: startDate,
+      end: endDate,
+      type: "hygiene",
+    })
+  );
   await typeFilter.selectOption("hygiene");
+  await hygieneListResponse;
   const hygieneParams = buildFilterParams({
     status: "due,overdue",
     start: startDate,
@@ -148,7 +205,18 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   await expect(contactedRow).toBeVisible({ timeout: 15_000 });
   await expect(exportSummary).toContainText(`${hygieneCount} recalls`, { timeout: 15_000 });
 
+  const contactedListResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({
+      status: "due,overdue",
+      start: startDate,
+      end: endDate,
+      type: "hygiene",
+      contact_state: "contacted",
+    })
+  );
   await contactStateFilter.selectOption("contacted");
+  await contactedListResponse;
   const contactedParams = buildFilterParams({
     status: "due,overdue",
     start: startDate,
@@ -160,7 +228,19 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   await expect(contactedRow).toBeVisible({ timeout: 15_000 });
   await expect(exportSummary).toContainText(`${contactedCount} recalls`, { timeout: 15_000 });
 
+  const recentContactListResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({
+      status: "due,overdue",
+      start: startDate,
+      end: endDate,
+      type: "hygiene",
+      contact_state: "contacted",
+      last_contact: "7d",
+    })
+  );
   await lastContactFilter.selectOption("7d");
+  await recentContactListResponse;
   const recentContactParams = buildFilterParams({
     status: "due,overdue",
     start: startDate,
@@ -175,7 +255,36 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
     timeout: 15_000,
   });
 
+  // A concurrent full-suite letter export records a newer contact method. Restore this
+  // synthetic fixture's phone-contact precondition immediately before testing the filter.
+  const refreshedContactResponse = await request.post(
+    `${baseUrl}/api/recalls/${contactedRecall.id}/contact`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        method: "phone",
+        other_detail: null,
+        outcome: `Reached patient again ${unique}`,
+        note: `Recalls filters refreshed phone contact ${unique}`,
+      },
+    }
+  );
+  expect(refreshedContactResponse.ok()).toBeTruthy();
+
+  const phoneListResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({
+      status: "due,overdue",
+      start: startDate,
+      end: endDate,
+      type: "hygiene",
+      contact_state: "contacted",
+      last_contact: "7d",
+      method: "phone",
+    })
+  );
   await methodFilter.selectOption("phone");
+  await phoneListResponse;
   const phoneParams = buildFilterParams({
     status: "due,overdue",
     start: startDate,
@@ -189,7 +298,20 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   await expect(contactedRow).toBeVisible({ timeout: 15_000 });
   await expect(exportSummary).toContainText(`${phoneCount} recalls`, { timeout: 15_000 });
 
+  const impossibleListResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({
+      status: "due,overdue",
+      start: startDate,
+      end: endDate,
+      type: "hygiene",
+      contact_state: "never",
+      last_contact: "7d",
+      method: "phone",
+    })
+  );
   await contactStateFilter.selectOption("never");
+  await impossibleListResponse;
   const impossibleParams = buildFilterParams({
     status: "due,overdue",
     start: startDate,
@@ -208,7 +330,12 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
   });
   await expect(exportSummary).toContainText("0 recalls", { timeout: 15_000 });
 
+  const resetListResponse = waitForRecallListResponse(
+    page,
+    buildListFilterParams({ status: "due,overdue" })
+  );
   await resetButton.click();
+  await resetListResponse;
   await expect(typeFilter).toHaveValue("all");
   await expect(contactStateFilter).toHaveValue("all");
   await expect(lastContactFilter).toHaveValue("all");
