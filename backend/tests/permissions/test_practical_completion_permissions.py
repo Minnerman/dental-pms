@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from app.core.security import create_access_token
+from app.core.settings import settings
+
 
 def _restricted_headers(api_client, auth_headers, capability_codes: list[str]) -> dict[str, str]:
     suffix = uuid4().hex[:10]
@@ -24,9 +27,14 @@ def _restricted_headers(api_client, auth_headers, capability_codes: list[str]) -
         json={"capability_codes": capability_codes},
     )
     assert updated.status_code == 200, updated.text
-    login = api_client.post("/auth/login", json={"email": email, "password": password})
-    assert login.status_code == 200, login.text
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    token = create_access_token(
+        subject=str(created.json()["id"]),
+        secret=settings.secret_key,
+        alg=settings.jwt_alg,
+        expires_minutes=settings.access_token_expire_minutes,
+        extra={"role": "reception", "email": email},
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _patient(api_client, auth_headers) -> int:
