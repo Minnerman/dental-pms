@@ -107,6 +107,55 @@ function classifyRoutePageError() {
   return {category: "page_error", unexpected: true};
 }
 
+function classifyRouteEndpointFamily(pathname, resourceType, rscRead = false) {
+  if (["script", "stylesheet", "image", "font"].includes(resourceType)) {
+    return "static_resource";
+  }
+  if (rscRead) return "other";
+  const path = String(pathname || "").toLowerCase();
+  if (path.includes("/api/health")) return "application_health";
+  if (!path.includes("patient")) return "other";
+  if (path.includes("note")) return "patient_notes";
+  if (path.includes("appointment")) return "patient_appointments";
+  if (path.includes("recall")) return "patient_recalls";
+  if (/ledger|finance|invoice|payment|transaction/.test(path)) {
+    return "patient_finance";
+  }
+  if (/clinical|chart|odontogram|bpe|treatment/.test(path)) {
+    return "patient_clinical";
+  }
+  if (/document|attachment|file/.test(path)) return "patient_documents";
+  if (/audit|history/.test(path)) return "patient_audit";
+  return "patient_core";
+}
+
+function classifyOptionalBackgroundReadFailure({
+  method,
+  resourceType,
+  failureKind,
+  endpointFamily,
+  rscRead,
+  patientShellRendered,
+  routeCriticalChecksPassed,
+  httpStatus = 0,
+}) {
+  const optional = Boolean(
+    method === "GET" &&
+      ["fetch", "xhr"].includes(resourceType) &&
+      failureKind === "aborted" &&
+      endpointFamily === "other" &&
+      rscRead &&
+      patientShellRendered &&
+      routeCriticalChecksPassed &&
+      httpStatus < 500
+  );
+  return {
+    optional,
+    endpointFamily: optional ? endpointFamily : "none",
+    failureType: optional ? "request_aborted" : "none",
+  };
+}
+
 async function waitForRouteReadsToSettle({
   pending,
   now = Date.now,
@@ -166,6 +215,11 @@ let validFrontendStatus = "not_checked_safely";
 let missingBackendStatus = "unknown";
 let missingFrontendState = "unknown";
 let missingClinicalState = "unknown";
+let optionalBackgroundReadFailure = false;
+let optionalBackgroundEndpointFamily = "none";
+let optionalBackgroundFailureType = "none";
+let patientShellRendered = false;
+let validRouteCriticalChecksPassed = false;
 
 function recordBrowserEvent(category, unexpected) {
   if (unexpected) {
@@ -429,6 +483,34 @@ async function renderNotFound(base, path, expectedState) {
       return "";
     }
   };
+  const endpointFamily = (request) => {
+    try {
+      return classifyRouteEndpointFamily(
+        new URL(request.url()).pathname,
+        request.resourceType(),
+        isRscRead(request)
+      );
+    } catch {
+      return "other";
+    }
+  };
+  const isRscRead = (request) => {
+    try {
+      const parsed = new URL(request.url());
+      const headers = request.headers();
+      return Boolean(
+        ["fetch", "xhr"].includes(request.resourceType()) &&
+          (parsed.searchParams.has("_rsc") ||
+            headers.rsc === "1" ||
+            Object.prototype.hasOwnProperty.call(
+              headers,
+              "next-router-state-tree"
+            ))
+      );
+    } catch {
+      return false;
+    }
+  };
   const isSafeRead = (request) => {
     if (request.method() !== "GET") return false;
     const key = safeReadKey(request);
@@ -545,6 +627,10 @@ async function renderNotFound(base, path, expectedState) {
         kind,
         resourceType: request.resourceType(),
         startedStage: requestStartStages.get(request) || "unknown",
+        endpointFamily: endpointFamily(request),
+        rscRead: isRscRead(request),
+        patientShellRendered,
+        routeCriticalChecksPassed: validRouteCriticalChecksPassed,
       });
       return;
     }
@@ -594,6 +680,8 @@ async function renderNotFound(base, path, expectedState) {
       .isVisible()
       .catch(() => false);
     checkpoints[10] = !validNotFound;
+    patientShellRendered = checkpoints[10];
+    validRouteCriticalChecksPassed = checkpoints.slice(0, 11).every(Boolean);
     browserStage = "valid_patient_settling";
     const settled = await waitForRouteReadsToSettle({
       pending: pendingValidReads,
@@ -601,6 +689,22 @@ async function renderNotFound(base, path, expectedState) {
     });
     trackValidReads = false;
     for (const failure of deferredSafeReadFailures) {
+      const optionalClassification = classifyOptionalBackgroundReadFailure({
+        method: "GET",
+        resourceType: failure.resourceType,
+        failureKind: failure.kind,
+        endpointFamily: failure.endpointFamily,
+        rscRead: failure.rscRead,
+        patientShellRendered: failure.patientShellRendered,
+        routeCriticalChecksPassed: failure.routeCriticalChecksPassed,
+      });
+      if (optionalClassification.optional) {
+        optionalBackgroundReadFailure = true;
+        optionalBackgroundEndpointFamily =
+          optionalClassification.endpointFamily;
+        optionalBackgroundFailureType = optionalClassification.failureType;
+        continue;
+      }
       const classification = classifyRouteRequestFailure({
         method: "GET",
         resourceType: failure.resourceType,
@@ -668,8 +772,12 @@ async function renderNotFound(base, path, expectedState) {
     checkpoints[20] = !writeRequest;
     if (context) {
       if (page) page.removeAllListeners();
-      await context.close().catch(() => {});
-      browserContextClosed = true;
+      try {
+        await context.close();
+        browserContextClosed = true;
+      } catch {
+        browserContextClosed = false;
+      }
     }
     if (browser) await browser.close().catch(() => {});
     process.stdout.write(
@@ -693,6 +801,9 @@ async function renderNotFound(base, path, expectedState) {
         browser_event_stage: browserEventStage(),
         expected_navigation_cancellation: expectedNavigationCancellation,
         browser_context_closed: browserContextClosed,
+        optional_background_read_failure: optionalBackgroundReadFailure,
+        optional_background_endpoint_family: optionalBackgroundEndpointFamily,
+        optional_background_failure_type: optionalBackgroundFailureType,
       }) + "\n"
     );
     process.exit(
@@ -768,6 +879,9 @@ def _empty_result(image_classification: str = "unknown") -> dict[str, Any]:
         "browser_event_stage": "unknown",
         "expected_navigation_cancellation": False,
         "browser_context_closed": False,
+        "optional_background_read_failure": False,
+        "optional_background_endpoint_family": "none",
+        "optional_background_failure_type": "none",
     }
 
 
@@ -848,6 +962,42 @@ def _normalise_result(payload: object) -> dict[str, Any]:
             payload.get("expected_navigation_cancellation") is True
         ),
         "browser_context_closed": payload.get("browser_context_closed") is True,
+        "optional_background_read_failure": (
+            payload.get("optional_background_read_failure") is True
+        ),
+        "optional_background_endpoint_family": choice(
+            "optional_background_endpoint_family",
+            {
+                "patient_core",
+                "patient_notes",
+                "patient_appointments",
+                "patient_recalls",
+                "patient_finance",
+                "patient_clinical",
+                "patient_documents",
+                "patient_audit",
+                "application_health",
+                "static_resource",
+                "other",
+                "none",
+            },
+            "none",
+        ),
+        "optional_background_failure_type": choice(
+            "optional_background_failure_type",
+            {
+                "request_aborted",
+                "request_failed",
+                "http_401",
+                "http_403",
+                "http_404",
+                "http_4xx_other",
+                "http_5xx",
+                "unknown",
+                "none",
+            },
+            "none",
+        ),
     }
 
 
@@ -954,6 +1104,18 @@ def main() -> int:
     )
     print("browser_context_closed: " + _yes_no(result["browser_context_closed"]))
     print("write_request_issued: " + _yes_no(result["write_request"]))
+    print(
+        "optional_background_read_failure: "
+        + _yes_no(result["optional_background_read_failure"])
+    )
+    print(
+        "optional_background_endpoint_family: "
+        + result["optional_background_endpoint_family"]
+    )
+    print(
+        "optional_background_failure_type: "
+        + result["optional_background_failure_type"]
+    )
 
     passed = (
         all(values)
