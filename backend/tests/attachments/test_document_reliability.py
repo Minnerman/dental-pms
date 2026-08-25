@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.core.security import create_access_token
@@ -19,6 +21,15 @@ from app.services import capabilities as capability_service
 from app.services import storage
 from app.services.capabilities import get_user_capabilities, replace_user_capabilities
 from app.services.users import create_user
+
+
+@pytest.fixture
+def local_api_client():
+    """Use the in-process app when a test monkeypatches router or storage objects."""
+    from app.main import app
+
+    with TestClient(app) as client:
+        yield client
 
 
 def _create_patient(api_client, headers, label: str) -> int:
@@ -274,11 +285,12 @@ def test_archived_patient_blocks_nested_and_global_document_routes(
 
 
 def test_upload_validation_and_storage_compensation(
-    api_client,
+    local_api_client,
     auth_headers,
     tmp_path,
     monkeypatch,
 ):
+    api_client = local_api_client
     monkeypatch.setattr(storage, "ATTACHMENTS_DIR", tmp_path)
     patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
     invalid_uploads = [
@@ -326,11 +338,12 @@ def test_upload_validation_and_storage_compensation(
 
 
 def test_failed_attachment_delete_restores_file_and_database_row(
-    api_client,
+    local_api_client,
     auth_headers,
     tmp_path,
     monkeypatch,
 ):
+    api_client = local_api_client
     monkeypatch.setattr(storage, "ATTACHMENTS_DIR", tmp_path)
     patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
     created = api_client.post(
@@ -424,11 +437,12 @@ def test_duplicate_requests_and_pdf_attachment_are_idempotent(
 
 
 def test_failed_generated_pdf_attach_cleans_storage_and_preserves_document(
-    api_client,
+    local_api_client,
     auth_headers,
     tmp_path,
     monkeypatch,
 ):
+    api_client = local_api_client
     monkeypatch.setattr(storage, "ATTACHMENTS_DIR", tmp_path)
     patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
     template_id = _create_template(api_client, auth_headers)
@@ -460,11 +474,12 @@ def test_failed_generated_pdf_attach_cleans_storage_and_preserves_document(
 
 
 def test_missing_files_and_invalid_templates_fail_without_success_audit(
-    api_client,
+    local_api_client,
     auth_headers,
     tmp_path,
     monkeypatch,
 ):
+    api_client = local_api_client
     monkeypatch.setattr(storage, "ATTACHMENTS_DIR", tmp_path)
     patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
     inactive_template_id = _create_template(api_client, auth_headers, active=False)
