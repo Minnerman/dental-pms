@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import require_capability
 from app.models.invoice import Payment
 from app.models.user import User
 from app.services.audit import log_event
@@ -16,7 +16,7 @@ def get_payment_receipt(
     payment_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("billing.view")),
     request_id: str | None = Header(default=None),
 ):
     payment = db.get(Payment, payment_id)

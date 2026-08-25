@@ -31,6 +31,11 @@ export default function CashupPage() {
   const [report, setReport] = useState<CashupReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const canViewCashup = Boolean(
+    capabilities?.includes("billing.view") && capabilities?.includes("billing.cashup")
+  );
 
   function formatCurrency(pence: number) {
     return new Intl.NumberFormat("en-GB", {
@@ -40,6 +45,7 @@ export default function CashupPage() {
   }
 
   const loadReport = useCallback(async (targetDate: string) => {
+    if (!canViewCashup) return;
     setLoading(true);
     setError(null);
     try {
@@ -52,8 +58,11 @@ export default function CashupPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to load cash-up (HTTP ${res.status})`);
+        throw new Error(
+          res.status === 403
+            ? "You do not have permission to view cash-up reports."
+            : "Failed to load cash-up."
+        );
       }
       const data = (await res.json()) as CashupReport;
       setReport(data);
@@ -63,11 +72,38 @@ export default function CashupPage() {
     } finally {
       setLoading(false);
     }
+  }, [canViewCashup, router]);
+
+  const loadCapabilities = useCallback(async () => {
+    setCapabilityError(null);
+    try {
+      const res = await apiFetch("/api/me/capabilities");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error("Cash-up permissions could not be verified.");
+      }
+      setCapabilities((await res.json()) as string[]);
+    } catch (caught) {
+      setCapabilities([]);
+      setCapabilityError(
+        caught instanceof Error
+          ? caught.message
+          : "Cash-up permissions could not be verified."
+      );
+    }
   }, [router]);
 
   useEffect(() => {
-    void loadReport(date);
-  }, [date, loadReport]);
+    void loadCapabilities();
+  }, [loadCapabilities]);
+
+  useEffect(() => {
+    if (canViewCashup) void loadReport(date);
+  }, [canViewCashup, date, loadReport]);
 
   return (
     <div className="app-grid">
@@ -86,17 +122,28 @@ export default function CashupPage() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                disabled={!canViewCashup}
               />
-              <button className="btn btn-secondary" onClick={() => void loadReport(date)}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => void loadReport(date)}
+                disabled={!canViewCashup}
+              >
                 Refresh
               </button>
             </div>
           </div>
 
+          {capabilities === null && <div className="badge">Checking cash-up permissions…</div>}
+          {capabilities !== null && !canViewCashup && (
+            <div className="notice">
+              {capabilityError || "You do not have permission to view cash-up reports."}
+            </div>
+          )}
           {loading && <div className="badge">Loading cash-up…</div>}
           {error && <div className="notice">{error}</div>}
 
-          {report && (
+          {canViewCashup && report && (
             <>
               <div
                 style={{

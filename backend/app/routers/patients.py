@@ -528,7 +528,7 @@ def patient_audit(
 def list_patient_ledger(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
@@ -705,7 +705,7 @@ def list_patient_treatment_transactions(
 def get_patient_balance(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
 ):
     patient = db.get(Patient, patient_id)
     if not patient or patient.deleted_at is not None:
@@ -725,7 +725,7 @@ def get_patient_balance(
 def get_patient_finance_summary(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
     limit: int = Query(default=10, ge=1, le=20),
 ):
     patient = db.get(Patient, patient_id)

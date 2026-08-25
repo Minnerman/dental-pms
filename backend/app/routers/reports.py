@@ -10,7 +10,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import require_capabilities, require_capability
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient
 from app.models.user import User
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 @router.get("/cashup", response_model=CashupReportOut)
 def cashup_report(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capabilities("billing.view", "billing.cashup")),
     report_date: date | None = Query(default=None, alias="date"),
 ):
     target = report_date or date.today()
@@ -77,7 +77,7 @@ def cashup_report(
 @router.get("/finance/cashup", response_model=FinanceCashupOut)
 def cashup_report_range(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capabilities("billing.view", "billing.cashup")),
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
 ):
@@ -178,7 +178,7 @@ def _monthly_cashup_data(
 @router.get("/finance/outstanding", response_model=FinanceOutstandingOut)
 def outstanding_report(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
     as_of: date | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=50),
 ):
@@ -280,7 +280,7 @@ def _outstanding_snapshot(
 @router.get("/finance/trends", response_model=FinanceTrendsOut)
 def finance_trends(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
     days: int = Query(default=30, ge=7, le=365),
 ):
     end_date = date.today()
@@ -352,7 +352,7 @@ def finance_month_pack(
     month: int = Query(ge=1, le=12),
     format: str = Query(default="pdf"),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capabilities("billing.view", "billing.cashup")),
     request_id: str | None = Header(default=None),
 ):
     period_start = date(year, month, 1)

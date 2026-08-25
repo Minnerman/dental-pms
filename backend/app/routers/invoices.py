@@ -153,7 +153,7 @@ def create_invoice(
 @router.get("", response_model=list[InvoiceSummaryOut])
 def list_invoices(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
     patient_id: int | None = Query(default=None),
     status: InvoiceStatus | None = Query(default=None),
     q: str | None = Query(default=None),
@@ -175,7 +175,7 @@ def list_invoices(
 def get_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("billing.view")),
 ):
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
@@ -521,7 +521,7 @@ def get_invoice_pdf(
     invoice_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capability("billing.view")),
     request_id: str | None = Header(default=None),
 ):
     invoice = db.get(Invoice, invoice_id)
