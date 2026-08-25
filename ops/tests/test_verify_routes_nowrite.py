@@ -45,6 +45,9 @@ def smoke_result(
     browser_event_stage: str = "unknown",
     expected_navigation_cancellation: bool = False,
     browser_context_closed: bool = True,
+    optional_background_read_failure: bool = False,
+    optional_background_endpoint_family: str = "none",
+    optional_background_failure_type: str = "none",
 ) -> dict[str, object]:
     checkpoints = [True] * len(SMOKE.CHECKPOINTS)
     if failed_checkpoint is not None:
@@ -70,6 +73,9 @@ def smoke_result(
         "browser_event_stage": browser_event_stage,
         "expected_navigation_cancellation": expected_navigation_cancellation,
         "browser_context_closed": browser_context_closed,
+        "optional_background_read_failure": optional_background_read_failure,
+        "optional_background_endpoint_family": optional_background_endpoint_family,
+        "optional_background_failure_type": optional_background_failure_type,
         "patient_name": PRIVATE_VALUES[0],
         "patient_id": PRIVATE_VALUES[1],
         "token": PRIVATE_VALUES[2],
@@ -358,6 +364,87 @@ process.stdout.write(JSON.stringify(result));
     assert result["unexpected"] is True
 
 
+def test_aborted_rsc_background_read_after_ready_shell_is_non_fatal() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyOptionalBackgroundReadFailure({
+  method: "GET",
+  resourceType: "fetch",
+  failureKind: "aborted",
+  endpointFamily: "other",
+  rscRead: true,
+  patientShellRendered: true,
+  routeCriticalChecksPassed: true,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result == {
+        "optional": True,
+        "endpointFamily": "other",
+        "failureType": "request_aborted",
+    }
+
+
+def test_same_rsc_abort_before_shell_readiness_remains_fatal() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyOptionalBackgroundReadFailure({
+  method: "GET",
+  resourceType: "fetch",
+  failureKind: "aborted",
+  endpointFamily: "other",
+  rscRead: true,
+  patientShellRendered: false,
+  routeCriticalChecksPassed: true,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["optional"] is False
+
+
+def test_patient_core_failure_is_never_optional() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyOptionalBackgroundReadFailure({
+  method: "GET",
+  resourceType: "xhr",
+  failureKind: "aborted",
+  endpointFamily: "patient_core",
+  rscRead: false,
+  patientShellRendered: true,
+  routeCriticalChecksPassed: true,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["optional"] is False
+
+
+def test_http_5xx_is_never_optional() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyOptionalBackgroundReadFailure({
+  method: "GET",
+  resourceType: "fetch",
+  failureKind: "aborted",
+  endpointFamily: "patient_clinical",
+  rscRead: false,
+  patientShellRendered: true,
+  routeCriticalChecksPassed: true,
+  httpStatus: 500,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["optional"] is False
+
+
 def test_genuine_static_resource_failure_remains_fatal() -> None:
     result = run_browser_policy(
         """
@@ -377,6 +464,22 @@ process.stdout.write(JSON.stringify(result));
     assert result["category"] == "request_failed_static_resource"
     assert result["unexpected"] is True
 
+    optional = run_browser_policy(
+        """
+const result = classifyOptionalBackgroundReadFailure({
+  method: "GET",
+  resourceType: "script",
+  failureKind: "aborted",
+  endpointFamily: "static_resource",
+  rscRead: false,
+  patientShellRendered: true,
+  routeCriticalChecksPassed: true,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+    assert optional["optional"] is False
+
 
 def test_page_error_remains_fatal() -> None:
     result = run_browser_policy(
@@ -395,7 +498,7 @@ def test_console_error_remains_fatal() -> None:
 
 
 def test_browser_context_and_authenticated_shell_are_deterministic() -> None:
-    context_close = "await context.close().catch(() => {})"
+    context_close = "await context.close()"
     browser_close = "if (browser) await browser.close().catch(() => {})"
 
     assert 'window.localStorage.setItem(key, value)' in SMOKE.NODE_SMOKE
@@ -403,7 +506,53 @@ def test_browser_context_and_authenticated_shell_are_deterministic() -> None:
     assert "waitForRouteReadsToSettle" in SMOKE.NODE_SMOKE
     assert "page.removeAllListeners()" in SMOKE.NODE_SMOKE
     assert context_close in SMOKE.NODE_SMOKE
+    assert "browserContextClosed = true" in SMOKE.NODE_SMOKE
+    assert "browserContextClosed = false" in SMOKE.NODE_SMOKE
     assert SMOKE.NODE_SMOKE.index(context_close) < SMOKE.NODE_SMOKE.index(browser_close)
+
+
+def test_context_cleanup_failure_remains_fatal(monkeypatch, capsys) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(browser_context_closed=False),
+    )
+
+    assert code == 1
+    assert "browser_context_closed: no" in output
+
+
+def test_write_request_remains_fatal(monkeypatch, capsys) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(failed_checkpoint=20, write_request=True),
+    )
+
+    assert code == 1
+    assert "checkpoint_21 No POST, PUT, PATCH or DELETE request issued: fail" in output
+    assert "write_request_issued: yes" in output
+
+
+def test_optional_background_output_is_fixed_and_redacted(monkeypatch, capsys) -> None:
+    code, output = output_for(
+        monkeypatch,
+        capsys,
+        smoke_result(
+            optional_background_read_failure=True,
+            optional_background_endpoint_family="other",
+            optional_background_failure_type="request_aborted",
+        ),
+    )
+
+    assert code == 0
+    assert "optional_background_read_failure: yes" in output
+    assert "optional_background_endpoint_family: other" in output
+    assert "optional_background_failure_type: request_aborted" in output
+    for private_value in PRIVATE_VALUES:
+        assert private_value not in output
+    assert "http://" not in output
+    assert "https://" not in output
 
 
 def test_fixed_browser_classifications_do_not_expose_event_details(
