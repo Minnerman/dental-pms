@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
 from pathlib import Path
 
 
@@ -39,6 +41,10 @@ def smoke_result(
     frontend_server_error: bool = False,
     server_exit: bool = False,
     write_request: bool = False,
+    browser_event_category: str = "none",
+    browser_event_stage: str = "unknown",
+    expected_navigation_cancellation: bool = False,
+    browser_context_closed: bool = True,
 ) -> dict[str, object]:
     checkpoints = [True] * len(SMOKE.CHECKPOINTS)
     if failed_checkpoint is not None:
@@ -60,6 +66,10 @@ def smoke_result(
         "frontend_server_error": frontend_server_error,
         "server_exit": server_exit,
         "write_request": write_request,
+        "browser_event_category": browser_event_category,
+        "browser_event_stage": browser_event_stage,
+        "expected_navigation_cancellation": expected_navigation_cancellation,
+        "browser_context_closed": browser_context_closed,
         "patient_name": PRIVATE_VALUES[0],
         "patient_id": PRIVATE_VALUES[1],
         "token": PRIVATE_VALUES[2],
@@ -73,6 +83,17 @@ def output_for(monkeypatch, capsys, result: dict[str, object]) -> tuple[int, str
     monkeypatch.setattr(SMOKE, "run_smoke", lambda: result)
     code = SMOKE.main()
     return code, capsys.readouterr().out
+
+
+def run_browser_policy(body: str) -> dict[str, object]:
+    completed = subprocess.run(
+        ["node", "-e", SMOKE.BROWSER_POLICY_JS + "\n" + body],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0
+    return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
 def test_successful_200_404_404_sequence_is_checkpoint_only(
@@ -226,3 +247,178 @@ def test_embedded_browser_smoke_blocks_all_write_methods() -> None:
     assert 'new Set(["POST", "PUT", "PATCH", "DELETE"])' in SMOKE.NODE_SMOKE
     assert 'page.route("**/*"' in SMOKE.NODE_SMOKE
     assert 'route.abort("blockedbyclient")' in SMOKE.NODE_SMOKE
+
+
+def test_delayed_safe_get_settles_before_route_transition() -> None:
+    result = run_browser_policy(
+        """
+(async () => {
+  const pending = new Set(["safe-read"]);
+  let clock = 0;
+  const settled = await waitForRouteReadsToSettle({
+    pending,
+    now: () => clock,
+    delay: async (milliseconds) => {
+      clock += milliseconds;
+      if (clock >= 150) pending.clear();
+    },
+    maxWaitMs: 1_000,
+    stableMs: 100,
+  });
+  process.stdout.write(JSON.stringify({settled, clock}));
+})().catch(() => process.exit(1));
+"""
+    )
+
+    assert result["settled"] is True
+    assert result["clock"] >= 250
+
+
+def test_expected_navigation_cancellation_is_classified_safely() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyRouteRequestFailure({
+  method: "GET",
+  resourceType: "fetch",
+  failureKind: "aborted",
+  startedStage: "valid_patient_settling",
+  currentStage: "missing_patient_navigation",
+  safeRead: true,
+  superseded: false,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result == {
+        "category": "request_failed_navigation_abort",
+        "unexpected": False,
+        "expectedCancellation": True,
+    }
+
+
+def test_superseded_safe_read_cancellation_is_classified_safely() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyRouteRequestFailure({
+  method: "GET",
+  resourceType: "xhr",
+  failureKind: "failed",
+  startedStage: "valid_patient_settling",
+  currentStage: "valid_patient_settling",
+  safeRead: true,
+  superseded: true,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["category"] == "request_failed_navigation_abort"
+    assert result["unexpected"] is False
+
+
+def test_completed_navigation_proves_late_safe_read_cancellation() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyRouteRequestFailure({
+  method: "GET",
+  resourceType: "fetch",
+  failureKind: "aborted",
+  startedStage: "missing_patient_navigation",
+  currentStage: "missing_patient_navigation",
+  safeRead: true,
+  superseded: false,
+  navigationCompleted: true,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["category"] == "request_failed_navigation_abort"
+    assert result["unexpected"] is False
+
+
+def test_genuine_failed_api_read_remains_fatal() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyRouteRequestFailure({
+  method: "GET",
+  resourceType: "fetch",
+  failureKind: "other",
+  startedStage: "valid_patient_settling",
+  currentStage: "valid_patient_settling",
+  safeRead: true,
+  superseded: false,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["category"] == "request_failed_safe_api_read"
+    assert result["unexpected"] is True
+
+
+def test_genuine_static_resource_failure_remains_fatal() -> None:
+    result = run_browser_policy(
+        """
+const result = classifyRouteRequestFailure({
+  method: "GET",
+  resourceType: "script",
+  failureKind: "other",
+  startedStage: "missing_patient_navigation",
+  currentStage: "missing_patient_navigation",
+  safeRead: false,
+  superseded: false,
+});
+process.stdout.write(JSON.stringify(result));
+"""
+    )
+
+    assert result["category"] == "request_failed_static_resource"
+    assert result["unexpected"] is True
+
+
+def test_page_error_remains_fatal() -> None:
+    result = run_browser_policy(
+        "process.stdout.write(JSON.stringify(classifyRoutePageError()));"
+    )
+
+    assert result == {"category": "page_error", "unexpected": True}
+
+
+def test_console_error_remains_fatal() -> None:
+    result = run_browser_policy(
+        'process.stdout.write(JSON.stringify(classifyRouteConsoleEvent("error", "synthetic")));'
+    )
+
+    assert result == {"category": "console_other", "unexpected": True}
+
+
+def test_browser_context_and_authenticated_shell_are_deterministic() -> None:
+    context_close = "await context.close().catch(() => {})"
+    browser_close = "if (browser) await browser.close().catch(() => {})"
+
+    assert 'window.localStorage.setItem(key, value)' in SMOKE.NODE_SMOKE
+    assert '.getByTestId("patient-header")' in SMOKE.NODE_SMOKE
+    assert "waitForRouteReadsToSettle" in SMOKE.NODE_SMOKE
+    assert "page.removeAllListeners()" in SMOKE.NODE_SMOKE
+    assert context_close in SMOKE.NODE_SMOKE
+    assert SMOKE.NODE_SMOKE.index(context_close) < SMOKE.NODE_SMOKE.index(browser_close)
+
+
+def test_fixed_browser_classifications_do_not_expose_event_details(
+    monkeypatch, capsys
+) -> None:
+    result = smoke_result(
+        browser_event_category="request_failed_navigation_abort",
+        browser_event_stage="missing_patient_navigation",
+        expected_navigation_cancellation=True,
+    )
+    code, output = output_for(monkeypatch, capsys, result)
+
+    assert code == 0
+    assert "browser_event_category: request_failed_navigation_abort" in output
+    assert "browser_event_stage: missing_patient_navigation" in output
+    assert "expected_navigation_cancellation: yes" in output
+    for private_value in PRIVATE_VALUES:
+        assert private_value not in output

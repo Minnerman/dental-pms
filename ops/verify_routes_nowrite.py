@@ -36,13 +36,122 @@ CHECKPOINTS = (
 )
 
 
+BROWSER_POLICY_JS = r"""
+function classifyRouteRequestFailure({
+  method,
+  resourceType,
+  failureKind,
+  startedStage,
+  currentStage,
+  safeRead,
+  superseded,
+  navigationCompleted,
+}) {
+  const abortLike = ["aborted", "failed"].includes(failureKind);
+  const transitioned =
+    startedStage !== "unknown" && startedStage !== currentStage;
+  const routeTransition = [
+    "missing_patient_navigation",
+    "missing_clinical_navigation",
+  ].includes(currentStage);
+  const expectedCancellation = Boolean(
+    method === "GET" &&
+      abortLike &&
+      ((transitioned && routeTransition) ||
+        (safeRead && superseded) ||
+        (safeRead && navigationCompleted))
+  );
+  if (expectedCancellation) {
+    return {
+      category: "request_failed_navigation_abort",
+      unexpected: false,
+      expectedCancellation: true,
+    };
+  }
+  if (safeRead) {
+    return {
+      category: "request_failed_safe_api_read",
+      unexpected: true,
+      expectedCancellation: false,
+    };
+  }
+  if (["document", "script", "stylesheet", "image", "font"].includes(resourceType)) {
+    return {
+      category: "request_failed_static_resource",
+      unexpected: true,
+      expectedCancellation: false,
+    };
+  }
+  return {
+    category: "request_failed_other",
+    unexpected: true,
+    expectedCancellation: false,
+  };
+}
+
+function classifyRouteConsoleEvent(messageType, text) {
+  if (messageType !== "error") return null;
+  if (text.startsWith("Warning: Extra attributes from the server")) {
+    return {category: "console_extra_attributes", unexpected: false};
+  }
+  if (
+    (text.includes("Failed to load resource") && text.includes("404")) ||
+    text.includes("NEXT_NOT_FOUND")
+  ) {
+    return {category: "console_expected_not_found", unexpected: false};
+  }
+  return {category: "console_other", unexpected: true};
+}
+
+function classifyRoutePageError() {
+  return {category: "page_error", unexpected: true};
+}
+
+async function waitForRouteReadsToSettle({
+  pending,
+  now = Date.now,
+  delay,
+  maxWaitMs = 10_000,
+  stableMs = 500,
+}) {
+  const deadline = now() + maxWaitMs;
+  let stableSince = null;
+  while (now() < deadline) {
+    if (pending.size === 0) {
+      if (stableSince === null) stableSince = now();
+      if (now() - stableSince >= stableMs) return true;
+    } else {
+      stableSince = null;
+    }
+    await delay(50);
+  }
+  return false;
+}
+"""
+
+
 NODE_SMOKE = r"""
 const { chromium } = require("@playwright/test");
+
+""" + BROWSER_POLICY_JS + r"""
 
 const checkpoints = Array(22).fill(false);
 const writeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 let browser;
+let context;
 let page;
+let browserStage = "unknown";
+let firstUnexpectedBrowserEvent = "none";
+let firstUnexpectedBrowserStage = "unknown";
+let firstBenignBrowserEvent = "none";
+let firstBenignBrowserStage = "unknown";
+let expectedNavigationCancellation = false;
+let expectedNavigationCancellationStage = "unknown";
+let browserContextClosed = false;
+let validPatientPath = "";
+let navigationInProgress = false;
+const deferredNavigationFailures = [];
+let deferredNotFoundResponses = 0;
 let unexpectedApi = false;
 let unexpectedBrowser = false;
 let unexpectedRedirect = false;
@@ -57,6 +166,69 @@ let validFrontendStatus = "not_checked_safely";
 let missingBackendStatus = "unknown";
 let missingFrontendState = "unknown";
 let missingClinicalState = "unknown";
+
+function recordBrowserEvent(category, unexpected) {
+  if (unexpected) {
+    if (firstUnexpectedBrowserEvent === "none") {
+      firstUnexpectedBrowserEvent = category;
+      firstUnexpectedBrowserStage = browserStage;
+    }
+    unexpectedBrowser = true;
+    return;
+  }
+  if (category === "request_failed_navigation_abort") {
+    expectedNavigationCancellation = true;
+    if (expectedNavigationCancellationStage === "unknown") {
+      expectedNavigationCancellationStage = browserStage;
+    }
+  }
+  if (firstBenignBrowserEvent === "none") {
+    firstBenignBrowserEvent = category;
+    firstBenignBrowserStage = browserStage;
+  }
+}
+
+function browserEventCategory() {
+  if (firstUnexpectedBrowserEvent !== "none") return firstUnexpectedBrowserEvent;
+  if (expectedNavigationCancellation) return "request_failed_navigation_abort";
+  return firstBenignBrowserEvent;
+}
+
+function browserEventStage() {
+  if (firstUnexpectedBrowserEvent !== "none") return firstUnexpectedBrowserStage;
+  if (expectedNavigationCancellation) return expectedNavigationCancellationStage;
+  return firstBenignBrowserStage;
+}
+
+function resolveNavigationFailures(navigationCompleted) {
+  for (const failure of deferredNavigationFailures.splice(0)) {
+    const classification = classifyRouteRequestFailure({
+      method: "GET",
+      resourceType: failure.resourceType,
+      failureKind: failure.kind,
+      startedStage: failure.startedStage,
+      currentStage: browserStage,
+      safeRead: true,
+      superseded: false,
+      navigationCompleted,
+    });
+    recordBrowserEvent(
+      classification.category,
+      classification.unexpected
+    );
+  }
+}
+
+function resolveNotFoundResponses(navigationCompleted) {
+  if (deferredNotFoundResponses === 0) return;
+  if (navigationCompleted) {
+    recordBrowserEvent("console_expected_not_found", false);
+  } else {
+    unexpectedApi = true;
+    recordBrowserEvent("request_failed_safe_api_read", true);
+  }
+  deferredNotFoundResponses = 0;
+}
 
 async function checkedFetch(base, path, options = {}, expectedStatuses = [200]) {
   const method = String(options.method || "GET").toUpperCase();
@@ -95,19 +267,28 @@ async function frontendReady(base) {
 }
 
 async function renderNotFound(base, path, expectedState) {
-  const navigation = await page.goto(base + path, {
-    waitUntil: "domcontentloaded",
-  });
-  const status = navigation ? navigation.status() : 0;
-  if ([301, 302, 303, 307, 308].includes(status)) unexpectedRedirect = true;
-  if (status >= 500) frontendServerError = true;
-  if (![200, 404].includes(status)) return false;
-  await page
-    .getByText("This page could not be found.", {exact: true})
-    .waitFor({state: "visible", timeout: 20_000});
-  if (expectedState === "patient") missingFrontendState = "not_found";
-  if (expectedState === "clinical") missingClinicalState = "not_found";
-  return true;
+  navigationInProgress = true;
+  let rendered = false;
+  try {
+    const navigation = await page.goto(base + path, {
+      waitUntil: "domcontentloaded",
+    });
+    const status = navigation ? navigation.status() : 0;
+    if ([301, 302, 303, 307, 308].includes(status)) unexpectedRedirect = true;
+    if (status >= 500) frontendServerError = true;
+    if (![200, 404].includes(status)) return false;
+    await page
+      .getByText("This page could not be found.", {exact: true})
+      .waitFor({state: "visible", timeout: 20_000});
+    if (expectedState === "patient") missingFrontendState = "not_found";
+    if (expectedState === "clinical") missingClinicalState = "not_found";
+    rendered = true;
+    return true;
+  } finally {
+    navigationInProgress = false;
+    resolveNavigationFailures(rendered);
+    resolveNotFoundResponses(rendered);
+  }
 }
 
 (async () => {
@@ -218,7 +399,7 @@ async function renderNotFound(base, path, expectedState) {
   checkpoints[11] = missingBackend.status === 404;
 
   browser = await chromium.launch({headless: true});
-  const context = await browser.newContext({
+  context = await browser.newContext({
     extraHTTPHeaders: {Authorization: "Bearer " + token},
   });
   await context.addCookies([
@@ -229,31 +410,111 @@ async function renderNotFound(base, path, expectedState) {
       sameSite: "Lax",
     },
   ]);
+  await context.addInitScript(
+    ({key, value}) => window.localStorage.setItem(key, value),
+    {key: "dental_pms_token", value: token}
+  );
   page = await context.newPage();
+  const pendingValidReads = new Set();
+  const completedSafeReadKeys = new Set();
+  const deferredSafeReadFailures = [];
+  const requestStartStages = new WeakMap();
+  let trackValidReads = false;
+
+  const safeReadKey = (request) => {
+    try {
+      const parsed = new URL(request.url());
+      return parsed.pathname + parsed.search;
+    } catch {
+      return "";
+    }
+  };
+  const isSafeRead = (request) => {
+    if (request.method() !== "GET") return false;
+    const key = safeReadKey(request);
+    return Boolean(
+      key.startsWith("/api/") ||
+        ["fetch", "xhr"].includes(request.resourceType())
+    );
+  };
+  const failureKind = (request) => {
+    const failure = request.failure();
+    const text = failure && failure.errorText ? failure.errorText : "";
+    if (text.includes("ERR_ABORTED")) return "aborted";
+    if (text.includes("ERR_FAILED")) return "failed";
+    return "other";
+  };
+
+  page.on("request", (request) => {
+    let observedStage = browserStage;
+    if (
+      validPatientPath &&
+      ["missing_patient_navigation", "missing_clinical_navigation"].includes(
+        browserStage
+      )
+    ) {
+      try {
+        const framePath = new URL(request.frame().url()).pathname;
+        if (framePath === validPatientPath) {
+          observedStage = "valid_patient_settling";
+        }
+      } catch {}
+    }
+    requestStartStages.set(request, observedStage);
+    if (trackValidReads && request.method() === "GET") {
+      pendingValidReads.add(request);
+    }
+  });
+  page.on("requestfinished", (request) => {
+    pendingValidReads.delete(request);
+    if (isSafeRead(request)) completedSafeReadKeys.add(safeReadKey(request));
+  });
   page.on("pageerror", () => {
-    unexpectedBrowser = true;
+    const classification = classifyRoutePageError();
+    recordBrowserEvent(classification.category, classification.unexpected);
   });
   page.on("console", (message) => {
-    const text = message.text();
-    const benignExtraAttributes =
-      message.type() === "error" &&
-      text.startsWith("Warning: Extra attributes from the server");
-    const benignExpectedNotFound =
-      message.type() === "error" &&
-      ((text.includes("Failed to load resource") && text.includes("404")) ||
-        text.includes("NEXT_NOT_FOUND"));
-    if (
-      message.type() === "error" &&
-      !benignExtraAttributes &&
-      !benignExpectedNotFound
-    ) {
-      unexpectedBrowser = true;
+    const classification = classifyRouteConsoleEvent(
+      message.type(),
+      message.text()
+    );
+    if (classification) {
+      recordBrowserEvent(
+        classification.category,
+        classification.unexpected
+      );
     }
   });
   page.on("response", (response) => {
     const status = response.status();
+    const request = response.request();
     if ([301, 302, 303, 307, 308].includes(status)) {
       unexpectedRedirect = true;
+    }
+    if (
+      status >= 400 &&
+      ["script", "stylesheet", "image", "font"].includes(
+        request.resourceType()
+      )
+    ) {
+      recordBrowserEvent("request_failed_static_resource", true);
+    }
+    if (
+      status >= 400 &&
+      ["fetch", "xhr"].includes(request.resourceType())
+    ) {
+      if (
+        status === 404 &&
+        navigationInProgress &&
+        ["missing_patient_navigation", "missing_clinical_navigation"].includes(
+          browserStage
+        )
+      ) {
+        deferredNotFoundResponses += 1;
+      } else {
+        unexpectedApi = true;
+        recordBrowserEvent("request_failed_safe_api_read", true);
+      }
     }
     if (status >= 500) {
       frontendServerError = true;
@@ -261,15 +522,46 @@ async function renderNotFound(base, path, expectedState) {
     }
   });
   page.on("requestfailed", (request) => {
-    const failure = request.failure();
-    const navigationAbort = Boolean(
-      failure &&
-        failure.errorText &&
-        failure.errorText.includes("ERR_ABORTED")
-    );
-    if (!navigationAbort && !writeMethods.has(request.method())) {
-      unexpectedBrowser = true;
+    pendingValidReads.delete(request);
+    if (writeMethods.has(request.method())) return;
+    const safeRead = isSafeRead(request);
+    const kind = failureKind(request);
+    if (safeRead && navigationInProgress && kind === "aborted") {
+      deferredNavigationFailures.push({
+        kind,
+        resourceType: request.resourceType(),
+        startedStage: requestStartStages.get(request) || "unknown",
+      });
+      return;
     }
+    if (
+      safeRead &&
+      ["valid_patient_navigation", "valid_patient_settling"].includes(
+        browserStage
+      )
+    ) {
+      deferredSafeReadFailures.push({
+        key: safeReadKey(request),
+        kind,
+        resourceType: request.resourceType(),
+        startedStage: requestStartStages.get(request) || "unknown",
+      });
+      return;
+    }
+    const classification = classifyRouteRequestFailure({
+      method: request.method(),
+      resourceType: request.resourceType(),
+      failureKind: kind,
+      startedStage: requestStartStages.get(request) || "unknown",
+      currentStage: browserStage,
+      safeRead,
+      superseded: false,
+      navigationCompleted: false,
+    });
+    recordBrowserEvent(
+      classification.category,
+      classification.unexpected
+    );
   });
   await page.route("**/*", async (route) => {
     if (writeMethods.has(route.request().method())) {
@@ -281,8 +573,11 @@ async function renderNotFound(base, path, expectedState) {
   });
 
   if (patient) {
+    browserStage = "valid_patient_navigation";
+    trackValidReads = true;
+    validPatientPath = "/patients/" + patient.id;
     const validNavigation = await page.goto(
-      frontendBase + "/patients/" + patient.id,
+      frontendBase + validPatientPath,
       {waitUntil: "domcontentloaded"}
     );
     validFrontendStatus = validNavigation
@@ -291,14 +586,45 @@ async function renderNotFound(base, path, expectedState) {
     checkpoints[9] = Boolean(
       validNavigation && validNavigation.status() === 200
     );
-    await page.locator("body").waitFor({state: "visible", timeout: 20_000});
+    await page
+      .getByTestId("patient-header")
+      .waitFor({state: "visible", timeout: 20_000});
     const validNotFound = await page
       .getByText("This page could not be found.", {exact: true})
       .isVisible()
       .catch(() => false);
     checkpoints[10] = !validNotFound;
+    browserStage = "valid_patient_settling";
+    const settled = await waitForRouteReadsToSettle({
+      pending: pendingValidReads,
+      delay: (milliseconds) => page.waitForTimeout(milliseconds),
+    });
+    trackValidReads = false;
+    for (const failure of deferredSafeReadFailures) {
+      const classification = classifyRouteRequestFailure({
+        method: "GET",
+        resourceType: failure.resourceType,
+        failureKind: failure.kind,
+        startedStage: failure.startedStage,
+        currentStage: browserStage,
+        safeRead: true,
+        superseded: Boolean(
+          failure.key && completedSafeReadKeys.has(failure.key)
+        ),
+        navigationCompleted: false,
+      });
+      recordBrowserEvent(
+        classification.category,
+        classification.unexpected
+      );
+    }
+    if (!settled) recordBrowserEvent("request_failed_other", true);
+    if (unexpectedBrowser || unexpectedApi) {
+      throw new Error("valid patient page did not settle safely");
+    }
   }
 
+  browserStage = "missing_patient_navigation";
   checkpoints[12] = await renderNotFound(
     frontendBase,
     "/patients/" + impossible,
@@ -314,6 +640,7 @@ async function renderNotFound(base, path, expectedState) {
   );
   await missingClinicalBackend.arrayBuffer();
   checkpoints[14] = missingClinicalBackend.status === 404;
+  browserStage = "missing_clinical_navigation";
   checkpoints[15] = await renderNotFound(
     frontendBase,
     "/patients/" + impossible + "/clinical",
@@ -323,6 +650,7 @@ async function renderNotFound(base, path, expectedState) {
 })()
   .catch(() => {})
   .finally(async () => {
+    browserStage = "final_health";
     const port = process.env.SMOKE_FRONTEND_PORT || "3000";
     const frontendBase = "http://127.0.0.1:" + port;
     try {
@@ -338,6 +666,11 @@ async function renderNotFound(base, path, expectedState) {
     checkpoints[18] = !unexpectedApi && !backendForbidden && !frontendServerError;
     checkpoints[19] = !unexpectedBrowser;
     checkpoints[20] = !writeRequest;
+    if (context) {
+      if (page) page.removeAllListeners();
+      await context.close().catch(() => {});
+      browserContextClosed = true;
+    }
     if (browser) await browser.close().catch(() => {});
     process.stdout.write(
       JSON.stringify({
@@ -356,6 +689,10 @@ async function renderNotFound(base, path, expectedState) {
         frontend_server_error: frontendServerError,
         server_exit: serverExit,
         write_request: writeRequest,
+        browser_event_category: browserEventCategory(),
+        browser_event_stage: browserEventStage(),
+        expected_navigation_cancellation: expectedNavigationCancellation,
+        browser_context_closed: browserContextClosed,
       }) + "\n"
     );
     process.exit(
@@ -427,6 +764,10 @@ def _empty_result(image_classification: str = "unknown") -> dict[str, Any]:
         "frontend_server_error": False,
         "server_exit": True,
         "write_request": False,
+        "browser_event_category": "none",
+        "browser_event_stage": "unknown",
+        "expected_navigation_cancellation": False,
+        "browser_context_closed": False,
     }
 
 
@@ -476,6 +817,37 @@ def _normalise_result(payload: object) -> dict[str, Any]:
         "frontend_server_error": payload.get("frontend_server_error") is True,
         "server_exit": payload.get("server_exit") is not False,
         "write_request": payload.get("write_request") is True,
+        "browser_event_category": choice(
+            "browser_event_category",
+            {
+                "page_error",
+                "console_expected_not_found",
+                "console_extra_attributes",
+                "console_other",
+                "request_failed_navigation_abort",
+                "request_failed_safe_api_read",
+                "request_failed_static_resource",
+                "request_failed_other",
+                "none",
+            },
+            "none",
+        ),
+        "browser_event_stage": choice(
+            "browser_event_stage",
+            {
+                "valid_patient_navigation",
+                "valid_patient_settling",
+                "missing_patient_navigation",
+                "missing_clinical_navigation",
+                "final_health",
+                "unknown",
+            },
+            "unknown",
+        ),
+        "expected_navigation_cancellation": (
+            payload.get("expected_navigation_cancellation") is True
+        ),
+        "browser_context_closed": payload.get("browser_context_closed") is True,
     }
 
 
@@ -574,6 +946,13 @@ def main() -> int:
     print("temporary_server_exit: " + _yes_no(result["server_exit"]))
     print("unexpected_api_failure: " + _yes_no(result["unexpected_api"]))
     print("unexpected_browser_failure: " + _yes_no(result["unexpected_browser"]))
+    print("browser_event_category: " + result["browser_event_category"])
+    print("browser_event_stage: " + result["browser_event_stage"])
+    print(
+        "expected_navigation_cancellation: "
+        + _yes_no(result["expected_navigation_cancellation"])
+    )
+    print("browser_context_closed: " + _yes_no(result["browser_context_closed"]))
     print("write_request_issued: " + _yes_no(result["write_request"]))
 
     passed = (
@@ -592,6 +971,7 @@ def main() -> int:
         and not result["server_exit"]
         and not result["unexpected_api"]
         and not result["unexpected_browser"]
+        and result["browser_context_closed"]
         and not result["write_request"]
     )
     return 0 if passed else 1
