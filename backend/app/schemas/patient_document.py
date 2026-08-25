@@ -1,14 +1,24 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.actor import ActorOut
 
 
 class PatientDocumentCreate(BaseModel):
-    template_id: int
-    title: Optional[str] = None
+    template_id: int = Field(gt=0)
+    title: Optional[str] = Field(default=None, max_length=200)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Document title must not be blank")
+        return normalized
 
 
 class PatientDocumentOut(BaseModel):

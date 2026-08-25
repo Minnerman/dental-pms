@@ -48,8 +48,13 @@ def save_bytes(content: bytes) -> tuple[str, int]:
     _ensure_dir()
     storage_key = uuid.uuid4().hex
     path = _resolve_path(storage_key)
-    with path.open("wb") as handle:
-        handle.write(content)
+    try:
+        with path.open("wb") as handle:
+            handle.write(content)
+    except Exception:
+        if path.exists():
+            path.unlink()
+        raise
     return storage_key, len(content)
 
 
@@ -62,3 +67,33 @@ def delete_file(storage_key: str) -> None:
     path = _resolve_path(storage_key)
     if path.exists():
         path.unlink()
+
+
+def file_exists(storage_key: str) -> bool:
+    return _resolve_path(storage_key).is_file()
+
+
+def stage_delete(storage_key: str) -> str | None:
+    """Move a file aside so a failed database delete can restore it."""
+    path = _resolve_path(storage_key)
+    if not path.exists():
+        return None
+    staged_key = f"delete-{uuid.uuid4().hex}.pending"
+    path.replace(_resolve_path(staged_key))
+    return staged_key
+
+
+def restore_staged_delete(staged_key: str | None, storage_key: str) -> None:
+    if staged_key is None:
+        return
+    staged_path = _resolve_path(staged_key)
+    if staged_path.exists():
+        staged_path.replace(_resolve_path(storage_key))
+
+
+def finalize_staged_delete(staged_key: str | None) -> None:
+    if staged_key is None:
+        return
+    staged_path = _resolve_path(staged_key)
+    if staged_path.exists():
+        staged_path.unlink()

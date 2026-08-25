@@ -3,29 +3,21 @@
 R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
 
 ## Current continuity / handover
-- Deployment batch 5 was rolled back on 24 August 2026 after the patient-route
-  verifier reported one unexpected-browser checkpoint failure. Production is
-  healthy and stable on the unchanged rollback runtime
-  `7c9a6883fcdef7090161da1d094a1b1d652824e7`.
-- The batch-5 candidate passed the deterministic notes, clinical, recall,
-  patient-record, patient-ledger, and appointment no-write checks before the
-  route verifier reported `21/22`. PR #703 is merged but is not live.
-- The checkpoint-20 investigation classified the failure as a verifier
-  browser-state and route-settling defect, not a candidate product regression.
-  Immediate route transitions reproduced the same cancellation on isolated
-  control and candidate stacks; an authenticated, bounded-settling sequence
-  passed control `5/5` and candidate `10/10` without a genuine page, console,
-  API, or resource failure.
-- PR #704 is the active verifier-only reliability slice. It initialises the
-  authenticated browser state, waits for the actual valid-patient shell and
-  bounded safe-read settling, keeps genuine failures strict, and closes browser
-  contexts deterministically. It does not change product code or deploy.
+- Deployment batch 5 passed on 25 August 2026. Production is healthy and stable
+  on runtime `90b1f29c2c9685f2885aa61b2d0874c447e43452`.
+- PR #703 clinical notes reliability is live. The deterministic notes,
+  clinical, recall, patient-record, patient-ledger, appointment, and corrected
+  patient-route no-write checks passed during deployment.
+- Patient documents and attachments reliability is the active feature-sized
+  slice. It includes deterministic document no-write deployment verification
+  and is intended to be the final broad reliability slice before practical
+  completion audit and practice UAT.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
   merged code under a separate deployment instruction.
-- R4 research remains blocked. R4 writes are permanently prohibited, and the
-  deferred finance and invoice/payment/staging import work remains blocked.
+- R4 investigation remains blocked. R4 writes are permanently prohibited, and
+  the deferred finance and invoice/payment/staging import work remains blocked.
 
 ## Historical pause / handover (superseded)
 - The authoritative continuity baseline is `origin/master@26e2dc14d9af0620388b9b1db9ba25a522fa434e`.

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import require_capabilities, require_roles
 from app.models.document_template import DocumentTemplate, DocumentTemplateKind
 from app.models.user import User
 from app.schemas.document_template import (
@@ -24,6 +24,16 @@ router = APIRouter(prefix="/document-templates", tags=["document-templates"])
 def sanitize_filename(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
     return cleaned or "template"
+
+
+def normalize_request_id(value: str | None) -> str | None:
+    request_id = value.strip() if value else None
+    if request_id and len(request_id) > 120:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request identifier is invalid",
+        )
+    return request_id
 
 
 def get_template_or_404(
@@ -49,7 +59,7 @@ def template_audit_payload(template: DocumentTemplate) -> dict:
 @router.get("", response_model=list[DocumentTemplateOut])
 def list_document_templates(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capabilities("documents.download")),
     kind: DocumentTemplateKind | None = Query(default=None),
     include_inactive: bool = Query(default=False),
 ):
@@ -99,7 +109,7 @@ def create_document_template(
 def get_document_template(
     template_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capabilities("documents.download")),
 ):
     return get_template_or_404(db, template_id)
 
@@ -172,9 +182,10 @@ def download_document_template(
     template_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_capabilities("documents.download")),
     request_id: str | None = Header(default=None),
 ):
+    request_id = normalize_request_id(request_id)
     template = get_template_or_404(db, template_id)
     safe_name = sanitize_filename(template.name)
     filename = f"{safe_name}-{template.kind.value}.txt"

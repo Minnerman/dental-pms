@@ -6847,6 +6847,9 @@ export default function PatientDetailClient({
                           <PatientDocuments
                             patientId={patientId}
                             patientLastName={patient?.last_name ?? null}
+                            capabilities={capabilities}
+                            capabilityError={capabilityError}
+                            patientArchived={Boolean(patient?.deleted_at)}
                             embedded
                           />
                         </div>
@@ -6854,7 +6857,13 @@ export default function PatientDetailClient({
                       <details className="card" style={{ margin: 0 }}>
                         <summary className="label">Attachments</summary>
                         <div className="stack" style={{ marginTop: 12 }}>
-                          <PatientAttachments patientId={patientIdNum} embedded />
+                          <PatientAttachments
+                            patientId={patientIdNum}
+                            capabilities={capabilities}
+                            capabilityError={capabilityError}
+                            patientArchived={Boolean(patient?.deleted_at)}
+                            embedded
+                          />
                         </div>
                       </details>
                     </div>
@@ -10170,11 +10179,19 @@ export default function PatientDetailClient({
                   <PatientDocuments
                     patientId={patientId}
                     patientLastName={patient?.last_name ?? null}
+                    capabilities={capabilities}
+                    capabilityError={capabilityError}
+                    patientArchived={Boolean(patient?.deleted_at)}
                   />
                 </div>
               ) : tab === "attachments" ? (
                 <div className="stack">
-                  <PatientAttachments patientId={patientIdNum} />
+                  <PatientAttachments
+                    patientId={patientIdNum}
+                    capabilities={capabilities}
+                    capabilityError={capabilityError}
+                    patientArchived={Boolean(patient?.deleted_at)}
+                  />
                 </div>
               ) : tab === "notes" ? (
                 <div

@@ -107,7 +107,7 @@ test("patient document Save PDF to attachments shows in-flight state and success
   await expect(page.getByText("PDF saved to attachments.", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(attachButton).toBeEnabled({ timeout: 15_000 });
-  await expect(attachButton).toHaveText("Save PDF to attachments");
+  await expect(attachButton).toBeDisabled({ timeout: 15_000 });
+  await expect(attachButton).toHaveText("PDF in attachments");
   await page.unroute(routePattern);
 });

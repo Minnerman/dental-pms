@@ -56,16 +56,27 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 
 
 def require_capability(code: str):
+    return require_capabilities(code)
+
+
+def require_capabilities(*codes: str):
+    required = frozenset(codes)
+
     def _inner(
         db: Session = Depends(get_db),
         user: User = Depends(get_current_user),
     ) -> User:
-        allowed = db.scalar(
-            select(UserCapability)
-            .join(Capability, Capability.id == UserCapability.capability_id)
-            .where(UserCapability.user_id == user.id, Capability.code == code)
+        allowed = set(
+            db.scalars(
+                select(Capability.code)
+                .join(UserCapability, Capability.id == UserCapability.capability_id)
+                .where(
+                    UserCapability.user_id == user.id,
+                    Capability.code.in_(required),
+                )
+            )
         )
-        if not allowed:
+        if not required.issubset(allowed):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return user
 
