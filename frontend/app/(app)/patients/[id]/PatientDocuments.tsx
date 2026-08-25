@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
+import { safeDocumentError } from "@/lib/document-errors";
 
 type DocumentTemplateKind = "letter" | "prescription";
 
@@ -16,6 +17,7 @@ type DocumentTemplate = {
 type PatientDocument = {
   id: number;
   template_id?: number | null;
+  attachment_id?: number | null;
   title: string;
   rendered_content: string;
   created_at: string;
@@ -73,7 +75,7 @@ function filenameFromHeader(header: string | null) {
 }
 
 function sanitizeTemplateFilename(value: string) {
-  const cleaned = value.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const cleaned = value.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+|[._]+$/g, "");
   return cleaned || "template";
 }
 
@@ -100,8 +102,9 @@ function buildPatientDocumentDownloadFilename(
   responseDateHeader: string | null
 ) {
   const safeTitle = sanitizePatientDocumentFilename(doc.title);
+  const safePatientName = sanitizePatientDocumentFilename(patientLastName || "patient");
   const dateSuffix = dateSuffixFromHeader(responseDateHeader) ?? new Date().toISOString().slice(0, 10);
-  return `${safeTitle}_${patientLastName ?? ""}_${dateSuffix}.${extension}`;
+  return `${safeTitle}_${safePatientName}_${dateSuffix}.${extension}`;
 }
 
 function formatDocumentCreatedAt(value: string) {
@@ -115,10 +118,16 @@ export default function PatientDocuments({
   patientId,
   patientLastName,
   embedded = false,
+  capabilities,
+  capabilityError = null,
+  patientArchived = false,
 }: {
   patientId: string;
   patientLastName?: string | null;
   embedded?: boolean;
+  capabilities: string[] | null;
+  capabilityError?: string | null;
+  patientArchived?: boolean;
 }) {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -129,7 +138,6 @@ export default function PatientDocuments({
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -143,24 +151,26 @@ export default function PatientDocuments({
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
   const previewingDocumentRef = useRef(false);
   const savingDocumentRef = useRef(false);
-
-  const loadMe = useCallback(async () => {
-    try {
-      const res = await apiFetch("/api/me");
-      if (res.status === 401 || res.status === 403) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) return;
-      const data = (await res.json()) as { role: string };
-      setIsSuperadmin(data.role === "superadmin");
-    } catch {
-      setIsSuperadmin(false);
-    }
-  }, [router]);
+  const capabilitiesReady = capabilities !== null;
+  const canDownload = Boolean(capabilities?.includes("documents.download"));
+  const canUpload = Boolean(canDownload && capabilities?.includes("documents.upload"));
+  const canDelete = Boolean(canDownload && capabilities?.includes("documents.delete"));
+  const accessState = !capabilitiesReady
+    ? "loading"
+    : patientArchived
+      ? "archived"
+      : canDownload
+        ? canUpload || canDelete
+          ? "write"
+          : "read-only"
+        : "denied";
 
   const loadTemplates = useCallback(async () => {
+    if (!capabilitiesReady || !canDownload || patientArchived) {
+      setTemplates([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -177,7 +187,7 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to load templates (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to load templates."));
       }
       const data = (await res.json()) as DocumentTemplate[];
       setTemplates(data.filter((item) => item.is_active));
@@ -186,9 +196,14 @@ export default function PatientDocuments({
     } finally {
       setLoading(false);
     }
-  }, [kindFilter, router]);
+  }, [canDownload, capabilitiesReady, kindFilter, patientArchived, router]);
 
   const loadDocuments = useCallback(async () => {
+    if (!capabilitiesReady || !canDownload || patientArchived) {
+      setDocuments([]);
+      setLoadingDocs(false);
+      return;
+    }
     setLoadingDocs(true);
     setError(null);
     try {
@@ -199,7 +214,7 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to load documents (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to load documents."));
       }
       const data = (await res.json()) as PatientDocument[];
       setDocuments(data);
@@ -208,10 +223,16 @@ export default function PatientDocuments({
     } finally {
       setLoadingDocs(false);
     }
-  }, [patientId, router]);
+  }, [canDownload, capabilitiesReady, patientArchived, patientId, router]);
 
   async function downloadTemplate(template: DocumentTemplate, button?: HTMLButtonElement | null) {
-    if (!button || downloadingTemplateIds.has(template.id) || button.disabled) return;
+    if (
+      !canDownload ||
+      patientArchived ||
+      !button ||
+      downloadingTemplateIds.has(template.id) ||
+      button.disabled
+    ) return;
     downloadingTemplateIds.add(template.id);
     button.disabled = true;
     setError(null);
@@ -224,8 +245,7 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download template (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to download template."));
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -234,7 +254,7 @@ export default function PatientDocuments({
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
         buildTemplateDownloadFilename(template);
       link.href = url;
-      link.download = filename;
+      link.download = sanitizeTemplateFilename(filename.replace(/\.txt$/i, "")) + ".txt";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -251,7 +271,7 @@ export default function PatientDocuments({
   }
 
   async function previewDocument() {
-    if (previewingDocumentRef.current) {
+    if (!canUpload || patientArchived || previewingDocumentRef.current) {
       return;
     }
     if (!selectedTemplateId) {
@@ -275,8 +295,7 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to preview document (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to preview document."));
       }
       const data = (await res.json()) as {
         title: string;
@@ -297,7 +316,7 @@ export default function PatientDocuments({
   }
 
   async function saveDocument() {
-    if (savingDocumentRef.current) {
+    if (!canUpload || patientArchived || savingDocumentRef.current) {
       return;
     }
     if (!selectedTemplateId) {
@@ -310,6 +329,7 @@ export default function PatientDocuments({
     try {
       const res = await apiFetch(`/api/patients/${patientId}/documents`, {
         method: "POST",
+        headers: { "Request-Id": crypto.randomUUID() },
         body: JSON.stringify({
           template_id: selectedTemplateId,
           title: title || null,
@@ -320,13 +340,8 @@ export default function PatientDocuments({
         router.replace("/login");
         return;
       }
-      if (res.status === 403) {
-        setError("You don't have permission to do that. Please ask an administrator.");
-        return;
-      }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to save document (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to save document."));
       }
       setPreview(null);
       setUnknownFields([]);
@@ -341,7 +356,13 @@ export default function PatientDocuments({
   }
 
   async function downloadDocument(doc: PatientDocument, button?: HTMLButtonElement | null) {
-    if (!button || downloadingPatientDocumentTextIds.has(doc.id) || button.disabled) return;
+    if (
+      !canDownload ||
+      patientArchived ||
+      !button ||
+      downloadingPatientDocumentTextIds.has(doc.id) ||
+      button.disabled
+    ) return;
     downloadingPatientDocumentTextIds.add(doc.id);
     button.disabled = true;
     setError(null);
@@ -354,15 +375,15 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download document (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to download document."));
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const filename =
+      const filename = sanitizePatientDocumentFilename(
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        buildPatientDocumentDownloadFilename(doc, patientLastName, "txt", res.headers.get("Date"));
+        buildPatientDocumentDownloadFilename(doc, patientLastName, "txt", res.headers.get("Date"))
+      );
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -381,7 +402,13 @@ export default function PatientDocuments({
   }
 
   async function downloadDocumentPdf(doc: PatientDocument, button?: HTMLButtonElement | null) {
-    if (!button || downloadingPatientDocumentPdfIds.has(doc.id) || button.disabled) return;
+    if (
+      !canDownload ||
+      patientArchived ||
+      !button ||
+      downloadingPatientDocumentPdfIds.has(doc.id) ||
+      button.disabled
+    ) return;
     downloadingPatientDocumentPdfIds.add(doc.id);
     button.disabled = true;
     setError(null);
@@ -394,15 +421,15 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download PDF (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to download PDF."));
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const filename =
+      const filename = sanitizePatientDocumentFilename(
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        buildPatientDocumentDownloadFilename(doc, patientLastName, "pdf", res.headers.get("Date"));
+        buildPatientDocumentDownloadFilename(doc, patientLastName, "pdf", res.headers.get("Date"))
+      );
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -421,7 +448,13 @@ export default function PatientDocuments({
   }
 
   async function attachDocumentPdf(doc: PatientDocument, button?: HTMLButtonElement | null) {
-    if (!button || attachingPatientDocumentPdfIds.has(doc.id) || button.disabled) {
+    if (
+      !canUpload ||
+      patientArchived ||
+      !button ||
+      attachingPatientDocumentPdfIds.has(doc.id) ||
+      button.disabled
+    ) {
       return;
     }
     attachingPatientDocumentPdfIds.add(doc.id);
@@ -432,6 +465,7 @@ export default function PatientDocuments({
     try {
       const res = await apiFetch(`/api/patient-documents/${doc.id}/attach-pdf`, {
         method: "POST",
+        headers: { "Request-Id": crypto.randomUUID() },
       });
       if (res.status === 401) {
         clearToken();
@@ -439,23 +473,32 @@ export default function PatientDocuments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to attach PDF (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to attach PDF."));
       }
+      const attachment = (await res.json()) as { id: number };
+      setDocuments((current) =>
+        current.map((item) =>
+          item.id === doc.id ? { ...item, attachment_id: attachment.id } : item
+        )
+      );
       setAttachNotice("PDF saved to attachments.");
+      window.dispatchEvent(new Event("patient-attachments-changed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to attach PDF");
     } finally {
       attachingPatientDocumentPdfIds.delete(doc.id);
-      if (button?.isConnected) {
-        button.disabled = false;
-      }
       setAttachingDocumentPdfId(null);
     }
   }
 
   async function deleteDocument(doc: PatientDocument, button?: HTMLButtonElement | null) {
-    if (!button || deletingPatientDocumentIds.has(doc.id) || button.disabled) return;
+    if (
+      !canDelete ||
+      patientArchived ||
+      !button ||
+      deletingPatientDocumentIds.has(doc.id) ||
+      button.disabled
+    ) return;
     if (!confirm(`Delete "${doc.title}"?`)) return;
     deletingPatientDocumentIds.add(doc.id);
     button.disabled = true;
@@ -468,13 +511,8 @@ export default function PatientDocuments({
         router.replace("/login");
         return;
       }
-      if (res.status === 403) {
-        setError("You don't have permission to do that. Please ask an administrator.");
-        return;
-      }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to delete document (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to delete document."));
       }
       setDocuments((prev) => prev.filter((item) => item.id !== doc.id));
     } catch (err) {
@@ -493,15 +531,15 @@ export default function PatientDocuments({
   }, [loadTemplates]);
 
   useEffect(() => {
-    void loadMe();
-  }, [loadMe]);
-
-  useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
 
   const content = (
-    <div className="stack">
+    <div
+      className="stack"
+      data-testid="patient-documents-access"
+      data-state={accessState}
+    >
         <div className="row">
           <div>
             <h4 style={{ marginTop: 0 }}>Documents</h4>
@@ -509,22 +547,35 @@ export default function PatientDocuments({
               Download a letter or prescription template.
             </div>
           </div>
-          <select
-            className="input"
-            value={kindFilter}
-            onChange={(e) => setKindFilter(e.target.value as "all" | DocumentTemplateKind)}
-          >
-            <option value="all">All kinds</option>
-            <option value="letter">Letters</option>
-            <option value="prescription">Prescriptions</option>
-          </select>
+          {canDownload && !patientArchived && (
+            <select
+              className="input"
+              value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value as "all" | DocumentTemplateKind)}
+            >
+              <option value="all">All kinds</option>
+              <option value="letter">Letters</option>
+              <option value="prescription">Prescriptions</option>
+            </select>
+          )}
         </div>
 
+        {!capabilitiesReady && <div className="badge">Checking document permissions…</div>}
+        {capabilitiesReady && capabilityError && <div className="notice">{capabilityError}</div>}
+        {patientArchived && (
+          <div className="notice">Archived patient documents are unavailable.</div>
+        )}
+        {capabilitiesReady && !patientArchived && !canDownload && (
+          <div className="notice">You do not have permission to view patient documents.</div>
+        )}
+        {capabilitiesReady && canDownload && !canUpload && !patientArchived && (
+          <div className="notice">Patient documents are read-only.</div>
+        )}
         {loading && <div className="badge">Loading templates…</div>}
         {error && <div className="notice">{error}</div>}
         {attachNotice && <div className="badge">{attachNotice}</div>}
 
-        <div className="card" style={{ margin: 0 }}>
+        {canUpload && !patientArchived && <div className="card" style={{ margin: 0 }}>
           <div className="stack">
             <h4 style={{ marginTop: 0 }}>Generate document</h4>
             <div className="grid grid-2">
@@ -555,6 +606,7 @@ export default function PatientDocuments({
                   className="input"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  maxLength={200}
                   data-testid="patient-document-title-input"
                 />
               </div>
@@ -616,9 +668,9 @@ export default function PatientDocuments({
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <div className="card" style={{ margin: 0 }}>
+        {canDownload && !patientArchived && <div className="card" style={{ margin: 0 }}>
           <div className="stack">
             <h4 style={{ marginTop: 0 }}>Generated documents</h4>
             {loadingDocs && <div className="badge">Loading documents…</div>}
@@ -646,7 +698,7 @@ export default function PatientDocuments({
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button
+                      {canDownload && <button
                         className="btn btn-secondary"
                         type="button"
                         onClick={(event) =>
@@ -658,8 +710,8 @@ export default function PatientDocuments({
                         {downloadingDocumentTextId === doc.id
                           ? "Downloading text..."
                           : "Download text"}
-                      </button>
-                      <button
+                      </button>}
+                      {canDownload && <button
                         className="btn btn-secondary"
                         type="button"
                         onClick={(event) =>
@@ -669,21 +721,23 @@ export default function PatientDocuments({
                         data-testid={`patient-document-download-pdf-${doc.id}`}
                       >
                         {downloadingDocumentPdfId === doc.id ? "Downloading PDF..." : "Download PDF"}
-                      </button>
-                      <button
+                      </button>}
+                      {canUpload && <button
                         className="btn btn-secondary"
                         type="button"
                         onClick={(event) =>
                           void attachDocumentPdf(doc, event.currentTarget)
                         }
-                        disabled={attachingDocumentPdfId !== null}
+                        disabled={attachingDocumentPdfId !== null || Boolean(doc.attachment_id)}
                         data-testid={`patient-document-attach-pdf-${doc.id}`}
                       >
-                        {attachingDocumentPdfId === doc.id
+                        {doc.attachment_id
+                          ? "PDF in attachments"
+                          : attachingDocumentPdfId === doc.id
                           ? "Saving PDF..."
                           : "Save PDF to attachments"}
-                      </button>
-                      {isSuperadmin && (
+                      </button>}
+                      {canDelete && (
                         <button
                           className="btn btn-secondary"
                           type="button"
@@ -700,11 +754,11 @@ export default function PatientDocuments({
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        {templates.length === 0 ? (
+        {canDownload && !patientArchived && templates.length === 0 && !loading ? (
           <div className="notice">No active templates available.</div>
-        ) : (
+        ) : canDownload && !patientArchived && templates.length > 0 ? (
           <div className="stack" style={{ gap: 8 }}>
             {templates.map((template) => (
               <div
@@ -729,7 +783,7 @@ export default function PatientDocuments({
               </div>
             ))}
           </div>
-        )}
+        ) : null}
     </div>
   );
 

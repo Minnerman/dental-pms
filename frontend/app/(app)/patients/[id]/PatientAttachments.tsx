@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, clearToken, getToken } from "@/lib/auth";
+import { clearToken, getToken } from "@/lib/auth";
+import { safeDocumentError } from "@/lib/document-errors";
 
 type Actor = { id: number; email: string; role: string };
 
@@ -50,9 +51,15 @@ const downloadingAttachmentIds = new Set<number>();
 export default function PatientAttachments({
   patientId,
   embedded = false,
+  capabilities,
+  capabilityError = null,
+  patientArchived = false,
 }: {
   patientId: number;
   embedded?: boolean;
+  capabilities: string[] | null;
+  capabilityError?: string | null;
+  patientArchived?: boolean;
 }) {
   const router = useRouter();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -62,11 +69,23 @@ export default function PatientAttachments({
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const uploadingAttachmentRef = useRef(false);
   const previewingAttachmentRef = useRef(false);
   const deletingAttachmentRef = useRef<number | null>(null);
   const attachmentLoadRequestIdRef = useRef(0);
+  const capabilitiesReady = capabilities !== null;
+  const canDownload = Boolean(capabilities?.includes("documents.download"));
+  const canUpload = Boolean(canDownload && capabilities?.includes("documents.upload"));
+  const canDelete = Boolean(canDownload && capabilities?.includes("documents.delete"));
+  const accessState = !capabilitiesReady
+    ? "loading"
+    : patientArchived
+      ? "archived"
+      : canDownload
+        ? canUpload || canDelete
+          ? "write"
+          : "read-only"
+        : "denied";
 
   const authFetch = useCallback((path: string, init: RequestInit = {}) => {
     const token = getToken();
@@ -76,6 +95,11 @@ export default function PatientAttachments({
   }, []);
 
   const loadAttachments = useCallback(async () => {
+    if (!capabilitiesReady || !canDownload || patientArchived) {
+      setAttachments([]);
+      setLoading(false);
+      return;
+    }
     const requestId = ++attachmentLoadRequestIdRef.current;
     setLoading(true);
     setError(null);
@@ -87,7 +111,7 @@ export default function PatientAttachments({
         return;
       }
       if (!res.ok) {
-        throw new Error(`Failed to load attachments (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to load attachments."));
       }
       const data = (await res.json()) as Attachment[];
       if (requestId !== attachmentLoadRequestIdRef.current) {
@@ -103,26 +127,10 @@ export default function PatientAttachments({
         setLoading(false);
       }
     }
-  }, [authFetch, patientId, router]);
-
-  const loadMe = useCallback(async () => {
-    try {
-      const res = await apiFetch("/api/me");
-      if (res.status === 401 || res.status === 403) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) return;
-      const data = (await res.json()) as { role: string };
-      setIsSuperadmin(data.role === "superadmin");
-    } catch {
-      setIsSuperadmin(false);
-    }
-  }, [router]);
+  }, [authFetch, canDownload, capabilitiesReady, patientArchived, patientId, router]);
 
   async function uploadAttachment(file: File) {
-    if (uploadingAttachmentRef.current) {
+    if (!canUpload || patientArchived || uploadingAttachmentRef.current) {
       return;
     }
     uploadingAttachmentRef.current = true;
@@ -133,6 +141,7 @@ export default function PatientAttachments({
       form.append("file", file);
       const res = await authFetch(`/api/patients/${patientId}/attachments`, {
         method: "POST",
+        headers: { "Request-Id": crypto.randomUUID() },
         body: form,
       });
       if (res.status === 401) {
@@ -141,8 +150,7 @@ export default function PatientAttachments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to upload attachment (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to upload attachment."));
       }
       const created = (await res.json()) as Attachment;
       attachmentLoadRequestIdRef.current += 1;
@@ -163,7 +171,7 @@ export default function PatientAttachments({
   }
 
   async function previewAttachment(attachment: Attachment) {
-    if (previewingAttachmentRef.current) {
+    if (!canDownload || patientArchived || previewingAttachmentRef.current) {
       return;
     }
     previewingAttachmentRef.current = true;
@@ -177,8 +185,7 @@ export default function PatientAttachments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to preview attachment (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to preview attachment."));
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -196,7 +203,13 @@ export default function PatientAttachments({
     attachment: Attachment,
     button?: HTMLButtonElement | null
   ) {
-    if (!button || downloadingAttachmentIds.has(attachment.id) || button.disabled) {
+    if (
+      !canDownload ||
+      patientArchived ||
+      !button ||
+      downloadingAttachmentIds.has(attachment.id) ||
+      button.disabled
+    ) {
       return;
     }
     downloadingAttachmentIds.add(attachment.id);
@@ -211,17 +224,16 @@ export default function PatientAttachments({
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download attachment (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to download attachment."));
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const filename =
         filenameFromHeader(res.headers.get("Content-Disposition")) ||
-        sanitizeAttachmentFilename(attachment.original_filename);
+        attachment.original_filename;
       link.href = url;
-      link.download = filename;
+      link.download = sanitizeAttachmentFilename(filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -238,7 +250,7 @@ export default function PatientAttachments({
   }
 
   async function deleteAttachment(attachment: Attachment) {
-    if (deletingAttachmentRef.current === attachment.id) {
+    if (!canDelete || patientArchived || deletingAttachmentRef.current === attachment.id) {
       return;
     }
     if (!confirm(`Delete "${attachment.original_filename}"?`)) return;
@@ -252,13 +264,8 @@ export default function PatientAttachments({
         router.replace("/login");
         return;
       }
-      if (res.status === 403) {
-        setError("You don't have permission to do that. Please ask an administrator.");
-        return;
-      }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to delete attachment (HTTP ${res.status})`);
+        throw new Error(await safeDocumentError(res, "Failed to delete attachment."));
       }
       setAttachments((prev) => prev.filter((item) => item.id !== attachment.id));
     } catch (err) {
@@ -276,11 +283,17 @@ export default function PatientAttachments({
   }, [loadAttachments]);
 
   useEffect(() => {
-    void loadMe();
-  }, [loadMe]);
+    const refresh = () => void loadAttachments();
+    window.addEventListener("patient-attachments-changed", refresh);
+    return () => window.removeEventListener("patient-attachments-changed", refresh);
+  }, [loadAttachments]);
 
   const content = (
-    <div className="stack">
+    <div
+      className="stack"
+      data-testid="patient-attachments-access"
+      data-state={accessState}
+    >
         <div className="row">
           <div>
             <h4 style={{ marginTop: 0 }}>Attachments</h4>
@@ -288,31 +301,46 @@ export default function PatientAttachments({
               Upload files for this patient (stored locally).
             </div>
           </div>
-          <label className="btn btn-secondary" data-testid="attachment-upload">
-            {uploading ? "Uploading..." : "Upload document"}
-            <input
-              type="file"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  void uploadAttachment(file);
-                }
-                e.currentTarget.value = "";
-              }}
-              disabled={uploading}
-            />
-          </label>
+          {canUpload && !patientArchived && (
+            <label className="btn btn-secondary" data-testid="attachment-upload">
+              {uploading ? "Uploading..." : "Upload document"}
+              <input
+                type="file"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void uploadAttachment(file);
+                  }
+                  e.currentTarget.value = "";
+                }}
+                disabled={uploading}
+              />
+            </label>
+          )}
         </div>
 
+        {!capabilitiesReady && <div className="badge">Checking document permissions…</div>}
+        {capabilitiesReady && capabilityError && <div className="notice">{capabilityError}</div>}
+        {patientArchived && (
+          <div className="notice">Archived patient attachments are unavailable.</div>
+        )}
+        {capabilitiesReady && !patientArchived && !canDownload && (
+          <div className="notice">You do not have permission to view patient attachments.</div>
+        )}
+        {capabilitiesReady && canDownload && !canUpload && !patientArchived && (
+          <div className="notice">Attachments are read-only.</div>
+        )}
         {loading && <div className="badge">Loading attachments…</div>}
         {error && <div className="notice">{error}</div>}
 
-        {attachments.length === 0 ? (
+        {capabilitiesReady && canDownload && !patientArchived && attachments.length === 0 && !loading ? (
           <div className="notice">
-            No attachments yet. Use &quot;Upload file&quot; to add one.
+            {canUpload
+              ? "No attachments yet. Use \"Upload document\" to add one."
+              : "No attachments are available."}
           </div>
-        ) : (
+        ) : capabilitiesReady && canDownload && !patientArchived && attachments.length > 0 ? (
           <div className="stack" style={{ gap: 8 }}>
             {attachments.map((attachment) => (
               <div
@@ -336,7 +364,7 @@ export default function PatientAttachments({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {isPreviewable(attachment) && (
+                  {canDownload && isPreviewable(attachment) && (
                     <button
                       className="btn btn-secondary"
                       type="button"
@@ -347,18 +375,20 @@ export default function PatientAttachments({
                       {previewingId === attachment.id ? "Opening..." : "Preview"}
                     </button>
                   )}
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={(event) =>
-                      void downloadAttachment(attachment, event.currentTarget)
-                    }
-                    data-testid={`attachment-download-${attachment.id}`}
-                    disabled={downloadingId === attachment.id}
-                  >
-                    {downloadingId === attachment.id ? "Downloading..." : "Download"}
-                  </button>
-                  {isSuperadmin && (
+                  {canDownload && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={(event) =>
+                        void downloadAttachment(attachment, event.currentTarget)
+                      }
+                      data-testid={`attachment-download-${attachment.id}`}
+                      disabled={downloadingId === attachment.id}
+                    >
+                      {downloadingId === attachment.id ? "Downloading..." : "Download"}
+                    </button>
+                  )}
+                  {canDelete && (
                     <button
                       className="btn btn-secondary"
                       type="button"
@@ -373,7 +403,7 @@ export default function PatientAttachments({
               </div>
             ))}
           </div>
-        )}
+        ) : null}
     </div>
   );
 
