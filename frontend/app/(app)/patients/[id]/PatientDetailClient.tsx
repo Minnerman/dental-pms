@@ -3531,30 +3531,37 @@ export default function PatientDetailClient({
     if (!isValidPatientId) return;
     void loadPatient();
     void loadTimeline();
-    void loadInvoices();
     void loadTreatments();
     void loadEstimates();
     void loadAppointments();
     void loadUsers();
     void loadCapabilities();
-    void loadLedger();
-    void loadLedgerBalance();
-    void loadFinanceSummary();
     void loadRecalls();
   }, [
     isValidPatientId,
     loadAppointments,
     loadEstimates,
-    loadFinanceSummary,
-    loadInvoices,
     loadCapabilities,
-    loadLedger,
-    loadLedgerBalance,
     loadPatient,
     loadRecalls,
     loadTimeline,
     loadTreatments,
     loadUsers,
+  ]);
+
+  useEffect(() => {
+    if (!isValidPatientId || !billingCapabilitiesReady) return;
+    void loadInvoices();
+    void loadLedger();
+    void loadLedgerBalance();
+    void loadFinanceSummary();
+  }, [
+    billingCapabilitiesReady,
+    isValidPatientId,
+    loadFinanceSummary,
+    loadInvoices,
+    loadLedger,
+    loadLedgerBalance,
   ]);
 
   useEffect(() => {
