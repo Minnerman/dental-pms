@@ -57,6 +57,11 @@ export default function ReportsPage() {
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [downloadingMonthPack, setDownloadingMonthPack] = useState<"pdf" | "zip" | null>(null);
+  const [capabilities, setCapabilities] = useState<string[] | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const canViewReports = Boolean(
+    capabilities?.includes("billing.view") && capabilities?.includes("billing.cashup")
+  );
 
   function formatCurrency(pence: number) {
     return new Intl.NumberFormat("en-GB", {
@@ -66,6 +71,7 @@ export default function ReportsPage() {
   }
 
   const loadReports = useCallback(async (days: number) => {
+    if (!canViewReports) return;
     setLoading(true);
     setError(null);
     try {
@@ -99,6 +105,27 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
+  }, [canViewReports, router]);
+
+  const loadCapabilities = useCallback(async () => {
+    setCapabilityError(null);
+    try {
+      const res = await apiFetch("/api/me/capabilities");
+      if (res.status === 401) {
+        clearToken();
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error("Report permissions could not be verified.");
+      }
+      setCapabilities((await res.json()) as string[]);
+    } catch (caught) {
+      setCapabilities([]);
+      setCapabilityError(
+        caught instanceof Error ? caught.message : "Report permissions could not be verified."
+      );
+    }
   }, [router]);
 
   function downloadCsv(filename: string, rows: string[][]) {
@@ -115,7 +142,7 @@ export default function ReportsPage() {
   }
 
   async function downloadMonthPack(format: "pdf" | "zip") {
-    if (downloadingMonthPack) return;
+    if (downloadingMonthPack || !canViewReports) return;
     setError(null);
     setDownloadingMonthPack(format);
     try {
@@ -131,8 +158,11 @@ export default function ReportsPage() {
         return;
       }
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `Failed to download month pack (HTTP ${res.status})`);
+        throw new Error(
+          res.status === 403
+            ? "You do not have permission to download financial reports."
+            : "Failed to download month pack."
+        );
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -154,8 +184,12 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
-    void loadReports(rangePreset);
-  }, [loadReports, rangePreset]);
+    void loadCapabilities();
+  }, [loadCapabilities]);
+
+  useEffect(() => {
+    if (canViewReports) void loadReports(rangePreset);
+  }, [canViewReports, loadReports, rangePreset]);
 
   return (
     <div className="app-grid">
@@ -175,6 +209,7 @@ export default function ReportsPage() {
                   className="btn btn-secondary"
                   type="button"
                   onClick={() => setRangePreset(days as RangePreset)}
+                  disabled={!canViewReports}
                 >
                   {days}d
                 </button>
@@ -182,10 +217,16 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {capabilities === null && <div className="badge">Checking report permissions…</div>}
+          {capabilities !== null && !canViewReports && (
+            <div className="notice">
+              {capabilityError || "You do not have permission to view financial reports."}
+            </div>
+          )}
           {loading && <div className="badge">Loading reports…</div>}
           {error && <div className="notice">{error}</div>}
 
-          <div className="card" style={{ margin: 0 }}>
+          {canViewReports && <div className="card" style={{ margin: 0 }}>
             <div className="stack">
               <h4 style={{ margin: 0 }}>Monthly export pack</h4>
               <div style={{ color: "var(--muted)" }}>
@@ -247,7 +288,7 @@ export default function ReportsPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </div>}
 
           {cashup && (
             <div className="card" style={{ margin: 0 }}>

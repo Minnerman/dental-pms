@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.deps import get_current_user
+from app.deps import require_capability
 from app.models.audit_log import AuditLog
 from app.models.appointment import Appointment
 from app.models.note import Note
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/patients/{patient_id}/timeline", tags=["timeline"])
 def patient_timeline(
     patient_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_capability("patients.view")),
     limit: int = Query(default=200, ge=1, le=500),
 ):
     patient = db.get(Patient, patient_id)

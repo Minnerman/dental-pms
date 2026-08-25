@@ -1238,6 +1238,8 @@ export default function PatientDetailClient({
     capabilities?.includes("appointments.write")
   );
   const canWritePatients = Boolean(capabilities?.includes("patients.write"));
+  const billingCapabilitiesReady = capabilities !== null;
+  const canViewBilling = Boolean(capabilities?.includes("billing.view"));
   const notesCapabilitiesReady = capabilities !== null;
   const canViewNotes = Boolean(capabilities?.includes("notes.view"));
   const canWriteNotes = Boolean(canViewNotes && capabilities?.includes("notes.write"));
@@ -1515,6 +1517,12 @@ export default function PatientDetailClient({
   }, [patientId, router]);
 
   const loadLedger = useCallback(async () => {
+    if (!billingCapabilitiesReady) return;
+    if (!canViewBilling) {
+      setLedgerEntries([]);
+      setLedgerError(null);
+      return;
+    }
     setLedgerLoading(true);
     setLedgerError(null);
     try {
@@ -1535,9 +1543,15 @@ export default function PatientDetailClient({
     } finally {
       setLedgerLoading(false);
     }
-  }, [patientId, router]);
+  }, [billingCapabilitiesReady, canViewBilling, patientId, router]);
 
   const loadLedgerBalance = useCallback(async () => {
+    if (!billingCapabilitiesReady) return;
+    if (!canViewBilling) {
+      setLedgerBalance(null);
+      setLedgerBalanceError(null);
+      return;
+    }
     setLedgerBalanceError(null);
     try {
       const res = await apiFetch(`/api/patients/${patientId}/balance`);
@@ -1557,7 +1571,7 @@ export default function PatientDetailClient({
         err instanceof Error ? err.message : "Failed to load ledger balance."
       );
     }
-  }, [patientId, router]);
+  }, [billingCapabilitiesReady, canViewBilling, patientId, router]);
 
   const loadCapabilities = useCallback(async () => {
     setCapabilityError(null);
@@ -1585,6 +1599,12 @@ export default function PatientDetailClient({
       reset?: boolean;
       overrides?: { from?: string; to?: string; costOnly?: boolean };
     }) => {
+      if (!billingCapabilitiesReady || !canViewBilling) {
+        setTransactions([]);
+        setTransactionsNextCursor(null);
+        setTransactionsLoaded(true);
+        return;
+      }
       if (!isValidPatientId) return;
       const reset = options?.reset ?? false;
       if (!reset && !transactionsNextCursor) return;
@@ -1638,6 +1658,8 @@ export default function PatientDetailClient({
     },
     [
       isValidPatientId,
+      billingCapabilitiesReady,
+      canViewBilling,
       patientId,
       router,
       transactionsCostOnly,
@@ -1648,6 +1670,12 @@ export default function PatientDetailClient({
   );
 
   const loadFinanceSummary = useCallback(async () => {
+    if (!billingCapabilitiesReady) return;
+    if (!canViewBilling) {
+      setFinanceSummary(null);
+      setFinanceSummaryError(null);
+      return;
+    }
     setFinanceSummaryLoading(true);
     setFinanceSummaryError(null);
     try {
@@ -1671,7 +1699,7 @@ export default function PatientDetailClient({
     } finally {
       setFinanceSummaryLoading(false);
     }
-  }, [patientId, router]);
+  }, [billingCapabilitiesReady, canViewBilling, patientId, router]);
 
   const loadRecalls = useCallback(async () => {
     setRecallsLoading(true);
@@ -1832,6 +1860,12 @@ export default function PatientDetailClient({
   }, [patientId, router]);
 
   const loadInvoices = useCallback(async () => {
+    if (!billingCapabilitiesReady) return;
+    if (!canViewBilling) {
+      setInvoices([]);
+      setInvoiceError(null);
+      return;
+    }
     setLoadingInvoices(true);
     setInvoiceError(null);
     try {
@@ -1851,9 +1885,13 @@ export default function PatientDetailClient({
     } finally {
       setLoadingInvoices(false);
     }
-  }, [patientId, router]);
+  }, [billingCapabilitiesReady, canViewBilling, patientId, router]);
 
   async function loadInvoiceDetail(invoiceId: number) {
+    if (!canViewBilling) {
+      setInvoiceError("You do not have permission to view billing information.");
+      return;
+    }
     setInvoiceError(null);
     try {
       const res = await apiFetch(`/api/invoices/${invoiceId}`);
@@ -4621,13 +4659,16 @@ export default function PatientDetailClient({
   const financeBalance =
     financeSummary?.outstanding_balance_pence ?? ledgerBalance;
   const canWriteLedger = Boolean(
-    capabilities?.includes("billing.payments.write")
+    canViewBilling && capabilities?.includes("billing.payments.write")
   );
-  const ledgerReadOnly = Boolean(patient?.deleted_at) || !canWriteLedger;
+  const ledgerReadOnly =
+    !billingCapabilitiesReady || !canViewBilling || Boolean(patient?.deleted_at) || !canWriteLedger;
   const ledgerReadOnlyMessage = patient?.deleted_at
     ? "Archived patients have a read-only ledger."
-    : capabilities === null
+    : !billingCapabilitiesReady
     ? "Checking ledger permissions…"
+    : !canViewBilling
+    ? "You do not have permission to view billing information."
     : "You can view this ledger, but you cannot add entries.";
 
   const toothHistoryEntries = useMemo(() => {
@@ -6256,15 +6297,21 @@ export default function PatientDetailClient({
                 >
                   {PATIENT_TABS.map((lockedTab, index) => {
                     const isActive = activeLockedTab === lockedTab.key;
+                    const billingDenied =
+                      lockedTab.key === "financial" &&
+                      billingCapabilitiesReady &&
+                      !canViewBilling;
                     return (
                       <button
                         key={lockedTab.key}
                         style={tabStyle(isActive)}
                         onClick={() => activateLockedTab(lockedTab.key)}
+                        disabled={billingDenied}
                         type="button"
                         role="tab"
                         aria-selected={isActive}
                         aria-current={isActive ? "page" : undefined}
+                        aria-disabled={billingDenied}
                         data-testid={`patient-tab-${lockedTab.label}`}
                         title={`Ctrl/Cmd+${index + 1}`}
                       >
@@ -6273,7 +6320,7 @@ export default function PatientDetailClient({
                     );
                   })}
                 </div>
-                {activeLockedTab === "financial" && (
+                {activeLockedTab === "financial" && canViewBilling && (
                   <div
                     style={tabRowStyle}
                     role="tablist"
@@ -6300,6 +6347,9 @@ export default function PatientDetailClient({
                       Ledger
                     </button>
                   </div>
+                )}
+                {billingCapabilitiesReady && !canViewBilling && (
+                  <div className="notice">You do not have permission to view billing information.</div>
                 )}
                 <div
                   style={{

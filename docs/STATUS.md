@@ -1,23 +1,28 @@
 # Dental PMS — Status (Stop Point)
 
-R4 SQL Server policy: SELECT-only. See `docs/r4/R4_CHARTING_DISCOVERY.md`.
+R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
-- Deployment batch 5 passed on 25 August 2026. Production is healthy and stable
-  on runtime `90b1f29c2c9685f2885aa61b2d0874c447e43452`.
-- PR #703 clinical notes reliability is live. The deterministic notes,
-  clinical, recall, patient-record, patient-ledger, appointment, and corrected
-  patient-route no-write checks passed during deployment.
-- Patient documents and attachments reliability is the active feature-sized
-  slice. It includes deterministic document no-write deployment verification
-  and is intended to be the final broad reliability slice before practical
-  completion audit and practice UAT.
+- Deployment batch 6 passed on 25 August 2026. Production is healthy and stable
+  on runtime `e5d8664948dd4b13eb7c0a996e137ed6e3179e94`.
+- PR #706 patient documents and attachments reliability is live. Deterministic
+  document, notes, clinical, recall, patient-record, patient-ledger,
+  appointment, and patient-route no-write checks passed during deployment.
+- The practical-completion audit reproduced one final coherent blocker group:
+  restricted users could read routine finance/cash-up data and legacy global
+  audit data without the matching effective capabilities. PR #707 closes that
+  backend and frontend permission gap and replaces the old Stage 57 checklist
+  with a 45–60 minute practice sign-off pass.
+- Dental PMS is a practical-completion candidate after PR #707 validation,
+  merge and deployment. Owner/staff manual UAT and final sign-off remain
+  required; no further broad product feature is active.
 - The approved acceleration model uses coherent feature-sized GitHub PRs for
   Dental PMS implementation, targeted and directly relevant tests during
   development, required GitHub CI as the merge gate, and deployment only from
   merged code under a separate deployment instruction.
 - R4 investigation remains blocked. R4 writes are permanently prohibited, and
-  the deferred finance and invoice/payment/staging import work remains blocked.
+  deferred historical migration and invoice/payment/staging import work must
+  not be resumed as practical-completion blockers.
 
 ## Historical pause / handover (superseded)
 - The authoritative continuity baseline is `origin/master@26e2dc14d9af0620388b9b1db9ba25a522fa434e`.

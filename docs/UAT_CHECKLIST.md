@@ -1,71 +1,41 @@
-# UAT Checklist (Stage 57)
+# Practical completion UAT checklist
 
-Use this checklist for a focused go-live acceptance pass with representative users.
+Use one designated synthetic/test patient and representative staff accounts. Allow 45–60 minutes. Record `pass` or `fail` and a short blocker note for every row; a failure is a blocker only when it prevents or makes unsafe routine practice work.
 
-## Receptionist flow (15-20 mins)
+## Reception/admin
 
-1) Login + logout
-- Action: Sign in with receptionist/admin credentials, then log out.
-- Expected result: Login succeeds, protected pages load, logout returns to login page.
+| Action | Expected result | Pass/fail | Blocker note |
+| --- | --- | --- | --- |
+| Sign in as reception, open the main work areas, then sign out. | Authentication succeeds, permitted navigation loads, and sign-out returns to login. |  |  |
+| Create a test patient, find them by partial search, reopen the record, and edit contact details. | The patient is searchable once, the correct record opens, and edits persist after refresh. |  |  |
+| Add and edit a patient note, then open its audit history. | The current note is shown and created/updated audit entries identify the acting user. |  |  |
+| Create an appointment, move it to another valid slot, refresh, then cancel it with a reason. | The diary and day sheet show the persisted slot and final cancelled state without duplication. |  |  |
+| Archive and restore the test patient after dependent workflow checks are complete. | The archived record leaves ordinary active views and returns with its history after restore. |  |  |
 
-2) Password reset flow (if enabled)
-- Action: Start forgot/reset flow for a valid user.
-- Expected result: Reset request is accepted and reset completion allows login with the new password.
+## Dentist/clinical
 
-3) Patient search + open record
-- Action: Search by full and partial patient name; open the selected patient.
-- Expected result: Matching results appear quickly; opened patient header/details match selected patient.
+| Action | Expected result | Pass/fail | Blocker note |
+| --- | --- | --- | --- |
+| Open the test patient’s clinical page, select a tooth and surface, and view tooth history. | Both arches, tooth surfaces, clinical summary and history render without error. |  |  |
+| Add a tooth note and a planned treatment, then change the treatment to a supported next status. | The chart, history and treatment plan refresh; planned and completed/history states remain distinct. |  |  |
+| Record a valid six-value BPE entry and reopen the clinical page. | The saved BPE values persist and render using the current supported notation. |  |  |
+| Sign in as a clinical read-only user and reopen the same record. | Clinical information remains viewable while note, BPE and treatment mutation controls are unavailable. |  |  |
 
-4) Create appointment
-- Action: Create an appointment with patient, date/time, clinician, and location.
-- Expected result: Appointment appears in list/calendar at the selected slot with correct clinician/location.
+## Finance/recall/documents
 
-5) Move appointment in calendar (drag/drop)
-- Action: Drag appointment to a different time/day.
-- Expected result: Appointment updates to new slot and persists after refresh.
+| Action | Expected result | Pass/fail | Blocker note |
+| --- | --- | --- | --- |
+| Record one routine payment and one adjustment, then refresh the ledger and daily cash-up. | Both entries, balance and cash-up totals persist with the correct signs and payment method. |  |  |
+| Use a user without `billing.view`/`billing.cashup` to open patient finance, cash-up, reports and the global audit feed. | Financial data and the global audit feed remain blocked; no background finance request succeeds. |  |  |
+| Create or update a recall, find it with the worklist filters, and use the booking hand-off. | The recall remains visible under the selected filters and the patient booking context opens correctly. |  |  |
+| Generate a patient document from an active template and save it to the test patient. | The generated document is listed once with the correct metadata and no raw merge-field error. |  |  |
+| Upload a small synthetic attachment, refresh the list, and open/download it. | Metadata and filename are safe, the file is available once, and the action is audited. |  |  |
 
-6) Day sheet cut/copy/paste (if enabled)
-- Action: Use day sheet cut/copy/paste actions for an appointment.
-- Expected result: Appointment is moved/copied correctly and resulting schedule is accurate.
+## Operational sign-off
 
-7) Add/edit patient note + verify detail and audit display
-- Action: Add a note on a patient record, open it in the notes detail view, edit/save it, and open note audit view/details.
-- Expected result: Note saves and updates successfully; note detail reflects the latest body/type; created/updated audit information is visible.
-
-8) Recall worklist + filters
-- Action: Open Recalls page and apply filter changes.
-- Expected result: Worklist loads and filters update rows/KPIs as expected.
-
-## Clinician flow (15-20 mins)
-
-1) Open patient clinical page
-- Action: Open a patient and navigate to Clinical.
-- Expected result: Clinical page loads without errors with chart and timeline content.
-
-2) Clinical view mode persistence (Stage 55)
-- Action: Toggle clinical view mode, refresh, and reopen same/different patient.
-- Expected result: Selected mode persists across refresh/navigation.
-
-3) Treatment plan add/edit
-- Action: Add a treatment item, edit it, and save.
-- Expected result: Changes persist and display correctly in treatment plan/history views.
-
-4) BPE record and verify (Stage 139)
-- Action: Add or view BPE entries for a patient with data.
-- Expected result: BPE record is visible and mapped correctly on chart/timeline.
-
-5) BPE furcation verify (Stage 140)
-- Action: Add or view BPE furcation entries.
-- Expected result: Furcation data appears correctly where expected.
-
-6) Perio probe view for relevant patients (Stage 138)
-- Action: Open Perio probe context for patient(s) known to have probe data.
-- Expected result: Probe data view exists and renders data without errors.
-
-7) Generate patient letter PDF from template
-- Action: Create a patient document from template and download PDF.
-- Expected result: Generated PDF downloads successfully with expected merged content.
-
-## Sign-off
-- Record date, tester name/role, pass/fail per section, and blockers.
-- Any failed step blocks go-live until triaged and accepted.
+| Action | Expected result | Pass/fail | Blocker note |
+| --- | --- | --- | --- |
+| Run the standard application health check. | Backend, frontend, proxy/login and database checks pass at the intended runtime SHA. |  |  |
+| Confirm the scheduled backup timer and latest natural backup status without running a manual backup. | The timer is enabled/active and the latest scheduled run is successful under current retention. |  |  |
+| Confirm the documented application-only rollback references and operator contact are available. | Backend/frontend rollback can be performed without changing the database or volumes. |  |  |
+| Record tester names/roles, date, overall result and every accepted blocker/deferment. | Owner and staff have one complete sign-off record and no unresolved daily-use blocker. |  |  |
