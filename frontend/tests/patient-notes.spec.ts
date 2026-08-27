@@ -236,7 +236,10 @@ test("patient chart tooth note add shows in-flight state and guards repeat submi
   });
   await waitForPatientClinicalPage(page, patientId);
   await expect(page.getByTestId("patient-tab-Medical")).toHaveAttribute("aria-selected", "true");
-  await page.getByTestId("tooth-button-UR6").click();
+  await page
+    .getByTestId("tooth-button-UR6")
+    .getByText("UR6", { exact: true })
+    .click();
   await expect(page.getByText("Add tooth note", { exact: true })).toBeVisible();
   await page.getByTestId("patient-chart-note-surface").fill("O");
   await page.getByTestId("patient-chart-note-body").fill(noteBody);
