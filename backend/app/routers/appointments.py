@@ -11,6 +11,7 @@ from app.deps import get_current_user, require_capability
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.audit_log import AuditLog
 from app.models.estimate import Estimate
+from app.models.note import Note
 from app.models.patient import CareSetting, Patient
 from app.models.user import Role, User
 from app.schemas.appointment import (
@@ -66,6 +67,35 @@ def _require_user_capabilities(db: Session, user: User, *codes: str) -> None:
     available = {capability.code for capability in get_user_capabilities(db, user.id)}
     if any(code not in available for code in codes):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+def _attach_note_previews(
+    db: Session,
+    user: User,
+    appointments: list[Appointment],
+) -> list[Appointment]:
+    """Attach the newest active note without exposing notes to unauthorised users."""
+    available = {capability.code for capability in get_user_capabilities(db, user.id)}
+    if "notes.view" not in available:
+        return appointments
+
+    appointment_ids = [appointment.id for appointment in appointments]
+    if not appointment_ids:
+        return appointments
+
+    rows = db.execute(
+        select(Note.appointment_id, Note.body)
+        .where(Note.appointment_id.in_(appointment_ids))
+        .where(Note.deleted_at.is_(None))
+        .order_by(Note.created_at.desc(), Note.id.desc())
+    )
+    previews: dict[int, str] = {}
+    for appointment_id, body in rows:
+        if appointment_id is not None and appointment_id not in previews:
+            previews[appointment_id] = body
+    for appointment in appointments:
+        appointment.note_preview = previews.get(appointment.id)
+    return appointments
 
 
 def _validate_basic_appointment_window(starts_at: datetime, ends_at: datetime) -> None:
@@ -180,7 +210,7 @@ def list_appointments_range(
     end: date,
     location: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _user: User = Depends(require_capability("appointments.view")),
+    user: User = Depends(require_capability("appointments.view")),
 ):
     start_dt = datetime.combine(start, time.min, tzinfo=timezone.utc)
     end_dt = datetime.combine(end, time.min, tzinfo=timezone.utc)
@@ -196,7 +226,7 @@ def list_appointments_range(
         stmt = stmt.where(Appointment.location_type == AppointmentLocationType.clinic)
     elif location == "visit":
         stmt = stmt.where(Appointment.location_type == AppointmentLocationType.visit)
-    return list(db.scalars(stmt))
+    return _attach_note_previews(db, user, list(db.scalars(stmt)))
 
 
 @router.get("/snapshot", response_model=DiarySnapshotOut)
@@ -218,7 +248,7 @@ def appointments_snapshot(
 @router.get("", response_model=list[AppointmentOut])
 def list_appointments(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_capability("appointments.view")),
+    user: User = Depends(require_capability("appointments.view")),
     patient_id: int | None = Query(default=None),
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
@@ -258,7 +288,7 @@ def list_appointments(
         stmt = stmt.where(Appointment.is_domiciliary == domiciliary)
     if location_type is not None:
         stmt = stmt.where(Appointment.location_type == location_type)
-    return list(db.scalars(stmt))
+    return _attach_note_previews(db, user, list(db.scalars(stmt)))
 
 
 @router.post("", response_model=AppointmentOut, status_code=status.HTTP_201_CREATED)

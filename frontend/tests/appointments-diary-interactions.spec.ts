@@ -93,6 +93,78 @@ async function openAppointmentNoteEditorFromContextMenu(
   return eventCard;
 }
 
+test("calendar event shows its saved note, one time label, and readable week days", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const patientId = await createPatient(request, {
+    first_name: "Calendar",
+    last_name: `Note ${unique}`,
+  });
+  const appointment = await createAppointment(request, patientId, {
+    starts_at: "2026-01-15T11:00:00.000Z",
+    ends_at: "2026-01-15T11:30:00.000Z",
+    location_type: "clinic",
+    location: "Room 1",
+  });
+  const noteText = `Bring referral letter ${unique}`;
+  await createAppointmentNote(request, appointment.id, { body: noteText });
+
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/appointments?date=2026-01-15&view=day`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("appointments-view-calendar").click();
+  await switchToDayView(page);
+
+  const eventCard = page.getByTestId(`appointment-event-${appointment.id}`);
+  await expect(eventCard).toBeVisible({ timeout: 20_000 });
+  await expect(eventCard).toContainText(noteText);
+  await expect(eventCard.locator(".appointments-r4-event-time")).toHaveCount(0);
+
+  const calendarEvent = eventCard.locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' rbc-event ')][1]");
+  const renderedText = await calendarEvent.innerText();
+  expect(renderedText.match(/11:00/g)).toHaveLength(1);
+
+  await page.getByTestId("appointments-calendar-view-week").click();
+  const dayHeaders = page.locator(".rbc-time-header-content .rbc-header");
+  await expect(dayHeaders).toHaveCount(7);
+  const narrowestHeader = await dayHeaders.evaluateAll((headers) =>
+    Math.min(...headers.map((header) => header.getBoundingClientRect().width))
+  );
+  expect(narrowestHeader).toBeGreaterThan(70);
+});
+
+test("booking clinician list contains active dentists only and separates home visits", async ({
+  page,
+  request,
+}) => {
+  await page.route("**/api/users", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        { id: 801, email: "dentist@example.test", full_name: "Primary Dentist", role: "dentist", is_active: true },
+        { id: 802, email: "reception@example.test", full_name: "Reception User", role: "reception", is_active: true },
+        { id: 803, email: "inactive@example.test", full_name: "Inactive Dentist", role: "dentist", is_active: false },
+      ]),
+    });
+  });
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/appointments?date=2026-01-15`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForDiaryPage(page);
+  await page.getByTestId("new-appointment").click();
+
+  const clinician = page.locator("#booking-clinician");
+  await expect(clinician.locator("option")).toHaveText(["Unassigned", "Primary Dentist"]);
+  await expect(page.getByTestId("booking-location-type").locator('option[value="visit"]')).toHaveText(
+    "Home visit"
+  );
+});
+
 test("diary interaction parity: select, open, context menu, escape, enter", async ({
   page,
   request,

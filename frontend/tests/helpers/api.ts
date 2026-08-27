@@ -5,6 +5,9 @@ import { ensureAuthReady, getBaseUrl } from "./auth";
 type PatientOverrides = {
   first_name?: string;
   last_name?: string;
+  address_line1?: string;
+  city?: string;
+  postcode?: string;
 };
 
 type ProcedureOverrides = {
@@ -59,6 +62,9 @@ export async function createPatient(
   const payload = {
     first_name: overrides.first_name ?? "Test",
     last_name: overrides.last_name ?? `Patient ${unique}`,
+    address_line1: overrides.address_line1,
+    city: overrides.city,
+    postcode: overrides.postcode,
   };
   const response = await request.post(`${baseURL}/api/patients`, {
     headers: { Authorization: `Bearer ${token}` },
