@@ -877,9 +877,9 @@ export default function AppointmentsPage() {
       }
     }
 
-    window.addEventListener("keydown", handleShortcut);
+    window.addEventListener("keydown", handleShortcut, true);
     return () => {
-      window.removeEventListener("keydown", handleShortcut);
+      window.removeEventListener("keydown", handleShortcut, true);
     };
   }, [canWriteAppointments, showNewModal]);
 
