@@ -11,6 +11,7 @@ MAX_CLINICAL_TEXT_LENGTH = 2_000
 MAX_FEE_PENCE = 100_000_000
 TOOTH_PATTERN = re.compile(r"^(UR|UL|LR|LL)[1-8]$")
 SURFACES = {"M", "O", "D", "B", "L", "I"}
+SURFACE_ORDER = ("M", "O", "I", "D", "B", "L")
 BPE_SCORE_PATTERN = re.compile(r"^[0-4]\*?$")
 
 
@@ -34,9 +35,11 @@ def _surface(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip().upper()
-    if value not in SURFACES:
-        raise ValueError("must be one of M, O, D, B, L or I")
-    return value
+    if not value or len(value) > 5 or any(surface not in SURFACES for surface in value):
+        raise ValueError("must contain only M, O, D, B, L or I")
+    if len(set(value)) != len(value):
+        raise ValueError("must not repeat a surface")
+    return "".join(surface for surface in SURFACE_ORDER if surface in value)
 
 
 def validate_tooth_surface(tooth: str | None, surface: str | None) -> None:
@@ -45,9 +48,9 @@ def validate_tooth_surface(tooth: str | None, surface: str | None) -> None:
     if tooth is None:
         raise ValueError("surface requires a tooth")
     tooth_number = int(tooth[-1])
-    if surface == "I" and tooth_number > 3:
+    if "I" in surface and tooth_number > 3:
         raise ValueError("incisal surface is only valid for anterior teeth")
-    if surface == "O" and tooth_number <= 3:
+    if "O" in surface and tooth_number <= 3:
         raise ValueError("occlusal surface is only valid for posterior teeth")
 
 

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
-import { createPatient } from "./helpers/api";
+import { createPatient, createTreatmentPlanItem } from "./helpers/api";
 
 async function waitForPatientClinicalPage(page: Page, patientId: string) {
   await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/clinical`));
@@ -557,6 +557,91 @@ test("patient treatment plan accept shows in-flight state and guards repeat subm
         item.status === "accepted"
     )
   ).toBeTruthy();
+});
+
+test("planned chart completion records the procedure and finance charge together", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now();
+  const baseUrl = getBaseUrl();
+  const patientId = await createPatient(request, {
+    first_name: "Chart",
+    last_name: `Plan ${unique}`,
+  });
+  const createdItem = await createTreatmentPlanItem(request, patientId, {
+    tooth: "UL4",
+    surface: "DBOM",
+    procedure_code: "FILL",
+    description: `Synthetic chart completion ${unique}`,
+    fee_pence: 5_450,
+  });
+  const token = await primePageAuth(page, request);
+
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientClinicalPage(page, patientId);
+  await page.getByTestId("clinical-chart-view-planned").click();
+
+  const planItem = page.getByTestId(`clinical-chart-plan-item-${createdItem.id}`);
+  await expect(planItem).toBeVisible();
+  await expect(planItem).toContainText("UL4 · MODB · FILL");
+  await expect(planItem).toContainText("£54.50");
+
+  const completeButton = page.getByTestId(
+    `clinical-chart-plan-complete-${createdItem.id}`
+  );
+  await expect(completeButton).toBeEnabled();
+  let confirmation = "";
+  page.once("dialog", async (dialog) => {
+    confirmation = dialog.message();
+    await dialog.accept();
+  });
+  const completionResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes(`/api/treatment-plan/${createdItem.id}`)
+  );
+  await completeButton.click();
+  expect((await completionResponse).ok()).toBeTruthy();
+  expect(confirmation).toContain("£54.50");
+
+  await expect(planItem).toHaveAttribute("data-status", "completed", {
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByText("Treatment completed and £54.50 added to finance.", {
+      exact: true,
+    })
+  ).toBeVisible();
+
+  const [clinicalResponse, ledgerResponse] = await Promise.all([
+    request.get(`${baseUrl}/api/patients/${patientId}/clinical/summary?limit=200`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    request.get(`${baseUrl}/api/patients/${patientId}/ledger?limit=200`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  ]);
+  expect(clinicalResponse.ok()).toBeTruthy();
+  expect(ledgerResponse.ok()).toBeTruthy();
+  const clinicalSummary = await clinicalResponse.json();
+  const ledger = await ledgerResponse.json();
+  expect(
+    clinicalSummary.recent_procedures.filter(
+      (procedure: { procedure_code?: string; fee_pence?: number }) =>
+        procedure.procedure_code === "FILL" && procedure.fee_pence === 5_450
+    )
+  ).toHaveLength(1);
+  expect(
+    ledger.filter(
+      (entry: { entry_type?: string; amount_pence?: number; reference?: string }) =>
+        entry.entry_type === "charge" &&
+        entry.amount_pence === 5_450 &&
+        entry.reference === `TREATMENT-PLAN:${createdItem.id}`
+    )
+  ).toHaveLength(1);
 });
 
 test("patient treatment plan add shows in-flight state and guards repeat submit", async ({

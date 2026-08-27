@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
-test("odontogram surface click highlights only the selected surface", async ({
+test("odontogram surface clicks build a multi-surface selection", async ({
   page,
   request,
 }) => {
@@ -30,9 +30,11 @@ test("odontogram surface click highlights only the selected surface", async ({
 
   await ur5D.click();
   await expect(ur5D).toHaveAttribute("data-selected", "true");
-  await expect(ur5M).toHaveAttribute("data-selected", "false");
+  await expect(ur5M).toHaveAttribute("data-selected", "true");
+  await expect(page.getByTestId("clinical-selection-state")).toContainText("Surfaces MD");
 
   await ur6M.click();
   await expect(ur6M).toHaveAttribute("data-selected", "true");
   await expect(ur5D).toHaveAttribute("data-selected", "false");
+  await expect(ur5M).toHaveAttribute("data-selected", "false");
 });
