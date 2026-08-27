@@ -60,7 +60,7 @@ def test_patient_create_edit_archive_restore_lifecycle(api_client, auth_headers)
 
     archived_list_response = api_client.get(
         "/patients",
-        params={"include_deleted": True},
+        params={"include_deleted": True, "limit": 200},
         headers=auth_headers,
     )
     assert archived_list_response.status_code == 200, archived_list_response.text
