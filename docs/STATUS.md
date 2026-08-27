@@ -3,6 +3,14 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- The active desktop-density branch compacts the shared application shell and
+  patient workspace, replaces text-heavy navigation/action controls with
+  labelled accessible icons, brings the odontogram into the first desktop
+  viewport, gives the chart substantially more width than its clinical tool
+  panel, and contains wide controls on small screens. Frontend typecheck, lint,
+  production build, and 22 focused patient/clinical Playwright checks pass in
+  an isolated synthetic stack. This branch has no database migration, R4
+  access, production change, or deployment.
 - Owner UAT on 27 August 2026 identified a coherent appointment/patient UI
   blocker set. The active isolated branch fixes duplicate calendar times,
   clipped week headings, visible permission-gated appointment-note previews,

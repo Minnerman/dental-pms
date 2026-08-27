@@ -22,6 +22,7 @@ import OdontogramToothSvg, {
 import StatusIcon from "@/components/ui/StatusIcon";
 import Panel from "@/components/ui/Panel";
 import Table from "@/components/ui/Table";
+import Icon from "@/components/ui/Icon";
 import PatientDocuments from "./PatientDocuments";
 import PatientAttachments from "./PatientAttachments";
 
@@ -4899,40 +4900,6 @@ export default function PatientDetailClient({
     alignItems: "center",
   } as const;
 
-  const patientHeaderGridStyle = {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 10,
-    alignItems: "stretch",
-  } as const;
-
-  const patientHeaderPanelStyle = {
-    display: "grid",
-    gap: 8,
-    padding: "10px 12px",
-    border: "1px solid var(--border)",
-    borderRadius: 14,
-    background: "var(--tab-active-bg)",
-    minWidth: 0,
-  } as const;
-
-  const patientHeaderMetricGridStyle = {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-    gap: 8,
-  } as const;
-
-  const patientHeaderMetaPillStyle = {
-    display: "inline-flex",
-    alignItems: "center",
-    padding: "4px 8px",
-    borderRadius: 999,
-    border: "1px solid var(--border)",
-    background: "var(--tab-active-bg)",
-    fontSize: 12,
-    lineHeight: 1.2,
-  } as const;
-
   async function copyAddress() {
     if (!patient) return;
     const address = buildAddress(patient);
@@ -6023,7 +5990,7 @@ export default function PatientDetailClient({
 
   return (
     <div className="app-grid">
-      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+      <div className="patient-route-page">
         <div>
           <Link className="btn btn-secondary" href="/patients">
             ← Back to patients
@@ -6038,43 +6005,19 @@ export default function PatientDetailClient({
         <div className="stack">
           <div
             className="card patient-route-sticky-card"
-            style={{ position: "sticky", top: 12, zIndex: 1 }}
+            style={{ position: "sticky", top: 8, zIndex: 10 }}
             data-testid="patient-header-card"
           >
             <div
               className="patient-route-header-grid"
-              style={patientHeaderGridStyle}
               data-testid="patient-header"
             >
               <div
                 data-testid="patient-header-name"
-                className="stack"
-                style={{
-                  gap: 8,
-                  gridColumn: "1 / -1",
-                  paddingBottom: 10,
-                  borderBottom: "1px solid var(--border)",
-                }}
+                className="patient-header-name-block"
               >
-                <h2 style={{ margin: 0 }}>
-                  {patient.first_name} {patient.last_name}
-                </h2>
-                <div
-                  style={{
-                    color: "var(--muted)",
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={patientHeaderMetaPillStyle}>Patient #{patient.id}</span>
-                  <span style={patientHeaderMetaPillStyle}>
-                    Category {categoryLabels[patient.patient_category]}
-                  </span>
-                  <span style={patientHeaderMetaPillStyle}>
-                    Care {careSettingLabels[patient.care_setting]}
-                  </span>
+                <div className="patient-header-title-row">
+                  <h2>{patient.first_name} {patient.last_name}</h2>
                   {patient.deleted_at && (
                     <span
                       className="badge"
@@ -6084,39 +6027,45 @@ export default function PatientDetailClient({
                       Archived
                     </span>
                   )}
-                  <span style={patientHeaderMetaPillStyle}>Created by {patient.created_by.email}</span>
+                </div>
+                <div className="patient-header-meta-row">
+                  <span className="patient-header-meta-pill">Patient #{patient.id}</span>
+                  <span className="patient-header-meta-pill">
+                    Category {categoryLabels[patient.patient_category]}
+                  </span>
+                  <span className="patient-header-meta-pill">
+                    Care {careSettingLabels[patient.care_setting]}
+                  </span>
                   <span
-                    style={patientHeaderMetaPillStyle}
+                    className="patient-header-provenance"
+                    title={`Created by ${patient.created_by.email}`}
+                  >
+                    Created by {patient.created_by.email}
+                  </span>
+                  <span
+                    className="patient-header-updated patient-header-provenance"
                     data-testid="patient-header-updated-meta"
                     data-iso={patient.updated_at}
+                    title={`Last updated by ${
+                      patient.updated_by?.email || patient.created_by.email || "—"
+                    } on ${formatDateTime(patient.updated_at)}`}
                   >
-                    Last updated by{" "}
-                    {patient.updated_by?.email || patient.created_by.email || "—"} ·{" "}
-                    {formatDateTime(patient.updated_at)}
+                    Last updated by {patient.updated_by?.email || patient.created_by.email || "—"}
+                    {" · "}{formatDateTime(patient.updated_at)}
                   </span>
                 </div>
               </div>
 
               <div
                 data-testid="patient-header-identifiers"
-                className="stack"
-                style={patientHeaderPanelStyle}
+                className="patient-header-section patient-header-identifiers"
               >
                 <div className="label">Identifiers</div>
-                <div className="patient-route-header-metrics" style={patientHeaderMetricGridStyle}>
+                <div className="patient-route-header-metrics">
                   {patientHeaderIdentifiers.map((item) => (
-                    <div
-                      key={item.label}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        background: "var(--panel)",
-                        border: "1px solid var(--border)",
-                        minWidth: 0,
-                      }}
-                    >
-                      <div className="label">{item.label}</div>
-                      <div>{item.value || "—"}</div>
+                    <div key={item.label} className="patient-header-metric">
+                      <span className="patient-header-metric-label">{item.label}</span>
+                      <strong>{item.value || "—"}</strong>
                     </div>
                   ))}
                 </div>
@@ -6124,11 +6073,10 @@ export default function PatientDetailClient({
 
               <div
                 data-testid="patient-header-alerts"
-                className="stack"
-                style={patientHeaderPanelStyle}
+                className="patient-header-section patient-header-alerts"
               >
                 <div className="label">Alerts and flags</div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="patient-header-alert-row">
                   {headerAlertFlags.length === 0 && <span className="badge">No alerts</span>}
                   {headerAlertFlags.map((alert) => (
                     <span
@@ -6155,7 +6103,7 @@ export default function PatientDetailClient({
                     ))}
                 </div>
                 {headerAlertFlags.length > 0 && (
-                  <div style={{ display: "grid", gap: 6 }}>
+                  <div className="patient-header-alert-details">
                     {headerAlertFlags.map((alert) => (
                       <div key={`${alert.label}-detail`}>
                         <strong>{alert.label}:</strong> {alert.value}
@@ -6167,72 +6115,65 @@ export default function PatientDetailClient({
 
               <div
                 data-testid="patient-header-actions"
-                className="stack"
-                style={patientHeaderPanelStyle}
+                className="patient-header-section patient-header-actions"
               >
                 <div className="label">Quick actions</div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="patient-header-action-row">
                   {phoneHref ? (
-                    <a className="btn btn-secondary" href={phoneHref}>
-                      Call
+                    <a className="btn btn-secondary patient-icon-action" href={phoneHref}>
+                      <Icon name="phone" /> <span>Call</span>
                     </a>
                   ) : (
                     <span className="badge">No phone</span>
                   )}
                   {emailHref ? (
-                    <a className="btn btn-secondary" href={emailHref}>
-                      Email
+                    <a className="btn btn-secondary patient-icon-action" href={emailHref}>
+                      <Icon name="email" /> <span>Email</span>
                     </a>
                   ) : (
                     <span className="badge">No email</span>
                   )}
                   <button
-                    className="btn btn-secondary"
+                    className="btn btn-secondary patient-icon-action"
                     type="button"
                     data-testid="patient-copy-address"
                     onClick={copyAddress}
                   >
-                    Copy address
+                    <Icon name="copy" /> <span>Copy address</span>
                   </button>
                   {copyNotice && <span className="badge">{copyNotice}</span>}
                 </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <div className="label">Quick links</div>
-                  <div style={tabRowStyle}>
-                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}`}>
-                      Main route
+                <div className="patient-header-route-row">
+                  <div className="patient-header-route-links">
+                    <Link className="patient-route-link" href={`/patients/${patientId}`}>
+                      <Icon name="patients" /> <span>Main route</span>
                     </Link>
-                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/clinical`}>
-                      Clinical route
+                    <Link className="patient-route-link" href={`/patients/${patientId}/clinical`}>
+                      <Icon name="clinical" /> <span>Clinical route</span>
                     </Link>
                     {chartingViewerEnabled && (
                       <Link
-                        style={tabStyle(tab === "charting", true)}
+                        className={`patient-route-link${tab === "charting" ? " active" : ""}`}
                         href={`/patients/${patientId}/charting`}
                       >
-                        Charting
+                        <Icon name="chart" /> <span>Charting</span>
                       </Link>
                     )}
-                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
-                      Timeline
+                    <Link className="patient-route-link" href={`/patients/${patientId}/timeline`}>
+                      <Icon name="timeline" /> <span>Timeline</span>
                     </Link>
-                    <Link style={tabStyle(false, true)} href={`/patients/${patientId}/audit`}>
-                      Audit
+                    <Link className="patient-route-link" href={`/patients/${patientId}/audit`}>
+                      <Icon name="audit" /> <span>Audit</span>
                     </Link>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="stack" style={{ gap: 12, marginTop: 12 }}>
+            <div className="patient-header-detail-strip">
               <div
-                className="patient-route-overview-grid"
+                className="patient-route-overview-grid patient-overview-strip"
                 data-testid="patient-overview-grid"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 12,
-                }}
               >
                 <div>
                   <div className="label">Phone</div>
@@ -6262,22 +6203,18 @@ export default function PatientDetailClient({
                   <div className="label">Address</div>
                   <div>{buildAddress(patient) || "—"}</div>
                 </div>
-                <div>
-                  <div className="label">Denplan plan</div>
-                  <div>
-                    {patient.patient_category === "DENPLAN" && patient.denplan_plan_name
-                      ? patient.denplan_plan_name
-                      : "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="label">Denplan member</div>
-                  <div>
-                    {patient.patient_category === "DENPLAN" && patient.denplan_member_no
-                      ? patient.denplan_member_no
-                      : "—"}
-                  </div>
-                </div>
+                {patient.patient_category === "DENPLAN" && (
+                  <>
+                    <div>
+                      <div className="label">Denplan plan</div>
+                      <div>{patient.denplan_plan_name || "—"}</div>
+                    </div>
+                    <div>
+                      <div className="label">Denplan member</div>
+                      <div>{patient.denplan_member_no || "—"}</div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {patient.care_setting !== "CLINIC" && (
@@ -6328,7 +6265,7 @@ export default function PatientDetailClient({
 
           <div className="card">
             <div className="stack">
-              <div className="stack" style={{ gap: 10 }}>
+              <div className="patient-content-navigation">
                 <div
                   style={tabRowStyle}
                   data-testid="patient-tabs"
@@ -6392,6 +6329,7 @@ export default function PatientDetailClient({
                   <div className="notice">You do not have permission to view billing information.</div>
                 )}
                 <div
+                  className="patient-custom-tabs"
                   style={{
                     display: "flex",
                     gap: 10,
@@ -8817,7 +8755,8 @@ export default function PatientDetailClient({
                       history and treatment plan, but cannot make changes.
                     </div>
                   )}
-                  <div className="tabs">
+                  <div className="clinical-section-toolbar">
+                    <div className="tabs">
                     <button
                       className={`tab ${clinicalTab === "chart" ? "active" : ""}`}
                       onClick={() => setClinicalTab("chart")}
@@ -8836,28 +8775,18 @@ export default function PatientDetailClient({
                     >
                       Notes ({clinicalNotes.length})
                     </button>
-                  </div>
-
-                  <div
-                    className="row"
-                    style={{
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div style={{ color: "var(--muted)" }}>
-                      Last updated: {formatDateTime(clinicalLastUpdated)}
                     </div>
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      onClick={refreshClinicalData}
-                      disabled={clinicalLoading}
-                    >
-                      {clinicalLoading ? "Refreshing..." : "Refresh"}
-                    </button>
+                    <div className="clinical-refresh-control">
+                      <span>Last updated: {formatDateTime(clinicalLastUpdated)}</span>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={refreshClinicalData}
+                        disabled={clinicalLoading}
+                      >
+                        {clinicalLoading ? "Refreshing..." : "Refresh"}
+                      </button>
+                    </div>
                   </div>
 
                   {clinicalError && (
@@ -8882,12 +8811,13 @@ export default function PatientDetailClient({
                     <div className="badge">Loading clinical…</div>
                   ) : clinicalTab === "chart" ? (
                 <div
-                  className="stack"
+                  className="stack clinical-chart-content"
                   data-testid="clinical-chart-content"
                   data-planned-state={plannedTeeth.size > 0 ? "present" : "absent"}
                   data-completed-state={historyTeeth.size > 0 ? "present" : "absent"}
                 >
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <div className="clinical-chart-toolbar">
+                  <div className="clinical-control-group">
                     <div className="label">View mode</div>
                     <div style={tabRowStyle} data-testid="clinical-chart-toggle">
                       <button
@@ -8922,7 +8852,7 @@ export default function PatientDetailClient({
                       </button>
                     </div>
                   </div>
-                  <div style={tabRowStyle}>
+                  <div className="clinical-state-legend">
                     <span className="badge">P Planned</span>
                     <span className="badge">H History</span>
                     <span className="badge">M Missing</span>
@@ -8930,7 +8860,7 @@ export default function PatientDetailClient({
                     <span className="badge">D Deciduous</span>
                     <span className="badge">GC Gap closed</span>
                   </div>
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <div className="clinical-control-group">
                     <div className="label">R4 overlays</div>
                     <div style={tabRowStyle} data-testid="clinical-overlay-filter">
                       <button
@@ -9005,19 +8935,21 @@ export default function PatientDetailClient({
                     <span className="badge" data-testid="clinical-selection-state">
                       Tooth {selectedTooth ?? "—"} · Surface {selectedToothSurface ?? "None"}
                     </span>
-                    <span className="badge" data-testid="clinical-selection-shortcuts">
-                      Surface keys: M O D B L I · Arrows: tooth nav · Ctrl/Cmd+Z undo
+                    <span
+                      className="badge"
+                      data-testid="clinical-selection-shortcuts"
+                      title="Surface keys: M O D B L I · Arrows: tooth navigation · Ctrl/Cmd+Z undo"
+                    >
+                      Keyboard shortcuts
                     </span>
                   </div>
-                  <div
-                    className="card"
-                    style={{ margin: 0, padding: "8px 10px" }}
+                  </div>
+                  <details
+                    className="clinical-chart-legend"
                     data-testid="odontogram-overlay-legend"
                   >
-                    <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-                      <span className="label" style={{ marginRight: 6 }}>
-                        Legend
-                      </span>
+                    <summary>Legend</summary>
+                    <div className="row clinical-chart-legend-items">
                       <span className="row" style={{ gap: 6, alignItems: "center" }}>
                         <span
                           style={{
@@ -9072,7 +9004,7 @@ export default function PatientDetailClient({
                         Tooth
                       </span>
                     </div>
-                  </div>
+                  </details>
                   {r4TreatmentOverlayError && (
                     <div className="notice">
                       <div
@@ -9096,8 +9028,9 @@ export default function PatientDetailClient({
                     data-testid="patient-clinical-grid"
                     style={{
                       display: "grid",
-                      gap: 16,
-                      gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+                      gap: 14,
+                      gridTemplateColumns: "minmax(730px, 2fr) minmax(300px, 0.78fr)",
+                      alignItems: "start",
                     }}
                   >
                         <div className="stack" style={{ gap: 16 }}>
@@ -9620,7 +9553,10 @@ export default function PatientDetailClient({
                           </Panel>
                         </div>
 
-                        <Panel title={selectedTooth ? `Tooth ${selectedTooth}` : "Select a tooth"}>
+                        <Panel
+                          title={selectedTooth ? `Tooth ${selectedTooth}` : "Select a tooth"}
+                          className="patient-clinical-tools"
+                        >
                           {!selectedTooth ? (
                             <div className="notice">Select a tooth to add notes and procedures.</div>
                           ) : (

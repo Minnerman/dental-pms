@@ -3,6 +3,288 @@
   min-width: 0;
 }
 
+.shell :global(.patient-route-page) {
+  margin: 0 auto;
+  max-width: 1600px;
+  width: 100%;
+}
+
+.shell :global(.patient-route-sticky-card) {
+  padding: 12px 14px;
+}
+
+.shell :global(.patient-route-header-grid) {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns:
+    minmax(240px, 1.3fr)
+    minmax(210px, 0.8fr)
+    minmax(180px, 0.8fr)
+    minmax(300px, 1.25fr);
+}
+
+.shell :global(.patient-header-name-block),
+.shell :global(.patient-header-section) {
+  background: var(--tab-active-bg);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.shell :global(.patient-header-title-row),
+.shell :global(.patient-header-meta-row),
+.shell :global(.patient-header-alert-row),
+.shell :global(.patient-header-action-row),
+.shell :global(.patient-header-route-links) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.shell :global(.patient-header-title-row h2) {
+  font-size: 20px;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.shell :global(.patient-header-meta-row) {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.shell :global(.patient-header-meta-pill) {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-flex;
+  line-height: 1.15;
+  padding: 3px 6px;
+}
+
+.shell :global(.patient-header-updated) {
+  line-height: 1.25;
+}
+
+.shell :global(.patient-header-provenance) {
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell :global(.patient-route-header-metrics) {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.shell :global(.patient-header-metric) {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.shell :global(.patient-header-metric-label) {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shell :global(.patient-header-metric strong) {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell :global(.patient-header-alert-details) {
+  display: grid;
+  font-size: 12px;
+  gap: 3px;
+  line-height: 1.25;
+}
+
+.shell :global(.patient-icon-action),
+.shell :global(.patient-route-link) {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.shell :global(.patient-icon-action) {
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.shell :global(.patient-route-link) {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 5px;
+}
+
+.shell :global(.patient-route-link:hover),
+.shell :global(.patient-route-link.active) {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.shell :global(.patient-header-detail-strip) {
+  border-top: 1px solid var(--border);
+  margin-top: 9px;
+  padding-top: 8px;
+}
+
+.shell :global(.patient-overview-strip) {
+  display: grid;
+  font-size: 13px;
+  gap: 6px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+}
+
+.shell :global(.patient-overview-strip .label) {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.shell :global(.patient-overview-strip .badge) {
+  padding: 3px 7px;
+}
+
+.shell :global(.patient-content-navigation) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  min-width: 0;
+  width: 100%;
+}
+
+.shell :global(.patient-content-navigation [data-testid="patient-tabs"]) {
+  max-width: 100%;
+  flex-wrap: nowrap !important;
+  gap: 5px !important;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.shell :global(.patient-content-navigation [data-testid^="patient-tab-"]) {
+  flex: 0 0 auto;
+  padding: 5px 10px !important;
+}
+
+.shell :global(.patient-custom-tabs) {
+  flex: 1 1 380px;
+  gap: 6px !important;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.shell :global(.patient-custom-tabs .label) {
+  font-size: 10px;
+}
+
+.shell :global(.clinical-section-toolbar),
+.shell :global(.clinical-refresh-control),
+.shell :global(.clinical-chart-toolbar),
+.shell :global(.clinical-control-group),
+.shell :global(.clinical-state-legend),
+.shell :global(.clinical-chart-legend-items) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shell :global(.clinical-section-toolbar) {
+  justify-content: space-between;
+}
+
+.shell :global(.clinical-section-toolbar .tab) {
+  padding: 5px 10px;
+}
+
+.shell :global(.clinical-refresh-control) {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.shell :global(.clinical-refresh-control .btn),
+.shell :global(.clinical-chart-toolbar .btn) {
+  min-height: 30px;
+  padding: 4px 8px;
+}
+
+.shell :global(.clinical-chart-content) {
+  gap: 8px;
+}
+
+.shell :global(.clinical-chart-toolbar) {
+  background: var(--badge-bg);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 6px 8px;
+}
+
+.shell :global(.clinical-control-group) {
+  border-right: 1px solid var(--border);
+  padding-right: 8px;
+}
+
+.shell :global(.clinical-state-legend .badge),
+.shell :global(.clinical-chart-toolbar .badge) {
+  min-height: 26px;
+  padding: 3px 7px;
+}
+
+.shell :global(.clinical-chart-legend) {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.shell :global(.clinical-chart-legend summary) {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.shell :global(.clinical-chart-legend-items) {
+  margin-top: 7px;
+}
+
+.shell :global(.patient-route-chart-panel) {
+  overflow: hidden;
+}
+
+.shell :global(.patient-route-odontogram-grid) {
+  justify-content: center;
+  width: 100%;
+}
+
+.shell :global(.patient-route-odontogram-grid > button) {
+  min-width: 0;
+}
+
+.shell :global(.patient-clinical-tools) {
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  position: sticky;
+  top: 220px;
+}
+
 .shell :global(.app-grid) {
   min-width: 0;
 }
@@ -55,12 +337,26 @@
   max-width: 100%;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1120px) {
+  .shell :global(.patient-route-header-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .shell :global(.patient-route-appointment-grid),
   .shell :global(.patient-route-booking-grid),
   .shell :global(.patient-route-clinical-grid),
   .shell :global([data-testid="charting-viewer"] .grid) {
     grid-template-columns: 1fr !important;
+  }
+
+  .shell :global(.patient-clinical-tools) {
+    max-height: none;
+    overflow-y: visible;
+    position: static;
+  }
+
+  .shell :global(.patient-custom-tabs) {
+    justify-content: flex-start;
   }
 }
 
@@ -68,6 +364,27 @@
   .shell :global(.patient-route-sticky-card) {
     position: static !important;
     top: auto !important;
+  }
+
+  .shell :global(.patient-route-header-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  .shell :global(.patient-route-sticky-card) {
+    padding: 10px;
+  }
+
+  .shell :global(.patient-header-action-row),
+  .shell :global(.patient-header-route-links) {
+    gap: 5px;
+  }
+
+  .shell :global(.patient-route-link span) {
+    font-size: 10px;
+  }
+
+  .shell :global(.patient-custom-tabs) {
+    flex-basis: 100%;
   }
 
   .shell :global([data-testid="patient-appointments"]),
@@ -79,7 +396,7 @@
   }
 
   .shell :global(.patient-route-odontogram-grid) {
-    min-width: 760px;
+    min-width: 730px;
   }
 
   .shell :global([data-testid="bpe-grid"]),
