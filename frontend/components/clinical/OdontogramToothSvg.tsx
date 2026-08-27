@@ -269,6 +269,7 @@ function OdontogramToothSvgImpl({
       viewBox="0 0 100 100"
       width="40"
       height="40"
+      className="odontogram-tooth-svg"
       role="img"
       aria-label={`${toothKey} ${toothType}`}
       data-testid={`tooth-svg-${toothKey}`}

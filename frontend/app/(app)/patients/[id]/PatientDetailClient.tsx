@@ -3685,16 +3685,11 @@ export default function PatientDetailClient({
       return;
     }
     void refreshClinicalData();
-    if (!selectedTooth) {
-      applyChartSelection(upperTeeth[0], null, { trackHistory: false });
-    }
   }, [
-    applyChartSelection,
     canViewClinical,
     clinicalCapabilitiesReady,
     clinicalPatientUnavailable,
     refreshClinicalData,
-    selectedTooth,
     tab,
   ]);
 
@@ -6170,7 +6165,9 @@ export default function PatientDetailClient({
               </div>
             </div>
 
-            <div className="patient-header-detail-strip">
+            <details className="patient-header-detail-strip">
+              <summary><Icon name="patients" size={14} /> More patient information</summary>
+              <div className="patient-header-detail-content">
               <div
                 className="patient-route-overview-grid patient-overview-strip"
                 data-testid="patient-overview-grid"
@@ -6260,10 +6257,11 @@ export default function PatientDetailClient({
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            </details>
           </div>
 
-          <div className="card">
+          <div className="card patient-content-card">
             <div className="stack">
               <div className="patient-content-navigation">
                 <div
@@ -6346,7 +6344,7 @@ export default function PatientDetailClient({
                         aria-current={tab === "charting" ? "page" : undefined}
                         data-testid="patient-tab-charting"
                       >
-                        Charting
+                        <Icon name="chart" size={14} /> Charting
                       </Link>
                     )}
                     <Link
@@ -6354,20 +6352,20 @@ export default function PatientDetailClient({
                       href={`/patients/${patientId}/documents`}
                       aria-current={tab === "documents" ? "page" : undefined}
                     >
-                      Documents
+                      <Icon name="template" size={14} /> Documents
                     </Link>
                     <Link
                       style={tabStyle(tab === "attachments", true)}
                       href={`/patients/${patientId}/attachments`}
                       aria-current={tab === "attachments" ? "page" : undefined}
                     >
-                      Attachments
+                      <Icon name="notes" size={14} /> Attachments
                     </Link>
                     <Link style={tabStyle(false, true)} href={`/patients/${patientId}/timeline`}>
-                      Timeline
+                      <Icon name="timeline" size={14} /> Timeline
                     </Link>
                     <Link style={tabStyle(false, true)} href={`/patients/${patientId}/audit`}>
-                      Audit
+                      <Icon name="audit" size={14} /> Audit
                     </Link>
                   </div>
                 </div>
@@ -8817,9 +8815,9 @@ export default function PatientDetailClient({
                   data-completed-state={historyTeeth.size > 0 ? "present" : "absent"}
                 >
                   <div className="clinical-chart-toolbar">
-                  <div className="clinical-control-group">
-                    <div className="label">View mode</div>
-                    <div style={tabRowStyle} data-testid="clinical-chart-toggle">
+                  <div className="clinical-chart-primary-controls">
+                    <div className="clinical-control-group">
+                    <div style={tabRowStyle} data-testid="clinical-chart-toggle" aria-label="Chart view">
                       <button
                         type="button"
                         style={tabStyle(clinicalViewMode === "current", true)}
@@ -8852,6 +8850,21 @@ export default function PatientDetailClient({
                       </button>
                     </div>
                   </div>
+                  <div
+                    className="row"
+                    style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}
+                    data-testid="clinical-selection-toolbar"
+                  >
+                    <span className="badge" data-testid="clinical-selection-state">
+                      {selectedTooth
+                        ? `Tooth ${selectedTooth} · Surface ${selectedToothSurface ?? "None"}`
+                        : "Select a tooth"}
+                    </span>
+                  </div>
+                  </div>
+                  <details className="clinical-chart-options">
+                    <summary><Icon name="settings" size={14} /> Chart options</summary>
+                    <div className="clinical-chart-options-content">
                   <div className="clinical-state-legend">
                     <span className="badge">P Planned</span>
                     <span className="badge">H History</span>
@@ -8912,7 +8925,6 @@ export default function PatientDetailClient({
                   <div
                     className="row"
                     style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}
-                    data-testid="clinical-selection-toolbar"
                   >
                     <button
                       className="btn btn-secondary"
@@ -8932,9 +8944,6 @@ export default function PatientDetailClient({
                     >
                       Redo
                     </button>
-                    <span className="badge" data-testid="clinical-selection-state">
-                      Tooth {selectedTooth ?? "—"} · Surface {selectedToothSurface ?? "None"}
-                    </span>
                     <span
                       className="badge"
                       data-testid="clinical-selection-shortcuts"
@@ -8942,7 +8951,6 @@ export default function PatientDetailClient({
                     >
                       Keyboard shortcuts
                     </span>
-                  </div>
                   </div>
                   <details
                     className="clinical-chart-legend"
@@ -9005,6 +9013,9 @@ export default function PatientDetailClient({
                       </span>
                     </div>
                   </details>
+                    </div>
+                  </details>
+                  </div>
                   {r4TreatmentOverlayError && (
                     <div className="notice">
                       <div
@@ -9026,6 +9037,7 @@ export default function PatientDetailClient({
                   <div
                     className="patient-route-clinical-grid"
                     data-testid="patient-clinical-grid"
+                    data-has-tooth-selection={selectedTooth ? "true" : "false"}
                     style={{
                       display: "grid",
                       gap: 14,
@@ -9449,7 +9461,7 @@ export default function PatientDetailClient({
                             </div>
                           </Panel>
 
-                          <Panel title="Unassigned treatment items">
+                          <Panel title="Unassigned treatment items" className="clinical-unassigned-panel">
                             <div className="stack" style={{ gap: 8 }} data-testid="overlay-unassigned-items">
                               {overlayUnassignedItems.length === 0 ? (
                                 <div className="notice">No unassigned treatment plan items.</div>
@@ -9498,7 +9510,7 @@ export default function PatientDetailClient({
                             </div>
                           </Panel>
 
-                          <Panel title="BPE">
+                          <Panel title="BPE" className="clinical-bpe-panel">
                             <div
                               className="stack"
                               style={{ gap: 12 }}
@@ -9553,13 +9565,21 @@ export default function PatientDetailClient({
                           </Panel>
                         </div>
 
+                        {selectedTooth && (
                         <Panel
-                          title={selectedTooth ? `Tooth ${selectedTooth}` : "Select a tooth"}
+                          title={`Tooth ${selectedTooth}`}
                           className="patient-clinical-tools"
                         >
-                          {!selectedTooth ? (
-                            <div className="notice">Select a tooth to add notes and procedures.</div>
-                          ) : (
+                          <div className="patient-clinical-tools-header">
+                            <button
+                              className="btn btn-secondary patient-clinical-tools-close"
+                              type="button"
+                              onClick={() => applyChartSelection(null, null)}
+                              aria-label="Close tooth tools"
+                            >
+                              Close
+                            </button>
+                          </div>
                             <div className="stack" style={{ gap: 16 }}>
                               <div className="stack" style={{ gap: 10 }}>
                                 <div className="label">Add tooth note</div>
@@ -9866,8 +9886,8 @@ export default function PatientDetailClient({
                                 )}
                               </div>
                             </div>
-                          )}
                         </Panel>
+                        )}
                       </div>
                     </div>
                   ) : clinicalTab === "treatment" ? (

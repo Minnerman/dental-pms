@@ -236,9 +236,8 @@ test("patient chart tooth note add shows in-flight state and guards repeat submi
   });
   await waitForPatientClinicalPage(page, patientId);
   await expect(page.getByTestId("patient-tab-Medical")).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("Add tooth note", { exact: true })).toBeVisible();
-
   await page.getByTestId("tooth-button-UR6").click();
+  await expect(page.getByText("Add tooth note", { exact: true })).toBeVisible();
   await page.getByTestId("patient-chart-note-surface").fill("O");
   await page.getByTestId("patient-chart-note-body").fill(noteBody);
 
@@ -342,9 +341,8 @@ test("patient chart procedure add shows in-flight state and guards repeat submit
   });
   await waitForPatientClinicalPage(page, patientId);
   await expect(page.getByTestId("patient-tab-Medical")).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("Quick add procedure", { exact: true })).toBeVisible();
-
   await page.getByTestId("tooth-button-UR6").click();
+  await expect(page.getByText("Quick add procedure", { exact: true })).toBeVisible();
   await page.getByTestId("patient-chart-procedure-code").selectOption("FILL");
   await page.getByTestId("patient-chart-procedure-description").fill(description);
   await page.getByTestId("patient-chart-procedure-fee").fill("45.50");
