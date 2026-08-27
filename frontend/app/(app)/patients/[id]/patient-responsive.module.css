@@ -416,6 +416,21 @@
   width: 68px;
 }
 
+.shell :global(
+  .patient-route-clinical-grid[data-has-tooth-selection="true"]
+    .patient-route-odontogram-grid
+    > button
+) {
+  min-height: 92px !important;
+}
+
+.shell :global(
+  .patient-route-clinical-grid[data-has-tooth-selection="true"] .odontogram-tooth-svg
+) {
+  height: 44px;
+  width: 44px;
+}
+
 .shell :global(.patient-clinical-tools) {
   background: var(--panel);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
