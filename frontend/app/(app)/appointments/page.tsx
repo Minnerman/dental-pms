@@ -2028,7 +2028,11 @@ export default function AppointmentsPage() {
       const res = await apiFetch("/api/users");
       if (res.ok) {
         const data = (await res.json()) as UserOption[];
-        setUsers(data.filter((u) => u.is_active && u.role === "dentist"));
+        setUsers(
+          data.filter(
+            (u) => u.is_active && (u.role === "dentist" || u.role === "superadmin")
+          )
+        );
       }
     } catch {
       setUsers([]);

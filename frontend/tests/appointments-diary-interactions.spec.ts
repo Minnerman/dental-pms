@@ -137,7 +137,7 @@ test("calendar event shows its saved note, one time label, and readable week day
   expect(narrowestHeader).toBeGreaterThan(70);
 });
 
-test("booking clinician list contains active dentists only and separates home visits", async ({
+test("booking clinician list excludes non-clinical users and separates home visits", async ({
   page,
   request,
 }) => {
@@ -146,6 +146,7 @@ test("booking clinician list contains active dentists only and separates home vi
       contentType: "application/json",
       body: JSON.stringify([
         { id: 801, email: "dentist@example.test", full_name: "Primary Dentist", role: "dentist", is_active: true },
+        { id: 804, email: "owner@example.test", full_name: "Practice Owner", role: "superadmin", is_active: true },
         { id: 802, email: "reception@example.test", full_name: "Reception User", role: "reception", is_active: true },
         { id: 803, email: "inactive@example.test", full_name: "Inactive Dentist", role: "dentist", is_active: false },
       ]),
@@ -159,7 +160,11 @@ test("booking clinician list contains active dentists only and separates home vi
   await page.getByTestId("new-appointment").click();
 
   const clinician = page.locator("#booking-clinician");
-  await expect(clinician.locator("option")).toHaveText(["Unassigned", "Primary Dentist"]);
+  await expect(clinician.locator("option")).toHaveText([
+    "Unassigned",
+    "Primary Dentist",
+    "Practice Owner",
+  ]);
   await expect(page.getByTestId("booking-location-type").locator('option[value="visit"]')).toHaveText(
     "Home visit"
   );

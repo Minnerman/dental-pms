@@ -1835,7 +1835,12 @@ export default function PatientDetailClient({
       }
       if (res.ok) {
         const data = (await res.json()) as UserOption[];
-        setUsers(data.filter((user) => user.is_active && user.role === "dentist"));
+        setUsers(
+          data.filter(
+            (user) =>
+              user.is_active && (user.role === "dentist" || user.role === "superadmin")
+          )
+        );
       }
     } catch {
       setUsers([]);
