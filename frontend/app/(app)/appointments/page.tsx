@@ -852,7 +852,9 @@ export default function AppointmentsPage() {
       if (event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const key = event.key.toLowerCase();
-      if (key === "escape" && showNewModal) {
+      // The modal can render before this effect has rebound with the latest
+      // state, so use the rendered dialog as the authoritative shortcut guard.
+      if (key === "escape" && document.querySelector('[data-testid="booking-modal"]')) {
         event.preventDefault();
         setShowNewModal(false);
         return;
