@@ -62,6 +62,7 @@ type Appointment = {
   location_text?: string | null;
   is_domiciliary: boolean;
   visit_address?: string | null;
+  note_preview?: string | null;
   starts_at: string;
   ends_at: string;
   status: AppointmentStatus;
@@ -528,7 +529,7 @@ function toConflictItems(conflicts: ConflictApiItem[]) {
       const patientName = (conflict.patient_name || "Another patient").trim();
       const locationLabel =
         conflict.location_type === "visit"
-          ? conflict.location || "Visit"
+          ? conflict.location || "Home visit"
           : conflict.location || "Clinic";
       return {
         id: conflict.id,
@@ -989,10 +990,10 @@ export default function AppointmentsPage() {
       }
       return {
         key: "chair:visit:unassigned",
-        label: "Visit",
+        label: "Home visit",
         locationType: "visit" as AppointmentLocationType,
         location: null,
-        locationText: "Visit",
+        locationText: "Home visit",
       };
     }
     return {
@@ -1310,7 +1311,7 @@ export default function AppointmentsPage() {
           };
         }
         if (lane.locationType === "visit") {
-          const visitLabel = (lane.locationText || lane.label || "").trim() || "Visit";
+          const visitLabel = (lane.locationText || lane.label || "").trim() || "Home visit";
           return {
             error: null,
             lanePatch: {
@@ -1489,7 +1490,7 @@ export default function AppointmentsPage() {
           const endDate = new Date(appt.ends_at);
           const locationLabel =
             appt.location_type === "visit"
-              ? appt.location_text || "Visit"
+              ? appt.location_text || "Home visit"
               : appt.location || "Clinic";
           return {
             id: appt.id,
@@ -1933,6 +1934,9 @@ export default function AppointmentsPage() {
     if (notes.length > 0) {
       lines.push("Notes:");
       notes.slice(0, 2).forEach((note) => lines.push(`- ${note}`));
+    } else if (appt.note_preview) {
+      lines.push("Notes:");
+      lines.push(`- ${appt.note_preview}`);
     }
     if (appt.cancel_reason) {
       lines.push(`Cancel reason: ${appt.cancel_reason}`);
@@ -2024,7 +2028,11 @@ export default function AppointmentsPage() {
       const res = await apiFetch("/api/users");
       if (res.ok) {
         const data = (await res.json()) as UserOption[];
-        setUsers(data.filter((u) => u.is_active));
+        setUsers(
+          data.filter(
+            (u) => u.is_active && (u.role === "dentist" || u.role === "superadmin")
+          )
+        );
       }
     } catch {
       setUsers([]);
@@ -3782,9 +3790,10 @@ export default function AppointmentsPage() {
     const appointmentCode = toAppointmentCode(appt.appointment_type);
     const locationLabel =
       appt.location_type === "visit"
-        ? appt.location_text || "Visit"
+        ? appt.location_text || "Home visit"
         : appt.location || "Clinic";
     const patientLabel = `${appt.patient.last_name.toUpperCase()}, ${appt.patient.first_name}`;
+    const notePreview = noteCache[appt.id]?.[0] || appt.note_preview || "";
     const detailParts = [
       calendarView === "day" && phone ? `P: ${phone}` : null,
       calendarView === "day" && address ? address : null,
@@ -3796,6 +3805,11 @@ export default function AppointmentsPage() {
         data-testid={`appointment-event-${appt.id}`}
         data-appointment-id={appt.id}
         data-selected={isSelected ? "true" : "false"}
+        onMouseEnter={(event) => {
+          void ensureNotesLoaded(appt.id);
+          showTooltip(event, appt);
+        }}
+        onMouseLeave={() => setTooltip(null)}
         onClick={() => setSelectedAppointmentId(appt.id)}
         onDoubleClick={() => openAppointment(appt)}
         onContextMenu={(event) => {
@@ -3806,7 +3820,9 @@ export default function AppointmentsPage() {
         }}
       >
         <div className="appointments-r4-event-title">
-          <span className="appointments-r4-event-time">{timeLabel}</span>
+          {calendarView === "month" && (
+            <span className="appointments-r4-event-time">{timeLabel}</span>
+          )}
           <span>{patientLabel}</span>
         </div>
         <div className="appointments-r4-event-meta">
@@ -3818,6 +3834,11 @@ export default function AppointmentsPage() {
         </div>
         {detailParts.length > 0 && (
           <div className="appointments-r4-event-detail">{detailParts.join(" · ")}</div>
+        )}
+        {notePreview && (
+          <div className="appointments-r4-event-note" title={notePreview}>
+            Note: {notePreview}
+          </div>
         )}
       </div>
     );
@@ -4166,7 +4187,7 @@ export default function AppointmentsPage() {
               resizable={canRescheduleAppointments}
               step={DIARY_TIME_STEP_MINUTES}
               timeslots={1}
-              resources={calendarResources}
+              resources={calendarView === "day" ? calendarResources : undefined}
               resourceIdAccessor="id"
               resourceTitleAccessor="title"
               onSelectSlot={handleSelectSlot}
@@ -4666,7 +4687,7 @@ export default function AppointmentsPage() {
                     <option value="">Unassigned</option>
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.full_name || u.email} ({u.role})
+                        {u.full_name || u.email}
                       </option>
                     ))}
                   </select>
@@ -4719,7 +4740,7 @@ export default function AppointmentsPage() {
                     }}
                   >
                     <option value="clinic">Clinic</option>
-                    <option value="visit">Visit</option>
+                    <option value="visit">Home visit</option>
                   </select>
                 </div>
                 {activeLocationType === "visit" && (
@@ -4873,7 +4894,7 @@ export default function AppointmentsPage() {
                       <option value="">Unassigned</option>
                       {users.map((user) => (
                         <option key={user.id} value={user.id}>
-                          {user.full_name || user.email} ({user.role})
+                          {user.full_name || user.email}
                         </option>
                       ))}
                     </select>
@@ -4900,7 +4921,7 @@ export default function AppointmentsPage() {
                       }}
                     >
                       <option value="clinic">Clinic</option>
-                      <option value="visit">Visit</option>
+                      <option value="visit">Home visit</option>
                     </select>
                   </div>
                   {editLocationType === "visit" && (
@@ -5276,7 +5297,7 @@ export default function AppointmentsPage() {
                         }}
                       >
                         <option value="clinic">Clinic</option>
-                        <option value="visit">Visit</option>
+                        <option value="visit">Home visit</option>
                       </select>
                     </div>
                     {detailLocationType === "visit" && (

@@ -124,3 +124,38 @@ test("patient clinical route keeps page width stable and scrolls the chart insid
   expect(chartOverflow.scrollLeft).toBeGreaterThan(chartOverflow.before);
   await expectNoHorizontalOverflow(routeShell);
 });
+
+test("patient quick actions copy an address without the secure Clipboard API and identify appointments", async ({
+  page,
+  request,
+}) => {
+  const patientId = await createPatient(request, {
+    first_name: "Quick",
+    last_name: `Actions ${Date.now()}`,
+    address_line1: "1 Test Street",
+    city: "Test Town",
+    postcode: "TE1 1ST",
+  });
+
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => Promise.reject(new Error("Not available")) },
+    });
+    document.execCommand = (command: string) => command === "copy";
+  });
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForPatientPage(page, patientId);
+
+  await page.getByTestId("patient-copy-address").click();
+  await expect(page.getByText("Address copied.", { exact: true })).toBeVisible();
+
+  await page.getByTestId("patient-jump-appointments").click();
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id))
+    .toBe("patient-appointments");
+  await expect(page.getByTestId("patient-appointments")).toBeFocused();
+});

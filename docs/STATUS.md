@@ -3,6 +3,14 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- Owner UAT on 27 August 2026 identified a coherent appointment/patient UI
+  blocker set. The active isolated branch fixes duplicate calendar times,
+  clipped week headings, visible permission-gated appointment-note previews,
+  clinical-user-only clinician choices with separate Clinic/Home visit
+  selection, the patient appointment jump target, and address-copy fallback.
+  Targeted API tests, frontend typecheck, Python compilation, and focused
+  Playwright checks pass. This branch is not deployed; production and R4 were
+  not changed.
 - Deployment batch 6 passed on 25 August 2026. Production is healthy and stable
   on runtime `e5d8664948dd4b13eb7c0a996e137ed6e3179e94`.
 - PR #706 patient documents and attachments reliability is live. Deterministic

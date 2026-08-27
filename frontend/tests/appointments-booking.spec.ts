@@ -48,6 +48,15 @@ async function switchToCalendarDayView(page: any) {
   await expect(page.getByTestId("appointments-diary-shell")).toBeVisible({ timeout: 15_000 });
 }
 
+async function expectCalendarTimeOnce(eventCard: any, time: string) {
+  const calendarEvent = eventCard.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' rbc-event ')][1]"
+  );
+  await expect(calendarEvent).toContainText(time);
+  const renderedText = await calendarEvent.innerText();
+  expect(renderedText.split(time).length - 1).toBe(1);
+}
+
 function getFutureClinicWeekdayDate(seed: number) {
   const date = new Date(Date.UTC(2030, 0, 1));
   date.setUTCDate(date.getUTCDate() + (seed % 365));
@@ -683,7 +692,7 @@ test("appointment creation appears in clinician diary immediately and persists a
 
   const createdEvent = page.getByTestId(`appointment-event-${createdAppointment.id}`);
   await expect(createdEvent).toBeVisible({ timeout: 15_000 });
-  await expect(createdEvent).toContainText(bookableSlot.start);
+  await expectCalendarTimeOnce(createdEvent, bookableSlot.start);
   await expect(createdEvent).toContainText(lastName.toUpperCase());
   await expect(createdEvent).toContainText(`@ ${room}`);
 
@@ -704,7 +713,7 @@ test("appointment creation appears in clinician diary immediately and persists a
 
   const reloadedEvent = page.getByTestId(`appointment-event-${createdAppointment.id}`);
   await expect(reloadedEvent).toBeVisible({ timeout: 15_000 });
-  await expect(reloadedEvent).toContainText(bookableSlot.start);
+  await expectCalendarTimeOnce(reloadedEvent, bookableSlot.start);
   await expect(reloadedEvent).toContainText(lastName.toUpperCase());
   await expect(reloadedEvent).toContainText(`@ ${room}`);
 });

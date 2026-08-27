@@ -687,6 +687,10 @@ button {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .appointments-r4-calendar .rbc-timeslot-group {
@@ -796,6 +800,20 @@ button {
   font-size: 11px;
   line-height: 1.2;
   opacity: 0.92;
+}
+
+.appointments-r4-event-note {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-scroll-target:focus {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .table th {

@@ -1835,7 +1835,12 @@ export default function PatientDetailClient({
       }
       if (res.ok) {
         const data = (await res.json()) as UserOption[];
-        setUsers(data.filter((user) => user.is_active));
+        setUsers(
+          data.filter(
+            (user) =>
+              user.is_active && (user.role === "dentist" || user.role === "superadmin")
+          )
+        );
       }
     } catch {
       setUsers([]);
@@ -4075,11 +4080,15 @@ export default function PatientDetailClient({
   const scrollToAnchor = useCallback(function scrollToAnchor(id: string, attempts = 8) {
     const target = document.getElementById(id);
     if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
       const focusable = target.querySelector("input, select, textarea") as
         | HTMLElement
         | null;
-      focusable?.focus();
+      if (focusable) {
+        focusable.focus();
+      } else {
+        target.focus({ preventScroll: true });
+      }
       return;
     }
     if (attempts <= 0) return;
@@ -4932,10 +4941,29 @@ export default function PatientDetailClient({
       return;
     }
     try {
-      await navigator.clipboard.writeText(address);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(address);
+      } else {
+        throw new Error("Clipboard API unavailable");
+      }
       setCopyNotice("Address copied.");
     } catch {
-      setCopyNotice("Copy failed. Please copy manually.");
+      const textarea = document.createElement("textarea");
+      textarea.value = address;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch {
+        copied = false;
+      } finally {
+        textarea.remove();
+      }
+      setCopyNotice(copied ? "Address copied." : "Copy failed. Please copy manually.");
     }
   }
 
@@ -6158,7 +6186,12 @@ export default function PatientDetailClient({
                   ) : (
                     <span className="badge">No email</span>
                   )}
-                  <button className="btn btn-secondary" type="button" onClick={copyAddress}>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    data-testid="patient-copy-address"
+                    onClick={copyAddress}
+                  >
                     Copy address
                   </button>
                   {copyNotice && <span className="badge">{copyNotice}</span>}
@@ -6458,6 +6491,7 @@ export default function PatientDetailClient({
                       <button
                         type="button"
                         className="btn btn-secondary"
+                        data-testid="patient-jump-appointments"
                         onClick={() => {
                           activateContentTab("summary");
                           setPendingScrollTarget("patient-appointments");
@@ -6725,9 +6759,10 @@ export default function PatientDetailClient({
 
                     <div className="stack">
                       <div
-                        className="card"
+                        className="card patient-scroll-target"
                         id="patient-appointments"
                         data-testid="patient-appointments"
+                        tabIndex={-1}
                         style={{ margin: 0, scrollMarginTop: 96 }}
                       >
                         <div className="stack">
@@ -12237,7 +12272,7 @@ export default function PatientDetailClient({
                       <option value="">Unassigned</option>
                       {users.map((user) => (
                         <option key={user.id} value={user.id}>
-                          {user.full_name || user.email} ({user.role})
+                          {user.full_name || user.email}
                         </option>
                       ))}
                     </select>
@@ -12264,7 +12299,7 @@ export default function PatientDetailClient({
                       }}
                     >
                       <option value="clinic">Clinic</option>
-                      <option value="visit">Visit</option>
+                      <option value="visit">Home visit</option>
                     </select>
                   </div>
                   {bookingLocationType === "visit" && (
