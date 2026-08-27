@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch, clearToken, getToken } from "@/lib/auth";
+import Icon, { type IconName } from "@/components/ui/Icon";
 
 type Me = {
   id: number;
@@ -38,15 +39,17 @@ function getPatientSearchUrl(query: string) {
   return `/api/patients/search?${params.toString()}`;
 }
 
-const baseTabs = [
-  { href: "/", label: "Home" },
-  { href: "/patients", label: "Patients" },
-  { href: "/appointments", label: "Appointments" },
-  { href: "/r4-calendar", label: "R4 Calendar" },
-  { href: "/recalls", label: "Recalls" },
-  { href: "/cashup", label: "Cash-up" },
-  { href: "/reports", label: "Reports" },
-  { href: "/notes", label: "Notes" },
+type ShellTab = { href: string; label: string; icon: IconName };
+
+const baseTabs: ShellTab[] = [
+  { href: "/", label: "Home", icon: "home" },
+  { href: "/patients", label: "Patients", icon: "patients" },
+  { href: "/appointments", label: "Appointments", icon: "calendar" },
+  { href: "/r4-calendar", label: "R4 Calendar", icon: "history" },
+  { href: "/recalls", label: "Recalls", icon: "history" },
+  { href: "/cashup", label: "Cash-up", icon: "wallet" },
+  { href: "/reports", label: "Reports", icon: "reports" },
+  { href: "/notes", label: "Notes", icon: "notes" },
 ];
 
 const patientTabsStorageKey = "dental_pms_patient_tabs";
@@ -74,8 +77,9 @@ function ThemeToggle() {
   }
 
   return (
-    <button className="btn btn-secondary" onClick={toggle} aria-label="Toggle theme">
-      {theme === "light" ? "🌙 Dark" : "☀️ Light"}
+    <button className="btn btn-secondary app-utility-button" onClick={toggle} aria-label="Toggle theme">
+      <Icon name={theme === "light" ? "moon" : "sun"} />
+      <span>{theme === "light" ? "Dark" : "Light"}</span>
     </button>
   );
 }
@@ -267,23 +271,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push(`/patients/${patient.id}`);
   }
 
-  const tabs = [
-    ...baseTabs,
-    ...(isSuperadmin ? [{ href: "/treatments", label: "Treatments" }] : []),
-    ...(isSuperadmin ? [{ href: "/templates", label: "Templates" }] : []),
+  const tabs: ShellTab[] = baseTabs;
+  const moreTabs: ShellTab[] = [
     ...(isSuperadmin
-      ? [{ href: "/admin/legacy/unmapped-appointments", label: "Legacy Queue" }]
+      ? [{ href: "/treatments", label: "Treatments", icon: "treatment" as const }]
+      : []),
+    ...(isSuperadmin
+      ? [{ href: "/templates", label: "Templates", icon: "template" as const }]
+      : []),
+    ...(isSuperadmin
+      ? [{ href: "/admin/legacy/unmapped-appointments", label: "Legacy Queue", icon: "history" as const }]
       : []),
     ...(isSuperadmin
       ? [
-          { href: "/admin/r4/treatment-plans", label: "R4 Plans" },
-          { href: "/admin/r4/patient-mappings", label: "R4 Mappings" },
-          { href: "/admin/r4/manual-mappings", label: "R4 Manual Mappings" },
+          { href: "/admin/r4/treatment-plans", label: "R4 Plans", icon: "treatment" as const },
+          { href: "/admin/r4/patient-mappings", label: "R4 Mappings", icon: "patients" as const },
+          { href: "/admin/r4/manual-mappings", label: "R4 Manual Mappings", icon: "settings" as const },
         ]
       : []),
-    ...(isSuperadmin ? [{ href: "/settings/profile", label: "Practice profile" }] : []),
-    ...(isSuperadmin ? [{ href: "/settings/schedule", label: "Schedule" }] : []),
-    ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
+    ...(isSuperadmin
+      ? [{ href: "/settings/profile", label: "Practice profile", icon: "settings" as const }]
+      : []),
+    ...(isSuperadmin
+      ? [{ href: "/settings/schedule", label: "Schedule", icon: "calendar" as const }]
+      : []),
+    ...(isAdmin ? [{ href: "/users", label: "Users", icon: "users" as const }] : []),
   ];
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href));
   const showDropdown = searchQuery.trim().length >= 2;
@@ -297,10 +309,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <div className="app-top">
         <div className="app-top-bar">
-          <h1 className="app-title">Dental PMS</h1>
-          <div style={{ position: "relative", flex: 1, maxWidth: 420 }}>
+          <h1 className="app-title"><span className="app-mark" aria-hidden="true">D</span>Dental PMS</h1>
+          <div className="app-search">
+            <Icon name="search" className="app-search-icon" />
             <input
-              className="input"
+              className="input app-search-input"
               placeholder="Search patients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -379,33 +392,61 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div className="badge">{me ? `${me.email} · ${me.role}` : "Signed in"}</div>
-            <div className="badge">build: {buildSha}</div>
+          <div className="app-account-controls">
+            <div className="app-user" title={me?.email || "Signed in"}>
+              <span className="app-user-name">{me?.full_name || me?.email || "Signed in"}</span>
+              {me?.role && <span className="app-user-role">{me.role}</span>}
+            </div>
             <ThemeToggle />
             <button
-              className="btn btn-secondary"
+              className="btn btn-secondary app-utility-button"
               onClick={() => {
                 clearToken();
                 router.replace("/login");
               }}
             >
-              Sign out
+              <Icon name="logout" />
+              <span>Sign out</span>
             </button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <nav className="tab-list">
+        <div className="app-nav-row">
+          <nav className="tab-list app-primary-nav" aria-label="Main navigation">
             {tabs.map((tab) => (
               <Link
                 key={tab.href}
                 href={tab.href}
                 className={`tab-link${isActive(tab.href) ? " active" : ""}`}
               >
+                <Icon name={tab.icon} />
                 {tab.label}
               </Link>
             ))}
           </nav>
+          {moreTabs.length > 0 && (
+            <details className="app-more-menu">
+              <summary className={`tab-link${moreTabs.some((tab) => isActive(tab.href)) ? " active" : ""}`}>
+                <Icon name="menu" />
+                More
+              </summary>
+              <div className="app-more-popover">
+                <div className="app-more-meta">
+                  <span>{me?.email || "Signed in"}</span>
+                  <span>Build {buildSha}</span>
+                </div>
+                {moreTabs.map((tab) => (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={`app-menu-link${isActive(tab.href) ? " active" : ""}`}
+                  >
+                    <Icon name={tab.icon} />
+                    {tab.label}
+                  </Link>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
         {error && <div className="notice">{error}</div>}
       </div>
