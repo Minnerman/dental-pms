@@ -242,6 +242,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   });
 
   await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+  await page.getByText("Chart options", { exact: true }).click();
   await expect(page.getByTestId("odontogram-overlay-legend")).toBeVisible();
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
   await expect(page.getByTestId("tooth-overlay-planned-16")).toHaveText("P1");
@@ -323,6 +324,7 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
   await expect(page.getByTestId("tooth-restoration-LL6-crown")).toBeVisible();
   await expect(page.getByTestId("tooth-overlay-planned-15")).toHaveText("P1");
   await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByText("Chart options", { exact: true }).click();
   await expect(page.getByTestId("clinical-overlay-filter-planned")).toHaveAttribute(
     "data-active",
     "true"

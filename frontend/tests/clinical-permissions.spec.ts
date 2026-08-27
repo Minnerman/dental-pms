@@ -44,6 +44,7 @@ test("clinical viewers get a converged read-only chart and plan", async ({
   await expect(page.getByTestId("clinical-chart")).toBeVisible();
   await expect(page.locator('[data-testid^="patient-bpe-score-"]').first()).toBeDisabled();
   await expect(page.getByTestId("patient-bpe-save")).toBeDisabled();
+  await page.getByTestId("tooth-button-UR8").click();
   await expect(page.getByTestId("patient-chart-note-body")).toBeDisabled();
   await expect(page.getByTestId("patient-chart-note-add")).toBeDisabled();
   await expect(page.getByTestId("patient-chart-procedure-code")).toBeDisabled();
