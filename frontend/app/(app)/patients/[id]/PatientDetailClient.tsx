@@ -1436,6 +1436,16 @@ export default function PatientDetailClient({
     setActiveToothTool(section);
   }, []);
 
+  const closeToothTools = useCallback(() => {
+    shouldFocusToothToolRef.current = false;
+    setChartActionMenu(null);
+    setActiveToothTool(null);
+    setSelectedTooth(null);
+    setSelectedToothSurfaces([]);
+    setChartNoteSurface("");
+    setNotesTooth("");
+  }, []);
+
   useEffect(() => {
     if (!chartActionMenu) return;
     const dismissMenu = (event: PointerEvent) => {
@@ -9984,8 +9994,14 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary patient-clinical-tools-close"
                               type="button"
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={() => applyChartSelection(null, [])}
+                              onPointerDown={(event) => {
+                                if (event.button !== 0) return;
+                                event.stopPropagation();
+                                closeToothTools();
+                              }}
+                              onClick={(event) => {
+                                if (event.detail === 0) closeToothTools();
+                              }}
                               aria-label="Close tooth tools"
                             >
                               Close
