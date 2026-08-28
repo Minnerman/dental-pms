@@ -9982,7 +9982,7 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary patient-clinical-tools-close"
                               type="button"
-                              onClick={() => setActiveToothTool(null)}
+                              onClick={() => applyChartSelection(null, [])}
                               aria-label="Close tooth tools"
                             >
                               Close
