@@ -416,13 +416,11 @@
 .shell :global(.patient-clinical-tools) {
   background: var(--panel);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
-  position: fixed;
-  right: 18px;
-  top: 132px;
-  width: min(390px, calc(100vw - 36px));
-  z-index: 55;
+  grid-column: 1 / -1;
+  max-height: none;
+  overflow-y: visible;
+  position: static;
+  width: auto;
 }
 
 .shell :global(.clinical-chart-action-menu) {
@@ -539,10 +537,8 @@
   }
 
   .shell :global(.patient-clinical-tools) {
-    max-height: calc(100vh - 96px);
-    right: 10px;
-    top: 76px;
-    width: min(390px, calc(100vw - 20px));
+    max-height: none;
+    width: auto;
   }
 
   .shell :global(.patient-custom-tabs) {

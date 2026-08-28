@@ -1142,6 +1142,7 @@ export default function PatientDetailClient({
   const chartNoteBodyRef = useRef<HTMLTextAreaElement | null>(null);
   const chartProcedureCodeRef = useRef<HTMLSelectElement | null>(null);
   const chartTimelineRef = useRef<HTMLDivElement | null>(null);
+  const shouldFocusToothToolRef = useRef(false);
   const [chartSelectionUndoState, setChartSelectionUndoState] =
     useState<ChartSelectionState | null>(null);
   const [chartSelectionRedoState, setChartSelectionRedoState] =
@@ -1374,6 +1375,7 @@ export default function PatientDetailClient({
       }
       if (current.tooth !== nextTooth) {
         setChartActionMenu(null);
+        shouldFocusToothToolRef.current = false;
         setActiveToothTool(nextTooth ? "timeline" : null);
       }
       setSelectedTooth(nextTooth);
@@ -1430,6 +1432,7 @@ export default function PatientDetailClient({
 
   const openToothTool = useCallback((section: ToothToolSection) => {
     setChartActionMenu(null);
+    shouldFocusToothToolRef.current = true;
     setActiveToothTool(section);
   }, []);
 
@@ -1454,7 +1457,8 @@ export default function PatientDetailClient({
   }, [chartActionMenu]);
 
   useEffect(() => {
-    if (!activeToothTool) return;
+    if (!activeToothTool || !shouldFocusToothToolRef.current) return;
+    shouldFocusToothToolRef.current = false;
     const focusTimer = window.setTimeout(() => {
       if (activeToothTool === "note") chartNoteBodyRef.current?.focus();
       if (activeToothTool === "procedure") chartProcedureCodeRef.current?.focus();

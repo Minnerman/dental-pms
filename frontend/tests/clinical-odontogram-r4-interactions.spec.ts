@@ -52,6 +52,9 @@ test("odontogram keeps its size and separates anatomy from the surface map", asy
   expect(afterSelection?.height).toBeCloseTo(beforeSelection?.height ?? 0, 1);
   expect((afterSelection?.height ?? 0) > (afterSelection?.width ?? 0)).toBeTruthy();
 
+  await page.getByTestId("tooth-button-LL6").click();
+  await expect(page.getByTestId("tooth-button-LL6")).toHaveAttribute("data-selected", "true");
+
   await expect(page.getByTestId("tooth-root-LR6-1")).toBeAttached();
   await expect(page.getByTestId("tooth-root-LR6-2")).toBeAttached();
   await expect(page.getByTestId("tooth-root-LR6-3")).toHaveCount(0);
