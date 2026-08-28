@@ -801,6 +801,13 @@ type ChartSelectionState = {
   tooth: string | null;
   surfaces: R4SurfaceKey[];
 };
+type ChartActionMenu = {
+  tooth: string;
+  kind: "tooth" | "surface";
+  left: number;
+  top: number;
+};
+type ToothToolSection = "note" | "procedure" | "timeline";
 const restorativeShortcutSurfaceByKey: Record<string, R4SurfaceKey> = {
   m: "M",
   o: "O",
@@ -1129,6 +1136,13 @@ export default function PatientDetailClient({
   const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
   const [selectedToothSurfaces, setSelectedToothSurfaces] = useState<R4SurfaceKey[]>([]);
+  const [chartActionMenu, setChartActionMenu] = useState<ChartActionMenu | null>(null);
+  const [activeToothTool, setActiveToothTool] = useState<ToothToolSection | null>(null);
+  const chartActionMenuRef = useRef<HTMLDivElement | null>(null);
+  const chartNoteBodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const chartProcedureCodeRef = useRef<HTMLSelectElement | null>(null);
+  const chartTimelineRef = useRef<HTMLDivElement | null>(null);
+  const shouldFocusToothToolRef = useRef(false);
   const [chartSelectionUndoState, setChartSelectionUndoState] =
     useState<ChartSelectionState | null>(null);
   const [chartSelectionRedoState, setChartSelectionRedoState] =
@@ -1359,6 +1373,11 @@ export default function PatientDetailClient({
       ) {
         return;
       }
+      if (current.tooth !== nextTooth) {
+        setChartActionMenu(null);
+        shouldFocusToothToolRef.current = false;
+        setActiveToothTool(nextTooth ? "timeline" : null);
+      }
       setSelectedTooth(nextTooth);
       setSelectedToothSurfaces(normalizedSurfaces);
       setChartNoteSurface(normalizedSurfaces.join(""));
@@ -1366,6 +1385,8 @@ export default function PatientDetailClient({
         setNotesTooth(nextTooth);
       } else {
         setNotesTooth("");
+        setChartActionMenu(null);
+        setActiveToothTool(null);
       }
       if (options?.trackHistory === false) {
         return;
@@ -1386,6 +1407,75 @@ export default function PatientDetailClient({
     },
     [applyChartSelection, selectedTooth, selectedToothSurfaces]
   );
+
+  const openChartActionMenu = useCallback(
+    (
+      tooth: string,
+      kind: ChartActionMenu["kind"],
+      position: { clientX: number; clientY: number },
+      fallbackElement?: HTMLElement | null
+    ) => {
+      const fallbackRect = fallbackElement?.getBoundingClientRect();
+      const requestedLeft = position.clientX || fallbackRect?.left || 16;
+      const requestedTop = position.clientY || fallbackRect?.bottom || 16;
+      const maxLeft = Math.max(12, window.innerWidth - 268);
+      const maxTop = Math.max(12, window.innerHeight - 270);
+      setChartActionMenu({
+        tooth,
+        kind,
+        left: Math.max(12, Math.min(requestedLeft, maxLeft)),
+        top: Math.max(12, Math.min(requestedTop, maxTop)),
+      });
+    },
+    []
+  );
+
+  const openToothTool = useCallback((section: ToothToolSection) => {
+    setChartActionMenu(null);
+    shouldFocusToothToolRef.current = true;
+    setActiveToothTool(section);
+  }, []);
+
+  const closeToothTools = useCallback(() => {
+    shouldFocusToothToolRef.current = false;
+    setChartActionMenu(null);
+    setActiveToothTool(null);
+    setSelectedTooth(null);
+    setSelectedToothSurfaces([]);
+    setChartNoteSurface("");
+    setNotesTooth("");
+  }, []);
+
+  useEffect(() => {
+    if (!chartActionMenu) return;
+    const dismissMenu = (event: PointerEvent) => {
+      if (!chartActionMenuRef.current?.contains(event.target as Node)) {
+        setChartActionMenu(null);
+      }
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setChartActionMenu(null);
+      }
+    };
+    document.addEventListener("pointerdown", dismissMenu);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissMenu);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [chartActionMenu]);
+
+  useEffect(() => {
+    if (!activeToothTool || !shouldFocusToothToolRef.current) return;
+    shouldFocusToothToolRef.current = false;
+    const focusTimer = window.setTimeout(() => {
+      if (activeToothTool === "note") chartNoteBodyRef.current?.focus();
+      if (activeToothTool === "procedure") chartProcedureCodeRef.current?.focus();
+      if (activeToothTool === "timeline") chartTimelineRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [activeToothTool, selectedTooth]);
 
   const selectAdjacentChartTooth = useCallback(
     (direction: 1 | -1) => {
@@ -3060,6 +3150,18 @@ export default function PatientDetailClient({
     setShowPlanModal(true);
   }
 
+  function openBlankPlanForChartSelection() {
+    if (!canWriteClinical || clinicalPatientUnavailable || !selectedTooth) return;
+    setChartActionMenu(null);
+    setEditingTreatmentPlanId(null);
+    setPlanTooth(selectedTooth);
+    setPlanSurface(chartNoteSurface);
+    setPlanCode("");
+    setPlanDescription("");
+    setPlanFee("");
+    setShowPlanModal(true);
+  }
+
   function resetTreatmentPlanForm() {
     setEditingTreatmentPlanId(null);
     setShowPlanModal(false);
@@ -4328,9 +4430,10 @@ export default function PatientDetailClient({
 
   function getSurfaceOverlayPositionStyle(
     toothType: OdontogramToothType,
-    surface: R4SurfaceKey
+    surface: R4SurfaceKey,
+    isUpperArch: boolean
   ) {
-    const anchor = getOdontogramSurfaceAnchor(toothType, surface);
+    const anchor = getOdontogramSurfaceAnchor(toothType, surface, isUpperArch);
     return {
       position: "absolute",
       top: anchor.top,
@@ -9097,7 +9200,101 @@ export default function PatientDetailClient({
                       alignItems: "start",
                     }}
                   >
-                        <div className="stack" style={{ gap: 16 }}>
+                        {chartActionMenu && (
+                          <div
+                            key="clinical-chart-action-menu"
+                            ref={chartActionMenuRef}
+                            className="clinical-chart-action-menu"
+                            role="menu"
+                            aria-label={
+                              chartActionMenu.kind === "surface"
+                                ? `Surface actions for ${chartActionMenu.tooth}`
+                                : `Tooth actions for ${chartActionMenu.tooth}`
+                            }
+                            data-testid={`clinical-${chartActionMenu.kind}-action-menu`}
+                            style={{
+                              left: chartActionMenu.left,
+                              top: chartActionMenu.top,
+                            }}
+                          >
+                            <div className="clinical-chart-action-menu-title">
+                              {chartActionMenu.kind === "surface"
+                                ? `${chartActionMenu.tooth} · Surface${
+                                    selectedToothSurfaces.length === 1 ? "" : "s"
+                                  } ${selectedToothSurfaces.join("") || "none"}`
+                                : `${chartActionMenu.tooth} · Whole tooth`}
+                            </div>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              role="menuitem"
+                              onClick={() => openToothTool("note")}
+                              data-testid="clinical-chart-menu-add-note"
+                            >
+                              <Icon name="notes" size={14} /> Add clinical note
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              role="menuitem"
+                              onClick={() => openToothTool("procedure")}
+                              data-testid="clinical-chart-menu-add-procedure"
+                            >
+                              <Icon name="treatment" size={14} /> Add procedure
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              role="menuitem"
+                              onClick={openBlankPlanForChartSelection}
+                              disabled={!canWriteClinical}
+                              data-testid="clinical-chart-menu-add-plan"
+                            >
+                              <Icon name="template" size={14} /> Add to treatment plan
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              role="menuitem"
+                              onClick={() => openToothTool("timeline")}
+                              data-testid="clinical-chart-menu-view-timeline"
+                            >
+                              <Icon name="timeline" size={14} /> View tooth timeline
+                            </button>
+                            {chartActionMenu.kind === "surface" && (
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  applyChartSelection(chartActionMenu.tooth, []);
+                                  setChartActionMenu(null);
+                                }}
+                                data-testid="clinical-chart-menu-clear-surfaces"
+                              >
+                                Clear selected surfaces
+                              </button>
+                            )}
+                            {chartActionMenu.kind === "tooth" && (
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                role="menuitem"
+                                disabled
+                                title="A discrete clinical-state model is required before movement and rotation can be recorded safely."
+                                data-testid="clinical-chart-menu-movement-disabled"
+                              >
+                                Movement / rotation · not yet available
+                              </button>
+                            )}
+                            <div className="clinical-chart-action-menu-hint">
+                              {chartActionMenu.kind === "surface"
+                                ? "Click or right-click surfaces to build MODBL combinations."
+                                : "Click the surface diagram for surface-specific actions."}
+                            </div>
+                          </div>
+                        )}
+                        <div key="clinical-chart-main" className="stack" style={{ gap: 16 }}>
                           <Panel title="Odontogram" className="patient-route-chart-panel">
                             <div className="stack" style={{ gap: 16 }} data-testid="clinical-chart">
                               <div className="stack" style={{ gap: 8 }}>
@@ -9108,7 +9305,7 @@ export default function PatientDetailClient({
                                   style={{
                                     display: "grid",
                                     gap: 6,
-                                    gridTemplateColumns: "repeat(16, minmax(40px, 1fr))",
+                                    gridTemplateColumns: "repeat(16, minmax(58px, 1fr))",
                                   }}
                                 >
                                   {upperTeeth.map((tooth) => {
@@ -9129,7 +9326,25 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => applyChartSelection(tooth, [])}
+                                        onClick={(event) => {
+                                          applyChartSelection(tooth, []);
+                                          openChartActionMenu(
+                                            tooth,
+                                            "tooth",
+                                            { clientX: event.clientX, clientY: event.clientY },
+                                            event.currentTarget
+                                          );
+                                        }}
+                                        onContextMenu={(event) => {
+                                          event.preventDefault();
+                                          applyChartSelection(tooth, []);
+                                          openChartActionMenu(
+                                            tooth,
+                                            "tooth",
+                                            { clientX: event.clientX, clientY: event.clientY },
+                                            event.currentTarget
+                                          );
+                                        }}
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
@@ -9165,6 +9380,16 @@ export default function PatientDetailClient({
                                             } else {
                                               applyChartSelection(tooth, [surface]);
                                             }
+                                          }}
+                                          onSurfaceContextMenu={(surface, position) => {
+                                            const nextSurfaces =
+                                              isActive && selectedToothSurfaces.includes(surface)
+                                                ? selectedToothSurfaces
+                                                : isActive
+                                                  ? [...selectedToothSurfaces, surface]
+                                                  : [surface];
+                                            applyChartSelection(tooth, nextSurfaces);
+                                            openChartActionMenu(tooth, "surface", position);
                                           }}
                                         />
                                         <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
@@ -9270,7 +9495,8 @@ export default function PatientDetailClient({
                                                 style={{
                                                   ...getSurfaceOverlayPositionStyle(
                                                     toothType,
-                                                    surfaceOverlay.surface
+                                                    surfaceOverlay.surface,
+                                                    tooth.startsWith("U")
                                                   ),
                                                   display: "inline-flex",
                                                   alignItems: "center",
@@ -9314,7 +9540,7 @@ export default function PatientDetailClient({
                                   style={{
                                     display: "grid",
                                     gap: 6,
-                                    gridTemplateColumns: "repeat(16, minmax(40px, 1fr))",
+                                    gridTemplateColumns: "repeat(16, minmax(58px, 1fr))",
                                   }}
                                 >
                                   {lowerTeeth.map((tooth) => {
@@ -9335,7 +9561,25 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => applyChartSelection(tooth, [])}
+                                        onClick={(event) => {
+                                          applyChartSelection(tooth, []);
+                                          openChartActionMenu(
+                                            tooth,
+                                            "tooth",
+                                            { clientX: event.clientX, clientY: event.clientY },
+                                            event.currentTarget
+                                          );
+                                        }}
+                                        onContextMenu={(event) => {
+                                          event.preventDefault();
+                                          applyChartSelection(tooth, []);
+                                          openChartActionMenu(
+                                            tooth,
+                                            "tooth",
+                                            { clientX: event.clientX, clientY: event.clientY },
+                                            event.currentTarget
+                                          );
+                                        }}
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
@@ -9371,6 +9615,16 @@ export default function PatientDetailClient({
                                             } else {
                                               applyChartSelection(tooth, [surface]);
                                             }
+                                          }}
+                                          onSurfaceContextMenu={(surface, position) => {
+                                            const nextSurfaces =
+                                              isActive && selectedToothSurfaces.includes(surface)
+                                                ? selectedToothSurfaces
+                                                : isActive
+                                                  ? [...selectedToothSurfaces, surface]
+                                                  : [surface];
+                                            applyChartSelection(tooth, nextSurfaces);
+                                            openChartActionMenu(tooth, "surface", position);
                                           }}
                                         />
                                         <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
@@ -9476,7 +9730,8 @@ export default function PatientDetailClient({
                                                 style={{
                                                   ...getSurfaceOverlayPositionStyle(
                                                     toothType,
-                                                    surfaceOverlay.surface
+                                                    surfaceOverlay.surface,
+                                                    tooth.startsWith("U")
                                                   ),
                                                   display: "inline-flex",
                                                   alignItems: "center",
@@ -9729,8 +9984,9 @@ export default function PatientDetailClient({
                           </Panel>
                         </div>
 
-                        {selectedTooth && (
+                        {selectedTooth && activeToothTool && (
                         <Panel
+                          key="clinical-tooth-tools"
                           title={`Tooth ${selectedTooth}`}
                           className="patient-clinical-tools"
                         >
@@ -9738,7 +9994,14 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary patient-clinical-tools-close"
                               type="button"
-                              onClick={() => applyChartSelection(null, [])}
+                              onPointerDown={(event) => {
+                                if (event.button !== 0) return;
+                                event.stopPropagation();
+                                closeToothTools();
+                              }}
+                              onClick={(event) => {
+                                if (event.detail === 0) closeToothTools();
+                              }}
                               aria-label="Close tooth tools"
                             >
                               Close
@@ -9783,6 +10046,7 @@ export default function PatientDetailClient({
                                 <div className="stack" style={{ gap: 8 }}>
                                   <label className="label">Note</label>
                                   <textarea
+                                    ref={chartNoteBodyRef}
                                     className="input"
                                     data-testid="patient-chart-note-body"
                                     rows={3}
@@ -9817,6 +10081,7 @@ export default function PatientDetailClient({
                                 <div className="stack" style={{ gap: 8 }}>
                                   <label className="label">Procedure code</label>
                                   <select
+                                    ref={chartProcedureCodeRef}
                                     className="input"
                                     data-testid="patient-chart-procedure-code"
                                     value={procedureCode}
@@ -9996,7 +10261,12 @@ export default function PatientDetailClient({
                                 )}
                               </div>
 
-                              <div className="stack" style={{ gap: 10 }}>
+                              <div
+                                ref={chartTimelineRef}
+                                className="stack"
+                                style={{ gap: 10 }}
+                                tabIndex={-1}
+                              >
                                 <div className="label">Tooth timeline</div>
                                 {clinicalViewMode !== "planned" && (
                                   <div

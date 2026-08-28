@@ -3,18 +3,17 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
-- The active R4-inspired chart workflow branch adds canonical multi-surface
-  selection and storage, keeps the surface selection synchronized with chart
-  entry, and shows a compact treatment plan below the odontogram in Planned
-  view. Completing an item now atomically and idempotently records the
-  completed procedure and its positive ledger charge, requires both clinical
-  and billing permissions, and discloses the exact finance effect before
-  confirmation. The full backend suite passes (699 passed, one skipped), as do
-  eleven focused clinical/ledger checks, seven focused Playwright checks, the
-  repository verification and health scripts, frontend typecheck and lint,
-  the production build, Python compilation, and diff checks in isolated
-  synthetic environments. There is no database migration, R4 write,
-  production change, or deployment.
+- Production includes the merged R4-inspired chart workflow through PR #711:
+  canonical multi-surface selection and storage, synchronized chart entry, and
+  treatment-plan completion with its guarded finance effect.
+- The active isolated charting branch fixes the tooth-selection size jump,
+  separates the anatomical crown/root drawing from the clickable surface map,
+  and adds distinct whole-tooth and surface action menus for click/right-click
+  workflows. Movement and rotation remain visibly unavailable until a safe
+  discrete clinical-state model exists; no historical clinical state is
+  invented. Focused interaction checks cover stable geometry, upper/lower root
+  anatomy, multi-surface selection, and both menu types. There is no database
+  migration, R4 access/write, production change, or deployment in this branch.
 - Owner UAT on 27 August 2026 identified a coherent appointment/patient UI
   blocker set. The active isolated branch fixes duplicate calendar times,
   clipped week headings, visible permission-gated appointment-note previews,

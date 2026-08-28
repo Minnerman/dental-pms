@@ -377,10 +377,6 @@
   position: relative;
 }
 
-.shell :global(.patient-route-clinical-grid[data-has-tooth-selection="true"]) {
-  grid-template-columns: minmax(730px, 2fr) minmax(300px, 0.78fr) !important;
-}
-
 .shell :global(.patient-route-clinical-grid > .stack:first-child) {
   display: grid;
   gap: 10px !important;
@@ -393,6 +389,7 @@
 
 .shell :global(.patient-route-odontogram-grid) {
   justify-content: center;
+  overflow-x: auto;
   width: 100%;
 }
 
@@ -401,7 +398,7 @@
   border-color: transparent !important;
   border-radius: 7px !important;
   min-width: 0;
-  min-height: 118px !important;
+  min-height: 158px !important;
   padding: 4px 0 3px !important;
 }
 
@@ -412,34 +409,55 @@
 }
 
 .shell :global(.odontogram-tooth-svg) {
-  height: 68px;
-  width: 68px;
-}
-
-.shell :global(
-  .patient-route-clinical-grid[data-has-tooth-selection="true"]
-    .patient-route-odontogram-grid
-    > button
-) {
-  min-height: 92px !important;
-}
-
-.shell :global(
-  .patient-route-clinical-grid[data-has-tooth-selection="true"] .odontogram-tooth-svg
-) {
-  height: 44px;
-  width: 44px;
+  height: 122px;
+  width: 64px;
 }
 
 .shell :global(.patient-clinical-tools) {
   background: var(--panel);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
-  position: sticky;
-  top: 132px;
+  grid-column: 1 / -1;
+  max-height: none;
+  overflow-y: visible;
+  position: static;
   width: auto;
-  z-index: 20;
+}
+
+.shell :global(.clinical-chart-action-menu) {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.28);
+  display: grid;
+  gap: 4px;
+  min-width: 230px;
+  padding: 7px;
+  position: fixed;
+  z-index: 70;
+}
+
+.shell :global(.clinical-chart-action-menu-title) {
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  padding: 4px 7px 7px;
+}
+
+.shell :global(.clinical-chart-action-menu button) {
+  justify-content: flex-start;
+  min-height: 32px;
+  text-align: left;
+  width: 100%;
+}
+
+.shell :global(.clinical-chart-action-menu-hint) {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 2px;
+  padding: 6px 7px 2px;
 }
 
 .shell :global(.patient-clinical-tools-header) {
@@ -520,8 +538,6 @@
 
   .shell :global(.patient-clinical-tools) {
     max-height: none;
-    overflow-y: visible;
-    position: static;
     width: auto;
   }
 

@@ -30,13 +30,18 @@ type SurfaceShape = {
   points: string;
 };
 
+type PointerPosition = {
+  clientX: number;
+  clientY: number;
+};
+
 type NormalizedRestoration = {
   type: NormalizedRestorationType;
   surfaces: R4SurfaceKey[];
   meta?: Record<string, unknown>;
 };
 
-const toothOutlinePath: Record<OdontogramToothType, string> = {
+const surfaceOutlinePath: Record<OdontogramToothType, string> = {
   incisor:
     "M36 6 C44 4 56 4 64 6 C72 10 78 20 76 30 C74 42 72 52 70 66 C68 78 62 90 50 94 C38 90 32 78 30 66 C28 52 26 42 24 30 C22 20 28 10 36 6 Z",
   canine:
@@ -46,6 +51,40 @@ const toothOutlinePath: Record<OdontogramToothType, string> = {
   molar:
     "M26 10 C34 4 66 4 74 10 C82 18 86 30 84 42 C82 56 80 68 76 78 C72 88 64 94 50 96 C36 94 28 88 24 78 C20 68 18 56 16 42 C14 30 18 18 26 10 Z",
 };
+
+const anatomicalCrownPath: Record<OdontogramToothType, string> = {
+  incisor: "M34 44 C41 40 59 40 66 44 C72 49 73 61 70 72 C67 82 60 87 50 88 C40 87 33 82 30 72 C27 61 28 49 34 44 Z",
+  canine: "M34 46 C40 41 60 41 66 46 C72 51 75 63 71 74 C67 83 60 88 50 89 C40 88 33 83 29 74 C25 63 28 51 34 46 Z",
+  premolar: "M29 45 C38 39 62 39 71 45 C79 52 79 66 74 77 C69 86 61 89 50 89 C39 89 31 86 26 77 C21 66 21 52 29 45 Z",
+  molar: "M22 45 C33 38 67 38 78 45 C86 52 87 68 81 79 C75 87 65 90 50 90 C35 90 25 87 19 79 C13 68 14 52 22 45 Z",
+};
+
+const upperAnatomicalRootPaths: Record<OdontogramToothType, string[]> = {
+  incisor: [
+    "M39 47 C37 35 40 16 47 5 C49 2 51 2 53 5 C60 16 63 35 61 47 C55 52 45 52 39 47 Z",
+  ],
+  canine: [
+    "M38 48 C36 34 40 13 47 3 C49 0 51 0 53 3 C60 13 64 34 62 48 C56 53 44 53 38 48 Z",
+  ],
+  premolar: [
+    "M33 47 C31 34 31 17 39 5 C41 2 44 2 46 5 C50 17 50 34 48 48 C43 52 38 52 33 47 Z",
+    "M52 48 C50 34 50 17 54 5 C56 2 59 2 61 5 C69 17 69 34 67 47 C62 52 57 52 52 48 Z",
+  ],
+  molar: [
+    "M24 48 C21 36 20 22 27 8 C29 4 33 4 35 8 C41 21 42 36 40 50 C35 54 29 53 24 48 Z",
+    "M40 49 C39 34 42 16 48 5 C49 2 51 2 52 5 C58 16 61 34 60 49 C55 53 45 53 40 49 Z",
+    "M60 50 C58 36 59 21 65 8 C67 4 71 4 73 8 C80 22 79 36 76 48 C71 53 65 54 60 50 Z",
+  ],
+};
+
+const lowerMolarRootPaths = [
+  "M27 48 C23 34 24 17 34 5 C36 2 40 2 42 6 C47 19 48 35 46 49 C40 53 33 53 27 48 Z",
+  "M54 49 C52 35 53 19 58 6 C60 2 64 2 66 5 C76 17 77 34 73 48 C67 53 60 53 54 49 Z",
+];
+
+const singlePremolarRootPaths = [
+  "M37 48 C34 35 36 17 45 5 C48 1 52 1 55 5 C64 17 66 35 63 48 C57 53 43 53 37 48 Z",
+];
 
 const posteriorSurfaceShapes: SurfaceShape[] = [
   { key: "B", points: "26,12 74,12 66,30 34,30" },
@@ -75,36 +114,36 @@ const surfaceAnchorByType: Record<
   Record<R4SurfaceKey, { top: string; left: string }>
 > = {
   incisor: {
-    B: { top: "22%", left: "50%" },
-    M: { top: "54%", left: "26%" },
-    I: { top: "50%", left: "50%" },
-    O: { top: "50%", left: "50%" },
-    D: { top: "54%", left: "74%" },
-    L: { top: "78%", left: "50%" },
+    B: { top: "58%", left: "50%" },
+    M: { top: "70%", left: "26%" },
+    I: { top: "69%", left: "50%" },
+    O: { top: "69%", left: "50%" },
+    D: { top: "70%", left: "74%" },
+    L: { top: "82%", left: "50%" },
   },
   canine: {
-    B: { top: "22%", left: "50%" },
-    M: { top: "54%", left: "26%" },
-    I: { top: "50%", left: "50%" },
-    O: { top: "50%", left: "50%" },
-    D: { top: "54%", left: "74%" },
-    L: { top: "78%", left: "50%" },
+    B: { top: "58%", left: "50%" },
+    M: { top: "70%", left: "26%" },
+    I: { top: "69%", left: "50%" },
+    O: { top: "69%", left: "50%" },
+    D: { top: "70%", left: "74%" },
+    L: { top: "82%", left: "50%" },
   },
   premolar: {
-    B: { top: "22%", left: "50%" },
-    M: { top: "50%", left: "22%" },
-    I: { top: "50%", left: "50%" },
-    O: { top: "50%", left: "50%" },
-    D: { top: "50%", left: "78%" },
-    L: { top: "80%", left: "50%" },
+    B: { top: "58%", left: "50%" },
+    M: { top: "69%", left: "22%" },
+    I: { top: "69%", left: "50%" },
+    O: { top: "69%", left: "50%" },
+    D: { top: "69%", left: "78%" },
+    L: { top: "82%", left: "50%" },
   },
   molar: {
-    B: { top: "22%", left: "50%" },
-    M: { top: "50%", left: "22%" },
-    I: { top: "50%", left: "50%" },
-    O: { top: "50%", left: "50%" },
-    D: { top: "50%", left: "78%" },
-    L: { top: "80%", left: "50%" },
+    B: { top: "58%", left: "50%" },
+    M: { top: "69%", left: "22%" },
+    I: { top: "69%", left: "50%" },
+    O: { top: "69%", left: "50%" },
+    D: { top: "69%", left: "78%" },
+    L: { top: "82%", left: "50%" },
   },
 };
 
@@ -173,7 +212,8 @@ type Props = {
   missing?: boolean;
   extracted?: boolean;
   active?: boolean;
-  onSurfaceClick?: (surface: R4SurfaceKey) => void;
+  onSurfaceClick?: (surface: R4SurfaceKey, position: PointerPosition) => void;
+  onSurfaceContextMenu?: (surface: R4SurfaceKey, position: PointerPosition) => void;
 };
 
 function OdontogramToothSvgImpl({
@@ -185,6 +225,7 @@ function OdontogramToothSvgImpl({
   extracted = false,
   active = false,
   onSurfaceClick,
+  onSurfaceContextMenu,
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
   const selectedSurfaceKeys = new Set(selectedSurfaces);
@@ -264,20 +305,151 @@ function OdontogramToothSvgImpl({
   const extractedState = extracted || extractionFromRestoration;
   const stateDominant = missing || extractedState;
   const isUpperArch = toothKey.startsWith("U");
+  const toothPosition = Number(toothKey.slice(-1));
+  const anatomicalRootPaths = (() => {
+    if (toothType === "molar" && !isUpperArch) return lowerMolarRootPaths;
+    if (toothType === "premolar" && (!isUpperArch || toothPosition === 5)) {
+      return singlePremolarRootPaths;
+    }
+    return upperAnatomicalRootPaths[toothType];
+  })();
 
   return (
     <svg
-      viewBox="0 0 100 100"
-      width="40"
-      height="40"
+      viewBox="0 0 100 190"
+      width="64"
+      height="122"
       className="odontogram-tooth-svg"
       role="img"
-      aria-label={`${toothKey} ${toothType}`}
+      aria-label={`${toothKey} ${toothType}, anatomical tooth and surface map`}
       data-testid={`tooth-svg-${toothKey}`}
       style={{ display: "block", overflow: "visible" }}
     >
+      <g
+        data-testid={`tooth-anatomy-${toothKey}`}
+        data-anatomy-parts="crown root"
+        transform={isUpperArch ? undefined : "translate(0 190) scale(1 -1)"}
+        pointerEvents="none"
+      >
+        {anatomicalRootPaths.map((path, index) => (
+          <path
+            key={`${toothKey}-root-${index}`}
+            d={path}
+            fill="rgba(255, 251, 205, 0.96)"
+            stroke="rgba(17, 24, 39, 0.72)"
+            strokeWidth={1.35}
+            data-testid={`tooth-root-${toothKey}-${index + 1}`}
+          />
+        ))}
+        <path
+          d={anatomicalCrownPath[toothType]}
+          fill={active ? "rgba(51, 255, 180, 0.14)" : "rgba(255, 255, 255, 0.96)"}
+          stroke="rgba(17, 24, 39, 0.78)"
+          strokeWidth={1.55}
+          data-testid={`tooth-crown-${toothKey}`}
+        />
+
+        {hasRestoration("crown") && (
+          <path
+            d={anatomicalCrownPath[toothType]}
+            fill="rgba(128, 123, 47, 0.72)"
+            stroke="rgba(85, 82, 30, 0.96)"
+            strokeWidth={1.7}
+            data-testid={`tooth-anatomy-restoration-${toothKey}-crown`}
+          />
+        )}
+
+        {hasRestoration("root_canal") && (
+          <g data-testid={`tooth-anatomy-restoration-${toothKey}-root_canal`}>
+            {anatomicalRootPaths.map((_, index) => {
+              const count = anatomicalRootPaths.length;
+              const x = count === 1 ? 50 : 30 + (40 * index) / Math.max(1, count - 1);
+              return (
+                <line
+                  key={`${toothKey}-root-canal-${index}`}
+                  x1={x}
+                  y1="45"
+                  x2={x}
+                  y2="10"
+                  stroke="rgba(220, 38, 38, 0.92)"
+                  strokeWidth={2.2}
+                />
+              );
+            })}
+          </g>
+        )}
+
+        {hasRestoration("post") && (
+          <rect
+            x="46"
+            y="29"
+            width="8"
+            height="38"
+            rx="2"
+            fill="rgba(250, 204, 21, 0.92)"
+            stroke="rgba(161, 98, 7, 0.95)"
+            strokeWidth={1}
+            data-testid={`tooth-anatomy-restoration-${toothKey}-post`}
+          />
+        )}
+
+        {hasRestoration("implant") && (
+          <g data-testid={`tooth-anatomy-restoration-${toothKey}-implant`}>
+            <rect
+              x="42"
+              y="8"
+              width="16"
+              height="42"
+              rx="3"
+              fill="rgba(103, 232, 249, 0.9)"
+              stroke="rgba(14, 116, 144, 0.96)"
+              strokeWidth={1.2}
+            />
+            {[15, 23, 31, 39].map((y) => (
+              <circle
+                key={`${toothKey}-implant-${y}`}
+                cx="50"
+                cy={y}
+                r="3.1"
+                fill="rgba(255,255,255,0.9)"
+                stroke="rgba(14, 116, 144, 0.96)"
+                strokeWidth={0.9}
+              />
+            ))}
+          </g>
+        )}
+
+        {stateDominant && (
+          <rect x="10" y="0" width="80" height="91" fill="rgba(255,255,255,0.55)" />
+        )}
+        {missing && (
+          <line
+            x1="20"
+            y1="82"
+            x2="80"
+            y2="8"
+            stroke="rgba(220, 38, 38, 0.9)"
+            strokeWidth={4}
+          />
+        )}
+        {extractedState && (
+          <line
+            x1="20"
+            y1="8"
+            x2="80"
+            y2="82"
+            stroke="rgba(220, 38, 38, 0.9)"
+            strokeWidth={4}
+          />
+        )}
+      </g>
+
+      <g
+        transform={isUpperArch ? "translate(0 90)" : undefined}
+        data-testid={`tooth-surface-map-${toothKey}`}
+      >
       <path
-        d={toothOutlinePath[toothType]}
+        d={surfaceOutlinePath[toothType]}
         fill={active ? "rgba(51, 255, 180, 0.12)" : "rgba(255, 255, 255, 0.82)"}
         stroke="rgba(17, 24, 39, 0.55)"
         strokeWidth={2}
@@ -302,7 +474,18 @@ function OdontogramToothSvgImpl({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                onSurfaceClick?.(surface.key);
+                onSurfaceClick?.(surface.key, {
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                });
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSurfaceContextMenu?.(surface.key, {
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                });
               }}
             />
             {hasFilling && (
@@ -357,7 +540,7 @@ function OdontogramToothSvgImpl({
 
       {hasRestoration("crown") && (
         <path
-          d={toothOutlinePath[toothType]}
+          d={surfaceOutlinePath[toothType]}
           fill="rgba(251, 191, 36, 0.19)"
           stroke="rgba(180, 83, 9, 0.95)"
           strokeWidth={4}
@@ -473,7 +656,7 @@ function OdontogramToothSvgImpl({
 
       {hasRestoration("veneer") && (
         <path
-          d={toothOutlinePath[toothType]}
+          d={surfaceOutlinePath[toothType]}
           fill="none"
           stroke="rgba(37, 99, 235, 0.8)"
           strokeWidth={1.2}
@@ -520,7 +703,7 @@ function OdontogramToothSvgImpl({
 
       {stateDominant && (
         <path
-          d={toothOutlinePath[toothType]}
+          d={surfaceOutlinePath[toothType]}
           fill="rgba(255, 255, 255, 0.66)"
           stroke="none"
           pointerEvents="none"
@@ -553,6 +736,7 @@ function OdontogramToothSvgImpl({
           />
         </g>
       )}
+      </g>
     </svg>
   );
 }
@@ -568,9 +752,15 @@ export function getOdontogramToothType(toothKey: string): OdontogramToothType {
 
 export function getOdontogramSurfaceAnchor(
   toothType: OdontogramToothType,
-  surface: R4SurfaceKey
+  surface: R4SurfaceKey,
+  isUpperArch: boolean = true
 ) {
-  return surfaceAnchorByType[toothType][surface];
+  const anchor = surfaceAnchorByType[toothType][surface];
+  if (isUpperArch) return anchor;
+  return {
+    ...anchor,
+    top: `${100 - Number.parseFloat(anchor.top)}%`,
+  };
 }
 
 const OdontogramToothSvg = memo(OdontogramToothSvgImpl);
