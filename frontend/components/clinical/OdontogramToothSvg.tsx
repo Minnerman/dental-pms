@@ -168,7 +168,7 @@ function formatRestorationTooltip(restorations: NormalizedRestoration[]): string
 type Props = {
   toothKey: string;
   toothType: OdontogramToothType;
-  selectedSurface?: R4SurfaceKey | null;
+  selectedSurfaces?: R4SurfaceKey[];
   restorations?: OdontogramToothRestoration[];
   missing?: boolean;
   extracted?: boolean;
@@ -179,7 +179,7 @@ type Props = {
 function OdontogramToothSvgImpl({
   toothKey,
   toothType,
-  selectedSurface = null,
+  selectedSurfaces = [],
   restorations = [],
   missing = false,
   extracted = false,
@@ -187,6 +187,7 @@ function OdontogramToothSvgImpl({
   onSurfaceClick,
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
+  const selectedSurfaceKeys = new Set(selectedSurfaces);
   const availableSurfaceKeys = new Set<R4SurfaceKey>(surfaces.map((surface) => surface.key));
   const normalizedRestorations = restorations
     .map((restoration): NormalizedRestoration => ({
@@ -283,7 +284,7 @@ function OdontogramToothSvgImpl({
       />
 
       {surfaces.map((surface) => {
-        const isSelected = selectedSurface === surface.key;
+        const isSelected = selectedSurfaceKeys.has(surface.key);
         const hasFilling = fillingSurfaces.has(surface.key);
         const hasVeneer = veneerSurfaces.has(surface.key);
         const hasInlayOnlay = inlayOnlaySurfaces.has(surface.key);

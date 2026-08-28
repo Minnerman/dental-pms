@@ -304,7 +304,9 @@ def test_patient_validation_lifecycle_search_and_audit_are_atomic(
     assert patient_id not in {item["id"] for item in active_list}
     assert patient_id not in {item["id"] for item in active_search}
     archived_list = api_client.get(
-        "/patients", params={"include_deleted": True}, headers=auth_headers
+        "/patients",
+        params={"include_deleted": True, "limit": 200},
+        headers=auth_headers,
     ).json()
     assert patient_id in {item["id"] for item in archived_list}
 

@@ -197,11 +197,38 @@ function clinicalFeeIsValid(value: string) {
 function clinicalSurfaceIsValid(tooth: string | null, surface: string) {
   const normalized = surface.trim().toUpperCase();
   if (!normalized) return true;
-  if (!tooth || !["M", "O", "D", "B", "L", "I"].includes(normalized)) return false;
+  const surfaces = normalized.split("");
+  if (
+    !tooth ||
+    surfaces.length > 5 ||
+    surfaces.some((value) => !["M", "O", "D", "B", "L", "I"].includes(value)) ||
+    new Set(surfaces).size !== surfaces.length
+  ) {
+    return false;
+  }
   const toothNumber = Number(tooth.slice(-1));
-  if (normalized === "I") return toothNumber <= 3;
-  if (normalized === "O") return toothNumber >= 4;
+  if (surfaces.includes("I") && toothNumber > 3) return false;
+  if (surfaces.includes("O") && toothNumber <= 3) return false;
   return true;
+}
+
+const clinicalSurfaceOrder: R4SurfaceKey[] = ["M", "O", "I", "D", "B", "L"];
+
+function canonicalClinicalSurfaces(surfaces: Iterable<R4SurfaceKey>): R4SurfaceKey[] {
+  const selected = new Set(surfaces);
+  return clinicalSurfaceOrder.filter((surface) => selected.has(surface));
+}
+
+function canonicalClinicalSurfaceCode(surface: string): string {
+  const normalized = surface.trim().toUpperCase();
+  const selected = new Set(
+    normalized
+      .split("")
+      .filter((value): value is R4SurfaceKey =>
+        ["M", "O", "D", "B", "L", "I"].includes(value)
+      )
+  );
+  return canonicalClinicalSurfaces(selected).join("");
 }
 
 function bpeScoresAreValid(scores: string[]) {
@@ -772,7 +799,7 @@ const lowerTeeth = [
 const allTeeth = [...upperTeeth, ...lowerTeeth];
 type ChartSelectionState = {
   tooth: string | null;
-  surface: R4SurfaceKey | null;
+  surfaces: R4SurfaceKey[];
 };
 const restorativeShortcutSurfaceByKey: Record<string, R4SurfaceKey> = {
   m: "M",
@@ -1101,7 +1128,7 @@ export default function PatientDetailClient({
   const [clinicalError, setClinicalError] = useState<string | null>(null);
   const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
-  const [selectedToothSurface, setSelectedToothSurface] = useState<R4SurfaceKey | null>(null);
+  const [selectedToothSurfaces, setSelectedToothSurfaces] = useState<R4SurfaceKey[]>([]);
   const [chartSelectionUndoState, setChartSelectionUndoState] =
     useState<ChartSelectionState | null>(null);
   const [chartSelectionRedoState, setChartSelectionRedoState] =
@@ -1132,6 +1159,7 @@ export default function PatientDetailClient({
   const [planDescription, setPlanDescription] = useState("");
   const [planFee, setPlanFee] = useState("");
   const [planSaving, setPlanSaving] = useState(false);
+  const [treatmentPlanNotice, setTreatmentPlanNotice] = useState<string | null>(null);
   const [treatmentPlanStatusAction, setTreatmentPlanStatusAction] = useState<{
     itemId: number;
     status: TreatmentPlanStatus;
@@ -1241,6 +1269,7 @@ export default function PatientDetailClient({
   const canWritePatients = Boolean(capabilities?.includes("patients.write"));
   const billingCapabilitiesReady = capabilities !== null;
   const canViewBilling = Boolean(capabilities?.includes("billing.view"));
+  const canWriteBilling = Boolean(capabilities?.includes("billing.payments.write"));
   const notesCapabilitiesReady = capabilities !== null;
   const canViewNotes = Boolean(capabilities?.includes("notes.view"));
   const canWriteNotes = Boolean(canViewNotes && capabilities?.includes("notes.write"));
@@ -1316,19 +1345,23 @@ export default function PatientDetailClient({
   const applyChartSelection = useCallback(
     (
       nextTooth: string | null,
-      nextSurface: R4SurfaceKey | null,
+      nextSurfaces: R4SurfaceKey[],
       options?: { trackHistory?: boolean }
     ) => {
-      const normalizedSurface = nextTooth ? nextSurface : null;
+      const normalizedSurfaces = nextTooth ? canonicalClinicalSurfaces(nextSurfaces) : [];
       const current: ChartSelectionState = {
         tooth: selectedTooth,
-        surface: selectedToothSurface,
+        surfaces: selectedToothSurfaces,
       };
-      if (current.tooth === nextTooth && current.surface === normalizedSurface) {
+      if (
+        current.tooth === nextTooth &&
+        current.surfaces.join("") === normalizedSurfaces.join("")
+      ) {
         return;
       }
       setSelectedTooth(nextTooth);
-      setSelectedToothSurface(normalizedSurface);
+      setSelectedToothSurfaces(normalizedSurfaces);
+      setChartNoteSurface(normalizedSurfaces.join(""));
       if (nextTooth) {
         setNotesTooth(nextTooth);
       } else {
@@ -1340,16 +1373,18 @@ export default function PatientDetailClient({
       setChartSelectionUndoState(current);
       setChartSelectionRedoState(null);
     },
-    [selectedTooth, selectedToothSurface]
+    [selectedTooth, selectedToothSurfaces]
   );
 
   const toggleChartSurfaceSelection = useCallback(
     (surface: R4SurfaceKey) => {
       if (!selectedTooth) return;
-      const nextSurface = selectedToothSurface === surface ? null : surface;
-      applyChartSelection(selectedTooth, nextSurface);
+      const nextSurfaces = selectedToothSurfaces.includes(surface)
+        ? selectedToothSurfaces.filter((selected) => selected !== surface)
+        : [...selectedToothSurfaces, surface];
+      applyChartSelection(selectedTooth, nextSurfaces);
     },
-    [applyChartSelection, selectedTooth, selectedToothSurface]
+    [applyChartSelection, selectedTooth, selectedToothSurfaces]
   );
 
   const selectAdjacentChartTooth = useCallback(
@@ -1358,7 +1393,7 @@ export default function PatientDetailClient({
       const index = allTeeth.indexOf(anchor);
       const safeIndex = index >= 0 ? index : 0;
       const nextIndex = (safeIndex + direction + allTeeth.length) % allTeeth.length;
-      applyChartSelection(allTeeth[nextIndex], null);
+      applyChartSelection(allTeeth[nextIndex], []);
     },
     [applyChartSelection, selectedTooth]
   );
@@ -1367,10 +1402,11 @@ export default function PatientDetailClient({
     if (!chartSelectionUndoState) return;
     const current: ChartSelectionState = {
       tooth: selectedTooth,
-      surface: selectedToothSurface,
+      surfaces: selectedToothSurfaces,
     };
     setSelectedTooth(chartSelectionUndoState.tooth);
-    setSelectedToothSurface(chartSelectionUndoState.surface);
+    setSelectedToothSurfaces(chartSelectionUndoState.surfaces);
+    setChartNoteSurface(chartSelectionUndoState.surfaces.join(""));
     if (chartSelectionUndoState.tooth) {
       setNotesTooth(chartSelectionUndoState.tooth);
     } else {
@@ -1378,16 +1414,17 @@ export default function PatientDetailClient({
     }
     setChartSelectionRedoState(current);
     setChartSelectionUndoState(null);
-  }, [chartSelectionUndoState, selectedTooth, selectedToothSurface]);
+  }, [chartSelectionUndoState, selectedTooth, selectedToothSurfaces]);
 
   const redoChartSelection = useCallback(() => {
     if (!chartSelectionRedoState) return;
     const current: ChartSelectionState = {
       tooth: selectedTooth,
-      surface: selectedToothSurface,
+      surfaces: selectedToothSurfaces,
     };
     setSelectedTooth(chartSelectionRedoState.tooth);
-    setSelectedToothSurface(chartSelectionRedoState.surface);
+    setSelectedToothSurfaces(chartSelectionRedoState.surfaces);
+    setChartNoteSurface(chartSelectionRedoState.surfaces.join(""));
     if (chartSelectionRedoState.tooth) {
       setNotesTooth(chartSelectionRedoState.tooth);
     } else {
@@ -1395,7 +1432,7 @@ export default function PatientDetailClient({
     }
     setChartSelectionUndoState(current);
     setChartSelectionRedoState(null);
-  }, [chartSelectionRedoState, selectedTooth, selectedToothSurface]);
+  }, [chartSelectionRedoState, selectedTooth, selectedToothSurfaces]);
 
   const loadPatient = useCallback(async () => {
     setLoading(true);
@@ -2942,7 +2979,6 @@ export default function PatientDetailClient({
         throw new Error(clinicalRequestError(res.status, "save the tooth note"));
       }
       setChartNoteBody("");
-      setChartNoteSurface("");
       setChartNoteNotice("Note saved.");
       await Promise.all([refreshClinicalData(), loadToothHistory(selectedTooth)]);
     } catch (err) {
@@ -3233,6 +3269,21 @@ export default function PatientDetailClient({
       setClinicalError("Clinical records are read-only.");
       return;
     }
+    if (status === "completed") {
+      if (!canWriteBilling) {
+        setClinicalError(
+          "You need billing permission to complete treatment and add it to finance."
+        );
+        return;
+      }
+      const financeEffect = item.fee_pence
+        ? `add ${formatCurrency(item.fee_pence)} to the patient finance balance`
+        : "add no charge to finance";
+      const confirmed = window.confirm(
+        `Complete ${item.procedure_code} and ${financeEffect}? A completed clinical procedure will also be recorded.`
+      );
+      if (!confirmed) return;
+    }
     if (item.status === status) return;
     if (!button || savingTreatmentPlanStatusIds.has(item.id) || button.disabled) {
       return;
@@ -3240,6 +3291,8 @@ export default function PatientDetailClient({
     savingTreatmentPlanStatusIds.add(item.id);
     button.disabled = true;
     setTreatmentPlanStatusAction({ itemId: item.id, status });
+    setTreatmentPlanNotice(null);
+    setClinicalError(null);
     try {
       const res = await apiFetch(`/api/treatment-plan/${item.id}`, {
         method: "PATCH",
@@ -3254,41 +3307,22 @@ export default function PatientDetailClient({
       if (!res.ok) {
         throw new Error(clinicalRequestError(res.status, "update the treatment plan"));
       }
-      if (status === "completed") {
-        const shouldCreate = window.confirm(
-          "Create a completed procedure record for this item?"
-        );
-        if (shouldCreate) {
-          const procedureRes = await apiFetch(`/api/patients/${patientId}/procedures`, {
-            method: "POST",
-            headers: clinicalMutationHeaders(),
-            body: JSON.stringify({
-              tooth: item.tooth,
-              surface: item.surface,
-              procedure_code: item.procedure_code,
-              description: item.description,
-              fee_pence: item.fee_pence ?? null,
-              performed_at: new Date().toISOString(),
-              appointment_id: item.appointment_id ?? null,
-            }),
-          });
-          if (!procedureRes.ok) {
-            await refreshClinicalData();
-            throw new Error(
-              `Treatment plan status changed, but ${clinicalRequestError(
-                procedureRes.status,
-                "record the completed procedure"
-              ).toLowerCase()}`
-            );
-          }
-        }
-      }
       await Promise.all([
         refreshClinicalData(),
+        status === "completed" ? loadLedger() : Promise.resolve(),
+        status === "completed" ? loadLedgerBalance() : Promise.resolve(),
+        status === "completed" ? loadFinanceSummary() : Promise.resolve(),
         selectedTooth && item.tooth === selectedTooth
           ? loadToothHistory(selectedTooth)
           : Promise.resolve(),
       ]);
+      setTreatmentPlanNotice(
+        status === "completed"
+          ? item.fee_pence
+            ? `Treatment completed and ${formatCurrency(item.fee_pence)} added to finance.`
+            : "Treatment completed. No finance charge was added."
+          : `Treatment plan marked ${treatmentStatusLabels[status].toLowerCase()}.`
+      );
     } catch (err) {
       setClinicalError(
         err instanceof Error ? err.message : "Failed to update treatment plan"
@@ -3658,7 +3692,8 @@ export default function PatientDetailClient({
     setOverlayFilter("both");
     setOverlayFilterHydrated(false);
     setSelectedTooth(null);
-    setSelectedToothSurface(null);
+    setSelectedToothSurfaces([]);
+    setChartNoteSurface("");
     setNotesTooth("");
     setChartSelectionUndoState(null);
     setChartSelectionRedoState(null);
@@ -4460,6 +4495,23 @@ export default function PatientDetailClient({
     if (!selectedTooth) return [];
     return treatmentPlanItems.filter((item) => item.tooth === selectedTooth);
   }, [selectedTooth, treatmentPlanItems]);
+
+  const chartTreatmentPlanItems = useMemo(
+    () =>
+      treatmentPlanItems.filter((item) =>
+        ["proposed", "accepted", "completed"].includes(item.status)
+      ),
+    [treatmentPlanItems]
+  );
+
+  const chartTreatmentPlanTotal = useMemo(
+    () =>
+      chartTreatmentPlanItems.reduce(
+        (total, item) => total + (item.fee_pence ?? 0),
+        0
+      ),
+    [chartTreatmentPlanItems]
+  );
 
   const overlayItemsByTooth = useMemo(() => {
     const map = new Map<string, ToothOverlaySummary>();
@@ -8857,7 +8909,7 @@ export default function PatientDetailClient({
                   >
                     <span className="badge" data-testid="clinical-selection-state">
                       {selectedTooth
-                        ? `Tooth ${selectedTooth} · Surface ${selectedToothSurface ?? "None"}`
+                        ? `Tooth ${selectedTooth} · Surfaces ${selectedToothSurfaces.join("") || "None"}`
                         : "Select a tooth"}
                     </span>
                   </div>
@@ -9077,7 +9129,7 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => applyChartSelection(tooth, null)}
+                                        onClick={() => applyChartSelection(tooth, [])}
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
@@ -9103,16 +9155,17 @@ export default function PatientDetailClient({
                                           toothKey={tooth}
                                           toothType={toothType}
                                           active={isActive}
-                                          selectedSurface={isActive ? selectedToothSurface : null}
+                                          selectedSurfaces={isActive ? selectedToothSurfaces : []}
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
                                           extracted={toothStateSummary.extracted}
-                                          onSurfaceClick={(surface) =>
-                                            applyChartSelection(
-                                              tooth,
-                                              isActive && selectedToothSurface === surface ? null : surface
-                                            )
-                                          }
+                                          onSurfaceClick={(surface) => {
+                                            if (isActive) {
+                                              toggleChartSurfaceSelection(surface);
+                                            } else {
+                                              applyChartSelection(tooth, [surface]);
+                                            }
+                                          }}
                                         />
                                         <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
                                           {tooth}
@@ -9282,7 +9335,7 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="btn btn-secondary"
                                         type="button"
-                                        onClick={() => applyChartSelection(tooth, null)}
+                                        onClick={() => applyChartSelection(tooth, [])}
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
@@ -9308,16 +9361,17 @@ export default function PatientDetailClient({
                                           toothKey={tooth}
                                           toothType={toothType}
                                           active={isActive}
-                                          selectedSurface={isActive ? selectedToothSurface : null}
+                                          selectedSurfaces={isActive ? selectedToothSurfaces : []}
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
                                           extracted={toothStateSummary.extracted}
-                                          onSurfaceClick={(surface) =>
-                                            applyChartSelection(
-                                              tooth,
-                                              isActive && selectedToothSurface === surface ? null : surface
-                                            )
-                                          }
+                                          onSurfaceClick={(surface) => {
+                                            if (isActive) {
+                                              toggleChartSurfaceSelection(surface);
+                                            } else {
+                                              applyChartSelection(tooth, [surface]);
+                                            }
+                                          }}
                                         />
                                         <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
                                           {tooth}
@@ -9461,6 +9515,116 @@ export default function PatientDetailClient({
                             </div>
                           </Panel>
 
+                          {clinicalViewMode === "planned" && (
+                            <Panel
+                              title={`Treatment plan · ${formatCurrency(chartTreatmentPlanTotal)}`}
+                              className="clinical-chart-plan-panel"
+                            >
+                              <div
+                                className="stack"
+                                style={{ gap: 8 }}
+                                data-testid="clinical-chart-treatment-plan"
+                              >
+                                {treatmentPlanNotice && (
+                                  <div className="notice">{treatmentPlanNotice}</div>
+                                )}
+                                {chartTreatmentPlanItems.length === 0 ? (
+                                  <div className="notice">
+                                    No active treatment plan items. Select a tooth to add one.
+                                  </div>
+                                ) : (
+                                  chartTreatmentPlanItems.map((item) => {
+                                    const completing =
+                                      treatmentPlanStatusAction?.itemId === item.id &&
+                                      treatmentPlanStatusAction.status === "completed";
+                                    const completed = item.status === "completed";
+                                    return (
+                                      <div
+                                        className="card"
+                                        key={item.id}
+                                        data-testid={`clinical-chart-plan-item-${item.id}`}
+                                        data-status={item.status}
+                                        style={{
+                                          margin: 0,
+                                          padding: "9px 11px",
+                                          opacity: completed ? 0.55 : 1,
+                                          background: completed
+                                            ? "rgba(148, 163, 184, 0.10)"
+                                            : undefined,
+                                        }}
+                                      >
+                                        <div
+                                          className="row"
+                                          style={{ alignItems: "center", gap: 10 }}
+                                        >
+                                          <div style={{ minWidth: 0, flex: 1 }}>
+                                            <strong>
+                                              {item.tooth || "General"}
+                                              {item.surface ? ` · ${item.surface}` : ""}
+                                              {` · ${item.procedure_code}`}
+                                            </strong>
+                                            <div
+                                              title={item.description}
+                                              style={{
+                                                color: "var(--muted)",
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              {item.description}
+                                            </div>
+                                          </div>
+                                          <strong>
+                                            {item.fee_pence != null
+                                              ? formatCurrency(item.fee_pence)
+                                              : "—"}
+                                          </strong>
+                                          <span className="badge">
+                                            {treatmentStatusLabels[item.status]}
+                                          </span>
+                                          {!completed && (
+                                            <button
+                                              className="btn btn-secondary"
+                                              type="button"
+                                              data-testid={`clinical-chart-plan-complete-${item.id}`}
+                                              onClick={(event) =>
+                                                void updateTreatmentPlanStatus(
+                                                  item,
+                                                  "completed",
+                                                  event.currentTarget
+                                                )
+                                              }
+                                              disabled={
+                                                !canWriteClinical ||
+                                                !canWriteBilling ||
+                                                completing
+                                              }
+                                              title={
+                                                !canWriteBilling
+                                                  ? "Billing permission is required to complete treatment."
+                                                  : undefined
+                                              }
+                                            >
+                                              {completing ? "Completing…" : "Complete"}
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => setClinicalTab("treatment")}
+                                >
+                                  Manage plan
+                                </button>
+                              </div>
+                            </Panel>
+                          )}
+
                           <Panel title="Unassigned treatment items" className="clinical-unassigned-panel">
                             <div className="stack" style={{ gap: 8 }} data-testid="overlay-unassigned-items">
                               {overlayUnassignedItems.length === 0 ? (
@@ -9574,7 +9738,7 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary patient-clinical-tools-close"
                               type="button"
-                              onClick={() => applyChartSelection(null, null)}
+                              onClick={() => applyChartSelection(null, [])}
                               aria-label="Close tooth tools"
                             >
                               Close
@@ -9599,9 +9763,19 @@ export default function PatientDetailClient({
                                       className="input"
                                       data-testid="patient-chart-note-surface"
                                       value={chartNoteSurface}
-                                      onChange={(e) => setChartNoteSurface(e.target.value.toUpperCase())}
-                                      placeholder="O / I / M / D / B / L"
-                                      maxLength={1}
+                                      onChange={(e) => {
+                                        const value = e.target.value.toUpperCase();
+                                        if (clinicalSurfaceIsValid(selectedTooth, value)) {
+                                          applyChartSelection(
+                                            selectedTooth,
+                                            canonicalClinicalSurfaceCode(value).split("") as R4SurfaceKey[]
+                                          );
+                                        } else {
+                                          setChartNoteSurface(value);
+                                        }
+                                      }}
+                                      placeholder="e.g. MOD"
+                                      maxLength={5}
                                       disabled={!canWriteClinical}
                                     />
                                   </div>
@@ -9892,6 +10066,7 @@ export default function PatientDetailClient({
                     </div>
                   ) : clinicalTab === "treatment" ? (
                     <div className="stack" data-testid="patient-treatment-plan-section">
+                      {treatmentPlanNotice && <div className="notice">{treatmentPlanNotice}</div>}
                       <div className="row">
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
@@ -10051,9 +10226,15 @@ export default function PatientDetailClient({
                                         }
                                         disabled={
                                           !canWriteClinical ||
+                                          !canWriteBilling ||
                                           rowActionPending ||
                                           isFinal ||
                                           item.status === "declined"
+                                        }
+                                        title={
+                                          !canWriteBilling
+                                            ? "Billing permission is required to complete treatment."
+                                            : undefined
                                         }
                                       >
                                         {rowActionPending &&
@@ -10122,8 +10303,8 @@ export default function PatientDetailClient({
                                 className="input"
                                 value={notesSurface}
                                 onChange={(e) => setNotesSurface(e.target.value.toUpperCase())}
-                                placeholder="O / I / M / D / B / L"
-                                maxLength={1}
+                                placeholder="e.g. MOD"
+                                maxLength={5}
                                 disabled={!canWriteClinical}
                               />
                             </div>
@@ -11993,8 +12174,8 @@ export default function PatientDetailClient({
                         className="input"
                         value={planSurface}
                         onChange={(e) => setPlanSurface(e.target.value.toUpperCase())}
-                        placeholder="O / I / M / D / B / L"
-                        maxLength={1}
+                        placeholder="e.g. MOD"
+                        maxLength={5}
                       />
                     </div>
                   </div>

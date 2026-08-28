@@ -35,17 +35,17 @@ test("restorative chart UX supports selection toggles, keyboard navigation, and 
   const ur4D = page.getByTestId("tooth-surface-UR4-D");
   const selectionState = page.getByTestId("clinical-selection-state");
 
-  await toothUR5.click();
+  await toothUR5.getByText("UR5", { exact: true }).click();
   await expect(toothUR5).toHaveAttribute("data-selected", "true");
 
   await page.keyboard.press("m");
   await expect(ur5M).toHaveAttribute("data-selected", "true");
   await expect(selectionState).toContainText("Tooth UR5");
-  await expect(selectionState).toContainText("Surface M");
+  await expect(selectionState).toContainText("Surfaces M");
 
   await page.keyboard.press("m");
   await expect(ur5M).toHaveAttribute("data-selected", "false");
-  await expect(selectionState).toContainText("Surface None");
+  await expect(selectionState).toContainText("Surfaces None");
 
   await page.keyboard.press("ArrowRight");
   await expect(toothUR4).toHaveAttribute("data-selected", "true");
@@ -56,11 +56,11 @@ test("restorative chart UX supports selection toggles, keyboard navigation, and 
   await page.keyboard.press(`${modKey}+z`);
   await expect(ur4D).toHaveAttribute("data-selected", "false");
   await expect(selectionState).toContainText("Tooth UR4");
-  await expect(selectionState).toContainText("Surface None");
+  await expect(selectionState).toContainText("Surfaces None");
 
   await page.keyboard.press(`${modKey}+Shift+z`);
   await expect(ur4D).toHaveAttribute("data-selected", "true");
-  await expect(selectionState).toContainText("Surface D");
+  await expect(selectionState).toContainText("Surfaces D");
 
   await page.screenshot({
     path: path.join(artifactDir, `odontogram_restorative_ux_${patientId}.png`),

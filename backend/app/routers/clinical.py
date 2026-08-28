@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.deps import require_capability
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.audit_log import AuditLog
+from app.models.capability import Capability, UserCapability
 from app.models.clinical import (
     Procedure,
     ProcedureStatus,
@@ -16,6 +17,7 @@ from app.models.clinical import (
     TreatmentPlanItem,
     TreatmentPlanStatus,
 )
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.clinical import (
@@ -149,6 +151,17 @@ def _safe_plan_values(item: TreatmentPlanItem, fields: set[str]) -> dict:
         values["description_changed"] = True
     values["changed_fields"] = sorted(fields)
     return values
+
+
+def _user_has_capability(db: Session, user_id: int, code: str) -> bool:
+    return (
+        db.scalar(
+            select(Capability.id)
+            .join(UserCapability, UserCapability.capability_id == Capability.id)
+            .where(UserCapability.user_id == user_id, Capability.code == code)
+        )
+        is not None
+    )
 
 
 @patient_router.get("/clinical/summary", response_model=ClinicalSummaryOut)
@@ -490,6 +503,10 @@ def update_treatment_plan_item(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Treatment plan status transition is not permitted",
             )
+        if requested_status == TreatmentPlanStatus.completed and not _user_has_capability(
+            db, user.id, "billing.payments.write"
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     changed_fields = {
         field for field, value in updates.items() if getattr(item, field) != value
@@ -512,6 +529,48 @@ def update_treatment_plan_item(
         setattr(item, field, updates[field])
     item.updated_by_user_id = user.id
     db.add(item)
+
+    completed_procedure: Procedure | None = None
+    completion_charge: PatientLedgerEntry | None = None
+    if "status" in changed_fields and item.status == TreatmentPlanStatus.completed:
+        completed_procedure = Procedure(
+            patient_id=item.patient_id,
+            appointment_id=item.appointment_id,
+            tooth=item.tooth,
+            surface=item.surface,
+            procedure_code=item.procedure_code,
+            description=item.description,
+            fee_pence=item.fee_pence,
+            status=ProcedureStatus.completed,
+            performed_at=datetime.now(timezone.utc),
+            created_by_user_id=user.id,
+        )
+        db.add(completed_procedure)
+        db.flush()
+        if item.fee_pence:
+            ledger_reference = f"TREATMENT-PLAN:{item.id}"
+            existing_charge_id = db.scalar(
+                select(PatientLedgerEntry.id).where(
+                    PatientLedgerEntry.patient_id == item.patient_id,
+                    PatientLedgerEntry.reference == ledger_reference,
+                )
+            )
+            if existing_charge_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Treatment plan charge already exists",
+                )
+            completion_charge = PatientLedgerEntry(
+                patient_id=item.patient_id,
+                entry_type=LedgerEntryType.charge,
+                amount_pence=item.fee_pence,
+                reference=ledger_reference,
+                note=f"Completed treatment plan item {item.id}",
+                created_by_user_id=user.id,
+                updated_by_user_id=user.id,
+            )
+            db.add(completion_charge)
+            db.flush()
 
     if non_status_fields:
         log_event(
@@ -539,6 +598,38 @@ def update_treatment_plan_item(
             after_data={
                 "treatment_plan_item_id": item.id,
                 "status": item.status.value,
+            },
+        )
+    if completed_procedure is not None:
+        log_event(
+            db,
+            actor=user,
+            action="clinical.procedure.completed",
+            entity_type="patient",
+            entity_id=str(item.patient_id),
+            request_id=request_id,
+            after_data={
+                "procedure_id": completed_procedure.id,
+                "treatment_plan_item_id": item.id,
+                "appointment_id": completed_procedure.appointment_id,
+                "tooth": completed_procedure.tooth,
+                "surface": completed_procedure.surface,
+                "procedure_code": completed_procedure.procedure_code,
+                "fee_pence": completed_procedure.fee_pence,
+            },
+        )
+    if completion_charge is not None:
+        log_event(
+            db,
+            actor=user,
+            action="ledger.charge_recorded",
+            entity_type="patient",
+            entity_id=str(item.patient_id),
+            request_id=request_id,
+            after_data={
+                "ledger_entry_id": completion_charge.id,
+                "treatment_plan_item_id": item.id,
+                "amount_pence": completion_charge.amount_pence,
             },
         )
     db.commit()

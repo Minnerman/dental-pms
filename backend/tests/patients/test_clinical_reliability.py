@@ -10,7 +10,8 @@ from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.appointment import Appointment, AppointmentLocationType, AppointmentStatus
 from app.models.audit_log import AuditLog
-from app.models.clinical import Procedure, ToothNote, TreatmentPlanItem
+from app.models.clinical import Procedure, ToothNote, TreatmentPlanItem, TreatmentPlanStatus
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.user import Role, User
 from app.services.capabilities import get_user_capabilities, replace_user_capabilities
 from app.services.users import create_user
@@ -339,6 +340,188 @@ def test_clinical_validation_ownership_and_archived_patient_guards_are_atomic(
     assert _clinical_row_counts(patient_id) == baseline
     assert _clinical_audits(patient_id) == []
 
+
+def test_multi_surface_codes_are_canonical_and_tooth_appropriate(
+    api_client,
+    auth_headers,
+):
+    patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
+
+    posterior = api_client.post(
+        f"/patients/{patient_id}/tooth-notes",
+        headers=auth_headers,
+        json={"tooth": "UL4", "surface": "dbom", "note": "synthetic posterior note"},
+    )
+    anterior = api_client.post(
+        f"/patients/{patient_id}/tooth-notes",
+        headers=auth_headers,
+        json={"tooth": "UR1", "surface": "bdim", "note": "synthetic anterior note"},
+    )
+    assert posterior.status_code == 201, posterior.text
+    assert posterior.json()["surface"] == "MODB"
+    assert anterior.status_code == 201, anterior.text
+    assert anterior.json()["surface"] == "MIDB"
+
+    invalid_surfaces = [
+        ("UR1", "OI"),
+        ("UR1", "MM"),
+        ("UR4", "MI"),
+        ("UR4", "MODBX"),
+    ]
+    for tooth, surface in invalid_surfaces:
+        response = api_client.post(
+            f"/patients/{patient_id}/tooth-notes",
+            headers=auth_headers,
+            json={"tooth": tooth, "surface": surface, "note": "must be rejected"},
+        )
+        assert response.status_code == 422, response.text
+
+
+def test_treatment_plan_completion_is_atomic_idempotent_and_charges_once(
+    api_client,
+    auth_headers,
+):
+    patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
+    plan = api_client.post(
+        f"/patients/{patient_id}/treatment-plan",
+        headers=auth_headers,
+        json={
+            "tooth": "UL4",
+            "surface": "DBOM",
+            "procedure_code": "FILL",
+            "description": "synthetic planned restoration",
+            "fee_pence": 22_000,
+        },
+    )
+    assert plan.status_code == 201, plan.text
+    assert plan.json()["surface"] == "MODB"
+    item_id = int(plan.json()["id"])
+    completion_headers = {
+        **auth_headers,
+        "Request-Id": f"plan-complete-{uuid4().hex}",
+    }
+
+    completed = api_client.patch(
+        f"/treatment-plan/{item_id}",
+        headers=completion_headers,
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+    repeated_same_request = api_client.patch(
+        f"/treatment-plan/{item_id}",
+        headers=completion_headers,
+        json={"status": "completed"},
+    )
+    repeated_new_request = api_client.patch(
+        f"/treatment-plan/{item_id}",
+        headers={**auth_headers, "Request-Id": f"plan-repeat-{uuid4().hex}"},
+        json={"status": "completed"},
+    )
+    assert repeated_same_request.status_code == 200, repeated_same_request.text
+    assert repeated_new_request.status_code == 200, repeated_new_request.text
+
+    session = SessionLocal()
+    try:
+        procedures = list(
+            session.scalars(select(Procedure).where(Procedure.patient_id == patient_id))
+        )
+        charges = list(
+            session.scalars(
+                select(PatientLedgerEntry).where(
+                    PatientLedgerEntry.patient_id == patient_id,
+                    PatientLedgerEntry.entry_type == LedgerEntryType.charge,
+                )
+            )
+        )
+    finally:
+        session.close()
+    assert len(procedures) == 1
+    assert procedures[0].surface == "MODB"
+    assert procedures[0].fee_pence == 22_000
+    assert len(charges) == 1
+    assert charges[0].amount_pence == 22_000
+    assert charges[0].reference == f"TREATMENT-PLAN:{item_id}"
+
+    actions = [audit.action for audit in _clinical_audits(patient_id)]
+    assert actions == [
+        "clinical.treatment_plan.item.created",
+        "clinical.treatment_plan.status.changed",
+        "clinical.procedure.completed",
+    ]
+    session = SessionLocal()
+    try:
+        ledger_audits = list(
+            session.scalars(
+                select(AuditLog).where(
+                    AuditLog.entity_type == "patient",
+                    AuditLog.entity_id == str(patient_id),
+                    AuditLog.action == "ledger.charge_recorded",
+                )
+            )
+        )
+    finally:
+        session.close()
+    assert len(ledger_audits) == 1
+    assert ledger_audits[0].after_json == {
+        "ledger_entry_id": charges[0].id,
+        "treatment_plan_item_id": item_id,
+        "amount_pence": 22_000,
+    }
+    assert "synthetic planned restoration" not in repr(ledger_audits[0].after_json)
+
+
+def test_treatment_plan_completion_requires_billing_permission_without_side_effects(
+    api_client,
+    auth_headers,
+):
+    patient_id = _create_patient(api_client, auth_headers, uuid4().hex[:8])
+    plan = api_client.post(
+        f"/patients/{patient_id}/treatment-plan",
+        headers=auth_headers,
+        json={
+            "tooth": "LL5",
+            "surface": "O",
+            "procedure_code": "FILL",
+            "description": "synthetic denied completion",
+            "fee_pence": 9_500,
+        },
+    )
+    assert plan.status_code == 201, plan.text
+    item_id = int(plan.json()["id"])
+    user_id, user_headers = _create_user_headers(api_client)
+    _set_capabilities(user_id, ["clinical.view", "clinical.write"])
+
+    denied = api_client.patch(
+        f"/treatment-plan/{item_id}",
+        headers=user_headers,
+        json={"status": "completed"},
+    )
+    assert denied.status_code == 403, denied.text
+
+    session = SessionLocal()
+    try:
+        item = session.get(TreatmentPlanItem, item_id)
+        procedure_count = int(
+            session.scalar(
+                select(func.count(Procedure.id)).where(Procedure.patient_id == patient_id)
+            )
+            or 0
+        )
+        ledger_count = int(
+            session.scalar(
+                select(func.count(PatientLedgerEntry.id)).where(
+                    PatientLedgerEntry.patient_id == patient_id
+                )
+            )
+            or 0
+        )
+    finally:
+        session.close()
+    assert item is not None
+    assert item.status == TreatmentPlanStatus.proposed
+    assert procedure_count == 0
+    assert ledger_count == 0
 
 def test_clinical_mutations_are_audited_idempotent_and_refreshable(
     api_client,
