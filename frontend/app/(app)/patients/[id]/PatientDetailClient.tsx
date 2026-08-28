@@ -9192,6 +9192,7 @@ export default function PatientDetailClient({
                   >
                         {chartActionMenu && (
                           <div
+                            key="clinical-chart-action-menu"
                             ref={chartActionMenuRef}
                             className="clinical-chart-action-menu"
                             role="menu"
@@ -9283,7 +9284,7 @@ export default function PatientDetailClient({
                             </div>
                           </div>
                         )}
-                        <div className="stack" style={{ gap: 16 }}>
+                        <div key="clinical-chart-main" className="stack" style={{ gap: 16 }}>
                           <Panel title="Odontogram" className="patient-route-chart-panel">
                             <div className="stack" style={{ gap: 16 }} data-testid="clinical-chart">
                               <div className="stack" style={{ gap: 8 }}>
@@ -9975,6 +9976,7 @@ export default function PatientDetailClient({
 
                         {selectedTooth && activeToothTool && (
                         <Panel
+                          key="clinical-tooth-tools"
                           title={`Tooth ${selectedTooth}`}
                           className="patient-clinical-tools"
                         >
@@ -9982,6 +9984,7 @@ export default function PatientDetailClient({
                             <button
                               className="btn btn-secondary patient-clinical-tools-close"
                               type="button"
+                              onPointerDown={(event) => event.stopPropagation()}
                               onClick={() => applyChartSelection(null, [])}
                               aria-label="Close tooth tools"
                             >
