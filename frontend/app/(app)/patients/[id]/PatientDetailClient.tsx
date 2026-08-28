@@ -1374,7 +1374,7 @@ export default function PatientDetailClient({
       }
       if (current.tooth !== nextTooth) {
         setChartActionMenu(null);
-        setActiveToothTool(null);
+        setActiveToothTool(nextTooth ? "timeline" : null);
       }
       setSelectedTooth(nextTooth);
       setSelectedToothSurfaces(normalizedSurfaces);
@@ -1418,7 +1418,6 @@ export default function PatientDetailClient({
       const requestedTop = position.clientY || fallbackRect?.bottom || 16;
       const maxLeft = Math.max(12, window.innerWidth - 268);
       const maxTop = Math.max(12, window.innerHeight - 270);
-      setActiveToothTool(null);
       setChartActionMenu({
         tooth,
         kind,
