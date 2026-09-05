@@ -10,6 +10,18 @@ type ToothAnatomy = {
   grooves: string[];
 };
 
+/** Landmarks belong to the schematic drawing, not measured patient anatomy.
+ * Every canal is ordered from the cervical end toward its own apical tip. Using
+ * those endpoints keeps a root's finding and apical marker together as each
+ * quadrant is reflected, without assigning anatomical names to root indexes.
+ */
+export function getRootDrawingLandmarks(anatomy: ToothAnatomy, index: number) {
+  const coordinates = anatomy.canals[index].match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+  const cervical = { x: coordinates[0], y: coordinates[1] };
+  const apical = { x: coordinates[coordinates.length - 2], y: coordinates[coordinates.length - 1] };
+  return { cervical, apical, shaftX: (cervical.x + apical.x) / 2 };
+}
+
 // A schematic implant fixture, not a brand, measured size or treatment entry.
 // The apical tip is narrower than the cervical end beside the crown. Raised
 // oblique threads distinguish the screw from a natural root or a perforated post.

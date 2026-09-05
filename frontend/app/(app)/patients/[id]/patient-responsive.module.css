@@ -420,7 +420,7 @@
   width: 100%;
 }
 
-.shell :global(.patient-route-odontogram-grid > button) {
+.shell :global(.clinical-tooth-cell) {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -430,10 +430,12 @@
   min-width: 0;
   min-height: 210px !important;
   padding: 24px 0 3px !important;
+  border: 1px solid transparent;
+  cursor: pointer;
 }
 
-.shell :global(.patient-route-odontogram-grid > button:hover),
-.shell :global(.patient-route-odontogram-grid > button[data-selected="true"]) {
+.shell :global(.clinical-tooth-cell:hover),
+.shell :global(.clinical-tooth-cell[data-selected="true"]) {
   background: transparent !important;
   border-color: transparent !important;
   transform: none;
@@ -448,7 +450,7 @@
   overflow: visible;
 }
 
-.shell :global(.patient-route-odontogram-grid > button > div:first-child) {
+.shell :global(.clinical-tooth-cell > div:first-child) {
   width: 100%;
 }
 
@@ -479,6 +481,11 @@
   border-radius: 4px;
   padding: 3px 2px;
   isolation: isolate;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
 }
 
 .shell :global(.clinical-tooth-label::before) {
@@ -495,12 +502,12 @@
 }
 
 .shell :global(.clinical-tooth-label:hover::before),
-.shell :global(.patient-route-odontogram-grid > button:focus-visible .clinical-tooth-label::before) {
+.shell :global(.clinical-tooth-label:focus-visible::before) {
   animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
 }
 
-.shell :global(.patient-route-odontogram-grid > button[data-selected="true"] .clinical-tooth-label),
-.shell :global(.patient-route-odontogram-grid > button[data-batch-selected="true"] .clinical-tooth-label) {
+.shell :global(.clinical-tooth-cell[data-selected="true"] .clinical-tooth-label),
+.shell :global(.clinical-tooth-cell[data-batch-selected="true"] .clinical-tooth-label) {
   box-shadow: 0 0 0 2px #0b9ec0;
   color: var(--text);
 }
@@ -512,9 +519,76 @@
 
 @media (prefers-reduced-motion: reduce) {
   .shell :global(.clinical-tooth-label:hover::before),
-  .shell :global(.patient-route-odontogram-grid > button:focus-visible .clinical-tooth-label::before) {
+  .shell :global(.clinical-tooth-label:focus-visible::before) {
     animation: none;
     opacity: .8;
+  }
+}
+
+.shell :global(.clinical-root-target) {
+  cursor: pointer;
+  outline: none;
+}
+
+.shell :global(.clinical-root-halo) {
+  opacity: 0;
+  fill: none;
+  stroke: #12bce5;
+  stroke-width: 6px;
+  filter: drop-shadow(0 0 3px rgb(18 188 229 / 65%));
+  pointer-events: none;
+}
+
+.shell :global(.clinical-root-target:hover .clinical-root-halo),
+.shell :global(.clinical-root-target:focus-visible .clinical-root-halo) {
+  animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
+}
+
+.shell :global(.clinical-root-swatch) {
+  display: inline-block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 26px;
+  background-color: #f4ce53;
+  border: 1px solid #876624;
+  border-radius: 5px 5px 9px 9px;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] > button) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] > button[aria-checked="true"]) {
+  border-color: #0b9ec0;
+  box-shadow: inset 3px 0 0 #0b9ec0;
+  background: rgb(11 158 192 / 13%);
+}
+
+.shell :global(.clinical-root-swatch[data-condition^="post_core"]) {
+  background-color: #c4b5fd;
+  border-color: #7552a6;
+}
+
+.shell :global(.clinical-root-swatch[data-condition$="defective"]) {
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0 4px, #d22f49 4px 5px, transparent 5px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 4px, #d22f49 4px 5px, transparent 5px 8px);
+}
+
+.shell :global(.clinical-root-apical-symbol) {
+  width: 20px;
+  font-size: 22px;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(.clinical-root-target:hover .clinical-root-halo),
+  .shell :global(.clinical-root-target:focus-visible .clinical-root-halo) {
+    animation: none;
+    opacity: .85;
   }
 }
 

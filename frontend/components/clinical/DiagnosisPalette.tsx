@@ -10,7 +10,7 @@ export default function DiagnosisPalette(props: Props) {
   const { enabled, saving, action, selected, lastAction } = props;
   const invalid = action && !actionSupportsTeeth(action, selected);
   return <section className="clinical-diagnosis-palette" data-testid="clinical-diagnosis-palette" aria-label="Whole-tooth diagnosis">
-    <div className="clinical-diagnosis-heading"><strong>Diagnosis · Whole tooth</strong><span>Root, crown and surface charting will follow.</span></div>
+    <div className="clinical-diagnosis-heading"><strong>Diagnosis · Whole tooth</strong><span>Click or right-click a root for root diagnosis. Crown and surface charting will follow.</span></div>
     <p>Choose a condition, select one or more tooth numbers, then Apply. No treatment or charges are created.</p>
     <div className="clinical-diagnosis-tiles">
       {diagnosisActions.map((item) => <button key={item.id} className="btn btn-secondary" type="button"
@@ -22,7 +22,7 @@ export default function DiagnosisPalette(props: Props) {
     <div className="clinical-diagnosis-selection" role="status" data-testid="diagnosis-selection">
       {action ? <><strong>{diagnosisAction(action).label}</strong> · {selected.length ? selected.join(", ") : "Select tooth numbers above"}</> : "No condition selected"}
       {invalid && <span role="alert">Deciduous teeth use positions 1–5 (A–E). Deselect positions 6–8.</span>}
-      {action === "reset" && <span>Clears current tooth conditions, movement and rotation. Notes and treatment history are kept; no healthy or present finding is recorded.</span>}
+      {action === "reset" && <span>Clears current tooth and root conditions, movement and rotation. Notes and treatment history are kept; no healthy or present finding is recorded.</span>}
     </div>
     <div className="clinical-diagnosis-buttons">
       <button className="btn" type="button" data-testid="diagnosis-apply" disabled={!enabled || !action || !selected.length || Boolean(invalid)} onClick={props.onApply}>

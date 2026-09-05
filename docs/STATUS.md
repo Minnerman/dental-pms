@@ -3,6 +3,39 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-05 (root diagnosis): PR #714 now includes independent Current / Diagnosis
+  observations on each natural root. Click, right-click or keyboard activation
+  opens Filled sound / Filled defective (yellow, with red crosshatching for
+  defective) and Post & core sound / defective (light purple, with the same
+  defect mesh). Apicectomy adds a transverse apical line. Reset root records an
+  explicit neutral root; Reset the tooth clears all its root observations as
+  well as whole-tooth condition/movement/rotation. Notes/history remain intact.
+  Root shafts are 16% wider in Current only, with an individual cyan hover/focus
+  pulse and reduced-motion support. Existing crowns, implants, surface geometry
+  and History/Planned drawings remain unchanged. Root numbers denote schematic
+  positions, not inferred anatomical names or measured clinical anatomy.
+  Native root findings override conflicting legacy absence/implant drawings
+  only in Current; neutral root resets do not revive old root findings. Untouched
+  historical absent/implant teeth and native missing/implant/unerupted teeth do
+  not expose root authoring. Explicit native whole-tooth absence takes priority.
+  Root and tooth writes share an atomic patient lock, revision, audit and request
+  replay safeguards. No procedure, treatment plan, invoice or ledger is created.
+  Additive migration `0052_root_observations` adds a JSONB map without a clinical
+  backfill. Its downgrade refuses any nonempty map, including explicit resets;
+  rollback must preserve observation data and compatible schema/application code.
+  Verification: 46 backend tests passed (26 root, 13 tooth/reset, 7 adjacent
+  reliability). Empty 0052 downgrade/re-upgrade and populated-data refusal passed
+  in disposable storage. Eight new root glyph and 14 existing glyph tests passed.
+  A broader release guard passed 65/67 cases; the two old test contracts were
+  corrected for the new root menu target and added SVG definitions. The final
+  rebuilt artifact passed all 25 targeted browser cases, including those two
+  corrections and a new native-root/legacy-missing badge regression. Production
+  build, typecheck, lint, Python compilation, diff checks and six isolated
+  health/auth/read checks passed. Final synthetic light/dark/mobile previews
+  were visually reviewed. Full backend/default-stack wrappers were not run.
+  PR #714 remains draft, stacked on #713, with master CI/merge review gated on
+  resolving its parent. No R4 access, production changes, merge or deployment.
+  Production migrations #0049–0052 and deployment need separate explicit approval.
 - 2026-09-05 (root/reset refinement): the owner approved the threaded implant
   and requested better natural roots, a single Reset action and larger palette
   controls. Native SVG roots now have smoother taper, curved tips and distinct

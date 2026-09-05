@@ -1,7 +1,8 @@
-import { memo, useId } from "react";
+import { memo, useId, type KeyboardEvent, type MouseEvent } from "react";
 
-import { getToothAnatomy, getToothAnatomyWidth, implantScrewAnatomy } from "./toothAnatomy";
+import { getRootDrawingLandmarks, getToothAnatomy, getToothAnatomyWidth, implantScrewAnatomy } from "./toothAnatomy";
 import { britishToothLabel } from "./toothDiagnosis";
+import { rootConditionLabel, type RootObservation } from "./rootDiagnosis";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
@@ -190,6 +191,9 @@ type Props = {
   extracted?: boolean;
   active?: boolean;
   baselineCondition?: OdontogramBaselineCondition;
+  rootConditions?: Record<string, RootObservation>;
+  onRootClick?: (root: number, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onRootContextMenu?: (root: number, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onSurfaceClick?: (surface: R4SurfaceKey, position: PointerPosition) => void;
   onSurfaceContextMenu?: (surface: R4SurfaceKey, position: PointerPosition) => void;
 };
@@ -203,12 +207,22 @@ function OdontogramToothSvgImpl({
   extracted = false,
   active = false,
   baselineCondition,
+  rootConditions,
+  onRootClick,
+  onRootContextMenu,
   onSurfaceClick,
   onSurfaceContextMenu,
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
   const selectedSurfaceKeys = new Set(selectedSurfaces);
   const availableSurfaceKeys = new Set<R4SurfaceKey>(surfaces.map((surface) => surface.key));
+  const anatomy = getToothAnatomy(toothKey, baselineCondition?.dentition);
+  const supportsNativeRoots = !["missing", "implant", "unerupted"].includes(baselineCondition?.status ?? "");
+  const nativeRootIndexes = new Set(anatomy.roots.flatMap((_, index) =>
+    supportsNativeRoots && rootConditions && Object.prototype.hasOwnProperty.call(rootConditions, String(index + 1))
+      ? [index] : []
+  ));
+  const hasCurrentRootRecord = nativeRootIndexes.size > 0;
   const normalizedRestorations = restorations
     .map((restoration): NormalizedRestoration => ({
       type: normalizeRestorationType(restoration.type),
@@ -218,6 +232,9 @@ function OdontogramToothSvgImpl({
       meta: restoration.meta,
     }))
     .filter((restoration) => {
+      // Explicit root observations take precedence over conflicting, whole-tooth
+      // legacy absence/implant symbols without declaring the tooth healthy.
+      if (hasCurrentRootRecord && ["implant", "extraction"].includes(restoration.type)) return false;
       if (!baselineCondition) return true;
       // Reset is an explicit neutral current view, not a healthy/present finding.
       // Historical restorations stay available in History and are never deleted.
@@ -297,8 +314,8 @@ function OdontogramToothSvgImpl({
   const otherTooltip = tooltipForType("other");
 
   const extractionFromRestoration = hasRestoration("extraction");
-  const extractedState = !baselineCondition?.status && (extracted || extractionFromRestoration);
-  const legacyMissing = !baselineCondition?.status && missing;
+  const extractedState = !hasCurrentRootRecord && !baselineCondition?.status && (extracted || extractionFromRestoration);
+  const legacyMissing = !hasCurrentRootRecord && !baselineCondition?.status && missing;
   const stateDominant = legacyMissing || extractedState;
   const baselineMissing = baselineCondition?.status === "missing";
   const baselineImplant = baselineCondition?.status === "implant";
@@ -314,7 +331,20 @@ function OdontogramToothSvgImpl({
   const enamelFillId = `enamel-${illustrationId}`;
   const rootFillId = `root-${illustrationId}`;
   const implantFillId = `implant-${illustrationId}`;
-  const anatomy = getToothAnatomy(toothKey, baselineCondition?.dentition);
+  // Current-only affordances never change the historical tooth illustration.
+  const currentRootLayer = rootConditions !== undefined || Boolean(onRootClick || onRootContextMenu);
+  const canRecordNaturalRoots = supportsNativeRoots && !stateDominant && !hasRestoration("implant");
+  const rootControls = Boolean(onRootClick || onRootContextMenu) && showAnatomy && canRecordNaturalRoots;
+  const rootRecorded = (index: number) => canRecordNaturalRoots && nativeRootIndexes.has(index);
+  const anyRootRecorded = anatomy.roots.some((_, index) => rootRecorded(index));
+  const remainingLegacyCanals = anatomy.canals.map((path, index) => ({ path, index }))
+    .filter(({ index }) => !rootRecorded(index));
+  const rootTransform = (index: number) => {
+    const { shaftX } = getRootDrawingLandmarks(anatomy, index);
+    return currentRootLayer ? `translate(${shaftX} 0) scale(1.16 1) translate(${-shaftX} 0)` : undefined;
+  };
+  const defectPatternId = `root-defect-${illustrationId}`;
+  const rootHitClipId = `root-hit-${illustrationId}`;
   const anatomyWidth = getToothAnatomyWidth(toothKey) * (isDeciduous ? 0.86 : 1);
   const anatomyScaleX = toothKey[1] === "L" ? -anatomyWidth : anatomyWidth;
   const anatomyTransform = `translate(50 ${isUpperArch ? 0 : 280}) scale(${anatomyScaleX} ${isUpperArch ? 1 : -1}) translate(-50 0)`;
@@ -337,7 +367,7 @@ function OdontogramToothSvgImpl({
       width="72"
       height="202"
       className="odontogram-tooth-svg"
-      role="img"
+      role={rootControls ? "group" : "img"}
       aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
       data-baseline-status={baselineCondition?.status}
@@ -364,6 +394,20 @@ function OdontogramToothSvgImpl({
           <stop offset="72%" stopColor="#acbfc7" />
           <stop offset="100%" stopColor="#657e89" />
         </linearGradient>
+        {currentRootLayer && showNaturalRoots && <>
+          <pattern id={defectPatternId} width="6" height="6" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L5 7 M1 -1 L7 5 M-1 5 L5 -1 M1 7 L7 1"
+              fill="none" stroke="#b91c1c" strokeWidth="1.1" />
+          </pattern>
+          <clipPath id={rootHitClipId}>
+            <path d={`M0 0 H100 V170 H0 Z ${anatomy.crown}`} clipRule="evenodd" />
+          </clipPath>
+          {anatomy.roots.map((path, index) => (
+            <clipPath key={index} id={`root-clip-${illustrationId}-${index + 1}`}>
+              <path d={path} />
+            </clipPath>
+          ))}
+        </>}
       </defs>
       {showAnatomy && <g
         data-testid={`tooth-anatomy-${toothKey}`}
@@ -372,17 +416,81 @@ function OdontogramToothSvgImpl({
         transform={anatomyTransform}
         pointerEvents="none"
       >
-        {showNaturalRoots && anatomy.roots.map((path, index) => (
-          <path
-            key={`${toothKey}-root-${index}`}
-            d={path}
-            fill={`url(#${rootFillId})`}
-            stroke="#686958"
-            strokeWidth={1.05}
-            strokeLinejoin="round"
-            data-testid={`tooth-root-${toothKey}-${index + 1}`}
-          />
-        ))}
+        {showNaturalRoots && anatomy.roots.map((path, index) => {
+          const rootNumber = index + 1;
+          const recorded = rootRecorded(index);
+          const observation = recorded ? rootConditions?.[String(rootNumber)] : undefined;
+          const condition = observation?.condition;
+          const postCore = condition?.startsWith("post_core") ?? false;
+          const defective = condition?.endsWith("defective") ?? false;
+          const landmarks = getRootDrawingLandmarks(anatomy, index);
+          const findingColor = postCore ? "#c4a7ee" : "#ffd84d";
+          const findingWidth = postCore ? 9 : 7;
+          // A gap longer than the entire normalized path prevents a second
+          // rounded dash/dot at the apex of this cervical-only post symbol.
+          const postDash = postCore ? "62 200" : undefined;
+          const rootDescription = `${displayLabel} root ${rootNumber}, ${condition ? rootConditionLabel(condition) : "current root finding unspecified"}${observation?.apicectomy ? ", apicectomy recorded" : ""}`;
+          return <g key={`${toothKey}-root-${index}`} transform={rootTransform(index)}>
+            <g
+              className={rootControls ? "clinical-root-target" : undefined}
+              data-testid={`clinical-root-${toothKey}-${rootNumber}`}
+              data-root-condition={condition ?? "unspecified"}
+              data-root-recorded={recorded ? "true" : "false"}
+              data-apicectomy={observation?.apicectomy ? "true" : "false"}
+              role={rootControls ? "button" : undefined}
+              tabIndex={rootControls ? 0 : undefined}
+              aria-label={rootControls ? rootDescription : undefined}
+              pointerEvents={rootControls ? "visiblePainted" : "none"}
+              onClick={rootControls ? (event) => {
+                event.preventDefault(); event.stopPropagation();
+                (onRootClick ?? onRootContextMenu)?.(rootNumber, event);
+              } : undefined}
+              onContextMenu={rootControls ? (event) => {
+                event.preventDefault(); event.stopPropagation();
+                (onRootContextMenu ?? onRootClick)?.(rootNumber, event);
+              } : undefined}
+              onKeyDown={rootControls ? (event) => {
+                const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+                if (!context && event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault(); event.stopPropagation();
+                (context ? onRootContextMenu ?? onRootClick : onRootClick ?? onRootContextMenu)?.(rootNumber, event);
+              } : undefined}
+            >
+              {currentRootLayer && <title>{rootDescription}</title>}
+              <path d={path} fill={`url(#${rootFillId})`} stroke="#686958"
+                strokeWidth={1.05} strokeLinejoin="round" pointerEvents="none"
+                data-testid={`tooth-root-${toothKey}-${rootNumber}`} />
+              {condition && <g clipPath={`url(#root-clip-${illustrationId}-${rootNumber})`}
+                pointerEvents="none" data-testid={`clinical-root-finding-${toothKey}-${rootNumber}`} data-condition={condition}>
+                <path d={anatomy.canals[index]} fill="none" stroke={findingColor}
+                  strokeWidth={findingWidth} strokeLinecap="round" pathLength={100}
+                  strokeDasharray={postDash} />
+                {postCore && <rect x={landmarks.cervical.x - 8} y={landmarks.cervical.y - 16}
+                  width="16" height="9" rx="2" fill={findingColor} />}
+                {defective && <g data-testid={`clinical-root-defect-${toothKey}-${rootNumber}`}>
+                  <path d={anatomy.canals[index]} fill="none" stroke={`url(#${defectPatternId})`}
+                    strokeWidth={findingWidth} strokeLinecap="round" pathLength={100}
+                    strokeDasharray={postDash} />
+                  {postCore && <rect x={landmarks.cervical.x - 8} y={landmarks.cervical.y - 16}
+                    width="16" height="9" rx="2" fill={`url(#${defectPatternId})`} />}
+                </g>}
+              </g>}
+              {observation?.apicectomy && <g pointerEvents="none"
+                data-testid={`clinical-root-apicectomy-${toothKey}-${rootNumber}`}>
+                <path d={`M${landmarks.apical.x - 7} ${landmarks.apical.y} H${landmarks.apical.x + 7}`}
+                  fill="none" stroke="#fff9eb" strokeWidth="4.5" />
+                <path d={`M${landmarks.apical.x - 7} ${landmarks.apical.y} H${landmarks.apical.x + 7}`}
+                  fill="none" stroke="#574329" strokeWidth="2.3" />
+              </g>}
+              {rootControls && <g clipPath={`url(#${rootHitClipId})`}>
+                <path className="clinical-root-halo" d={path} fill="none"
+                  stroke="var(--accent, #00bcea)" strokeWidth="8" pointerEvents="none" />
+                <path d={path} fill="transparent" stroke="transparent" strokeWidth="5"
+                  pointerEvents="all" />
+              </g>}
+            </g>
+          </g>;
+        })}
         {baselineImplant && (
           <g data-testid={`tooth-baseline-implant-${toothKey}`}>
             <path d={implantScrewAnatomy.body} fill={`url(#${implantFillId})`}
@@ -434,16 +542,17 @@ function OdontogramToothSvgImpl({
         )}
         </g>
 
-        {hasRestoration("root_canal") && (
+        {hasRestoration("root_canal") && remainingLegacyCanals.length > 0 && (
           <g data-testid={`tooth-anatomy-restoration-${toothKey}-root_canal`}>
-            {anatomy.canals.map((path, index) => (
+            {remainingLegacyCanals.map(({ path, index }) => (
               <path key={index} d={path} fill="none" stroke="rgba(220, 38, 38, 0.92)"
-                strokeWidth={2.2} strokeLinecap="round" />
+                strokeWidth={2.2} strokeLinecap="round" transform={rootTransform(index)}
+                data-root-index={index + 1} />
             ))}
           </g>
         )}
 
-        {hasRestoration("post") && (
+        {hasRestoration("post") && !anyRootRecorded && (
           <rect
             x="46"
             y="74"
@@ -673,7 +782,7 @@ function OdontogramToothSvgImpl({
         </g>
       )}
 
-      {hasRestoration("root_canal") && (
+      {hasRestoration("root_canal") && !anyRootRecorded && (
         <g
           pointerEvents="none"
           data-tooltip={rootCanalTooltip}
@@ -688,7 +797,7 @@ function OdontogramToothSvgImpl({
         </g>
       )}
 
-      {hasRestoration("post") && (
+      {hasRestoration("post") && !anyRootRecorded && (
         <g
           pointerEvents="none"
           data-tooltip={postTooltip}

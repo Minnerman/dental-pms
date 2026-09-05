@@ -33,9 +33,14 @@ test("larger tooth silhouettes remain legible and reachable at desktop and narro
   const illustrationIds = await chart.locator("defs > [id]").evaluateAll((elements) =>
     elements.map((element) => element.id)
   );
-  // Enamel, root and threaded-implant shading each need a unique SVG id.
-  expect(illustrationIds).toHaveLength(96);
-  expect(new Set(illustrationIds).size).toBe(96);
+  // Three shading references per tooth are unchanged; Current now also has
+  // independent root hatch/hit/clip definitions, all globally unique.
+  await expect(chart.locator("defs > radialGradient, defs > linearGradient")).toHaveCount(96);
+  await expect(chart.locator('defs > pattern[id^="root-defect-"]')).toHaveCount(32);
+  await expect(chart.locator('defs > clipPath[id^="root-hit-"]')).toHaveCount(32);
+  await expect(chart.locator('defs > clipPath[id^="root-clip-"]')).toHaveCount(52);
+  expect(illustrationIds).toHaveLength(212);
+  expect(new Set(illustrationIds).size).toBe(illustrationIds.length);
   expect(await page.getByTestId("tooth-anatomy-UL6").getAttribute("transform")).toContain("scale(-1 1)");
   expect(await page.getByTestId("tooth-anatomy-LL6").getAttribute("transform")).toContain("scale(-1 -1)");
   await expect(page.getByTestId("tooth-crown-groove-UR6-1")).toBeAttached();

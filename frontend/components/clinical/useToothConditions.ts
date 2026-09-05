@@ -4,11 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/auth";
 import type { OdontogramBaselineCondition } from "./OdontogramToothSvg";
 import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothCondition } from "./toothDiagnosis";
+import { rootConditionLabel, type RootObservation, type RootPatch } from "./rootDiagnosis";
 export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
 type ConditionRow = DiagnosisPatch & {
   condition: ToothCondition | null;
   revision: number;
+  root_observations?: Record<string, RootObservation>;
   updated_at: string;
   updated_by: { id: number; email: string; role: string } | null;
 };
@@ -95,7 +97,9 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   const currentChart = enabled && chart?.patient_id === Number(patientId) ? chart : null;
   const canSave = enabled && writable && Boolean(currentChart) && !loading && !saving && !error;
 
-  const saveAction = async (teeth: string[], action: DiagnosisAction, remember = true) => {
+  const saveObservation = async (
+    path: string, payload: Record<string, unknown>, message: string, rememberAction?: DiagnosisAction
+  ) => {
     if (!canSave || !currentChart || saveLock.current) return false;
     const operation = Symbol("tooth-condition-save");
     saveLock.current = operation;
@@ -104,14 +108,10 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     setNotice(null);
     setError(null);
     try {
-      const response = await apiFetch(endpoint, {
+      const response = await apiFetch(path, {
         method: "POST",
         headers: { "Request-Id": requestId() },
-        body: JSON.stringify({
-          teeth,
-          ...diagnosisAction(action).patch,
-          expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart.teeth[tooth]?.revision ?? 0])),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         if (response.status === 409) throw new Error("The tooth chart changed elsewhere. Refresh and review it before trying again.");
@@ -124,8 +124,8 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       generation.current += 1;
       setLoading(false);
       setChart(data);
-      if (remember) setLastAction(action);
-      setNotice(`${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${diagnosisAction(action).label} saved. Notes and history retained.`);
+      if (rememberAction) setLastAction(rememberAction);
+      setNotice(`${message} saved. Notes and history retained.`);
       return true;
     } catch (cause) {
       if (currentPatient.current === patientId && saveLock.current === operation) {
@@ -140,10 +140,23 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     }
   };
 
+  const saveAction = (teeth: string[], action: DiagnosisAction, remember = true) =>
+    saveObservation(endpoint, {
+      teeth, ...diagnosisAction(action).patch,
+      expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
+    }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${diagnosisAction(action).label}`,
+    remember ? action : undefined);
+
+  const saveRoot = (tooth: string, root: number, patch: RootPatch) =>
+    saveObservation(`/api/patients/${patientId}/clinical/root-conditions`, {
+      tooth, root, dentition: currentChart?.teeth[tooth]?.condition === "deciduous" ? "deciduous" : "permanent",
+      ...patch, expected_revision: currentChart?.teeth[tooth]?.revision ?? 0,
+    }, `${tooth} · Root ${root} · ${"condition" in patch ? rootConditionLabel(patch.condition) : patch.apicectomy ? "Apicectomy" : "Apicectomy marker removed"}`);
+
   return {
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
-    loading, saving, error, notice, lastAction, canSave, load, saveAction,
+    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoot,
     save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

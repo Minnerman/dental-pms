@@ -560,8 +560,8 @@ test("tooth-number hover pulse never resizes anatomy and is disabled by reduced 
   expect(after!.height).toBeCloseTo(before!.height, 1);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect.poll(() => label.evaluate((element) => getComputedStyle(element, "::before").animationName)).toBe("none");
-  await page.getByTestId("tooth-button-UR5").focus();
-  await expect(page.getByTestId("tooth-button-UR5")).toBeFocused();
+  await label.focus();
+  await expect(label).toBeFocused();
   const reduced = await svg.boundingBox();
   expect(reduced!.width).toBeCloseTo(before!.width, 1);
   expect(reduced!.height).toBeCloseTo(before!.height, 1);

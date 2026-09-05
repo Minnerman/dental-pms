@@ -13,7 +13,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base
@@ -67,6 +69,11 @@ class ToothCondition(Base, AuditMixin):
             "rotation IS NULL OR rotation IN ('clockwise', 'anticlockwise')",
             name="ck_tooth_conditions_rotation",
         ),
+        CheckConstraint(
+            "jsonb_typeof(root_observations) = 'object' AND "
+            "root_observations - '1' - '2' - '3' = '{}'::jsonb",
+            name="ck_tooth_conditions_root_keys",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -75,6 +82,9 @@ class ToothCondition(Base, AuditMixin):
     condition: Mapped[str | None] = mapped_column(String(20), nullable=True)
     movement: Mapped[str | None] = mapped_column(String(20), nullable=True)
     rotation: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    root_observations: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

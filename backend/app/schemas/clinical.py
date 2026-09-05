@@ -127,12 +127,57 @@ class ToothConditionUpdate(BaseModel):
         return self
 
 
+RootConditionValue = Literal["filled_sound", "filled_defective", "post_core_sound", "post_core_defective"]
+
+
+def schematic_root_count(tooth: str, dentition: str) -> int:
+    """Numbered schematic slots, not a claim about individual patient anatomy."""
+    position = int(tooth[-1])
+    upper = tooth.startswith("U")
+    if dentition == "deciduous":
+        if position > 5:
+            raise ValueError("deciduous teeth are supported only in positions 1-5")
+        return (3 if upper else 2) if position in (4, 5) else 1
+    if position >= 6:
+        return 3 if upper else 2
+    return 2 if upper and position == 4 else 1
+
+
+class RootObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    condition: RootConditionValue | None
+    apicectomy: bool = Field(strict=True)
+
+
+class RootConditionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tooth: str
+    root: int = Field(strict=True, ge=1, le=3)
+    dentition: Literal["permanent", "deciduous"]
+    condition: RootConditionValue | None = None
+    apicectomy: bool = Field(default=False, strict=True)
+    expected_revision: int = Field(strict=True, ge=0)
+
+    _normalize_tooth = field_validator("tooth")(_tooth)
+
+    @model_validator(mode="after")
+    def check_observation(self):
+        if not self.model_fields_set.intersection({"condition", "apicectomy"}):
+            raise ValueError("supply a root condition or apicectomy observation")
+        if self.root > schematic_root_count(self.tooth, self.dentition):
+            raise ValueError("root number is not available for this schematic tooth and dentition")
+        return self
+
+
 class ToothConditionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     condition: ToothConditionValue | None
     movement: Literal["forward", "backward"] | None
     rotation: Literal["clockwise", "anticlockwise"] | None
+    root_observations: dict[Literal["1", "2", "3"], RootObservation]
     revision: int
     updated_at: datetime
     updated_by: ActorOut
