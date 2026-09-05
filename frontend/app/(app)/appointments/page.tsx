@@ -25,6 +25,9 @@ import { apiFetch, clearToken } from "@/lib/auth";
 import { NOTE_BODY_MAX_LENGTH, noteResponseError } from "@/lib/noteErrors";
 import { recallResponseError } from "@/lib/recallErrors";
 import StatusIcon from "@/components/ui/StatusIcon";
+import Icon from "@/components/ui/Icon";
+import { getWorkingSessionsForKey, isWithinPracticeHours, practiceDateParts, type PracticeSchedule } from "@/lib/practiceSchedule";
+import styles from "./Schedule.module.css";
 
 type Actor = { id: number; email: string; role: string };
 type PatientCategory = "CLINIC_PRIVATE" | "DOMICILIARY_PRIVATE" | "DENPLAN";
@@ -167,33 +170,6 @@ type AppointmentLanePatch = {
   visitAddress?: string | null;
 };
 
-type PracticeHour = {
-  day_of_week: number;
-  start_time: string | null;
-  end_time: string | null;
-  is_closed: boolean;
-};
-
-type PracticeClosure = {
-  start_date: string;
-  end_date: string;
-  reason: string | null;
-};
-
-type PracticeOverride = {
-  date: string;
-  start_time: string | null;
-  end_time: string | null;
-  is_closed: boolean;
-  reason: string | null;
-};
-
-type PracticeSchedule = {
-  hours: PracticeHour[];
-  closures: PracticeClosure[];
-  overrides: PracticeOverride[];
-};
-
 type LocationFilter = "all" | "clinic" | "visit";
 type DiaryGrouping = "chair" | "clinician";
 
@@ -299,6 +275,8 @@ const daySheetStatusLabels: Record<AppointmentStatus, string> = {
 };
 
 const DIARY_TIME_STEP_MINUTES = 10;
+const APPOINTMENT_DURATIONS = [10, 15, 20, 30, 45, 60, 90, 120, 180, 190, 210, 240, 300, 360];
+const durationLabel = (minutes: number) => minutes >= 240 && minutes % 60 === 0 ? `${minutes / 60} hours` : `${minutes} min`;
 const DIARY_UNDO_WINDOW_MS = 10_000;
 const appointmentsBookingSubmitLocks = new Set<string>();
 const APPOINTMENTS_BOOKING_SUBMIT_LOCK = "appointments-booking-submit";
@@ -618,55 +596,6 @@ function buildPatientAlertFlags(
   return flags.filter((flag) => (flag.value || "").trim().length > 0);
 }
 
-function getScheduleDayIndex(date: Date) {
-  return (date.getDay() + 6) % 7;
-}
-
-function isDateWithinRange(date: Date, start: string, end: string) {
-  const key = toDateKey(date);
-  return key >= start && key <= end;
-}
-
-function getWorkingWindowForDate(date: Date, schedule: PracticeSchedule | null) {
-  if (!schedule) return null;
-  const key = toDateKey(date);
-  const override = schedule.overrides.find((item) => item.date === key);
-  if (override) {
-    if (override.is_closed) return null;
-    if (override.start_time && override.end_time) {
-      return {
-        start: timeToMinutes(override.start_time),
-        end: timeToMinutes(override.end_time),
-      };
-    }
-  }
-  const isClosed = schedule.closures.some((closure) =>
-    isDateWithinRange(date, closure.start_date, closure.end_date)
-  );
-  if (isClosed) return null;
-  const dayIndex = getScheduleDayIndex(date);
-  const hour = schedule.hours.find((item) => item.day_of_week === dayIndex);
-  if (!hour || hour.is_closed || !hour.start_time || !hour.end_time) return null;
-  return {
-    start: timeToMinutes(hour.start_time),
-    end: timeToMinutes(hour.end_time),
-  };
-}
-
-function isRangeWithinSchedule(
-  start: Date,
-  end: Date,
-  schedule: PracticeSchedule | null
-) {
-  if (!schedule) return true;
-  if (toDateKey(start) !== toDateKey(end)) return false;
-  const window = getWorkingWindowForDate(start, schedule);
-  if (!window) return false;
-  const startMinutes = start.getHours() * 60 + start.getMinutes();
-  const endMinutes = end.getHours() * 60 + end.getMinutes();
-  return startMinutes >= window.start && endMinutes <= window.end;
-}
-
 export default function AppointmentsPage() {
   const contextMenuMargin = 12;
   const router = useRouter();
@@ -674,8 +603,11 @@ export default function AppointmentsPage() {
   const patientSearchRef = useRef<HTMLInputElement | null>(null);
   const diarySearchRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const bookingDialogRef = useRef<HTMLDialogElement | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedule, setSchedule] = useState<PracticeSchedule | null>(null);
+  const [scheduleError, setScheduleError] = useState(false);
+  const [showFullDay, setShowFullDay] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -740,7 +672,7 @@ export default function AppointmentsPage() {
   const [range, setRange] = useState<CalendarRange | null>(null);
   const [calendarView, setCalendarView] = useState<View>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [viewMode, setViewMode] = useState<"day_sheet" | "calendar">("day_sheet");
+  const [viewMode, setViewMode] = useState<"day_sheet" | "calendar">("calendar");
   const [diaryGrouping, setDiaryGrouping] = useState<DiaryGrouping>("chair");
   const [diaryChairFilter, setDiaryChairFilter] = useState("all");
   const [diaryClinicianFilter, setDiaryClinicianFilter] = useState("all");
@@ -856,7 +788,7 @@ export default function AppointmentsPage() {
       // state, so use the rendered dialog as the authoritative shortcut guard.
       if (key === "escape" && document.querySelector('[data-testid="booking-modal"]')) {
         event.preventDefault();
-        setShowNewModal(false);
+        if (!saving) setShowNewModal(false);
         return;
       }
       if (isEditableTarget(event.target)) return;
@@ -881,17 +813,19 @@ export default function AppointmentsPage() {
     return () => {
       window.removeEventListener("keydown", handleShortcut, true);
     };
-  }, [canWriteAppointments, showNewModal]);
+  }, [canWriteAppointments, showNewModal, saving]);
 
   useEffect(() => {
     if (!showNewModal) return;
+    const dialog = bookingDialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
     const focusTimer = window.setTimeout(() => {
       if (patientSearchRef.current) {
         patientSearchRef.current.focus();
         patientSearchRef.current.select();
       }
     }, 0);
-    return () => window.clearTimeout(focusTimer);
+    return () => { window.clearTimeout(focusTimer); dialog?.close(); };
   }, [showNewModal]);
 
   useEffect(() => {
@@ -1518,7 +1452,7 @@ export default function AppointmentsPage() {
     if (stored === "calendar" || stored === "day_sheet") {
       setViewMode(stored);
     } else {
-      setViewMode("day_sheet");
+      setViewMode("calendar");
     }
   }, []);
 
@@ -1775,15 +1709,18 @@ export default function AppointmentsPage() {
         errors.time = "Select a valid start and end time.";
       } else if (endDate <= startDate) {
         errors.time = "End time must be after the start time.";
-      } else if (schedule && !isRangeWithinSchedule(startDate, endDate, schedule)) {
-        errors.time = "Appointment time is outside of working hours.";
+      } else if (practiceDateParts(startDate).key !== practiceDateParts(endDate).key) {
+        errors.time = "Appointments must start and end on the same practice day.";
       }
     }
     if (activeLocationType === "visit" && !activeLocationText.trim()) {
       errors.visit = "Visit address is required for domiciliary visits.";
     }
     return errors;
-  }, [selectedPatientId, startsAt, endsAt, activeLocationType, activeLocationText, schedule]);
+  }, [selectedPatientId, startsAt, endsAt, activeLocationType, activeLocationText]);
+
+  const bookingOutsideHours = startsAt && endsAt && !bookingFieldErrors.time
+    ? isWithinPracticeHours(new Date(startsAt), new Date(endsAt), schedule) === false : false;
 
   const bookingValidationError =
     bookingFieldErrors.patient || bookingFieldErrors.time || bookingFieldErrors.visit || null;
@@ -1810,18 +1747,18 @@ export default function AppointmentsPage() {
   }, [manualScrollTime]);
 
   const { minTime, maxTime } = useMemo(() => {
-    if (!schedule) return { minTime: undefined, maxTime: undefined };
-    const hours = schedule.hours.filter(
-      (hour) => !hour.is_closed && hour.start_time && hour.end_time
-    );
-    if (hours.length === 0) return { minTime: undefined, maxTime: undefined };
-    const minMinutes = Math.min(...hours.map((hour) => timeToMinutes(hour.start_time!)));
-    const maxMinutes = Math.max(...hours.map((hour) => timeToMinutes(hour.end_time!)));
+    if (showFullDay) return { minTime: dateWithMinutes(0), maxTime: dateWithMinutes(1439) };
+    const hours = [...(schedule?.hours ?? []), ...(schedule?.overrides ?? [])].filter((hour) => !hour.is_closed && hour.start_time && hour.end_time);
+    // Always retain appointments outside opening hours in the visible time range.
+    const starts = appointments.map((item) => { const date = new Date(item.starts_at); return date.getHours() * 60 + date.getMinutes(); });
+    const ends = appointments.map((item) => { const date = new Date(item.ends_at); return date.getHours() * 60 + date.getMinutes(); });
+    const minMinutes = Math.max(0, Math.floor(Math.min(8 * 60, ...starts, ...hours.map((hour) => timeToMinutes(hour.start_time!))) / 60) * 60);
+    const maxMinutes = Math.min(1439, Math.ceil(Math.max(19 * 60, ...ends, ...hours.map((hour) => timeToMinutes(hour.end_time!))) / 60) * 60);
     return {
       minTime: dateWithMinutes(minMinutes),
       maxTime: dateWithMinutes(maxMinutes),
     };
-  }, [schedule]);
+  }, [schedule, appointments, showFullDay]);
 
   function resetAppointmentNotesState() {
     loadAppointmentNotesRequestId.current += 1;
@@ -1866,6 +1803,7 @@ export default function AppointmentsPage() {
   }
 
   const loadSchedule = useCallback(async () => {
+    setScheduleError(false);
     try {
       const res = await apiFetch("/api/settings/schedule");
       if (res.status === 401) {
@@ -1878,6 +1816,7 @@ export default function AppointmentsPage() {
       setSchedule(data);
     } catch {
       setSchedule(null);
+      setScheduleError(true);
     }
   }, [router]);
 
@@ -3056,8 +2995,8 @@ export default function AppointmentsPage() {
       const originalEnd = new Date(appt.ends_at);
       const durationMs = originalEnd.getTime() - originalStart.getTime();
       const targetEnd = new Date(targetStart.getTime() + durationMs);
-      if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
-        setError("Paste time is outside of working hours.");
+      if (practiceDateParts(targetStart).key !== practiceDateParts(targetEnd).key) {
+        setError("Appointments must start and end on the same practice day.");
         return;
       }
       const actionLabel = clipboard.mode === "cut" ? "Move" : "Copy";
@@ -3118,7 +3057,6 @@ export default function AppointmentsPage() {
       clipboard,
       loadAppointments,
       router,
-      schedule,
       setDaySheetPasteTargetAppointmentId,
       updateAppointmentTimes,
     ]
@@ -3146,6 +3084,7 @@ export default function AppointmentsPage() {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (bookingDialogRef.current?.open) return;
       const isCmd = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       const navigateToDate = (target: Date, options?: { scrollToTime?: Date }) => {
@@ -3397,12 +3336,9 @@ export default function AppointmentsPage() {
       setError("You can view appointments, but you cannot create them.");
       return;
     }
-    if (!isRangeWithinSchedule(slotInfo.start, slotInfo.end, schedule)) {
-      setError("Selected time is outside of working hours.");
-      return;
-    }
     setStartsAt(toLocalDateTimeInput(slotInfo.start));
     setEndsAt(toLocalDateTimeInput(slotInfo.end));
+    setDurationMinutes(Math.max(10, Math.round((slotInfo.end.getTime() - slotInfo.start.getTime()) / 60000)));
     setShowNewModal(true);
   }
 
@@ -3457,8 +3393,8 @@ export default function AppointmentsPage() {
         await loadAppointments();
         return;
       }
-      if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
-        setError("Reschedule is outside of working hours.");
+      if (practiceDateParts(targetStart).key !== practiceDateParts(targetEnd).key) {
+        setError("Appointments must start and end on the same practice day.");
         await loadAppointments();
         return;
       }
@@ -3551,8 +3487,8 @@ export default function AppointmentsPage() {
     const laneKey = getLaneKeyForAppointment(event.resource);
 
     try {
-      if (!isRangeWithinSchedule(targetStart, targetEnd, schedule)) {
-        setError("Resize is outside of working hours.");
+      if (practiceDateParts(targetStart).key !== practiceDateParts(targetEnd).key) {
+        setError("Appointments must start and end on the same practice day.");
         await loadAppointments();
         return;
       }
@@ -3745,6 +3681,7 @@ export default function AppointmentsPage() {
         color: theme.text,
         borderStyle: "solid",
         borderWidth: isHighlighted || isSelected ? 2 : 1,
+        borderLeft: isWithinPracticeHours(event.start, event.end, schedule) === false ? "4px solid var(--danger)" : `3px solid ${theme.border}`,
         outline: isHighlighted || isSelected ? "2px solid var(--accent)" : undefined,
         outlineOffset: isHighlighted || isSelected ? 1 : undefined,
         boxShadow:
@@ -3758,22 +3695,38 @@ export default function AppointmentsPage() {
 
   function dayPropGetter(date: Date) {
     if (!schedule) return {};
-    const window = getWorkingWindowForDate(date, schedule);
-    if (window) return {};
-    return { style: { backgroundColor: "rgba(120, 120, 120, 0.12)" } };
+    return getWorkingSessionsForKey(practiceDateParts(date).key, schedule).length ? {} : { className: styles.closedDay };
   }
 
-  function slotPropGetter(date: Date) {
-    if (!schedule) return {};
-    const window = getWorkingWindowForDate(date, schedule);
-    if (!window) {
-      return { style: { backgroundColor: "rgba(120, 120, 120, 0.12)" } };
-    }
-    const minutes = date.getHours() * 60 + date.getMinutes();
-    if (minutes < window.start || minutes >= window.end) {
-      return { style: { backgroundColor: "rgba(120, 120, 120, 0.12)" } };
-    }
-    return {};
+  function slotPropGetter(date: Date, resource?: string | number) {
+    const end = new Date(date.getTime() + DIARY_TIME_STEP_MINUTES * 60000);
+    const outside = isWithinPracticeHours(date, end, schedule) === false;
+    return {
+      className: outside ? styles.closedSlot : undefined,
+      "data-testid": `schedule-slot-${format(date, "yyyy-MM-dd-HH-mm")}${resource === undefined ? "" : `-${resource}`}`,
+      "data-outside-hours": outside ? "true" : "false",
+      onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => {
+        if (!event.currentTarget.closest(".rbc-day-slot")) return;
+        event.preventDefault(); event.stopPropagation();
+        if (!canWriteAppointments) return;
+        setContextMenu(null); setTooltip(null); setBookingSubmitError(null);
+        setStartsAt(toLocalDateTimeInput(date));
+        setEndsAt(toLocalDateTimeInput(new Date(date.getTime() + 30 * 60000)));
+        setDurationMinutes(30); setLastSelectedSlot(date);
+        if (resource !== undefined) {
+          const lane = diaryLaneByKey.get(String(resource));
+          if (lane?.grouping === "clinician") setClinicianUserId(lane.clinicianUserId ? String(lane.clinicianUserId) : "");
+          if (lane?.grouping === "chair") {
+            setLocation(lane.location ?? "");
+            setLocationType(lane.locationType ?? "clinic");
+            // A home-visit lane can contain another patient's address. Let the
+            // selected patient's own address populate the new booking instead.
+            setLocationText("");
+          }
+        }
+        setShowNewModal(true);
+      },
+    };
   }
 
   function AppointmentEvent({
@@ -3807,6 +3760,8 @@ export default function AppointmentsPage() {
         data-testid={`appointment-event-${appt.id}`}
         data-appointment-id={appt.id}
         data-selected={isSelected ? "true" : "false"}
+        data-outside-hours={isWithinPracticeHours(event.start, event.end, schedule) === false ? "true" : "false"}
+        title={isWithinPracticeHours(event.start, event.end, schedule) === false ? "Outside normal opening hours" : scheduleError ? "Opening hours could not be checked" : undefined}
         onMouseEnter={(event) => {
           void ensureNotesLoaded(appt.id);
           showTooltip(event, appt);
@@ -3833,6 +3788,7 @@ export default function AppointmentsPage() {
             {daySheetStatusLabels[appt.status]}
           </span>
           {rescheduleSavingId === appt.id && <span className="badge">Saving...</span>}
+          {isWithinPracticeHours(event.start, event.end, schedule) === false && <span className={styles.outsideLabel}>Outside hours</span>}
         </div>
         {detailParts.length > 0 && (
           <div className="appointments-r4-event-detail">{detailParts.join(" · ")}</div>
@@ -3854,19 +3810,17 @@ export default function AppointmentsPage() {
 
   return (
     <div
-      className="app-grid"
+      className={`app-grid ${styles.page}`}
       data-book-intent={bookIntent ? "1" : "0"}
       data-testid="appointments-page"
     >
-      <section className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+      <section className={`card ${styles.surface}`} style={{ display: "grid", gap: 12 }}>
+        <div className={styles.header}>
           <div>
-            <h2 style={{ marginTop: 0 }}>Appointments</h2>
-            <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-              Plan your clinic and visit diary across day, week, and month views.
-            </p>
+            <h1>Schedule</h1>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className={styles.headerActions}>
+            <Link href="/settings/schedule" className="btn btn-secondary" data-testid="schedule-opening-hours"><Icon name="settings" />Opening hours & closures</Link>
             {canWriteAppointments && (
               <button
                 className="btn btn-primary"
@@ -3943,6 +3897,7 @@ export default function AppointmentsPage() {
         )}
         {error && <div className="notice">{error}</div>}
         {notice && <div className="notice">{notice}</div>}
+        {scheduleError && <div className="notice" role="status" data-testid="schedule-load-error">Opening hours could not be loaded. Appointments remain available, but hours cannot be checked. <button type="button" className="btn btn-secondary" onClick={() => void loadSchedule()}>Retry hours</button></div>}
         {diaryUndo && (
           <div
             className="notice"
@@ -4008,7 +3963,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
         )}
-        {activeConflictWarning && (
+        {activeConflictWarning && !showNewModal && (
           <div
             className="notice"
             style={{
@@ -4073,7 +4028,7 @@ export default function AppointmentsPage() {
 
         {viewMode === "calendar" ? (
           <div
-            className="card appointments-r4-shell"
+            className={`card appointments-r4-shell ${styles.calendarShell}`}
             style={{ margin: 0, padding: 16 }}
             data-testid="appointments-diary-shell"
           >
@@ -4147,7 +4102,7 @@ export default function AppointmentsPage() {
                   />
                 </label>
                 <div className="appointments-r4-shell-note">
-                  <span>Time scale: {DIARY_TIME_STEP_MINUTES}-minute increments</span>
+                  <label className={styles.fullDay}><input type="checkbox" checked={showFullDay} onChange={(event) => setShowFullDay(event.target.checked)} data-testid="appointments-show-full-day" />Full 24 hours</label>
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -4159,6 +4114,7 @@ export default function AppointmentsPage() {
                 </div>
               </div>
             )}
+            <div className={styles.legend}><span><i className={styles.closedKey} />Closed / outside normal hours</span><span><i className={styles.warningKey} />Out-of-hours appointment</span><span className={styles.bookingHint}>Right-click a time slot to book · {DIARY_TIME_STEP_MINUTES}-minute grid</span></div>
             {isDiaryShellView && (
               <div
                 className="appointments-r4-columns"
@@ -4188,7 +4144,7 @@ export default function AppointmentsPage() {
               selectable={canWriteAppointments}
               resizable={canRescheduleAppointments}
               step={DIARY_TIME_STEP_MINUTES}
-              timeslots={1}
+              timeslots={6}
               resources={calendarView === "day" ? calendarResources : undefined}
               resourceIdAccessor="id"
               resourceTitleAccessor="title"
@@ -4216,7 +4172,7 @@ export default function AppointmentsPage() {
               slotPropGetter={slotPropGetter}
               scrollToTime={manualScrollTime ?? highlightScrollTime}
               className="appointments-r4-calendar"
-              style={{ height: "70vh" }}
+              style={{ height: "max(510px, calc(100vh - 265px))" }}
             />
           </div>
         ) : (
@@ -4520,32 +4476,33 @@ export default function AppointmentsPage() {
         {!loading &&
           ((viewMode === "calendar" && calendarEvents.length === 0) ||
             (viewMode !== "calendar" && appointments.length === 0)) && (
-          <div className="notice">No appointments in this range.</div>
+          <div className={styles.emptyState}>No appointments in this range.</div>
         )}
 
         {showNewModal && (
-          <div className="card" style={{ margin: 0 }} data-testid="booking-modal">
+          <dialog ref={bookingDialogRef} className={`card ${styles.bookingDialog}`} data-testid="booking-modal" aria-labelledby="booking-title" onCancel={(event) => { event.preventDefault(); if (!saving) setShowNewModal(false); }}>
             <div className="stack">
               <div className="row">
                 <div>
-                  <h3 style={{ marginTop: 0 }}>New appointment</h3>
-                  <p style={{ color: "var(--muted)" }}>
-                    Choose a patient, date/time, and optional clinician details.
-                  </p>
+                  <h2 id="booking-title" style={{ margin: 0 }}>New appointment</h2>
                 </div>
-                <button className="btn btn-secondary" onClick={() => setShowNewModal(false)}>
+                <button type="button" disabled={saving} className="btn btn-secondary" onClick={() => setShowNewModal(false)}>
                   Close
                 </button>
               </div>
-              <form onSubmit={createAppointment} className="stack">
+              <form onSubmit={createAppointment} className={styles.bookingForm}>
                 {(bookingSubmitError || bookingValidationError) && (
-                  <div className="notice" data-testid="booking-error">
+                  <div className={`${bookingSubmitError ? "notice" : styles.bookingGuidance} ${styles.fullWidth}`} data-testid="booking-error">
                     {bookingSubmitError || bookingValidationError}
                   </div>
                 )}
+                {scheduleError && <div className={`notice ${styles.fullWidth}`} role="status" data-testid="booking-schedule-error">Opening hours could not be checked. You can still save this appointment.</div>}
+                {bookingOutsideHours && <div className={`${styles.hoursWarning} ${styles.fullWidth}`} role="status" data-testid="booking-outside-hours-warning">Outside normal opening hours or during a closure. You can still book; the calendar will show a red edge.</div>}
+                {conflictWarning && <div className={`notice ${styles.fullWidth}`} data-testid="booking-conflicts"><strong>{conflictWarning.message}</strong>{conflictWarning.items.map((item, index) => <div data-testid="booking-conflict-row" key={index}>{formatConflictTime(item.start, item.end)} · {item.patientName}</div>)}<button type="button" className="btn btn-secondary" data-testid="booking-conflict-view-day" onClick={() => { if (conflictWarning.anchorDate) { setShowNewModal(false); viewConflictsAt(conflictWarning.anchorDate); } }}>View day</button></div>}
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Search patient</label>
+                  <label className="label" htmlFor="booking-patient-search">Search patient</label>
                   <input
+                    id="booking-patient-search"
                     className="input"
                     placeholder="Start typing a name"
                     value={patientQuery}
@@ -4555,11 +4512,12 @@ export default function AppointmentsPage() {
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">
+                  <label className="label" htmlFor="booking-patient-select">
                     Select patient
                     {requiredMark}
                   </label>
                   <select
+                    id="booking-patient-select"
                     className="input"
                     value={selectedPatientId}
                     onChange={(e) => setSelectedPatientId(e.target.value)}
@@ -4581,13 +4539,14 @@ export default function AppointmentsPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+                <div className={`${styles.fullWidth} ${styles.bookingTimes}`}>
                   <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">
+                    <label className="label" htmlFor="booking-start">
                       Start
                       {requiredMark}
                     </label>
                     <input
+                      id="booking-start"
                       className="input"
                       type="datetime-local"
                       value={startsAt}
@@ -4596,11 +4555,12 @@ export default function AppointmentsPage() {
                     />
                   </div>
                   <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">
+                    <label className="label" htmlFor="booking-end">
                       End
                       {requiredMark}
                     </label>
                     <input
+                      id="booking-end"
                       className="input"
                       type="datetime-local"
                       value={endsAt}
@@ -4621,7 +4581,7 @@ export default function AppointmentsPage() {
                         const diffMinutes = Math.round(
                           (endDate.getTime() - startDate.getTime()) / 60000
                         );
-                        if ([10, 15, 20, 30, 45, 60, 90].includes(diffMinutes)) {
+                        if (APPOINTMENT_DURATIONS.includes(diffMinutes)) {
                           setDurationMinutes(diffMinutes);
                         } else {
                           setDurationMinutes(null);
@@ -4633,7 +4593,7 @@ export default function AppointmentsPage() {
                 </div>
                 {bookingFieldErrors.time && (
                   <div
-                    style={{ color: "var(--danger)", fontSize: 12 }}
+                    className={styles.fullWidth} style={{ color: "var(--danger)", fontSize: 14 }}
                     data-testid="booking-error-time"
                   >
                     {bookingFieldErrors.time}
@@ -4641,15 +4601,18 @@ export default function AppointmentsPage() {
                 )}
                 {startsAt && endsAt && (
                   <div
-                    style={{ color: "var(--muted)", fontSize: 12 }}
+                    className={styles.fullWidth} style={{ color: "var(--muted)", fontSize: 12 }}
                     data-testid="booking-preselected-slot"
                   >
                     Slot prefilled — edit times if needed.
                   </div>
                 )}
-                <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Duration</label>
+                <div className={`stack ${styles.fullWidth}`} style={{ gap: 8 }}>
+                  <label className="label" htmlFor="booking-duration">Duration</label>
+                  <div className={styles.durationPresets}>{APPOINTMENT_DURATIONS.filter((minutes) => minutes >= 15 && minutes !== 20).map((minutes) => <button type="button" key={minutes} data-testid={`duration-preset-${minutes}`} aria-pressed={durationMinutes === minutes} onClick={() => setDurationMinutes(minutes)}>{durationLabel(minutes)}</button>)}</div>
                   <select
+                    id="booking-duration"
+                    data-testid="booking-duration"
                     className="input"
                     value={durationMinutes === null ? "" : String(durationMinutes)}
                     onChange={(e) => {
@@ -4665,9 +4628,9 @@ export default function AppointmentsPage() {
                     }}
                   >
                     <option value="">Custom</option>
-                    {[10, 15, 20, 30, 45, 60, 90].map((minutes) => (
+                    {APPOINTMENT_DURATIONS.map((minutes) => (
                       <option key={minutes} value={minutes}>
-                        {minutes} min
+                        {durationLabel(minutes)}
                       </option>
                     ))}
                   </select>
@@ -4695,8 +4658,9 @@ export default function AppointmentsPage() {
                   </select>
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Appointment type</label>
+                  <label className="label" htmlFor="booking-appointment-type">Appointment type</label>
                   <input
+                    id="booking-appointment-type"
                     className="input"
                     value={appointmentType}
                     onChange={(e) => setAppointmentType(e.target.value)}
@@ -4704,8 +4668,9 @@ export default function AppointmentsPage() {
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">Location / room</label>
+                  <label className="label" htmlFor="booking-location-room">Location / room</label>
                   <input
+                    id="booking-location-room"
                     className="input"
                     data-testid="booking-location-room"
                     value={activeLocation}
@@ -4723,11 +4688,12 @@ export default function AppointmentsPage() {
                   />
                 </div>
                 <div className="stack" style={{ gap: 8 }}>
-                  <label className="label">
+                  <label className="label" htmlFor="booking-location-type">
                     Location type
                     {requiredMark}
                   </label>
                   <select
+                    id="booking-location-type"
                     className="input"
                     data-testid="booking-location-type"
                     value={activeLocationType}
@@ -4746,12 +4712,13 @@ export default function AppointmentsPage() {
                   </select>
                 </div>
                 {activeLocationType === "visit" && (
-                  <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">
+                  <div className={`stack ${styles.fullWidth}`} style={{ gap: 8 }}>
+                    <label className="label" htmlFor="booking-visit-address">
                       Visit address
                       {requiredMark}
                     </label>
                     <textarea
+                      id="booking-visit-address"
                       className="input"
                       data-testid="booking-visit-address"
                       rows={3}
@@ -4774,12 +4741,12 @@ export default function AppointmentsPage() {
                   </div>
                 )}
                 {conflictChecking && (
-                  <div className="notice" data-testid="booking-conflicts-loading">
+                  <div className={`notice ${styles.fullWidth}`} data-testid="booking-conflicts-loading">
                     Checking conflicts…
                   </div>
                 )}
                 <button
-                  className="btn btn-primary"
+                  className={`btn btn-primary ${styles.fullWidth}`}
                   data-testid="booking-submit"
                   disabled={
                     saving ||
@@ -4791,7 +4758,7 @@ export default function AppointmentsPage() {
                 </button>
               </form>
             </div>
-          </div>
+          </dialog>
         )}
 
         {selectedAppointment && (
@@ -4866,10 +4833,10 @@ export default function AppointmentsPage() {
                       disabled={!canRescheduleAppointments}
                       onChange={(event) => handleEditDurationChange(event.target.value)}
                     >
-                      {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].map(
+                      {Array.from(new Set([...APPOINTMENT_DURATIONS, 40, 50, 70, 80, 100, 110, Number(editDuration)])).filter((minutes) => Number.isFinite(minutes) && minutes > 0).sort((a, b) => a - b).map(
                         (minutes) => (
                           <option key={minutes} value={String(minutes)}>
-                            {minutes} minutes
+                            {durationLabel(minutes)}
                           </option>
                         )
                       )}

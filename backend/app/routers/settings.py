@@ -44,30 +44,41 @@ def get_practice_profile(
     return PracticeProfileOut(id=None, **defaults)
 
 
-def _validate_hours(entries: list[PracticeHourIn]) -> None:
+def _validate_sessions(entries, key_name: str) -> None:
+    grouped = {}
     for entry in entries:
-        if entry.day_of_week < 0 or entry.day_of_week > 6:
-            raise HTTPException(status_code=400, detail="day_of_week must be 0-6")
+        grouped.setdefault(getattr(entry, key_name), []).append(entry)
         if entry.is_closed:
+            if entry.start_time is not None or entry.end_time is not None:
+                raise HTTPException(status_code=400, detail="Closed days must not include session times")
             continue
         if not entry.start_time or not entry.end_time:
-            raise HTTPException(status_code=400, detail="Open days require start_time and end_time")
+            raise HTTPException(status_code=400, detail="Open sessions require start_time and end_time")
         if entry.end_time <= entry.start_time:
             raise HTTPException(status_code=400, detail="end_time must be after start_time")
+    for rows in grouped.values():
+        if any(row.is_closed for row in rows) and len(rows) != 1:
+            raise HTTPException(status_code=400, detail="A closed day cannot contain other sessions")
+        sessions = sorted((row.start_time, row.end_time) for row in rows if not row.is_closed)
+        if any(current[0] < previous[1] for previous, current in zip(sessions, sessions[1:])):
+            raise HTTPException(status_code=400, detail="Sessions must not overlap or duplicate one another")
+
+
+def _validate_hours(entries: list[PracticeHourIn]) -> None:
+    _validate_sessions(entries, "day_of_week")
 
 
 def _validate_closures(entries: list[PracticeClosureIn]) -> None:
     for entry in entries:
         if entry.end_date < entry.start_date:
             raise HTTPException(status_code=400, detail="Closure end_date must be after start_date")
+    ranges = sorted((entry.start_date, entry.end_date) for entry in entries)
+    if any(current[0] <= previous[1] for previous, current in zip(ranges, ranges[1:])):
+        raise HTTPException(status_code=400, detail="Closure date ranges must not overlap or duplicate one another")
 
 
 def _validate_overrides(entries: list[PracticeOverrideIn]) -> None:
-    for entry in entries:
-        if entry.is_closed:
-            continue
-        if entry.start_time and entry.end_time and entry.end_time <= entry.start_time:
-            raise HTTPException(status_code=400, detail="Override end_time must be after start_time")
+    _validate_sessions(entries, "date")
 
 
 @router.put("/schedule", response_model=PracticeScheduleOut)

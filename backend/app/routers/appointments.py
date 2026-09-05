@@ -13,7 +13,7 @@ from app.models.audit_log import AuditLog
 from app.models.estimate import Estimate
 from app.models.note import Note
 from app.models.patient import CareSetting, Patient
-from app.models.user import Role, User
+from app.models.user import User
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentOut,
@@ -26,7 +26,7 @@ from app.services.appointments_snapshot import build_appointments_snapshot
 from app.services.audit import log_event, snapshot_model
 from app.services.capabilities import get_user_capabilities
 from app.services.run_sheet_pdf import build_run_sheet_pdf
-from app.services.schedule import LOCAL_TZ, load_schedule, validate_appointment_window
+from app.services.schedule import LOCAL_TZ
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -331,12 +331,8 @@ def create_appointment(
     if location_type == AppointmentLocationType.visit and not (location_text or "").strip():
         location_text = patient.visit_address_text
 
-    allow_outside = bool(payload.allow_outside_hours) and user.role == Role.superadmin
-    if not allow_outside:
-        hours, closures, overrides = load_schedule(db)
-        ok, reason = validate_appointment_window(payload.starts_at, payload.ends_at, hours, closures, overrides)
-        if not ok:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+    # Working sessions are advisory. Existing write permission allows booking
+    # outside them; legacy allow_outside_hours remains an accepted no-op.
 
     appt = Appointment(
         patient_id=payload.patient_id,
@@ -445,12 +441,6 @@ def update_appointment(
 
     if "starts_at" in fields or "ends_at" in fields:
         _validate_basic_appointment_window(starts_at, ends_at)
-        allow_outside = bool(payload.allow_outside_hours) and user.role == Role.superadmin
-        if not allow_outside:
-            hours, closures, overrides = load_schedule(db)
-            ok, reason = validate_appointment_window(starts_at, ends_at, hours, closures, overrides)
-            if not ok:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
     target_cancel_reason = (
         payload.cancel_reason if "cancel_reason" in fields else appt.cancel_reason
