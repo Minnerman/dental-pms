@@ -28,6 +28,7 @@ from app.schemas.clinical import (
     ProcedureCreate,
     ProcedureOut,
     RootConditionUpdate,
+    schematic_root_count,
     TOOTH_PATTERN,
     ToothHistoryOut,
     ToothConditionsOut,
@@ -240,7 +241,7 @@ def update_tooth_conditions(
         db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS
     )
     if duplicate:
-        if (duplicate.after_json or {}).get("request") != request_values:
+        if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Request-Id was already used for a different tooth-condition update",
@@ -333,49 +334,61 @@ def update_root_conditions(
     _viewer: User = Depends(CLINICAL_VIEW),
     request_id: str | None = Header(default=None, min_length=1, max_length=120),
 ):
-    # Root edits and whole-tooth resets serialize through the same patient lock
-    # and revision. A stale root dialog cannot restore a root cleared by reset.
+    # Whole-root-area edits and whole-tooth resets share the same patient lock.
+    # Validate the entire selection before changing any tooth or root map.
     get_patient_or_404(db, patient_id, for_update=True)
+    action = "clinical.root_conditions.recorded"
     request_values = payload.model_dump(mode="json", exclude_unset=True)
     duplicate = _duplicate_audit(
         db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS
     )
     if duplicate:
-        if (duplicate.after_json or {}).get("request") != request_values:
+        if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                 detail="Request-Id was already used for a different tooth or root observation")
         return _tooth_conditions_out(db, patient_id)
 
-    row = db.scalar(select(ToothCondition).where(
-        ToothCondition.patient_id == patient_id, ToothCondition.tooth == payload.tooth,
-    ))
-    if payload.expected_revision != (row.revision if row else 0):
+    existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
+        ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(payload.teeth),
+    ))}
+    if any(payload.expected_revisions[tooth] != (existing[tooth].revision if tooth in existing else 0)
+           for tooth in payload.teeth):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
             detail="Tooth conditions changed. Refresh the chart before trying again")
-    condition = row.condition if row else None
-    if condition in {"missing", "implant", "unerupted"}:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Roots cannot be recorded for a missing, implant or unerupted tooth")
-    current_dentition = "deciduous" if condition == "deciduous" else "permanent"
-    if payload.dentition != current_dentition:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Dentition does not match the current tooth condition. Refresh and review the tooth")
+    root_counts = {}
+    for tooth in payload.teeth:
+        row = existing.get(tooth)
+        condition = row.condition if row else None
+        if condition in {"missing", "implant", "unerupted"}:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Roots cannot be recorded for a missing, implant or unerupted tooth")
+        dentition = "deciduous" if condition == "deciduous" else "permanent"
+        root_counts[tooth] = schematic_root_count(tooth, dentition)
 
-    before = _tooth_condition_snapshot(row)
-    root_key = str(payload.root)
-    roots = dict(row.root_observations) if row else {}
-    root_observation = {**roots.get(root_key, {"condition": None, "apicectomy": False})}
-    for field in ("condition", "apicectomy"):
-        if field in request_values:
-            root_observation[field] = request_values[field]
-    changed = root_key not in roots or roots[root_key] != root_observation
-    if changed:
-        roots[root_key] = root_observation
-        now = datetime.now(timezone.utc)
+    before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in payload.teeth}
+    changed_roots = {}
+    now = datetime.now(timezone.utc)
+    for tooth in payload.teeth:
+        row = existing.get(tooth)
+        roots = dict(row.root_observations) if row else {}
+        changed = []
+        for root in range(1, root_counts[tooth] + 1):
+            root_key = str(root)
+            root_observation = {**roots.get(root_key, {"condition": None, "apicectomy": False})}
+            for field in ("condition", "apicectomy"):
+                if field in request_values:
+                    root_observation[field] = request_values[field]
+            if root_key not in roots or roots[root_key] != root_observation:
+                roots[root_key] = root_observation
+                changed.append(root_key)
+        if not changed:
+            continue
+        changed_roots[tooth] = changed
         if row is None:
-            row = ToothCondition(patient_id=patient_id, tooth=payload.tooth, revision=1,
+            row = ToothCondition(patient_id=patient_id, tooth=tooth, revision=1,
                 root_observations=roots, created_by_user_id=user.id,
                 updated_by_user_id=user.id, updated_at=now)
+            existing[tooth] = row
         else:
             row.root_observations = roots
             row.revision += 1
@@ -383,11 +396,12 @@ def update_root_conditions(
             row.updated_at = now
         db.add(row)
     db.flush()
-    log_event(db, actor=user, action="clinical.root_conditions.recorded",
+    log_event(db, actor=user, action=action,
         entity_type="patient", entity_id=str(patient_id), request_id=request_id,
-        before_data={"teeth": {payload.tooth: before}},
-        after_data={"request": request_values, "changed_roots": [root_key] if changed else [],
-                    "teeth": {payload.tooth: _tooth_condition_snapshot(row)}},
+        before_data={"teeth": before},
+        after_data={"request": request_values, "changed_teeth": list(changed_roots),
+                    "changed_roots": changed_roots,
+                    "teeth": {tooth: _tooth_condition_snapshot(existing[tooth]) for tooth in payload.teeth}},
     )
     db.commit()
     return _tooth_conditions_out(db, patient_id)

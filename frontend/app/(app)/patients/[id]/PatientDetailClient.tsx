@@ -21,7 +21,8 @@ import OdontogramToothSvg, {
 } from "@/components/clinical/OdontogramToothSvg";
 import BaselineToothMenu from "@/components/clinical/BaselineToothMenu";
 import RootConditionMenu from "@/components/clinical/RootConditionMenu";
-import type { RootPatch } from "@/components/clinical/rootDiagnosis";
+import { rootAreaSummary, rootDiagnosisAction, type RootPatch, type RootDiagnosisAction } from "@/components/clinical/rootDiagnosis";
+import RootDiagnosisPalette from "@/components/clinical/RootDiagnosisPalette";
 import { baselineGlyph, toothConditionLabels, useToothConditions } from "@/components/clinical/useToothConditions";
 import { actionSupportsTeeth, britishToothLabel, type DiagnosisAction } from "@/components/clinical/toothDiagnosis";
 import DiagnosisPalette from "@/components/clinical/DiagnosisPalette";
@@ -812,7 +813,6 @@ type ChartSelectionState = {
 type ChartActionMenu = {
   tooth: string;
   kind: "tooth" | "surface" | "root";
-  root?: number;
   left: number;
   top: number;
 };
@@ -1316,12 +1316,18 @@ export default function PatientDetailClient({
     if (baseline.loading) setChartActionMenu(null);
   }, [baseline.loading]);
   const [diagnosisSelection, setDiagnosisSelection] = useState<{ patient: string; action: DiagnosisAction | null; teeth: string[] }>({ patient: patientId, action: null, teeth: [] });
+  const [diagnosisLayer, setDiagnosisLayer] = useState<"tooth" | "root">("tooth");
+  const [rootSelection, setRootSelection] = useState<{ patient: string; action: RootDiagnosisAction | null; teeth: string[] }>({ patient: patientId, action: null, teeth: [] });
+  const rootAction = clinicalViewMode === "current" && diagnosisLayer === "root" && rootSelection.patient === patientId ? rootSelection.action : null;
+  const rootTeeth = clinicalViewMode === "current" && diagnosisLayer === "root" && rootSelection.patient === patientId ? rootSelection.teeth : [];
   const diagnosisAction = clinicalViewMode === "current" && diagnosisSelection.patient === patientId ? diagnosisSelection.action : null;
   const diagnosisTeeth = diagnosisAction ? diagnosisSelection.teeth : [];
   const diagnosisContext = useRef("");
   diagnosisContext.current = `${patientId}:${tab}:${clinicalViewMode}`;
   useEffect(() => {
     setDiagnosisSelection({ patient: patientId, action: null, teeth: [] });
+    setRootSelection({ patient: patientId, action: null, teeth: [] });
+    setDiagnosisLayer("tooth");
     setChartActionMenu(null);
     if (clinicalViewMode === "current") {
       setSelectedToothSurfaces([]);
@@ -1332,8 +1338,31 @@ export default function PatientDetailClient({
   function cancelDiagnosisSelection() {
     setDiagnosisSelection({ patient: patientId, action: null, teeth: [] });
   }
+  function cancelRootSelection() {
+    setRootSelection({ patient: patientId, action: null, teeth: [] });
+  }
+  function showToothDiagnosis() {
+    setDiagnosisLayer("tooth");
+    cancelRootSelection();
+    setChartActionMenu(null);
+  }
+  function chooseRootAction(action: RootDiagnosisAction) {
+    if (!baseline.canSave) return;
+    setChartActionMenu(null);
+    setRootSelection((previous) => ({ patient: patientId, action, teeth: previous.patient === patientId ? previous.teeth : [] }));
+  }
+  async function applyRootSelection() {
+    if (!rootAction || !rootTeeth.length) return;
+    const context = diagnosisContext.current;
+    const selection = rootSelection;
+    const saved = await baseline.saveRoots(rootTeeth, rootDiagnosisAction(rootAction).patch);
+    if (saved && diagnosisContext.current === context) {
+      setRootSelection((previous) => previous === selection ? { patient: patientId, action: null, teeth: [] } : previous);
+    }
+  }
   function chooseDiagnosisAction(action: DiagnosisAction) {
     if (!baseline.canSave) return;
+    showToothDiagnosis();
     setChartActionMenu(null);
     setActiveToothTool(null);
     setDiagnosisSelection((previous) => ({ patient: patientId, action, teeth: previous.patient === patientId ? previous.teeth : [] }));
@@ -1354,17 +1383,18 @@ export default function PatientDetailClient({
   }
 
   async function applyBaselineCondition(tooth: string, condition: DiagnosisAction) {
-    setChartActionMenu(null);
+    showToothDiagnosis();
     cancelDiagnosisSelection();
     await baseline.saveAction([tooth], condition);
   }
 
-  async function applyRootCondition(tooth: string, root: number, patch: RootPatch) {
+  async function applyRootCondition(tooth: string, patch: RootPatch) {
     const trigger = chartActionTriggerRef.current;
     if (trigger instanceof HTMLElement || trigger instanceof SVGElement) trigger.focus();
     setChartActionMenu(null);
     cancelDiagnosisSelection();
-    await baseline.saveRoot(tooth, root, patch);
+    cancelRootSelection();
+    await baseline.saveRoots([tooth], patch);
   }
 
   async function markBaselineArchMissing(tooth: string) {
@@ -1494,19 +1524,17 @@ export default function PatientDetailClient({
       tooth: string,
       kind: ChartActionMenu["kind"],
       position: { clientX: number; clientY: number },
-      fallbackElement?: Element | null,
-      root?: number
+      fallbackElement?: Element | null
     ) => {
       const fallbackRect = fallbackElement?.getBoundingClientRect();
       chartActionTriggerRef.current = fallbackElement ?? null;
       const requestedLeft = position.clientX || fallbackRect?.left || 16;
       const requestedTop = position.clientY || fallbackRect?.bottom || 16;
       const maxLeft = Math.max(12, window.innerWidth - 342);
-      const maxTop = Math.max(12, window.innerHeight - (kind === "tooth" ? 590 : kind === "root" ? 490 : 270));
+      const maxTop = Math.max(12, window.innerHeight - (kind === "tooth" ? 590 : kind === "root" ? 660 : 270));
       setChartActionMenu({
         tooth,
         kind,
-        root,
         left: Math.max(12, Math.min(requestedLeft, maxLeft)),
         top: Math.max(12, Math.min(requestedTop, maxTop)),
       });
@@ -1514,17 +1542,29 @@ export default function PatientDetailClient({
     []
   );
 
-  function openRootMenu(tooth: string, root: number, event: React.MouseEvent<SVGElement> | React.KeyboardEvent<SVGElement>) {
+  function selectRootArea(tooth: string, event: React.MouseEvent<SVGElement> | React.KeyboardEvent<SVGElement>, contextMenu = false) {
     event.preventDefault();
     event.stopPropagation();
     if (clinicalViewMode !== "current") return;
+    if (baseline.saving) return;
+    setDiagnosisLayer("root");
     cancelDiagnosisSelection();
-    setActiveToothTool(null);
     applyChartSelection(tooth, []);
-    openChartActionMenu(tooth, "root", {
-      clientX: "clientX" in event ? event.clientX : 0,
-      clientY: "clientY" in event ? event.clientY : 0,
-    }, event.currentTarget, root);
+    setActiveToothTool(null);
+    if (contextMenu) {
+      setRootSelection({ patient: patientId, action: null, teeth: [tooth] });
+      openChartActionMenu(tooth, "root", {
+        clientX: "clientX" in event ? event.clientX : 0,
+        clientY: "clientY" in event ? event.clientY : 0,
+      }, event.currentTarget);
+    } else {
+      setChartActionMenu(null);
+      setRootSelection((previous) => ({ patient: patientId, action: rootAction,
+        teeth: rootAction && previous.patient === patientId
+          ? previous.teeth.includes(tooth) ? previous.teeth.filter((value) => value !== tooth) : [...previous.teeth, tooth]
+          : [tooth],
+      }));
+    }
   }
 
   const openToothTool = useCallback((section: ToothToolSection) => {
@@ -3961,7 +4001,7 @@ export default function PatientDetailClient({
     if (tab !== "clinical" || clinicalTab !== "chart") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || (event.target instanceof Element
-        && event.target.closest('.clinical-root-target, [data-testid="clinical-root-action-menu"]'))) return;
+        && event.target.closest('.clinical-root-target, [data-testid="clinical-root-action-menu"], [data-testid="clinical-root-diagnosis-palette"]'))) return;
       if (isEditableShortcutTarget(event.target)) return;
       const key = event.key;
       const keyLower = key.toLowerCase();
@@ -9356,7 +9396,7 @@ export default function PatientDetailClient({
                             }}
                             aria-label={
                               chartActionMenu.kind === "root"
-                                ? `Root ${chartActionMenu.root} actions for ${chartActionMenu.tooth}`
+                                ? `Root area actions for ${chartActionMenu.tooth}`
                                 : chartActionMenu.kind === "surface"
                                 ? `Surface actions for ${chartActionMenu.tooth}`
                                 : `Tooth actions for ${chartActionMenu.tooth}`
@@ -9370,17 +9410,17 @@ export default function PatientDetailClient({
                           >
                             <div className="clinical-chart-action-menu-title">
                               {chartActionMenu.kind === "root"
-                                ? `${britishToothLabel(chartActionMenu.tooth, baseline.teeth[chartActionMenu.tooth]?.condition)} · Root ${chartActionMenu.root}`
+                                ? `${britishToothLabel(chartActionMenu.tooth, baseline.teeth[chartActionMenu.tooth]?.condition)} · Whole root area`
                                 : chartActionMenu.kind === "surface"
                                 ? `${chartActionMenu.tooth} · Surface${
                                     selectedToothSurfaces.length === 1 ? "" : "s"
                                   } ${selectedToothSurfaces.join("") || "none"}`
                                 : `${chartActionMenu.tooth} · Whole tooth`}
                             </div>
-                            {chartActionMenu.kind === "root" && chartActionMenu.root && (
+                            {chartActionMenu.kind === "root" && (
                               <RootConditionMenu enabled={baseline.canSave}
-                                current={baseline.teeth[chartActionMenu.tooth]?.root_observations?.[String(chartActionMenu.root)]}
-                                onChange={(patch) => void applyRootCondition(chartActionMenu.tooth, chartActionMenu.root!, patch)} />
+                                current={rootAreaSummary(chartActionMenu.tooth, baseline.teeth[chartActionMenu.tooth]?.condition === "deciduous", baseline.teeth[chartActionMenu.tooth]?.root_observations)}
+                                onChange={(patch) => void applyRootCondition(chartActionMenu.tooth, patch)} />
                             )}
                             {chartActionMenu.kind === "tooth" && (
                               <>
@@ -9493,6 +9533,7 @@ export default function PatientDetailClient({
                                         role="group"
                                         aria-label={`Tooth ${britishToothLabel(tooth, currentCondition)}`}
                                         onClick={(event) => {
+                                          showToothDiagnosis();
                                           if (diagnosisAction) { toggleDiagnosisTooth(tooth); return; }
                                           applyChartSelection(tooth, []);
                                           openChartActionMenu(
@@ -9504,6 +9545,7 @@ export default function PatientDetailClient({
                                         }}
                                         onContextMenu={(event) => {
                                           event.preventDefault();
+                                          showToothDiagnosis();
                                           cancelDiagnosisSelection();
                                           applyChartSelection(tooth, []);
                                           openChartActionMenu(
@@ -9516,6 +9558,7 @@ export default function PatientDetailClient({
                                         onKeyDown={(event) => {
                                           if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
                                             event.preventDefault();
+                                            showToothDiagnosis();
                                             applyChartSelection(tooth, []);
                                             openChartActionMenu(tooth, "tooth", { clientX: 0, clientY: 0 }, event.currentTarget);
                                           }
@@ -9548,14 +9591,16 @@ export default function PatientDetailClient({
                                           active={clinicalViewMode !== "current" && isActive}
                                           baselineCondition={clinicalViewMode === "current" ? baselineGlyph(baseline.teeth[tooth]) : undefined}
                                           rootConditions={clinicalViewMode === "current" ? baseline.teeth[tooth]?.root_observations ?? {} : undefined}
-                                          onRootClick={clinicalViewMode === "current" ? (root, event) => openRootMenu(tooth, root, event) : undefined}
-                                          onRootContextMenu={clinicalViewMode === "current" ? (root, event) => openRootMenu(tooth, root, event) : undefined}
+                                          rootSelected={rootTeeth.includes(tooth)}
+                                          onRootClick={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event) : undefined}
+                                          onRootContextMenu={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event, true) : undefined}
                                           selectedSurfaces={isActive ? selectedToothSurfaces : []}
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
                                           extracted={toothStateSummary.extracted}
                                           onSurfaceClick={(surface) => {
                                             if (clinicalViewMode === "current") {
+                                              showToothDiagnosis();
                                               if (diagnosisAction) toggleDiagnosisTooth(tooth);
                                               else { applyChartSelection(tooth, []); setChartActionMenu(null); }
                                               return;
@@ -9568,6 +9613,7 @@ export default function PatientDetailClient({
                                           }}
                                           onSurfaceContextMenu={(surface, position) => {
                                             if (clinicalViewMode === "current") {
+                                              showToothDiagnosis();
                                               cancelDiagnosisSelection(); applyChartSelection(tooth, []); openChartActionMenu(tooth, "tooth", position); return;
                                             }
                                             const nextSurfaces =
@@ -9760,6 +9806,7 @@ export default function PatientDetailClient({
                                         role="group"
                                         aria-label={`Tooth ${britishToothLabel(tooth, currentCondition)}`}
                                         onClick={(event) => {
+                                          showToothDiagnosis();
                                           if (diagnosisAction) { toggleDiagnosisTooth(tooth); return; }
                                           applyChartSelection(tooth, []);
                                           openChartActionMenu(
@@ -9771,6 +9818,7 @@ export default function PatientDetailClient({
                                         }}
                                         onContextMenu={(event) => {
                                           event.preventDefault();
+                                          showToothDiagnosis();
                                           cancelDiagnosisSelection();
                                           applyChartSelection(tooth, []);
                                           openChartActionMenu(
@@ -9783,6 +9831,7 @@ export default function PatientDetailClient({
                                         onKeyDown={(event) => {
                                           if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
                                             event.preventDefault();
+                                            showToothDiagnosis();
                                             applyChartSelection(tooth, []);
                                             openChartActionMenu(tooth, "tooth", { clientX: 0, clientY: 0 }, event.currentTarget);
                                           }
@@ -9815,14 +9864,16 @@ export default function PatientDetailClient({
                                           active={clinicalViewMode !== "current" && isActive}
                                           baselineCondition={clinicalViewMode === "current" ? baselineGlyph(baseline.teeth[tooth]) : undefined}
                                           rootConditions={clinicalViewMode === "current" ? baseline.teeth[tooth]?.root_observations ?? {} : undefined}
-                                          onRootClick={clinicalViewMode === "current" ? (root, event) => openRootMenu(tooth, root, event) : undefined}
-                                          onRootContextMenu={clinicalViewMode === "current" ? (root, event) => openRootMenu(tooth, root, event) : undefined}
+                                          rootSelected={rootTeeth.includes(tooth)}
+                                          onRootClick={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event) : undefined}
+                                          onRootContextMenu={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event, true) : undefined}
                                           selectedSurfaces={isActive ? selectedToothSurfaces : []}
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
                                           extracted={toothStateSummary.extracted}
                                           onSurfaceClick={(surface) => {
                                             if (clinicalViewMode === "current") {
+                                              showToothDiagnosis();
                                               if (diagnosisAction) toggleDiagnosisTooth(tooth);
                                               else { applyChartSelection(tooth, []); setChartActionMenu(null); }
                                               return;
@@ -9835,6 +9886,7 @@ export default function PatientDetailClient({
                                           }}
                                           onSurfaceContextMenu={(surface, position) => {
                                             if (clinicalViewMode === "current") {
+                                              showToothDiagnosis();
                                               cancelDiagnosisSelection(); applyChartSelection(tooth, []); openChartActionMenu(tooth, "tooth", position); return;
                                             }
                                             const nextSurfaces =
@@ -10005,11 +10057,14 @@ export default function PatientDetailClient({
                           </Panel>
 
                           {clinicalViewMode === "current" && <>
-                            <DiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
+                            {diagnosisLayer === "root" ? <RootDiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
+                              action={rootAction} selected={rootTeeth} onChoose={chooseRootAction}
+                              onApply={() => void applyRootSelection()} onCancel={cancelRootSelection} onBack={showToothDiagnosis} />
+                            : <DiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
                               action={diagnosisAction} selected={diagnosisTeeth} lastAction={baseline.lastAction} activeTooth={selectedTooth}
                               onChoose={chooseDiagnosisAction} onApply={() => void applyDiagnosisSelection()} onCancel={cancelDiagnosisSelection}
                               onArchMissing={(tooth) => void markBaselineArchMissing(tooth)}
-                              onNote={() => openToothTool("note")} onDetails={() => openToothTool("timeline")} />
+                              onNote={() => openToothTool("note")} onDetails={() => openToothTool("timeline")} />}
                             {!baseline.loading && !baseline.error && <DentitionGuide dateOfBirth={patient?.date_of_birth}
                               hasFindings={Object.keys(baseline.teeth).length > 0 || clinicalNotes.length > 0 || clinicalProcedures.length > 0 || toothStateByTooth.size > 0}
                             />}

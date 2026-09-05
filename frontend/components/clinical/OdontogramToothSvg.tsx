@@ -192,8 +192,9 @@ type Props = {
   active?: boolean;
   baselineCondition?: OdontogramBaselineCondition;
   rootConditions?: Record<string, RootObservation>;
-  onRootClick?: (root: number, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
-  onRootContextMenu?: (root: number, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  rootSelected?: boolean;
+  onRootClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onRootContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onSurfaceClick?: (surface: R4SurfaceKey, position: PointerPosition) => void;
   onSurfaceContextMenu?: (surface: R4SurfaceKey, position: PointerPosition) => void;
 };
@@ -208,6 +209,7 @@ function OdontogramToothSvgImpl({
   active = false,
   baselineCondition,
   rootConditions,
+  rootSelected = false,
   onRootClick,
   onRootContextMenu,
   onSurfaceClick,
@@ -337,6 +339,15 @@ function OdontogramToothSvgImpl({
   const rootControls = Boolean(onRootClick || onRootContextMenu) && showAnatomy && canRecordNaturalRoots;
   const rootRecorded = (index: number) => canRecordNaturalRoots && nativeRootIndexes.has(index);
   const anyRootRecorded = anatomy.roots.some((_, index) => rootRecorded(index));
+  const rootAreaObservations = anatomy.roots.map((_, index) =>
+    rootRecorded(index) ? rootConditions?.[String(index + 1)] : undefined
+  );
+  const rootAreaCondition = rootAreaObservations.every((item) => (item?.condition ?? null) === (rootAreaObservations[0]?.condition ?? null))
+    ? rootAreaObservations[0]?.condition ?? "unspecified" : "mixed";
+  const rootAreaApicectomy = rootAreaObservations.every((item) => item?.apicectomy)
+    ? "true" : rootAreaObservations.some((item) => item?.apicectomy) ? "mixed" : "false";
+  const rootAreaDescription = `${displayLabel} root area, ${rootAreaCondition === "mixed" ? "mixed or partial root findings" : rootAreaCondition === "unspecified" ? "current root finding unspecified" : rootConditionLabel(rootAreaCondition)}${rootAreaApicectomy === "true" ? ", apicectomy recorded" : rootAreaApicectomy === "mixed" ? ", apicectomy recorded in part of the root area" : ""}`;
+  const rootZoneBottom = Math.max(...anatomy.roots.map((_, index) => getRootDrawingLandmarks(anatomy, index).cervical.y)) + 3;
   const remainingLegacyCanals = anatomy.canals.map((path, index) => ({ path, index }))
     .filter(({ index }) => !rootRecorded(index));
   const rootTransform = (index: number) => {
@@ -416,7 +427,35 @@ function OdontogramToothSvgImpl({
         transform={anatomyTransform}
         pointerEvents="none"
       >
-        {showNaturalRoots && anatomy.roots.map((path, index) => {
+        {showNaturalRoots && <g
+          className={rootControls ? "clinical-root-target" : undefined}
+          data-testid={`clinical-root-${toothKey}`}
+          data-root-selected={rootSelected && rootControls ? "true" : "false"}
+          data-root-condition={rootAreaCondition}
+          data-root-recorded={anyRootRecorded ? "true" : "false"}
+          data-apicectomy={rootAreaApicectomy}
+          role={rootControls ? "button" : undefined}
+          tabIndex={rootControls ? 0 : undefined}
+          aria-label={rootControls ? `${displayLabel} root area` : undefined}
+          aria-pressed={rootControls ? rootSelected : undefined}
+          pointerEvents={rootControls ? "visiblePainted" : "none"}
+          onClick={rootControls ? (event) => {
+            event.preventDefault(); event.stopPropagation();
+            (onRootClick ?? onRootContextMenu)?.(event);
+          } : undefined}
+          onContextMenu={rootControls ? (event) => {
+            event.preventDefault(); event.stopPropagation();
+            (onRootContextMenu ?? onRootClick)?.(event);
+          } : undefined}
+          onKeyDown={rootControls ? (event) => {
+            const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+            if (!context && event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault(); event.stopPropagation();
+            (context ? onRootContextMenu ?? onRootClick : onRootClick ?? onRootContextMenu)?.(event);
+          } : undefined}
+        >
+        {currentRootLayer && <title>{rootAreaDescription}</title>}
+        {anatomy.roots.map((path, index) => {
           const rootNumber = index + 1;
           const recorded = rootRecorded(index);
           const observation = recorded ? rootConditions?.[String(rootNumber)] : undefined;
@@ -429,34 +468,14 @@ function OdontogramToothSvgImpl({
           // A gap longer than the entire normalized path prevents a second
           // rounded dash/dot at the apex of this cervical-only post symbol.
           const postDash = postCore ? "62 200" : undefined;
-          const rootDescription = `${displayLabel} root ${rootNumber}, ${condition ? rootConditionLabel(condition) : "current root finding unspecified"}${observation?.apicectomy ? ", apicectomy recorded" : ""}`;
           return <g key={`${toothKey}-root-${index}`} transform={rootTransform(index)}>
             <g
-              className={rootControls ? "clinical-root-target" : undefined}
-              data-testid={`clinical-root-${toothKey}-${rootNumber}`}
+              data-testid={`clinical-root-drawing-${toothKey}-${rootNumber}`}
               data-root-condition={condition ?? "unspecified"}
               data-root-recorded={recorded ? "true" : "false"}
               data-apicectomy={observation?.apicectomy ? "true" : "false"}
-              role={rootControls ? "button" : undefined}
-              tabIndex={rootControls ? 0 : undefined}
-              aria-label={rootControls ? rootDescription : undefined}
-              pointerEvents={rootControls ? "visiblePainted" : "none"}
-              onClick={rootControls ? (event) => {
-                event.preventDefault(); event.stopPropagation();
-                (onRootClick ?? onRootContextMenu)?.(rootNumber, event);
-              } : undefined}
-              onContextMenu={rootControls ? (event) => {
-                event.preventDefault(); event.stopPropagation();
-                (onRootContextMenu ?? onRootClick)?.(rootNumber, event);
-              } : undefined}
-              onKeyDown={rootControls ? (event) => {
-                const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
-                if (!context && event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault(); event.stopPropagation();
-                (context ? onRootContextMenu ?? onRootClick : onRootClick ?? onRootContextMenu)?.(rootNumber, event);
-              } : undefined}
+              pointerEvents="none"
             >
-              {currentRootLayer && <title>{rootDescription}</title>}
               <path d={path} fill={`url(#${rootFillId})`} stroke="#686958"
                 strokeWidth={1.05} strokeLinejoin="round" pointerEvents="none"
                 data-testid={`tooth-root-${toothKey}-${rootNumber}`} />
@@ -482,15 +501,20 @@ function OdontogramToothSvgImpl({
                 <path d={`M${landmarks.apical.x - 7} ${landmarks.apical.y} H${landmarks.apical.x + 7}`}
                   fill="none" stroke="#574329" strokeWidth="2.3" />
               </g>}
-              {rootControls && <g clipPath={`url(#${rootHitClipId})`}>
-                <path className="clinical-root-halo" d={path} fill="none"
-                  stroke="var(--accent, #00bcea)" strokeWidth="8" pointerEvents="none" />
-                <path d={path} fill="transparent" stroke="transparent" strokeWidth="5"
-                  pointerEvents="all" />
-              </g>}
             </g>
           </g>;
         })}
+        {rootControls && <g clipPath={`url(#${rootHitClipId})`}>
+          {anatomy.roots.map((path, index) => <g key={index} transform={rootTransform(index)}>
+            <path className="clinical-root-halo" d={path} fill="none"
+              stroke="var(--accent, #00bcea)" strokeWidth="8" pointerEvents="none" />
+            {rootSelected && <path className="clinical-root-selection" d={path} fill="none"
+              stroke="var(--accent, #00bcea)" strokeWidth="1.8" opacity=".65" pointerEvents="none" />}
+          </g>)}
+          <rect x="0" y="0" width="100" height={rootZoneBottom} fill="transparent"
+            pointerEvents="all" data-testid={`clinical-root-hit-${toothKey}`} />
+        </g>}
+        </g>}
         {baselineImplant && (
           <g data-testid={`tooth-baseline-implant-${toothKey}`}>
             <path d={implantScrewAnatomy.body} fill={`url(#${implantFillId})`}

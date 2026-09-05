@@ -147,16 +147,16 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${diagnosisAction(action).label}`,
     remember ? action : undefined);
 
-  const saveRoot = (tooth: string, root: number, patch: RootPatch) =>
+  const saveRoots = (teeth: string[], patch: RootPatch) =>
     saveObservation(`/api/patients/${patientId}/clinical/root-conditions`, {
-      tooth, root, dentition: currentChart?.teeth[tooth]?.condition === "deciduous" ? "deciduous" : "permanent",
-      ...patch, expected_revision: currentChart?.teeth[tooth]?.revision ?? 0,
-    }, `${tooth} · Root ${root} · ${"condition" in patch ? rootConditionLabel(patch.condition) : patch.apicectomy ? "Apicectomy" : "Apicectomy marker removed"}`);
+      teeth, ...patch,
+      expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
+    }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · Whole root area · ${"condition" in patch ? rootConditionLabel(patch.condition) : patch.apicectomy ? "Apicectomy" : "Apicectomy marker removed"}`);
 
   return {
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
-    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoot,
+    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots,
     save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

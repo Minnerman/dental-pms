@@ -153,21 +153,27 @@ class RootObservation(BaseModel):
 class RootConditionUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tooth: str
-    root: int = Field(strict=True, ge=1, le=3)
-    dentition: Literal["permanent", "deciduous"]
+    teeth: list[str] = Field(min_length=1, max_length=32)
     condition: RootConditionValue | None = None
     apicectomy: bool = Field(default=False, strict=True)
-    expected_revision: int = Field(strict=True, ge=0)
+    expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
 
-    _normalize_tooth = field_validator("tooth")(_tooth)
+    @field_validator("teeth", mode="before")
+    @classmethod
+    def normalize_teeth(cls, value):
+        return ToothConditionUpdate.normalize_teeth(value)
+
+    @field_validator("expected_revisions", mode="before")
+    @classmethod
+    def normalize_revision_keys(cls, value):
+        return ToothConditionUpdate.normalize_revision_keys(value)
 
     @model_validator(mode="after")
     def check_observation(self):
+        if set(self.expected_revisions) != set(self.teeth):
+            raise ValueError("expected_revisions must contain exactly the selected teeth")
         if not self.model_fields_set.intersection({"condition", "apicectomy"}):
             raise ValueError("supply a root condition or apicectomy observation")
-        if self.root > schematic_root_count(self.tooth, self.dentition):
-            raise ValueError("root number is not available for this schematic tooth and dentition")
         return self
 
 

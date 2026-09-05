@@ -539,6 +539,14 @@
   pointer-events: none;
 }
 
+.shell :global(.clinical-root-selection) {
+  fill: none;
+  stroke: #12bce5;
+  stroke-width: 3px;
+  opacity: .65;
+  pointer-events: none;
+}
+
 .shell :global(.clinical-root-target:hover .clinical-root-halo),
 .shell :global(.clinical-root-target:focus-visible .clinical-root-halo) {
   animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
@@ -554,11 +562,35 @@
   border-radius: 5px 5px 9px 9px;
 }
 
-.shell :global([data-testid="clinical-root-action-menu"] > button) {
+.shell :global(.clinical-chart-action-menu[data-testid="clinical-root-action-menu"] > button) {
   display: flex;
   align-items: center;
   gap: 10px;
   text-align: left;
+  font-size: 18px;
+  line-height: 1.35;
+  min-height: 48px;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] .clinical-chart-action-menu-title) {
+  font-size: 16.5px;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] .clinical-chart-action-menu-hint) {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] .clinical-root-swatch) {
+  flex-basis: 30px;
+  width: 30px;
+  height: 39px;
+}
+
+.shell :global(.clinical-root-palette-swatch) {
+  flex: none;
+  width: 27px;
+  height: 34.5px;
 }
 
 .shell :global([data-testid="clinical-root-action-menu"] > button[aria-checked="true"]) {

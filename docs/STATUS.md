@@ -3,6 +3,38 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-05 (whole-root-area correction): the owner clarified that root diagnosis
+  applies to the entire root area belonging to each tooth, not separate roots.
+  This supersedes the individual-root authoring described in the earlier entry.
+  One broad hit area per tooth includes gaps between roots, with one keyboard
+  target and grouped pulsing/selection outlines. Click replaces the tooth palette
+  with six root rectangles: the four filling/post-core conditions, Apicectomy,
+  and Reset root area. Choose a rectangle, select multiple teeth's root areas,
+  then explicitly Apply. Tooth-number/surface interactions or the return button
+  restore tooth choices and clear unfinished root selection. Root clicks no longer
+  reopen tooth-details tools. Right-click opens a whole-root-area menu whose text
+  is 50% larger (buttons 12→18px, title 11→16.5px, hints 10→15px).
+  Root batch writes validate every selected tooth/revision before patching all
+  drawable roots, with one revision increment per changed tooth and atomic audit.
+  Shared Request-Id replay now also requires matching endpoint audit action,
+  preventing identical-JSON cross-endpoint collisions. Prior per-root maps remain
+  readable; mixed findings are shown honestly, including indeterminate apicectomy.
+  Explicit patches preserve omitted attributes. Existing schema/migration #0052
+  is unchanged; no new migration or automatic clinical conversion was introduced.
+  Old individual-root request bodies are rejected rather than reinterpreted.
+  Current whole-tooth conditions, notes/history, plans and finance are preserved.
+  Verification: 57 backend cases passed (37 root/batch, 13 tooth/reset, 7 adjacent
+  reliability). Across focused component checks, 11 root-area/summary/menu and 14
+  existing glyph cases passed. Final production build and all 25 focused browser
+  cases passed, covering palette switching, all-root multi-tooth persistence,
+  conflicts, pending saves, permissions, History and light/dark/mobile layouts.
+  Typecheck, lint, compilation, diff checks and six isolated health/auth/read
+  checks passed. Final chart-plus-palette/menu previews use synthetic data only.
+  Default-stack operational wrappers/full backend suite were not run; isolated
+  equivalents were used. PR #714 remains draft, stacked on #713, with master CI
+  and merge review still gated on resolving the parent. No R4 access, production
+  change, merge or deployment. Production migrations #0049–0052 and deployment
+  still need separate explicit approval.
 - 2026-09-05 (root diagnosis): PR #714 now includes independent Current / Diagnosis
   observations on each natural root. Click, right-click or keyboard activation
   opens Filled sound / Filled defective (yellow, with red crosshatching for
