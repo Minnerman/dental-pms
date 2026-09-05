@@ -40,8 +40,8 @@ async function fillLogin(page: Page, email: string, password: string) {
   const passwordInput = page.locator("#login-password");
   const passwordVisibilityToggle = page.getByRole("button", { name: "Show password" });
 
-  // The login form is a controlled client component with seeded defaults. Force one client-side
-  // state transition before filling so hydration cannot restore the default email mid-submit.
+  // The login form is a controlled client component. Force one client-side
+  // state transition before filling so hydration cannot restore an empty value mid-submit.
   await expect(passwordVisibilityToggle).toBeVisible({ timeout: 15_000 });
   await passwordVisibilityToggle.click();
   await expect(
@@ -122,5 +122,5 @@ test("forgot-password request and reset confirm allow login with the new passwor
     timeout: 20_000,
   });
   await expect(page).not.toHaveURL(/\/change-password/, { timeout: 20_000 });
-  await expect(page).toHaveURL(/\/patients(?:$|[?#])/, { timeout: 20_000 });
+  await expect(page).toHaveURL(`${getBaseUrl()}/`, { timeout: 20_000 });
 });

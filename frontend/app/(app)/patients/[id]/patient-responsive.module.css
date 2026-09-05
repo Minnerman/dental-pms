@@ -10,6 +10,8 @@
 }
 
 .shell :global(.patient-route-sticky-card) {
+  container-name: patient-header;
+  container-type: inline-size;
   padding: 8px 10px;
 }
 
@@ -38,6 +40,13 @@
 .shell :global(.patient-header-section > .label) {
   font-size: 9px;
   letter-spacing: 0.04em;
+}
+
+.shell :global(.patient-header-action-row .badge),
+.shell :global(.patient-header-alert-row .badge) {
+  font-size: 11px;
+  min-height: 26px;
+  padding: 3px 7px;
 }
 
 .shell :global(.patient-header-title-row),
@@ -388,7 +397,9 @@
 }
 
 .shell :global(.patient-route-odontogram-grid) {
-  justify-content: center;
+  /* Keep the first tooth reachable when the sidebar leaves less room than
+     the arch's minimum width. Centring overflow clips the start of the row. */
+  justify-content: start;
   overflow-x: auto;
   width: 100%;
 }
@@ -524,11 +535,15 @@
   max-width: 100%;
 }
 
-@media (max-width: 1120px) {
+/* The sidebar can be expanded or collapsed at the same viewport width.
+   Reflow patient context using the space actually available to the record. */
+@container patient-header (max-width: 920px) {
   .shell :global(.patient-route-header-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
+@media (max-width: 1120px) {
   .shell :global(.patient-route-appointment-grid),
   .shell :global(.patient-route-booking-grid),
   .shell :global(.patient-route-clinical-grid),

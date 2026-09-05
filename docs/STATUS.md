@@ -3,6 +3,71 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 5 September 2026 — the active, independent layout slice is based on merged
+  PR #712 (`d81bb96`). The later tooth-shape PR #713 and draft baseline-action
+  PR #714 remain paused, separate and unchanged; this slice does not include
+  their odontogram functionality or migration.
+- The layout slice replaces the global top navigation with a collapsible left
+  sidebar and a keyboard-accessible mobile drawer. It adds a proper protected
+  Home dashboard, keeps a separate blank-credential login page, and opens Home
+  after successful login. Shared light/dark colours follow the supplied
+  DentalPin reference with readable cyan accents; no new dependency is needed.
+- Home reads native PMS appointments, clinic presence, overdue invoice
+  balances, recent patient contacts, recalls and seven-day comparisons from
+  a no-store, capability-scoped endpoint. Patient identity lists require
+  patient access as well as their domain permission. Counts are independent
+  of bounded previews, UK dates use London/DST boundaries, and money remains
+  integer GBP pence. Confirmation and recall conversion are explicitly
+  unavailable because those measurements are not recorded. No guessed R4 or
+  historical clinical information is introduced.
+- The same layout slice now includes the owner's DentalPin-inspired Patients
+  directory: compact whole-row record links, initials, phone, active/archived
+  status, name/email/normalised-phone search, DOB/category filters, signed
+  ledger balances, debt filtering, five sort orders and bounded pagination.
+  Narrow screens retain DOB or a record-ID fallback; keyboard focus is
+  restored after clearing search or changing page. Existing patient creation,
+  record routes and the original `/patients` API contract remain unchanged.
+- The directory endpoint requires patient access and separately gates finance
+  and visit history. Ordinary searches enrich only the displayed patient IDs;
+  aggregate history is used before pagination only when a debt filter or
+  last-visit order needs it. Last visit means a completed, non-deleted native
+  appointment at or before now, including home visits. Balances match the
+  native ledger, not an overdue-invoice calculation. General do-not-contact
+  preferences are not recorded, so that filter is explicitly unavailable.
+- The first PR #715 CI run passed five jobs but failed its wider browser job
+  on three real patient-layout regressions. Compact header badges, a header
+  container breakpoint and start-aligned arch scrolling fix the oversized
+  header and two intercepted tooth clicks without changing tooth behavior or
+  weakening the existing tests. Those original clinical, desktop-density and
+  patient-responsive checks now pass in the isolated stack.
+- Patients-extension verification: 32 new directory backend tests, seven
+  relevant capability/patient/ledger tests and eight dashboard tests passed.
+  There are 31 unique focused browser passes across this update: 21 patient
+  directory/search/clinical/responsive cases, plus all 10 Home/sidebar cases.
+  The built application passed 13 selected checks, including real synthetic
+  ledger/appointment data, search, login and Home/sidebar navigation. Light,
+  dark, intermediate-width and mobile screenshots were visually reviewed.
+  Build, typecheck, lint, compilation and diff checks pass. Updated-head CI
+  remains the merge gate; no full-suite success is inferred from these tests.
+- Layout verification: 8 new dashboard backend tests and 19 adjacent targeted
+  tests passed; 18 unique focused browser tests passed across dashboard,
+  authentication, sidebar/search, patient layouts and appointment workflows.
+  The password-reset browser test was skipped because its debug-only token
+  feature was disabled. Build, typecheck, lint, compilation, diff checks and
+  isolated health/config/auth/proxy checks passed. The production-mode build
+  also passed a real synthetic API-to-browser dashboard/metric check.
+- The one full backend run stopped after 165 passes at the existing patient
+  lifecycle test's unfiltered-list assertion. The unchanged `origin/master`
+  backend reproduced the same failure: the API defaults to 50 alphabetical
+  patients and accumulated synthetic test data puts the new patient on a
+  later page. This is a pre-existing pagination/test-isolation assumption,
+  not a dashboard regression; it was not modified in this layout slice.
+  Full-suite success is not claimed. Local Compose wrappers were unavailable;
+  their relevant health/build/config checks used only an isolated internal
+  test stack with a disposable database instead.
+- No production deployment, production migration, infrastructure changes or
+  R4 access/writes occurred. Review/merge and a separate explicit production
+  deployment instruction remain the next gates for this layout slice.
 - Production includes the merged R4-inspired chart workflow through PR #711:
   canonical multi-surface selection and storage, synchronized chart entry, and
   treatment-plan completion with its guarded finance effect.

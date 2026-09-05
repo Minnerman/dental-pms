@@ -25,7 +25,7 @@ test("patients page searches by full and partial patient name and opens the sele
   await page.goto(`${getBaseUrl()}/patients`, { waitUntil: "domcontentloaded" });
 
   const searchInput = page.getByPlaceholder("Search name, email, phone");
-  const searchButton = page.getByRole("button", { name: "Search" });
+  const searchButton = page.getByRole("button", { name: "Search", exact: true });
   const targetLink = page.getByRole("link", { name: `${firstName} ${lastName}` });
   const distractorLink = page.getByRole("link", { name: `${distractorFirst} ${distractorLast}` });
 
@@ -33,15 +33,15 @@ test("patients page searches by full and partial patient name and opens the sele
   await expect(searchInput).toBeFocused();
 
   const fullNameQuery = `${firstName} ${lastName}`;
-  await searchInput.fill(fullNameQuery);
   const fullNameResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
-      url.pathname === "/api/patients" &&
+      url.pathname === "/api/patients/directory" &&
       url.searchParams.get("query") === fullNameQuery
     );
   });
+  await searchInput.fill(fullNameQuery);
   await searchButton.click();
   await fullNameResponse;
 
@@ -49,15 +49,15 @@ test("patients page searches by full and partial patient name and opens the sele
   await expect(distractorLink).toHaveCount(0);
 
   const partialNameQuery = lastName.slice(0, Math.min(8, lastName.length));
-  await searchInput.fill(partialNameQuery);
   const partialNameResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (
       response.request().method() === "GET" &&
-      url.pathname === "/api/patients" &&
+      url.pathname === "/api/patients/directory" &&
       url.searchParams.get("query") === partialNameQuery
     );
   });
+  await searchInput.fill(partialNameQuery);
   await searchButton.click();
   await partialNameResponse;
 

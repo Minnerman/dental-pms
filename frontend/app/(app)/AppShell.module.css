@@ -1,0 +1,145 @@
+.shell {
+  --app-sidebar-width: 232px;
+  min-height: 100dvh;
+  display: block;
+}
+
+.shell[data-sidebar-collapsed="true"] { --app-sidebar-width: 64px; }
+.shell :global(.app-main) {
+  margin-left: var(--app-sidebar-width);
+  min-width: 0;
+  padding: 26px 30px;
+  outline: none;
+}
+.shell :global(.app-grid) { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.shell :global(.app-grid > *) { min-width: 0; }
+/* Wide record tables keep their columns inside an independently scrollable
+   card rather than widening the whole workspace on phones or a narrow pane. */
+.shell :global(.card:has(> .table)) { max-width: 100%; overflow-x: auto; }
+.shell :global(.app-sidebar) {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  position: fixed;
+  top: 0;
+  width: var(--app-sidebar-width);
+  z-index: 40;
+}
+.shell :global(.app-sidebar-heading) {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  height: 76px;
+  padding: 18px 14px;
+}
+.shell :global(.app-title) { gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: -0.6px; min-width: 0; }
+.shell :global(.app-title .app-mark) { display: inline-flex; flex: 0 0 auto; }
+.shell :global(.app-mark) {
+  background: var(--accent);
+  border-radius: 10px;
+  color: var(--accent-ink);
+  height: 34px;
+  width: 34px;
+}
+.shell :global(.app-icon-button) {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+.shell :global(.app-sidebar-toggle) { margin-left: auto; }
+.shell :global(.app-sidebar-scroll) { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 12px 14px; scrollbar-width: thin; }
+.shell :global(.app-sidebar-section-label) { color: var(--muted); display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.13em; padding: 27px 12px 12px; }
+.shell :global(.app-primary-nav) { display: grid; flex: none; gap: 5px; overflow: visible; }
+.shell :global(.app-sidebar-link) {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 12px;
+  line-height: 1.35;
+  min-height: 43px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+.shell :global(.app-sidebar-link svg) { flex: 0 0 auto; }
+.shell :global(.app-sidebar-link:hover), .shell :global(.app-icon-button:hover) { background: var(--panel-muted); color: var(--text); }
+.shell :global(.app-sidebar-link.active) { background: var(--tab-active-bg); color: var(--text); font-weight: 650; }
+.shell :global(.app-sidebar-link.active svg) { color: var(--accent); }
+.shell :global(.app-sidebar-link:focus-visible), .shell :global(.app-icon-button:focus-visible),
+.shell :global(.app-search-result:focus-visible), .shell :global(.app-title:focus-visible) { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.shell :global(.app-sidebar-more) { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 14px; }
+.shell :global(.app-sidebar-chevron) { margin-left: auto; }
+.shell :global(.app-more-links) { display: grid; gap: 2px; margin-top: 4px; }
+.shell :global(.app-more-links .app-sidebar-link) { font-size: 12px; gap: 9px; min-height: 36px; padding: 8px 10px 8px 20px; }
+.shell :global(.app-search) { flex: none; max-width: none; min-width: 0; position: relative; }
+.shell :global(.app-search-input) { background: var(--panel-muted); border-color: transparent; font-size: 12px; height: 38px; padding-left: 33px; }
+.shell :global(.app-search-icon) { left: 10px; top: 19px; }
+.shell :global(.app-search-results) { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); margin-top: 6px; max-height: 280px; overflow-y: auto; padding: 4px; }
+.shell :global(.app-search-result) { background: transparent; border: 0; border-radius: 5px; color: var(--text); cursor: pointer; display: flex; flex-direction: column; font: inherit; font-size: 12px; gap: 5px; line-height: 1.35; padding: 9px 8px; text-align: left; width: 100%; }
+.shell :global(.app-search-result small) { color: var(--muted); font-size: 10px; }
+.shell :global(.app-search-result.active), .shell :global(.app-search-result:hover) { background: var(--tab-active-bg); }
+.shell :global(.app-search-status) { color: var(--muted); font-size: 12px; padding: 9px 8px; }
+.shell :global(.app-sidebar-footer) { border-top: 1px solid var(--border); flex: 0 0 auto; padding: 14px 12px 12px; }
+.shell :global(.app-user) { align-items: center; display: flex; flex-direction: row; gap: 10px; margin: 0 5px 10px; max-width: none; min-width: 0; }
+.shell :global(.app-user-avatar) { align-items: center; background: var(--tab-active-bg); border: 1px solid var(--border); border-radius: 50%; color: var(--text); display: flex; flex: 0 0 auto; font-size: 11px; font-weight: 600; height: 32px; justify-content: center; width: 32px; }
+.shell :global(.app-user-text) { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.shell :global(.app-user-name) { font-size: 12px; font-weight: 600; }
+.shell :global(.app-user-role) { font-size: 10px; }
+.shell :global(.app-sidebar-footer .app-sidebar-link) { min-height: 36px; padding-bottom: 8px; padding-top: 8px; }
+.shell :global(.app-sidebar-build) { color: var(--muted); display: block; font-size: 9px; margin: 9px 12px 0; opacity: 0.85; }
+.shell :global(.app-mobile-header), .shell :global(.app-sidebar-backdrop) { display: none; }
+.shell :global(.app-skip-link) { background: var(--panel); border: 2px solid var(--accent); border-radius: 8px; left: calc(var(--app-sidebar-width) + 10px); padding: 10px 14px; position: fixed; top: 8px; transform: translateY(-150%); z-index: 90; }
+.shell :global(.app-skip-link:focus) { transform: none; }
+
+@media (min-width: 761px) {
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-label),
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-section-label),
+  .shell[data-sidebar-collapsed="true"] :global(.app-title) { display: none; }
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-heading) { padding: 16px; }
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-toggle) { margin-left: 0; }
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-scroll),
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-footer) { padding-left: 8px; padding-right: 8px; }
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-link) { justify-content: center; padding: 11px; }
+  .shell[data-sidebar-collapsed="true"] :global(.app-sidebar-search-toggle) { margin-bottom: 22px; }
+  .shell[data-sidebar-collapsed="true"] :global(.app-user) { justify-content: center; margin: 0 0 10px; }
+}
+@media (max-width: 1100px) {
+  .shell :global(.app-main) { padding: 22px; }
+}
+@media (max-width: 760px) {
+  .shell { --app-sidebar-width: 0px; }
+  .shell :global(.app-main) { margin-left: 0; padding: 18px 14px; }
+  .shell :global(.app-mobile-header) { align-items: center; background: var(--sidebar-bg); border-bottom: 1px solid var(--border); display: flex; gap: 12px; height: 54px; padding: 8px 14px; }
+  .shell :global(.app-mobile-brand) { align-items: center; display: inline-flex; font-size: 15px; font-weight: 650; gap: 8px; }
+  .shell :global(.app-mobile-brand svg) { color: var(--accent); }
+  .shell :global(.app-sidebar) { box-shadow: 8px 0 40px rgba(0,0,0,0.2); transform: translateX(-105%); visibility: hidden; width: min(280px, calc(100vw - 52px)); z-index: 70; }
+  .shell :global(.app-sidebar[data-open="true"]) { transform: none; visibility: visible; }
+  .shell :global(.app-sidebar-backdrop) { background: rgba(0,0,0,0.48); border: 0; display: block; inset: 0; position: fixed; z-index: 60; }
+  .shell :global(.app-sidebar-heading) { height: 70px; }
+  .shell :global(.app-sidebar-link) { min-height: 44px; }
+}
+@media (max-height: 620px) {
+  .shell :global(.app-sidebar-heading) { height: 58px; padding-bottom: 10px; padding-top: 10px; }
+  .shell :global(.app-sidebar-footer) { padding-bottom: 8px; padding-top: 8px; }
+  .shell :global(.app-sidebar-build) { display: none; }
+}

@@ -1,26 +1,31 @@
 
 html[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f2ed;
+  --bg: #f7f7f5;
   --panel: #ffffff;
-  --text: #1f1f1f;
-  --muted: #6b6b6b;
-  --border: #e3ddd4;
-  --accent: #33ffb4;
-  --accent-strong: #1bd69a;
-  --accent-glow: rgba(51, 255, 180, 0.35);
-  --shadow: 0 18px 45px rgba(30, 26, 22, 0.08);
+  --panel-muted: #f1f1ee;
+  --sidebar-bg: #ffffff;
+  --text: #242320;
+  --muted: #68655f;
+  --border: #e4e3df;
+  --accent: #00bcea;
+  --accent-strong: #00acd7;
+  --accent-ink: #08232b;
+  --accent-text: #006e89;
+  --success: #147853;
+  --accent-glow: rgba(0, 188, 234, 0.1);
+  --shadow: 0 3px 14px rgba(33, 31, 28, 0.035);
   --danger: #a4312d;
-  --focus: rgba(51, 255, 180, 0.35);
+  --focus: rgba(0, 145, 181, 0.25);
   --input-bg: #ffffff;
-  --input-text: #1f1f1f;
-  --input-placeholder: #8a8a8a;
+  --input-text: #242320;
+  --input-placeholder: #77746e;
   --notice-bg: #fff5f4;
   --notice-border: #f1cbc9;
-  --tab-active-bg: rgba(51, 255, 180, 0.14);
+  --tab-active-bg: rgba(0, 188, 234, 0.11);
   --badge-bg: rgba(0, 0, 0, 0.04);
-  --radius: 16px;
-  --radius-sm: 10px;
+  --radius: 12px;
+  --radius-sm: 8px;
   --cal-event-booked-bg: #dbe7ff;
   --cal-event-booked-border: #8aaeff;
   --cal-event-booked-text: #163b7a;
@@ -54,26 +59,31 @@ html[data-theme="light"] {
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0f12;
-  --panel: #12181d;
-  --text: #f3f6f8;
-  --muted: #b7c2ca;
-  --border: #2a333b;
-  --accent: #33ffb4;
-  --accent-strong: #23d294;
-  --accent-glow: rgba(51, 255, 180, 0.28);
-  --shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  --bg: #171614;
+  --panel: #211f1c;
+  --panel-muted: #2a2824;
+  --sidebar-bg: #25231f;
+  --text: #f5f4f1;
+  --muted: #aaa59e;
+  --border: #3b3832;
+  --accent: #00bcea;
+  --accent-strong: #00acd7;
+  --accent-ink: #08232b;
+  --accent-text: #54d5f5;
+  --success: #55c9a0;
+  --accent-glow: rgba(0, 188, 234, 0.1);
+  --shadow: 0 3px 14px rgba(0, 0, 0, 0.1);
   --danger: #ff9a96;
-  --focus: rgba(51, 255, 180, 0.3);
-  --input-bg: #0f1418;
-  --input-text: #f3f6f8;
-  --input-placeholder: #8f9aa4;
+  --focus: rgba(0, 188, 234, 0.28);
+  --input-bg: #1b1a17;
+  --input-text: #f5f4f1;
+  --input-placeholder: #aaa59e;
   --notice-bg: #2a1414;
   --notice-border: #5a2c2b;
-  --tab-active-bg: rgba(51, 255, 180, 0.2);
+  --tab-active-bg: rgba(0, 188, 234, 0.12);
   --badge-bg: rgba(255, 255, 255, 0.08);
-  --radius: 16px;
-  --radius-sm: 10px;
+  --radius: 12px;
+  --radius-sm: 8px;
   --cal-event-booked-bg: #24324a;
   --cal-event-booked-border: #4f6fa8;
   --cal-event-booked-text: #dbe8ff;
@@ -117,9 +127,9 @@ body {
 }
 
 body {
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
   color: var(--text);
-  background: radial-gradient(circle at top, rgba(51, 255, 180, 0.08), var(--bg) 35%);
+  background: var(--bg);
 }
 
 a {
@@ -136,6 +146,21 @@ button {
   display: grid;
   place-items: center;
   padding: 48px 20px;
+}
+
+.app-session-message {
+  width: min(440px, 100%);
+}
+
+.app-session-message h1 {
+  font-size: 24px;
+  margin: 20px 0 10px;
+}
+
+.app-session-message p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 22px;
 }
 
 .card {
@@ -171,7 +196,7 @@ button {
 
 .input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-text);
   box-shadow: 0 0 0 3px var(--focus);
 }
 
@@ -206,9 +231,9 @@ button {
 }
 
 .btn-primary {
-  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
-  color: #07120e;
-  box-shadow: 0 10px 22px var(--accent-glow);
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: none;
 }
 
 .btn-primary:disabled {

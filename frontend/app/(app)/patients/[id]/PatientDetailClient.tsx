@@ -1353,6 +1353,8 @@ export default function PatientDetailClient({
   useEffect(() => {
     if (searchParams?.get("tab") === "recalls") {
       activateContentTab("recalls");
+    } else if (searchParams?.get("tab") === "financial") {
+      activateContentTab("invoices");
     }
   }, [activateContentTab, searchParams]);
 

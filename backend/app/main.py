@@ -15,6 +15,7 @@ from app.routers.notes import router as notes_router, patient_router as patient_
 from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.clinical import router as clinical_router, patient_router as patient_clinical_router
 from app.routers.patients import router as patients_router
+from app.routers.patient_directory import router as patient_directory_router
 from app.routers.reports import router as reports_router
 from app.routers.recalls import router as recalls_router
 from app.routers.treatments import router as treatments_router
@@ -34,6 +35,7 @@ from app.routers.patient_documents import (
 )
 from app.routers.capabilities import router as capabilities_router
 from app.routers.config import router as config_router
+from app.routers.dashboard import router as dashboard_router
 from app.services.users import seed_initial_admin
 from app.services.capabilities import ensure_capabilities
 from app.services.document_templates import ensure_default_templates
@@ -89,8 +91,10 @@ def health():
 
 app.include_router(auth_router)
 app.include_router(config_router)
+app.include_router(dashboard_router)
 app.include_router(me_router)
 app.include_router(users_router)
+app.include_router(patient_directory_router)
 app.include_router(patients_router)
 app.include_router(recalls_router)
 app.include_router(appointments_router)
