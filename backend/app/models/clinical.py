@@ -32,6 +32,8 @@ class TreatmentPlanStatus(str, enum.Enum):
 
 
 class ToothConditionValue(str, enum.Enum):
+    # Explicit neutral override: history remains, but is not inferred as current.
+    unrecorded = "unrecorded"
     present = "present"
     missing = "missing"
     deciduous = "deciduous"
@@ -54,7 +56,7 @@ class ToothCondition(Base, AuditMixin):
         CheckConstraint("revision > 0", name="ck_tooth_conditions_revision"),
         CheckConstraint(
             "condition IS NULL OR condition IN "
-            "('present', 'missing', 'deciduous', 'implant', 'unerupted', 'impacted')",
+            "('present', 'missing', 'deciduous', 'implant', 'unerupted', 'impacted', 'unrecorded')",
             name="ck_tooth_conditions_value",
         ),
         CheckConstraint(

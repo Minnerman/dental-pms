@@ -7,7 +7,7 @@ import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
 export type OdontogramToothType = "incisor" | "canine" | "premolar" | "molar";
 export type OdontogramBaselineCondition = {
-  status?: "present" | "missing" | "implant" | "unerupted" | "impacted";
+  status?: "present" | "missing" | "implant" | "unerupted" | "impacted" | "unrecorded";
   dentition?: "permanent" | "deciduous";
   movement?: "forward" | "backward" | null;
   rotation?: "clockwise" | "anticlockwise" | null;
@@ -219,6 +219,9 @@ function OdontogramToothSvgImpl({
     }))
     .filter((restoration) => {
       if (!baselineCondition) return true;
+      // Reset is an explicit neutral current view, not a healthy/present finding.
+      // Historical restorations stay available in History and are never deleted.
+      if (baselineCondition.status === "unrecorded") return false;
       // A current primary/unerupted tooth must not inherit the permanent
       // predecessor's historical restorations. The history itself is untouched.
       if (baselineCondition.dentition === "deciduous" || baselineCondition.status === "unerupted") {
@@ -323,7 +326,7 @@ function OdontogramToothSvgImpl({
   const rotation = baselineCondition?.rotation;
   const movementDirection = (toothKey[1] === "R" ? 1 : -1) * (movement === "backward" ? -1 : 1);
   const baselineDescription = [
-    isDeciduous ? "current condition deciduous" : baselineCondition?.status ? `current condition ${baselineCondition.status}` : "",
+    baselineCondition?.status === "unrecorded" ? "current observations reset, unspecified" : isDeciduous ? "current condition deciduous" : baselineCondition?.status ? `current condition ${baselineCondition.status}` : "",
     movement ? `movement ${movement} (${movement === "forward" ? "toward" : "away from"} the midline)` : "",
     rotation ? `rotation ${rotation}` : "",
   ].filter(Boolean).map((description) => `, ${description}`).join("");

@@ -9413,8 +9413,8 @@ export default function PatientDetailClient({
                                 >
                                   {upperTeeth.map((tooth, index) => {
                                     const isActive = diagnosisAction ? diagnosisTeeth.includes(tooth) : selectedTooth === tooth;
-                                    const toothBadges = getToothBadges(tooth);
                                     const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
+                                    const toothBadges = currentCondition === "unrecorded" ? [] : getToothBadges(tooth);
                                     const overlaySummary = currentCondition && currentCondition !== "present" ? null : getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     const toothStateSummary = getToothStateSummary(tooth);
@@ -9676,8 +9676,8 @@ export default function PatientDetailClient({
                                 >
                                   {lowerTeeth.map((tooth, index) => {
                                     const isActive = diagnosisAction ? diagnosisTeeth.includes(tooth) : selectedTooth === tooth;
-                                    const toothBadges = getToothBadges(tooth);
                                     const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
+                                    const toothBadges = currentCondition === "unrecorded" ? [] : getToothBadges(tooth);
                                     const overlaySummary = currentCondition && currentCondition !== "present" ? null : getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     const toothStateSummary = getToothStateSummary(tooth);

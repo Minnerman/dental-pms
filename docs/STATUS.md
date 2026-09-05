@@ -3,7 +3,37 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
-- 2026-09-05 (latest): PR #714 now includes the resumed diagnosis-only,
+- 2026-09-05 (root/reset refinement): the owner approved the threaded implant
+  and requested better natural roots, a single Reset action and larger palette
+  controls. Native SVG roots now have smoother taper, curved tips and distinct
+  incisor/canine/premolar/molar variants. Approved implant, crown/groove geometry,
+  surface targets and tooth dimensions are fingerprint-verified unchanged.
+  Palette labels increase from 12px to 18px and consistent original line icons
+  from 23px to 34.5px (both 50%). Icons are centred; Reset fills two grid columns.
+  Reset the tooth replaces both Clear movement and Clear rotation in the shared
+  11-action palette/menu. It records an explicit `unrecorded` current condition
+  and clears movement/rotation, returning a neutral numeric-labelled tooth.
+  This is not a healthy/present diagnosis. Notes, treatment history, plans,
+  finance and audit remain intact. Historical visual marks stay in History
+  rather than reappearing in Current after reset or later movement edits.
+  Additive migration `0051_unrecorded_tooth_condition` expands only the allowed
+  condition constraint; no backfill or rewrite of existing migrations. Null
+  remains distinct (no native override). Downgrade refuses before DDL if reset
+  observations exist. Rollback must preserve data/schema and use compatible
+  application code; older condition enums cannot read the new value.
+  Verification: 20 relevant backend tests and 52 focused release-build browser/
+  component cases passed, including single/batch reset preservation, atomic
+  stale-write rejection, audit/retry, legacy Current/History separation,
+  root/canal containment, unchanged implants/crowns, and responsive typography.
+  Final production build, typecheck, lint, Python compilation and diff checks
+  passed. Six isolated health/auth/read checks passed. Migration #0051 empty
+  downgrade/re-upgrade and populated-data refusal were verified in disposable
+  synthetic storage only. Light/dark/mobile previews were visually checked.
+  PR #714 remains draft, stacked on #713; master CI/merge review remains gated
+  on resolving the parent. No merge, production migration/deployment, R4 access
+  or infrastructure change. Production migrations #0049–0051 and deployment
+  still require separate explicit approval.
+- 2026-09-05 (diagnosis palette): PR #714 includes the resumed diagnosis-only,
   whole-tooth workflow. A shared rectangular palette and tooth-number context
   menu expose the same conditions and independent movement/rotation actions.
   Palette users choose an action, select multiple teeth, then explicitly Apply;

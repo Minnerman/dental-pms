@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timezone
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import func, select
 
 from app.core.security import create_access_token
@@ -10,8 +14,8 @@ from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.clinical import Procedure, ToothCondition, ToothNote, TreatmentPlanItem
-from app.models.invoice import Invoice
-from app.models.ledger import PatientLedgerEntry
+from app.models.invoice import Invoice, InvoiceStatus
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.user import Role
 from app.services.capabilities import replace_user_capabilities
 from app.services.users import create_user
@@ -381,3 +385,142 @@ def test_concurrent_multitooth_actions_have_one_atomic_winner(api_client, auth_h
     assert len({row["movement"] for row in current["teeth"].values()}) == 1
     assert all(row["revision"] == 1 for row in current["teeth"].values())
     assert len(_audits(patient_id)) == 1
+
+
+def _seed_reset_related_records(patient_id, actor_id, teeth):
+    """Nonempty synthetic records ensure reset preservation is not vacuous."""
+    with SessionLocal() as db:
+        for tooth in teeth:
+            db.add(ToothNote(patient_id=patient_id, tooth=tooth,
+                note=f"Synthetic existing note for {tooth}", created_by_user_id=actor_id))
+            db.add(Procedure(patient_id=patient_id, tooth=tooth, procedure_code="SYNTHETIC",
+                description=f"Synthetic historical treatment for {tooth}", fee_pence=2500,
+                performed_at=datetime(2035, 1, 2, 10, tzinfo=timezone.utc), created_by_user_id=actor_id))
+            db.add(TreatmentPlanItem(patient_id=patient_id, tooth=tooth, procedure_code="SYNTHETIC-PLAN",
+                description=f"Synthetic retained plan for {tooth}", fee_pence=5000,
+                created_by_user_id=actor_id))
+        invoice = Invoice(patient_id=patient_id, invoice_number=f"RESET-{uuid4().hex[:20]}",
+            issue_date=date(2035, 1, 2), status=InvoiceStatus.issued,
+            subtotal_pence=12000, total_pence=12000, created_by_user_id=actor_id)
+        db.add(invoice)
+        db.flush()
+        db.add(PatientLedgerEntry(patient_id=patient_id, entry_type=LedgerEntryType.charge,
+            amount_pence=12000, related_invoice_id=invoice.id,
+            note="Synthetic retained charge", created_by_user_id=actor_id))
+        db.commit()
+
+
+def _reset_related_snapshot(patient_id):
+    # Compare every stored column, not merely counts, for this synthetic patient.
+    with SessionLocal() as db:
+        return {
+            model.__tablename__: [dict(row) for row in db.execute(
+                select(*model.__table__.columns).where(model.patient_id == patient_id).order_by(model.id)
+            ).mappings()]
+            for model in (ToothNote, Procedure, TreatmentPlanItem, Invoice, PatientLedgerEntry)
+        }
+
+
+@pytest.mark.parametrize("selected", [["UR5"], ["UR5", "LL3", "UL7"]], ids=["single", "batch"])
+def test_explicit_reset_is_atomic_retains_all_history_and_records_neutral_not_healthy(
+    api_client, auth_headers, selected
+):
+    patient_id = _patient(api_client, auth_headers)
+    path = _path(patient_id)
+    untouched = "LR6"
+    all_teeth = [*selected, untouched]
+    initial = api_client.post(path, headers=auth_headers, json=_action_payload(
+        all_teeth, condition="implant", movement="forward", rotation="clockwise"))
+    assert initial.status_code == 200
+    actor_id = initial.json()["teeth"][untouched]["updated_by"]["id"]
+    _seed_reset_related_records(patient_id, actor_id, all_teeth)
+    # One newer observation must block the entire reset, including other teeth
+    # whose revisions still match. There must be no partially cleared batch.
+    advanced_tooth = selected[-1]
+    changed = api_client.post(path, headers=auth_headers, json=_action_payload(
+        [advanced_tooth], {advanced_tooth: 1}, rotation="anticlockwise"))
+    assert changed.status_code == 200
+    before_chart = api_client.get(path, headers=auth_headers).json()
+    before_counts = _counts(patient_id)
+    before_related = _reset_related_snapshot(patient_id)
+    before_audits = [(a.id, a.before_json, a.after_json) for a in _audits(patient_id)]
+    assert all(before_related.values())
+    reset_payload = _action_payload(selected, {tooth: 1 for tooth in selected},
+        condition="unrecorded", movement=None, rotation=None)
+    rejected = api_client.post(path, headers=auth_headers, json=reset_payload)
+    assert rejected.status_code == 409
+    assert api_client.get(path, headers=auth_headers).json() == before_chart
+    assert _counts(patient_id) == before_counts
+    assert _reset_related_snapshot(patient_id) == before_related
+    assert [(a.id, a.before_json, a.after_json) for a in _audits(patient_id)] == before_audits
+
+    reset_payload["expected_revisions"][advanced_tooth] = 2
+    reset_headers = {**auth_headers, "Request-Id": uuid4().hex}
+    reset = api_client.post(path, headers=reset_headers, json=reset_payload)
+    assert reset.status_code == 200
+    after_chart = reset.json()
+    for tooth in selected:
+        row = after_chart["teeth"][tooth]
+        assert row["condition"] == "unrecorded"
+        assert row["movement"] is row["rotation"] is None
+        assert row["revision"] == before_chart["teeth"][tooth]["revision"] + 1
+    assert after_chart["teeth"][untouched] == before_chart["teeth"][untouched]
+    assert after_chart["note_teeth"] == before_chart["note_teeth"] == sorted(all_teeth)
+    assert _counts(patient_id) == before_counts
+    assert _reset_related_snapshot(patient_id) == before_related
+    audits = _audits(patient_id)
+    assert len(audits) == len(before_audits) + 1
+    assert [(a.id, a.before_json, a.after_json) for a in audits[:-1]] == before_audits
+    audit = audits[-1]
+    assert audit.after_json["changed_teeth"] == sorted(selected)
+    assert audit.after_json["request"]["condition"] == "unrecorded"
+    assert audit.after_json["request"]["movement"] is audit.after_json["request"]["rotation"] is None
+    for tooth in selected:
+        assert audit.before_json["teeth"][tooth] == {
+            field: before_chart["teeth"][tooth][field]
+            for field in ("condition", "movement", "rotation", "revision")
+        }
+        assert audit.after_json["teeth"][tooth] == {
+            field: after_chart["teeth"][tooth][field]
+            for field in ("condition", "movement", "rotation", "revision")
+        }
+        history = api_client.get(f"/patients/{patient_id}/tooth-history", headers=auth_headers,
+                                 params={"tooth": tooth})
+        assert history.status_code == 200
+        assert len(history.json()["notes"]) == len(history.json()["procedures"]) == 1
+    assert api_client.post(path, headers=reset_headers, json=reset_payload).json() == after_chart
+    assert len(_audits(patient_id)) == len(audits)
+
+    # Later position editing must retain the explicit neutral override rather
+    # than expose historical missing/restored state or invent a healthy tooth.
+    later = api_client.post(path, headers=auth_headers, json=_action_payload(
+        selected, {tooth: after_chart["teeth"][tooth]["revision"] for tooth in selected}, movement="backward"))
+    assert later.status_code == 200
+    assert all(later.json()["teeth"][tooth]["condition"] == "unrecorded" for tooth in selected)
+    assert _reset_related_snapshot(patient_id) == before_related
+
+
+def test_unrecorded_migration_downgrade_refuses_before_any_schema_change(api_client, auth_headers, monkeypatch):
+    patient_id = _patient(api_client, auth_headers)
+    response = api_client.post(_path(patient_id), headers=auth_headers,
+        json=_action_payload(["UR5"], condition="unrecorded", movement=None, rotation=None))
+    assert response.status_code == 200
+    migration_path = Path(__file__).resolve().parents[2] / "alembic/versions/0051_unrecorded_tooth_condition.py"
+    spec = spec_from_file_location("unrecorded_tooth_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    before = response.json()
+
+    def forbid_ddl(*_args, **_kwargs):
+        pytest.fail("Downgrade must refuse before attempting to alter constraints")
+
+    # Call the real guard against synthetic data, but never allow DDL on the
+    # shared isolated test schema (parallel browser tests may be using it).
+    with SessionLocal() as db:
+        monkeypatch.setattr(migration.op, "get_bind", lambda: db.connection())
+        monkeypatch.setattr(migration.op, "drop_constraint", forbid_ddl)
+        monkeypatch.setattr(migration.op, "create_check_constraint", forbid_ddl)
+        with pytest.raises(RuntimeError, match="unrecorded tooth observations exist"):
+            migration.downgrade()
+    assert api_client.get(_path(patient_id), headers=auth_headers).json() == before

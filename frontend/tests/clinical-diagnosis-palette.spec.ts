@@ -1,15 +1,15 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { createPatient } from "./helpers/api";
+import { addInvoiceLine, createInvoice, createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
 const actionIds = [
   "missing", "deciduous", "implant", "unerupted", "impacted", "present",
   "movement_forward", "movement_backward", "rotation_clockwise", "rotation_anticlockwise",
-  "clear_movement", "clear_rotation",
+  "reset",
 ] as const;
 type ActionId = typeof actionIds[number];
-type Condition = "present" | "missing" | "deciduous" | "implant" | "unerupted" | "impacted";
+type Condition = "present" | "missing" | "deciduous" | "implant" | "unerupted" | "impacted" | "unrecorded";
 type Observation = {
   condition: Condition | null;
   movement?: "forward" | "backward" | null;
@@ -93,15 +93,41 @@ async function expectCleared(page: Page) {
   await expect(page.getByTestId("diagnosis-apply")).toBeDisabled();
 }
 
+async function expectPaletteSizing(page: Page) {
+  for (const action of actionIds) {
+    const tile = page.getByTestId(`diagnosis-palette-${action}`);
+    await expect(tile).toHaveCSS("font-size", "18px");
+    const icon = tile.locator("svg.clinical-diagnosis-symbol");
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toHaveAttribute("data-diagnosis-icon", action);
+    await expect(icon).toHaveCSS("width", "34.5px");
+    await expect(icon).toHaveCSS("height", "34.5px");
+    const tileBox = await tile.boundingBox();
+    const iconBox = await icon.boundingBox();
+    expect(tileBox).not.toBeNull();
+    expect(iconBox).not.toBeNull();
+    expect(Math.abs(iconBox!.x + iconBox!.width / 2 - tileBox!.x - tileBox!.width / 2), `${action} icon is centred`).toBeLessThanOrEqual(1);
+    const dimensions = await tile.evaluate((element) => ({ width: element.clientWidth, contentWidth: element.scrollWidth, height: element.clientHeight, contentHeight: element.scrollHeight }));
+    expect(dimensions.contentWidth, `${action} text fits its tile`).toBeLessThanOrEqual(dimensions.width + 1);
+    expect(dimensions.contentHeight, `${action} icon and label fit vertically`).toBeLessThanOrEqual(dimensions.height + 1);
+  }
+}
+
 test("Current chart palette and tooth-number menu expose the same diagnosis-only choices", async ({ page, request }) => {
   const { patientId } = await setup(page, request, "Diagnosis choices");
   await openChart(page, patientId);
   const { bodies, otherClinicalWrites } = observeWrites(page, patientId);
   const palette = page.getByTestId("clinical-diagnosis-palette");
+  await expect(palette.locator('[data-testid^="diagnosis-palette-"]')).toHaveCount(11);
+  await expectPaletteSizing(page);
   for (const action of actionIds) await expect(palette.getByTestId(`diagnosis-palette-${action}`)).toBeVisible();
+  for (const oldAction of ["clear_movement", "clear_rotation", "unrecorded"]) await expect(palette.getByTestId(`diagnosis-palette-${oldAction}`)).toHaveCount(0);
+  await expect(palette.getByTestId("diagnosis-palette-reset")).toHaveAccessibleName("Reset the tooth");
   await expect(page.getByTestId("diagnosis-apply")).toBeDisabled();
   await openMenu(page, "UR5");
+  await expect(page.getByTestId("clinical-tooth-action-menu").locator('[data-testid^="clinical-baseline-condition-"]')).toHaveCount(11);
   for (const action of actionIds) await expect(page.getByTestId(`clinical-baseline-condition-${action}`)).toBeVisible();
+  for (const oldAction of ["clear_movement", "clear_rotation", "unrecorded"]) await expect(page.getByTestId(`clinical-baseline-condition-${oldAction}`)).toHaveCount(0);
   await expect(page.getByTestId("clinical-chart-menu-add-procedure")).toHaveCount(0);
   await expect(page.getByTestId("clinical-chart-menu-add-plan")).toHaveCount(0);
   await expect(page.getByTestId("clinical-chart-menu-add-note")).toBeVisible();
@@ -172,8 +198,6 @@ test("movement and rotation update only their own field and repeat the same acti
     { id: "movement_backward", field: "movement", value: "backward" },
     { id: "rotation_clockwise", field: "rotation", value: "clockwise" },
     { id: "rotation_anticlockwise", field: "rotation", value: "anticlockwise" },
-    { id: "clear_movement", field: "movement", value: null },
-    { id: "clear_rotation", field: "rotation", value: null },
   ];
   let revision = 1;
   for (const action of actions) {
@@ -201,6 +225,131 @@ test("movement and rotation update only their own field and repeat the same acti
   expect(repeatedResponse.request().postDataJSON()).toEqual({ teeth: ["LR6"], movement: "forward", expected_revisions: { LR6: 0 } });
   const stored = await snapshot(request, patientId, token);
   expect(stored.teeth.LR6).toMatchObject({ condition: null, movement: "forward", revision: 1 });
+});
+
+test("single and batch tooth reset clear observations without losing notes history or finances", async ({ page, request }) => {
+  const { patientId, token, headers } = await setup(page, request, "Diagnosis reset retention");
+  const endpoint = `${getBaseUrl()}${conditionsPath(patientId)}`;
+  const primary = await request.post(endpoint, { headers, data: { teeth: ["UR5", "LL5"], condition: "deciduous", movement: "forward", rotation: "clockwise", expected_revisions: { UR5: 0, LL5: 0 } } });
+  expect(primary.ok()).toBeTruthy();
+  const implant = await request.post(endpoint, { headers, data: { teeth: ["UR6"], condition: "implant", movement: "backward", rotation: "anticlockwise", expected_revisions: { UR6: 0 } } });
+  expect(implant.ok()).toBeTruthy();
+  for (const tooth of ["UR5", "LL5"]) {
+    const note = await request.post(`${getBaseUrl()}/api/patients/${patientId}/tooth-notes`, { headers, data: { tooth, surface: null, note: `Synthetic retained observation on ${tooth}` } });
+    expect(note.ok()).toBeTruthy();
+  }
+  const procedure = await request.post(`${getBaseUrl()}/api/patients/${patientId}/procedures`, { headers, data: { tooth: "UR5", procedure_code: "RESET_PROOF", description: "Synthetic earlier completed treatment retained during reset", fee_pence: 1200 } });
+  expect(procedure.ok()).toBeTruthy();
+  const invoice = await createInvoice(request, patientId, { notes: "Synthetic reset retention invoice" });
+  await addInvoiceLine(request, invoice.id, { description: "Synthetic recorded charge", quantity: 1, unit_price_pence: 15000 });
+  const historyBefore: Record<string, unknown> = {};
+  for (const tooth of ["UR5", "LL5"]) {
+    const history = await request.get(`${getBaseUrl()}/api/patients/${patientId}/tooth-history?tooth=${tooth}`, { headers });
+    expect(history.ok()).toBeTruthy();
+    historyBefore[tooth] = await history.json();
+  }
+  const financeBefore = await request.get(`${getBaseUrl()}/api/patients/${patientId}/finance-summary`, { headers });
+  expect(financeBefore.ok()).toBeTruthy();
+  const recordedFinance = await financeBefore.json();
+  const invoiceBefore = await request.get(`${getBaseUrl()}/api/invoices/${invoice.id}`, { headers });
+  expect(invoiceBefore.ok()).toBeTruthy();
+  const recordedInvoice = await invoiceBefore.json();
+
+  await openChart(page, patientId);
+  const { bodies, otherClinicalWrites } = observeWrites(page, patientId);
+  await expect(page.getByTestId("tooth-label-UR5")).toHaveText("URE");
+  await expect(page.getByTestId("tooth-label-LL5")).toHaveText("LLE");
+  await expect(page.getByTestId("tooth-note-flag-UR5")).toBeVisible();
+  await openMenu(page, "UR5");
+  const singleSaved = nextSave(page, patientId);
+  await page.getByTestId("clinical-baseline-condition-reset").click();
+  const singleResponse = await singleSaved;
+  expect(singleResponse.ok()).toBeTruthy();
+  expect(singleResponse.request().postDataJSON()).toEqual({ teeth: ["UR5"], condition: "unrecorded", movement: null, rotation: null, expected_revisions: { UR5: 1 } });
+  await expect(page.getByTestId("tooth-label-UR5")).toHaveText("UR5");
+  await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "unrecorded");
+  await expect(page.getByTestId("tooth-svg-UR5")).not.toHaveAttribute("data-baseline-status", "present");
+  await expect(page.getByTestId("tooth-note-flag-UR5")).toBeVisible();
+  await openMenu(page, "LL5");
+  await expect(page.getByTestId("clinical-baseline-repeat")).toBeEnabled();
+  await expect(page.getByTestId("clinical-baseline-repeat")).toContainText("Reset the tooth");
+  await page.keyboard.press("Escape");
+
+  await chooseTargets(page, "reset", ["LL5", "UR6"]);
+  expect(bodies).toHaveLength(1);
+  await expect(page.getByTestId("tooth-label-LL5")).toHaveText("LLE");
+  await expect(page.getByTestId("tooth-baseline-implant-UR6")).toBeAttached();
+  const batch = await applyBatch(page, patientId);
+  expect(batch).toEqual({ teeth: ["LL5", "UR6"], condition: "unrecorded", movement: null, rotation: null, expected_revisions: { LL5: 1, UR6: 1 } });
+  expect(bodies).toHaveLength(2);
+  for (const tooth of ["UR5", "LL5", "UR6"]) {
+    await expect(page.getByTestId(`tooth-svg-${tooth}`)).toHaveAttribute("data-baseline-status", "unrecorded");
+    await expect(page.getByTestId(`tooth-label-${tooth}`)).toHaveText(tooth);
+    await expect(page.getByTestId(`tooth-baseline-implant-${tooth}`)).toHaveCount(0);
+    await expect(page.getByTestId(`tooth-crown-${tooth}`)).toBeAttached();
+  }
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("clinical-baseline-status")).not.toContainText(/loading/i);
+  const stored = await snapshot(request, patientId, token);
+  for (const tooth of ["UR5", "LL5", "UR6"]) {
+    expect(stored.teeth[tooth]).toMatchObject({ condition: "unrecorded", movement: null, rotation: null, revision: 2 });
+    await expect(page.getByTestId(`tooth-label-${tooth}`)).toHaveText(tooth);
+    await expect(page.getByTestId(`tooth-svg-${tooth}`)).toHaveAttribute("data-baseline-status", "unrecorded");
+  }
+  expect(stored.note_teeth.sort()).toEqual(["LL5", "UR5"]);
+  for (const tooth of ["UR5", "LL5"]) {
+    await expect(page.getByTestId(`tooth-note-flag-${tooth}`)).toBeVisible();
+    const history = await request.get(`${getBaseUrl()}/api/patients/${patientId}/tooth-history?tooth=${tooth}`, { headers });
+    expect(history.ok()).toBeTruthy();
+    expect(await history.json()).toEqual(historyBefore[tooth]);
+  }
+  const financeAfter = await request.get(`${getBaseUrl()}/api/patients/${patientId}/finance-summary`, { headers });
+  expect(financeAfter.ok()).toBeTruthy();
+  expect(await financeAfter.json()).toEqual(recordedFinance);
+  const invoiceAfter = await request.get(`${getBaseUrl()}/api/invoices/${invoice.id}`, { headers });
+  expect(invoiceAfter.ok()).toBeTruthy();
+  expect(await invoiceAfter.json()).toEqual(recordedInvoice);
+  expect(otherClinicalWrites).toEqual([]);
+});
+
+test("reset suppresses legacy restoration drawings only in Current and remains unrecorded after another observation", async ({ page, request }) => {
+  const { patientId, token } = await setup(page, request, "Diagnosis reset legacy display");
+  // Synthetic persisted-import representation only: no R4 connection or records.
+  const legacy = {
+    patient_id: Number(patientId), legacy_patient_code: null,
+    teeth: { "15": { missing: true, extracted: true, restorations: [
+      { type: "crown", surfaces: [], meta: { source: "synthetic-test", code_label: "Synthetic historical crown" } },
+      { type: "root_canal", surfaces: [], meta: { source: "synthetic-test", code_label: "Synthetic historical root treatment" } },
+    ] } },
+  };
+  await page.route(`**/api/patients/${patientId}/charting/tooth-state*`, (route) => route.fulfill({ json: legacy }));
+  await openChart(page, patientId);
+  await expect(page.getByTestId("tooth-restoration-UR5-missing")).toBeAttached();
+  await expect(page.getByTestId("tooth-anatomy-restoration-UR5-crown")).toBeAttached();
+  await openMenu(page, "UR5");
+  const reset = nextSave(page, patientId);
+  await page.getByTestId("clinical-baseline-condition-reset").click();
+  expect((await reset).ok()).toBeTruthy();
+  await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "unrecorded");
+  await expect(page.locator('[data-testid^="tooth-restoration-UR5-"], [data-testid^="tooth-anatomy-restoration-UR5-"]')).toHaveCount(0);
+  await expect(page.getByTestId("tooth-crown-UR5")).toBeAttached();
+
+  await chooseTargets(page, "movement_forward", ["UR5"]);
+  expect(await applyBatch(page, patientId)).toEqual({ teeth: ["UR5"], movement: "forward", expected_revisions: { UR5: 1 } });
+  expect((await snapshot(request, patientId, token)).teeth.UR5).toMatchObject({ condition: "unrecorded", movement: "forward", rotation: null, revision: 2 });
+  await expect(page.locator('[data-testid^="tooth-restoration-UR5-"], [data-testid^="tooth-anatomy-restoration-UR5-"]')).toHaveCount(0);
+  await page.getByTestId("clinical-chart-view-history").click();
+  await expect(page.getByTestId("tooth-restoration-UR5-missing")).toBeAttached();
+  await expect(page.getByTestId("tooth-anatomy-restoration-UR5-crown")).toBeAttached();
+  await expect(page.getByTestId("tooth-anatomy-restoration-UR5-root_canal")).toBeAttached();
+  await page.getByTestId("clinical-chart-view-current").click();
+  await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "unrecorded");
+  await expect(page.locator('[data-testid^="tooth-restoration-UR5-"], [data-testid^="tooth-anatomy-restoration-UR5-"]')).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "unrecorded");
+  await expect(page.locator('[data-testid^="tooth-restoration-UR5-"], [data-testid^="tooth-anatomy-restoration-UR5-"]')).toHaveCount(0);
 });
 
 test("Cancel and patient tab or view changes discard unsaved diagnosis selection", async ({ page, request }) => {
@@ -489,11 +638,19 @@ test("synthetic diagnosis palette and selected teeth remain usable in light dark
   await capturePage("diagnosis-palette-light.png");
   await page.setViewportSize({ width: 1900, height: 1300 });
   await capturePage("diagnosis-palette-wide-light.png");
+  const chartPreviewBox = await page.locator(".patient-route-chart-panel").boundingBox();
+  const palettePreviewBox = await palette.boundingBox();
+  if (chartPreviewBox && palettePreviewBox) await page.screenshot({
+    path: testInfo.outputPath("odontogram-roots-reset-preview.png"),
+    fullPage: true,
+    clip: { x: chartPreviewBox.x, y: chartPreviewBox.y, width: chartPreviewBox.width, height: palettePreviewBox.y + palettePreviewBox.height - chartPreviewBox.y },
+  });
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByRole("button", { name: "Toggle theme", exact: true }).click();
   await capturePage("diagnosis-palette-dark.png");
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.getByTestId("diagnosis-apply")).toBeVisible();
+  await expectPaletteSizing(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await capturePage("diagnosis-palette-1280.png");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -504,5 +661,6 @@ test("synthetic diagnosis palette and selected teeth remain usable in light dark
   const mobileBox = await palette.boundingBox();
   expect(mobileBox!.x).toBeGreaterThanOrEqual(0);
   expect(mobileBox!.x + mobileBox!.width).toBeLessThanOrEqual(391);
+  await expectPaletteSizing(page);
   await capturePage("diagnosis-palette-mobile.png");
 });

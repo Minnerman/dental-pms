@@ -1,4 +1,5 @@
 import { actionSupportsTeeth, diagnosisAction, diagnosisActions, type DiagnosisAction } from "./toothDiagnosis";
+import DiagnosisIcon from "./DiagnosisIcon";
 type Props = {
   enabled: boolean; saving: boolean; action: DiagnosisAction | null; selected: string[];
   lastAction: DiagnosisAction | null; activeTooth: string | null;
@@ -15,12 +16,13 @@ export default function DiagnosisPalette(props: Props) {
       {diagnosisActions.map((item) => <button key={item.id} className="btn btn-secondary" type="button"
         data-testid={`diagnosis-palette-${item.id}`} aria-pressed={action === item.id}
         disabled={!enabled} onClick={() => props.onChoose(item.id)}>
-        <span aria-hidden="true" className="clinical-diagnosis-symbol">{item.symbol}</span>{item.label}
+        <DiagnosisIcon action={item.id} className="clinical-diagnosis-symbol" />{item.label}
       </button>)}
     </div>
     <div className="clinical-diagnosis-selection" role="status" data-testid="diagnosis-selection">
       {action ? <><strong>{diagnosisAction(action).label}</strong> · {selected.length ? selected.join(", ") : "Select tooth numbers above"}</> : "No condition selected"}
       {invalid && <span role="alert">Deciduous teeth use positions 1–5 (A–E). Deselect positions 6–8.</span>}
+      {action === "reset" && <span>Clears current tooth conditions, movement and rotation. Notes and treatment history are kept; no healthy or present finding is recorded.</span>}
     </div>
     <div className="clinical-diagnosis-buttons">
       <button className="btn" type="button" data-testid="diagnosis-apply" disabled={!enabled || !action || !selected.length || Boolean(invalid)} onClick={props.onApply}>

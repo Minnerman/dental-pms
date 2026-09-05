@@ -144,6 +144,6 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
     loading, saving, error, notice, lastAction, canSave, load, saveAction,
-    save: (teeth: string[], condition: ToothCondition) => saveAction(teeth, condition, teeth.length === 1),
+    save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }
