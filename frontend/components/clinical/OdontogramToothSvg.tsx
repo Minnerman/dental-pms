@@ -1,13 +1,16 @@
 import { memo, useId } from "react";
 
-import { getToothAnatomy, getToothAnatomyWidth } from "./toothAnatomy";
+import { getToothAnatomy, getToothAnatomyWidth, implantScrewAnatomy } from "./toothAnatomy";
+import { britishToothLabel } from "./toothDiagnosis";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
 export type OdontogramToothType = "incisor" | "canine" | "premolar" | "molar";
 export type OdontogramBaselineCondition = {
-  status: "present" | "missing" | "implant" | "unerupted" | "impacted";
-  dentition: "permanent" | "deciduous";
+  status?: "present" | "missing" | "implant" | "unerupted" | "impacted";
+  dentition?: "permanent" | "deciduous";
+  movement?: "forward" | "backward" | null;
+  rotation?: "clockwise" | "anticlockwise" | null;
 };
 export type OdontogramRestorationType =
   | "filling"
@@ -291,14 +294,15 @@ function OdontogramToothSvgImpl({
   const otherTooltip = tooltipForType("other");
 
   const extractionFromRestoration = hasRestoration("extraction");
-  const extractedState = !baselineCondition && (extracted || extractionFromRestoration);
-  const legacyMissing = !baselineCondition && missing;
+  const extractedState = !baselineCondition?.status && (extracted || extractionFromRestoration);
+  const legacyMissing = !baselineCondition?.status && missing;
   const stateDominant = legacyMissing || extractedState;
   const baselineMissing = baselineCondition?.status === "missing";
   const baselineImplant = baselineCondition?.status === "implant";
   const baselineUnerupted = baselineCondition?.status === "unerupted";
   const baselineImpacted = baselineCondition?.status === "impacted";
   const isDeciduous = baselineCondition?.dentition === "deciduous";
+  const displayLabel = britishToothLabel(toothKey, isDeciduous ? "deciduous" : undefined);
   const showAnatomy = !baselineMissing;
   const showSurfaceMap = !baselineMissing && !baselineUnerupted;
   const showNaturalRoots = !baselineImplant && !baselineUnerupted;
@@ -306,6 +310,7 @@ function OdontogramToothSvgImpl({
   const illustrationId = useId().replace(/:/g, "");
   const enamelFillId = `enamel-${illustrationId}`;
   const rootFillId = `root-${illustrationId}`;
+  const implantFillId = `implant-${illustrationId}`;
   const anatomy = getToothAnatomy(toothKey, baselineCondition?.dentition);
   const anatomyWidth = getToothAnatomyWidth(toothKey) * (isDeciduous ? 0.86 : 1);
   const anatomyScaleX = toothKey[1] === "L" ? -anatomyWidth : anatomyWidth;
@@ -314,9 +319,14 @@ function OdontogramToothSvgImpl({
   // Left/right mirroring makes both quadrants incline toward the adjacent tooth
   // on the midline side without moving the tooth slot or surface hit targets.
   const crownTransform = baselineImpacted ? "rotate(-28 50 125)" : undefined;
-  const baselineDescription = baselineCondition
-    ? `, current condition ${isDeciduous ? "deciduous" : baselineCondition.status}`
-    : "";
+  const movement = baselineCondition?.movement;
+  const rotation = baselineCondition?.rotation;
+  const movementDirection = (toothKey[1] === "R" ? 1 : -1) * (movement === "backward" ? -1 : 1);
+  const baselineDescription = [
+    isDeciduous ? "current condition deciduous" : baselineCondition?.status ? `current condition ${baselineCondition.status}` : "",
+    movement ? `movement ${movement} (${movement === "forward" ? "toward" : "away from"} the midline)` : "",
+    rotation ? `rotation ${rotation}` : "",
+  ].filter(Boolean).map((description) => `, ${description}`).join("");
 
   return (
     <svg
@@ -325,10 +335,12 @@ function OdontogramToothSvgImpl({
       height="202"
       className="odontogram-tooth-svg"
       role="img"
-      aria-label={`${toothKey} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}`}
+      aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
       data-baseline-status={baselineCondition?.status}
       data-dentition={baselineCondition?.dentition}
+      data-movement={movement ?? undefined}
+      data-rotation={rotation ?? undefined}
       style={{ display: "block", overflow: "visible" }}
     >
       <defs>
@@ -342,6 +354,12 @@ function OdontogramToothSvgImpl({
           <stop offset="42%" stopColor="#ffffdf" />
           <stop offset="78%" stopColor="#faf7cf" />
           <stop offset="100%" stopColor="#e8e1ac" />
+        </linearGradient>
+        <linearGradient id={implantFillId} x1="0%" x2="100%">
+          <stop offset="0%" stopColor="#7d939d" />
+          <stop offset="38%" stopColor="#e3edf0" />
+          <stop offset="72%" stopColor="#acbfc7" />
+          <stop offset="100%" stopColor="#657e89" />
         </linearGradient>
       </defs>
       {showAnatomy && <g
@@ -364,12 +382,17 @@ function OdontogramToothSvgImpl({
         ))}
         {baselineImplant && (
           <g data-testid={`tooth-baseline-implant-${toothKey}`}>
-            <rect x="42" y="20" width="16" height="88" rx="3"
-              fill="rgba(103, 232, 249, 0.9)" stroke="rgba(14, 116, 144, 0.96)" strokeWidth={1.2} />
-            {[33, 52, 71, 90].map((y) => (
-              <circle key={y} cx="50" cy={y} r="3.1" fill="rgba(255,255,255,0.9)"
-                stroke="rgba(14, 116, 144, 0.96)" strokeWidth={0.9} />
+            <path d={implantScrewAnatomy.body} fill={`url(#${implantFillId})`}
+              stroke="#425d69" strokeWidth={1.3} strokeLinejoin="round"
+              data-testid={`tooth-implant-body-${toothKey}`} />
+            {implantScrewAnatomy.threads.map((path, index) => (
+              <path key={index} d={path} fill={`url(#${implantFillId})`}
+                stroke="#425d69" strokeWidth={1} strokeLinejoin="round"
+                data-testid={`tooth-implant-thread-${toothKey}-${index + 1}`} />
             ))}
+            <path d={implantScrewAnatomy.collar} fill={`url(#${implantFillId})`}
+              stroke="#425d69" strokeWidth={1.3} strokeLinejoin="round"
+              data-testid={`tooth-implant-collar-${toothKey}`} />
           </g>
         )}
         {baselineUnerupted && (
@@ -481,6 +504,44 @@ function OdontogramToothSvgImpl({
           />
         )}
       </g>}
+
+      {showAnatomy && (movement || rotation) && (
+        <g
+          transform={`translate(50 ${isUpperArch ? -14 : 294})`}
+          pointerEvents="none"
+          data-testid={`tooth-position-markers-${toothKey}`}
+          data-marker-side={isUpperArch ? "above" : "below"}
+        >
+          {movement && (
+            <g
+              transform={`translate(${rotation ? -21 : 0} 0) scale(${movementDirection} 1)`}
+              data-testid={`tooth-movement-${toothKey}`}
+              data-direction={movement}
+              stroke="var(--odontogram-movement, #b96708)"
+              strokeWidth={2.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            >
+              <path d="M-13 0 H13 M6 -7 L13 0 L6 7" />
+            </g>
+          )}
+          {rotation && (
+            <g
+              transform={`translate(${movement ? 21 : 0} 0) scale(${rotation === "anticlockwise" ? -1 : 1} 1)`}
+              data-testid={`tooth-rotation-${toothKey}`}
+              data-direction={rotation}
+              stroke="var(--odontogram-rotation, #8057c8)"
+              strokeWidth={2.3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            >
+              <path d="M8 6 A10 10 0 1 1 9 -4 M9 -4 L3 -5 M9 -4 L10 -10" />
+            </g>
+          )}
+        </g>
+      )}
 
       {showSurfaceMap && <g
         transform={isUpperArch ? "translate(0 180)" : undefined}

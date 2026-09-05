@@ -22,7 +22,7 @@ test("restorative chart UX supports selection toggles, keyboard navigation, and 
     last_name: `UX ${Date.now()}`,
   });
 
-  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, {
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical?clinicalView=planned`, {
     waitUntil: "domcontentloaded",
   });
   await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/clinical`));

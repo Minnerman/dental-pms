@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -91,8 +92,12 @@ def test_tooth_conditions_are_native_persistent_and_never_create_treatment_or_fi
     assert after == before
     audits = _audits(patient_id)
     assert len(audits) == 6
-    assert audits[0].before_json["teeth"]["UR5"] == {"condition": None, "revision": 0}
-    assert audits[-1].after_json["teeth"]["UR5"] == {"condition": "present", "revision": 6}
+    assert audits[0].before_json["teeth"]["UR5"] == {
+        "condition": None, "movement": None, "rotation": None, "revision": 0,
+    }
+    assert audits[-1].after_json["teeth"]["UR5"] == {
+        "condition": "present", "movement": None, "rotation": None, "revision": 6,
+    }
 
 
 def test_tooth_condition_retries_collisions_stale_writes_and_reset_preserve_revisions(api_client, auth_headers):
@@ -141,9 +146,14 @@ def test_tooth_condition_validation_rejects_unsupported_and_ambiguous_updates_at
         {**_payload(), "expected_revisions": {}},
         {**_payload(), "expected_revisions": {"UR5": 0, "LL5": 0}},
         {**_payload(), "teeth": ["UR5", "ur5"]},
-        {"teeth": ["UR5", "UL5"], "condition": "missing", "expected_revisions": {"UR5": 0, "UL5": 0}},
-        {"teeth": upper, "condition": "implant", "expected_revisions": {t: 0 for t in upper}},
-        {"teeth": upper[:-1] + ["LL8"], "condition": "missing", "expected_revisions": {t: 0 for t in upper[:-1] + ["LL8"]}},
+        # Arbitrary batches are now valid, but every selected tooth must support
+        # the observation and the complete revision set is still mandatory.
+        {"teeth": upper, "condition": "deciduous", "expected_revisions": {t: 0 for t in upper}},
+        {"teeth": upper, "condition": "implant", "expected_revisions": {t: 0 for t in upper[:-1]}},
+        {**_payload(), "movement": "left"},
+        {**_payload(), "rotation": 15},
+        {**_payload(), "rotation": "Clockwise"},
+        {**_payload(), "movement": False},
         {**_payload(), "teeth": [None]},
     ]
     before = _counts(patient_id)
@@ -238,3 +248,136 @@ def test_tooth_conditions_require_capabilities_and_reject_archived_patients(api_
     assert api_client.post(_path(patient_id), headers=auth_headers, json=_payload(condition="present", revision=1)).status_code == 404
     assert _counts(patient_id) == before
     assert len(_audits(patient_id)) == audit_count
+
+
+def _action_payload(teeth, revisions=None, **observations):
+    return {"teeth": teeth, "expected_revisions": revisions or {tooth: 0 for tooth in teeth},
+            **observations}
+
+
+def test_movement_and_rotation_preserve_condition_and_clear_only_explicit_attributes(api_client, auth_headers):
+    patient_id = _patient(api_client, auth_headers)
+    path = _path(patient_id)
+    for tooth, condition in (("UR5", "implant"), ("LL3", "deciduous")):
+        response = api_client.post(path, headers=auth_headers, json=_payload(tooth=tooth, condition=condition))
+        assert response.status_code == 200
+    before_counts = _counts(patient_id)
+    teeth = ["UR5", "LL3"]
+    forward = _action_payload(teeth, {tooth: 1 for tooth in teeth}, movement="forward")
+    response = api_client.post(path, headers=auth_headers, json=forward)
+    assert response.status_code == 200
+    for tooth, condition in (("UR5", "implant"), ("LL3", "deciduous")):
+        row = response.json()["teeth"][tooth]
+        assert row["condition"] == condition
+        assert row["movement"] == "forward"
+        assert row["rotation"] is None
+        assert row["revision"] == 2
+    rotated = api_client.post(path, headers=auth_headers,
+        json=_action_payload(teeth, {tooth: 2 for tooth in teeth}, rotation="anticlockwise"))
+    assert rotated.status_code == 200
+    clear_movement = api_client.post(path, headers=auth_headers,
+        json=_action_payload(teeth, {tooth: 3 for tooth in teeth}, movement=None))
+    assert clear_movement.status_code == 200
+    for row in clear_movement.json()["teeth"].values():
+        assert row["movement"] is None
+        assert row["rotation"] == "anticlockwise"
+        assert row["revision"] == 4
+    # The deployed old condition-only client must not erase position attributes.
+    old_client_clear = api_client.post(path, headers=auth_headers,
+        json=_payload(condition=None, revision=4))
+    assert old_client_clear.status_code == 200
+    row = old_client_clear.json()["teeth"]["UR5"]
+    assert row["condition"] is None
+    assert row["rotation"] == "anticlockwise"
+    assert row["revision"] == 5
+    reset = api_client.post(path, headers=auth_headers, json=_action_payload(
+        teeth, {"UR5": 5, "LL3": 4}, condition=None, movement=None, rotation=None))
+    assert reset.status_code == 200
+    for tooth, expected_revision in (("UR5", 6), ("LL3", 5)):
+        row = reset.json()["teeth"][tooth]
+        assert row["condition"] is row["movement"] is row["rotation"] is None
+        assert row["revision"] == expected_revision
+    assert _counts(patient_id) == before_counts
+    audit = _audits(patient_id)[-1]
+    assert audit.before_json["teeth"]["LL3"]["condition"] == "deciduous"
+    assert audit.before_json["teeth"]["LL3"]["rotation"] == "anticlockwise"
+    assert audit.after_json["request"]["movement"] is None
+
+
+def test_arbitrary_multitooth_batches_and_full_mouth_are_atomic_and_revision_guarded(api_client, auth_headers):
+    patient_id = _patient(api_client, auth_headers)
+    path = _path(patient_id)
+    selected = ["UR2", "UL6", "LR8", "LL1"]
+    before = _counts(patient_id)
+    initial = api_client.post(path, headers=auth_headers,
+        json=_action_payload(selected, movement="backward"))
+    assert initial.status_code == 200
+    assert set(initial.json()["teeth"]) == set(selected)
+    assert all(row["condition"] is None for row in initial.json()["teeth"].values())
+    assert all(row["movement"] == "backward" for row in initial.json()["teeth"].values())
+    all_teeth = [f"{quadrant}{number}" for quadrant in ("UR", "UL", "LR", "LL") for number in range(1, 9)]
+    stale_payload = _action_payload(all_teeth, condition="missing")
+    prior = api_client.get(path, headers=auth_headers).json()
+    audit_count = len(_audits(patient_id))
+    stale = api_client.post(path, headers=auth_headers, json=stale_payload)
+    assert stale.status_code == 409
+    assert api_client.get(path, headers=auth_headers).json() == prior
+    assert len(_audits(patient_id)) == audit_count
+    stale_payload["expected_revisions"].update({tooth: 1 for tooth in selected})
+    full = api_client.post(path, headers=auth_headers, json=stale_payload)
+    assert full.status_code == 200
+    assert len(full.json()["teeth"]) == 32
+    assert all(row["condition"] == "missing" for row in full.json()["teeth"].values())
+    for tooth in selected:
+        assert full.json()["teeth"][tooth]["movement"] == "backward"
+    after = _counts(patient_id)
+    assert after.pop("tooth_conditions") == 32
+    before.pop("tooth_conditions")
+    assert after == before
+
+
+def test_position_retries_collisions_and_unchanged_observations_are_safe(api_client, auth_headers):
+    patient_id = _patient(api_client, auth_headers)
+    path = _path(patient_id)
+    headers = {**auth_headers, "Request-Id": uuid4().hex}
+    payload = _action_payload(["LL8", "UR1"], rotation="clockwise")
+    first = api_client.post(path, headers=headers, json=payload)
+    assert first.status_code == 200
+    assert api_client.post(path, headers=headers, json=payload).json() == first.json()
+    assert len(_audits(patient_id)) == 1
+    # An explicit clearing of condition is not the same operation as omitting it.
+    collision = api_client.post(path, headers=headers, json={**payload, "condition": None})
+    assert collision.status_code == 409
+    assert len(_audits(patient_id)) == 1
+    unchanged = api_client.post(path, headers=auth_headers, json=_action_payload(
+        ["UR1", "LL8"], {"UR1": 1, "LL8": 1}, rotation="clockwise"))
+    assert unchanged.status_code == 200
+    assert all(row["revision"] == 1 for row in unchanged.json()["teeth"].values())
+    assert _audits(patient_id)[-1].after_json["changed_teeth"] == []
+    changed = api_client.post(path, headers=auth_headers, json=_action_payload(
+        ["UR1", "LL8"], {"UR1": 1, "LL8": 1}, movement="forward"))
+    assert changed.status_code == 200
+    replay = api_client.post(path, headers=headers, json=payload)
+    assert replay.status_code == 200
+    assert all(row["revision"] == 2 for row in replay.json()["teeth"].values())
+    assert all(row["movement"] == "forward" for row in replay.json()["teeth"].values())
+
+
+def test_concurrent_multitooth_actions_have_one_atomic_winner(api_client, auth_headers):
+    patient_id = _patient(api_client, auth_headers)
+    path = _path(patient_id)
+    teeth = ["UR7", "LL5", "UL1"]
+
+    def submit(direction):
+        return api_client.post(path, headers={**auth_headers, "Request-Id": uuid4().hex},
+            json=_action_payload(teeth, movement=direction))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(submit, ["forward", "backward"]))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    winner = next(response for response in responses if response.status_code == 200).json()
+    current = api_client.get(path, headers=auth_headers).json()
+    assert current == winner
+    assert len({row["movement"] for row in current["teeth"].values()}) == 1
+    assert all(row["revision"] == 1 for row in current["teeth"].values())
+    assert len(_audits(patient_id)) == 1

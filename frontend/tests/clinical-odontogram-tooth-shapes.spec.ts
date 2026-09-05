@@ -33,8 +33,9 @@ test("larger tooth silhouettes remain legible and reachable at desktop and narro
   const illustrationIds = await chart.locator("defs > [id]").evaluateAll((elements) =>
     elements.map((element) => element.id)
   );
-  expect(illustrationIds).toHaveLength(64);
-  expect(new Set(illustrationIds).size).toBe(64);
+  // Enamel, root and threaded-implant shading each need a unique SVG id.
+  expect(illustrationIds).toHaveLength(96);
+  expect(new Set(illustrationIds).size).toBe(96);
   expect(await page.getByTestId("tooth-anatomy-UL6").getAttribute("transform")).toContain("scale(-1 1)");
   expect(await page.getByTestId("tooth-anatomy-LL6").getAttribute("transform")).toContain("scale(-1 -1)");
   await expect(page.getByTestId("tooth-crown-groove-UR6-1")).toBeAttached();

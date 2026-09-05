@@ -43,8 +43,9 @@ class ToothConditionValue(str, enum.Enum):
 class ToothCondition(Base, AuditMixin):
     """Native current observations, deliberately separate from treatment/billing.
 
-    A null condition clears only the native override. Its revision remains so an
-    older editor cannot accidentally overwrite a later observation after reset.
+    Condition, movement and rotation are independent observations. Clearing one
+    never discards another. The revision remains after reset so an older editor
+    cannot accidentally overwrite a later observation.
     """
 
     __tablename__ = "tooth_conditions"
@@ -56,12 +57,22 @@ class ToothCondition(Base, AuditMixin):
             "('present', 'missing', 'deciduous', 'implant', 'unerupted', 'impacted')",
             name="ck_tooth_conditions_value",
         ),
+        CheckConstraint(
+            "movement IS NULL OR movement IN ('forward', 'backward')",
+            name="ck_tooth_conditions_movement",
+        ),
+        CheckConstraint(
+            "rotation IS NULL OR rotation IN ('clockwise', 'anticlockwise')",
+            name="ck_tooth_conditions_rotation",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
     tooth: Mapped[str] = mapped_column(String(3), nullable=False)
     condition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    movement: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    rotation: Mapped[str | None] = mapped_column(String(20), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

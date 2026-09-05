@@ -207,11 +207,13 @@ def update_tooth_conditions(
     _viewer: User = Depends(CLINICAL_VIEW),
     request_id: str | None = Header(default=None, min_length=1, max_length=120),
 ):
-    # All observations for a patient share this lock, including whole-arch writes
+    # All observations for a patient share this lock, including multi-tooth writes
     # and retries. Validate every revision before changing any selected tooth.
     get_patient_or_404(db, patient_id, for_update=True)
     action = "clinical.tooth_conditions.recorded"
-    request_values = payload.model_dump(mode="json")
+    # Omitted attributes are preserved, not reset. Excluding them also preserves
+    # request-ID replay compatibility with old condition-only clients/audits.
+    request_values = payload.model_dump(mode="json", exclude_unset=True)
     duplicate = _duplicate_audit(
         db, patient_id=patient_id, request_id=request_id, actions=[action]
     )
@@ -246,23 +248,29 @@ def update_tooth_conditions(
     before = {
         tooth: {
             "condition": existing[tooth].condition,
+            "movement": existing[tooth].movement,
+            "rotation": existing[tooth].rotation,
             "revision": existing[tooth].revision,
         }
-        if tooth in existing else {"condition": None, "revision": 0}
+        if tooth in existing else {"condition": None, "movement": None, "rotation": None, "revision": 0}
         for tooth in payload.teeth
     }
-    condition_value = payload.condition.value if payload.condition is not None else None
+    observations = {
+        key: request_values[key]
+        for key in ("condition", "movement", "rotation")
+        if key in request_values
+    }
     now = datetime.now(timezone.utc)
     changed_teeth = []
     for tooth in payload.teeth:
         row = existing.get(tooth)
-        if row is not None and row.condition == condition_value:
+        if row is not None and all(getattr(row, key) == value for key, value in observations.items()):
             continue
         if row is None:
             row = ToothCondition(
                 patient_id=patient_id,
                 tooth=tooth,
-                condition=condition_value,
+                **observations,
                 revision=1,
                 created_by_user_id=user.id,
                 updated_by_user_id=user.id,
@@ -270,7 +278,8 @@ def update_tooth_conditions(
             )
             existing[tooth] = row
         else:
-            row.condition = condition_value
+            for key, value in observations.items():
+                setattr(row, key, value)
             row.revision += 1
             row.updated_by_user_id = user.id
             row.updated_at = now
@@ -289,7 +298,12 @@ def update_tooth_conditions(
             "request": request_values,
             "changed_teeth": changed_teeth,
             "teeth": {
-                tooth: {"condition": existing[tooth].condition, "revision": existing[tooth].revision}
+                tooth: {
+                    "condition": existing[tooth].condition,
+                    "movement": existing[tooth].movement,
+                    "rotation": existing[tooth].rotation,
+                    "revision": existing[tooth].revision,
+                }
                 for tooth in payload.teeth
             },
         },

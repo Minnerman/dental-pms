@@ -429,13 +429,14 @@
   border-radius: 7px !important;
   min-width: 0;
   min-height: 210px !important;
-  padding: 22px 0 3px !important;
+  padding: 24px 0 3px !important;
 }
 
 .shell :global(.patient-route-odontogram-grid > button:hover),
 .shell :global(.patient-route-odontogram-grid > button[data-selected="true"]) {
-  background: var(--tab-active-bg) !important;
-  border-color: var(--accent) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  transform: none;
 }
 
 .shell :global(.odontogram-tooth-svg) {
@@ -443,6 +444,8 @@
   width: 100%;
   max-width: 88px;
   aspect-ratio: 100 / 280;
+  margin-bottom: 24px;
+  overflow: visible;
 }
 
 .shell :global(.patient-route-odontogram-grid > button > div:first-child) {
@@ -451,7 +454,7 @@
 
 .shell :global(.odontogram-surface-overlays) {
   /* Match the SVG box, excluding the tooth label and any badges below it. */
-  inset: 22px auto auto 50% !important;
+  inset: 24px auto auto 50% !important;
   transform: translateX(-50%);
   width: 100%;
   max-width: 88px;
@@ -472,12 +475,137 @@
   font-size: 18.7px;
   font-weight: 700;
   line-height: 1;
+  position: relative;
+  border-radius: 4px;
+  padding: 3px 2px;
+  isolation: isolate;
+}
+
+.shell :global(.clinical-tooth-label::before) {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid #0b9ec0;
+  background: rgb(11 158 192 / 13%);
+  border-radius: 7px;
+  box-shadow: 0 0 9px rgb(11 158 192 / 35%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.shell :global(.clinical-tooth-label:hover::before),
+.shell :global(.patient-route-odontogram-grid > button:focus-visible .clinical-tooth-label::before) {
+  animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
+}
+
+.shell :global(.patient-route-odontogram-grid > button[data-selected="true"] .clinical-tooth-label),
+.shell :global(.patient-route-odontogram-grid > button[data-batch-selected="true"] .clinical-tooth-label) {
+  box-shadow: 0 0 0 2px #0b9ec0;
+  color: var(--text);
+}
+
+@keyframes diagnosis-ready-pulse {
+  0%, 100% { opacity: .25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(.clinical-tooth-label:hover::before),
+  .shell :global(.patient-route-odontogram-grid > button:focus-visible .clinical-tooth-label::before) {
+    animation: none;
+    opacity: .8;
+  }
+}
+
+.shell :global(.clinical-diagnosis-palette),
+.shell :global(.clinical-dentition-guide) {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+
+.shell :global(.clinical-diagnosis-heading),
+.shell :global(.clinical-diagnosis-buttons) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.shell :global(.clinical-diagnosis-heading span),
+.shell :global(.clinical-diagnosis-palette p),
+.shell :global(.clinical-diagnosis-palette small),
+.shell :global(.clinical-dentition-guide p) {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.shell :global(.clinical-diagnosis-tiles) {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shell :global(.clinical-diagnosis-tiles button) {
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.shell :global(.clinical-diagnosis-tiles button[aria-pressed="true"]) {
+  border-color: #0b9ec0;
+  background: rgb(11 158 192 / 15%);
+  box-shadow: inset 0 0 0 1px #0b9ec0;
+}
+
+.shell :global(.clinical-diagnosis-symbol) {
+  color: #0b9ec0;
+  font-size: 23px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .shell :global(.clinical-diagnosis-tiles) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 540px) {
+  .shell :global(.clinical-diagnosis-tiles) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.shell :global(.clinical-diagnosis-selection) {
+  margin: 12px 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.shell :global(.clinical-diagnosis-selection [role="alert"]) {
+  display: block;
+  color: var(--danger, #b42318);
+  margin-top: 6px;
+}
+
+.shell :global(.clinical-diagnosis-secondary) {
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+  padding-top: 12px;
 }
 
 .shell :global(.clinical-tooth-note-flag) {
   position: absolute;
   top: 2px;
-  left: calc(50% - 8px);
+  left: 4px;
   width: 16px;
   height: 16px;
   background: #ffe66b;
@@ -527,6 +655,7 @@
 }
 
 .shell :global(.clinical-chart-action-menu button) {
+  border-radius: 6px;
   justify-content: flex-start;
   min-height: 32px;
   text-align: left;

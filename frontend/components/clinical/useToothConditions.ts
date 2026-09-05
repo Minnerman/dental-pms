@@ -3,17 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/auth";
 import type { OdontogramBaselineCondition } from "./OdontogramToothSvg";
+import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothCondition } from "./toothDiagnosis";
+export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
-export type ToothCondition = "present" | "missing" | "deciduous" | "implant" | "unerupted" | "impacted";
-export const toothConditionLabels: Record<ToothCondition, string> = {
-  present: "Tooth present",
-  missing: "Tooth missing",
-  deciduous: "Deciduous tooth",
-  implant: "Implant",
-  unerupted: "Unerupted tooth",
-  impacted: "Impacted tooth",
-};
-type ConditionRow = {
+type ConditionRow = DiagnosisPatch & {
   condition: ToothCondition | null;
   revision: number;
   updated_at: string;
@@ -25,11 +18,15 @@ type ConditionChart = {
   note_teeth: string[];
 };
 
-export function baselineGlyph(condition?: ToothCondition | null): OdontogramBaselineCondition | undefined {
-  if (!condition) return undefined;
-  return condition === "deciduous"
-    ? { status: "present", dentition: "deciduous" }
-    : { status: condition, dentition: "permanent" };
+export function baselineGlyph(row?: DiagnosisPatch): OdontogramBaselineCondition | undefined {
+  if (!row || (!row.condition && !row.movement && !row.rotation)) return undefined;
+  const { condition, movement, rotation } = row;
+  return {
+    ...(condition ? condition === "deciduous"
+      ? { status: "present" as const, dentition: "deciduous" as const }
+      : { status: condition, dentition: "permanent" as const } : {}),
+    movement, rotation,
+  };
 }
 
 function requestId() {
@@ -43,7 +40,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [lastAction, setLastAction] = useState<ToothCondition | null>(null);
+  const [lastAction, setLastAction] = useState<DiagnosisAction | null>(null);
   const currentPatient = useRef(patientId);
   currentPatient.current = patientId;
   const generation = useRef(0);
@@ -98,7 +95,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   const currentChart = enabled && chart?.patient_id === Number(patientId) ? chart : null;
   const canSave = enabled && writable && Boolean(currentChart) && !loading && !saving && !error;
 
-  const save = async (teeth: string[], condition: ToothCondition | null) => {
+  const saveAction = async (teeth: string[], action: DiagnosisAction, remember = true) => {
     if (!canSave || !currentChart || saveLock.current) return false;
     const operation = Symbol("tooth-condition-save");
     saveLock.current = operation;
@@ -112,7 +109,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
         headers: { "Request-Id": requestId() },
         body: JSON.stringify({
           teeth,
-          condition,
+          ...diagnosisAction(action).patch,
           expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart.teeth[tooth]?.revision ?? 0])),
         }),
       });
@@ -127,8 +124,8 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       generation.current += 1;
       setLoading(false);
       setChart(data);
-      if (teeth.length === 1 && condition) setLastAction(condition);
-      setNotice(teeth.length === 16 ? "Arch marked missing. Notes and history retained." : `${teeth[0]} · ${condition ? toothConditionLabels[condition] : "Current finding cleared"} saved.`);
+      if (remember) setLastAction(action);
+      setNotice(`${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${diagnosisAction(action).label} saved. Notes and history retained.`);
       return true;
     } catch (cause) {
       if (currentPatient.current === patientId && saveLock.current === operation) {
@@ -146,6 +143,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   return {
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
-    loading, saving, error, notice, lastAction, canSave, load, save,
+    loading, saving, error, notice, lastAction, canSave, load, saveAction,
+    save: (teeth: string[], condition: ToothCondition) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

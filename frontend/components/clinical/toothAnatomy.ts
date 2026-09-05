@@ -10,6 +10,20 @@ type ToothAnatomy = {
   grooves: string[];
 };
 
+// A schematic implant fixture, not a brand, measured size or treatment entry.
+// The apical tip is narrower than the cervical end beside the crown. Raised
+// oblique threads distinguish the screw from a natural root or a perforated post.
+export const implantScrewAnatomy = {
+  body: "M45 17 Q50 12 55 17 C60 27 64 53 68 84 L68 95 H32 L32 84 C36 53 40 27 45 17 Z",
+  collar: "M31 94 Q50 91 69 94 L65 105 H35 Z",
+  threads: [28, 37, 46, 55, 64, 73, 82].map((y) => {
+    const halfWidth = 11 + (y - 28) / 6;
+    const left = 50 - halfWidth;
+    const right = 50 + halfWidth;
+    return `M${left} ${y + 3} L${right} ${y - 1} L${right + 1} ${y + 2} L${left + 1} ${y + 6} Z`;
+  }),
+};
+
 const upperCentral: ToothAnatomy = {
   crown: "M32 99 C41 92 56 91 65 97 C74 104 80 119 82 136 C84 146 80 155 72 160 C61 165 43 164 32 159 C22 155 17 149 18 139 C19 122 23 107 32 99 Z",
   roots: ["M32 102 C34 84 34 67 38 49 C41 32 46 18 50 13 C53 9 58 11 58 17 C56 29 58 40 60 52 C62 70 64 86 65 100 C55 106 43 108 32 102 Z"],

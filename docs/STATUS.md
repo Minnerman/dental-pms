@@ -3,6 +3,38 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-05 (latest): PR #714 now includes the resumed diagnosis-only,
+  whole-tooth workflow. A shared rectangular palette and tooth-number context
+  menu expose the same conditions and independent movement/rotation actions.
+  Palette users choose an action, select multiple teeth, then explicitly Apply;
+  repeat remembers the last successful single- or multi-tooth action. Arch-wide
+  missing still requires confirmation. Current mode does not open root, crown,
+  surface or treatment-entry editors, and current tooth notes cannot inherit a
+  hidden surface selection from Planned mode. Planned/history workflows remain.
+  Forward means mesial (towards the arch centre), backward means distal, as
+  confirmed by the owner. Positional symbols are schematic, not measured angles.
+  Current implants use tapered threaded screw glyphs. Primary teeth display
+  British A–E labels while retaining canonical numeric storage identifiers.
+  Only tooth numbers pulse on hover/focus, with reduced-motion support; anatomy
+  no longer has a broad green selection halo or changes size on selection.
+  Empty first charts can show age-based, explicitly unconfirmed dentition
+  guidance. This guide never saves findings or infers missing teeth; it is not
+  a clinical diagnosis and existing chart observations are never overwritten.
+  Additive migration `0050_tooth_position_observations` adds nullable movement
+  and rotation columns without backfill. Attribute patches preserve omitted
+  fields and retain atomic revision checks, permissions and audit history.
+  Synthetic isolated verification: 52 relevant backend tests and 46 focused
+  browser/component cases passed. Production build, typecheck, focused lint,
+  Python compilation and diff checks passed. Six isolated health/auth/read
+  checkpoints passed instead of invoking default-stack operational scripts.
+  Migration #0050 upgrade/downgrade/re-upgrade passed on an explicitly empty
+  disposable observation table. Light/dark, wide/mobile and reduced-motion
+  previews were checked; screenshots contain synthetic patients only.
+  No R4 access, production changes, merge or deployment. PR #714 remains draft
+  and stacked on #713; resolve the parent before retargeting for master CI and
+  merge review. Production migrations #0049 and #0050, and deployment, require
+  separate explicit approval. Preserve observation data during rollback; do not
+  downgrade a populated table simply to roll back application code.
 - 2026-09-05: the owner expanded the resumed odontogram slice to native current
   tooth conditions. This follow-up is isolated on
   `codex/odontogram-baseline-tooth-actions`, stacked on visual-only PR #713.

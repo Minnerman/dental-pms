@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -84,8 +84,10 @@ class ToothNoteOut(BaseModel):
 class ToothConditionUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    teeth: list[str] = Field(min_length=1, max_length=16)
-    condition: ToothConditionValue | None
+    teeth: list[str] = Field(min_length=1, max_length=32)
+    condition: ToothConditionValue | None = None
+    movement: Literal["forward", "backward"] | None = None
+    rotation: Literal["clockwise", "anticlockwise"] | None = None
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
 
     @field_validator("teeth", mode="before")
@@ -116,13 +118,8 @@ class ToothConditionUpdate(BaseModel):
     def check_scope(self):
         if set(self.expected_revisions) != set(self.teeth):
             raise ValueError("expected_revisions must contain exactly the selected teeth")
-        if len(self.teeth) != 1:
-            upper = {f"U{side}{number}" for side in ("R", "L") for number in range(1, 9)}
-            lower = {f"L{side}{number}" for side in ("R", "L") for number in range(1, 9)}
-            if self.condition != ToothConditionValue.missing or set(self.teeth) not in (
-                upper, lower
-            ):
-                raise ValueError("batch updates must mark exactly one complete arch missing")
+        if not self.model_fields_set.intersection({"condition", "movement", "rotation"}):
+            raise ValueError("supply at least one condition, movement or rotation observation")
         if self.condition == ToothConditionValue.deciduous and any(
             int(tooth[-1]) > 5 for tooth in self.teeth
         ):
@@ -134,6 +131,8 @@ class ToothConditionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     condition: ToothConditionValue | None
+    movement: Literal["forward", "backward"] | None
+    rotation: Literal["clockwise", "anticlockwise"] | None
     revision: int
     updated_at: datetime
     updated_by: ActorOut
