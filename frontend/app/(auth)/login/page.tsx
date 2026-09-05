@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { login, setToken } from "@/lib/auth";
+import Icon from "@/components/ui/Icon";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+import styles from "./login.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("ChangeMe123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,7 +26,7 @@ export default function LoginPage() {
       if (mustChangePassword) {
         router.push("/change-password");
       } else {
-        router.push("/patients");
+        router.push("/");
       }
     } catch (err) {
       const message =
@@ -35,15 +38,14 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="page-center">
-      <section className="card" style={{ width: "min(440px, 100%)" }}>
+    <main className={`page-center ${styles.page}`}>
+      <div className={styles.theme}><ThemeToggle /></div>
+      <section className={`card ${styles.card}`}>
         <div className="stack">
           <div>
-            <div className="badge">Dental PMS</div>
-            <h1 style={{ margin: "12px 0 6px" }}>Sign in</h1>
-            <p style={{ margin: 0, color: "var(--muted)" }}>
-              Use your admin credentials to continue.
-            </p>
+            <div className={styles.brand}><span><Icon name="treatment" size={25} /></span>Dental PMS</div>
+            <h1>Welcome back</h1>
+            <p className={styles.subtitle}>Sign in to your practice workspace.</p>
           </div>
 
           <form onSubmit={onSubmit} className="stack">
@@ -54,6 +56,8 @@ export default function LoginPage() {
               <input
                 id="login-email"
                 className="input"
+                type="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
@@ -68,6 +72,7 @@ export default function LoginPage() {
                   id="login-password"
                   className="input"
                   type={showPassword ? "text" : "password"}
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
@@ -119,23 +124,18 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {error && <div className="notice">{error}</div>}
+            {error && <div className="notice" role="alert">{error}</div>}
 
             <button className="btn btn-primary" disabled={loading} type="submit">
               {loading ? "Signing in..." : "Sign in"}
             </button>
-            <p style={{ margin: 0, fontSize: 12, opacity: 0.6 }}>
-              API base: {process.env.NEXT_PUBLIC_API_BASE ?? "/api"}
-            </p>
           </form>
           <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
             <Link href="/forgot-password" style={{ textDecoration: "underline" }}>
               Forgot password?
             </Link>
           </p>
-          <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
-            Default admin is configured in <code>.env</code>.
-          </p>
+          <p className={styles.footer}>For authorised practice staff.</p>
         </div>
       </section>
     </main>

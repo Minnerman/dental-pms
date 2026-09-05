@@ -34,6 +34,7 @@ from app.routers.patient_documents import (
 )
 from app.routers.capabilities import router as capabilities_router
 from app.routers.config import router as config_router
+from app.routers.dashboard import router as dashboard_router
 from app.services.users import seed_initial_admin
 from app.services.capabilities import ensure_capabilities
 from app.services.document_templates import ensure_default_templates
@@ -89,6 +90,7 @@ def health():
 
 app.include_router(auth_router)
 app.include_router(config_router)
+app.include_router(dashboard_router)
 app.include_router(me_router)
 app.include_router(users_router)
 app.include_router(patients_router)

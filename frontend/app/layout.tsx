@@ -9,16 +9,15 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const themeScript = `
     (function () {
-      try {
-        var stored = localStorage.getItem("dental_pms_theme");
-        var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        var theme = stored || (prefersDark ? "dark" : "light");
-        document.documentElement.setAttribute("data-theme", theme);
-      } catch (e) {}
+      var stored;
+      try { stored = localStorage.getItem("dental_pms_theme"); } catch (e) {}
+      var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = stored === "dark" || stored === "light" ? stored : (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
     })();
   `;
   return (
-    <html lang="en">
+    <html lang="en" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
