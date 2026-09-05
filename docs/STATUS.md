@@ -20,6 +20,35 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   integer GBP pence. Confirmation and recall conversion are explicitly
   unavailable because those measurements are not recorded. No guessed R4 or
   historical clinical information is introduced.
+- The same layout slice now includes the owner's DentalPin-inspired Patients
+  directory: compact whole-row record links, initials, phone, active/archived
+  status, name/email/normalised-phone search, DOB/category filters, signed
+  ledger balances, debt filtering, five sort orders and bounded pagination.
+  Narrow screens retain DOB or a record-ID fallback; keyboard focus is
+  restored after clearing search or changing page. Existing patient creation,
+  record routes and the original `/patients` API contract remain unchanged.
+- The directory endpoint requires patient access and separately gates finance
+  and visit history. Ordinary searches enrich only the displayed patient IDs;
+  aggregate history is used before pagination only when a debt filter or
+  last-visit order needs it. Last visit means a completed, non-deleted native
+  appointment at or before now, including home visits. Balances match the
+  native ledger, not an overdue-invoice calculation. General do-not-contact
+  preferences are not recorded, so that filter is explicitly unavailable.
+- The first PR #715 CI run passed five jobs but failed its wider browser job
+  on three real patient-layout regressions. Compact header badges, a header
+  container breakpoint and start-aligned arch scrolling fix the oversized
+  header and two intercepted tooth clicks without changing tooth behavior or
+  weakening the existing tests. Those original clinical, desktop-density and
+  patient-responsive checks now pass in the isolated stack.
+- Patients-extension verification: 32 new directory backend tests, seven
+  relevant capability/patient/ledger tests and eight dashboard tests passed.
+  There are 31 unique focused browser passes across this update: 21 patient
+  directory/search/clinical/responsive cases, plus all 10 Home/sidebar cases.
+  The built application passed 13 selected checks, including real synthetic
+  ledger/appointment data, search, login and Home/sidebar navigation. Light,
+  dark, intermediate-width and mobile screenshots were visually reviewed.
+  Build, typecheck, lint, compilation and diff checks pass. Updated-head CI
+  remains the merge gate; no full-suite success is inferred from these tests.
 - Layout verification: 8 new dashboard backend tests and 19 adjacent targeted
   tests passed; 18 unique focused browser tests passed across dashboard,
   authentication, sidebar/search, patient layouts and appointment workflows.

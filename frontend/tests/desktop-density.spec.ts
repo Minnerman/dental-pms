@@ -81,3 +81,27 @@ test("mobile patient route contains wide controls inside their own scrolling sur
     .poll(() => routeShell.evaluate((element) => element.scrollWidth - element.clientWidth))
     .toBe(0);
 });
+
+test("patient header responds to the available sidebar workspace rather than viewport width alone", async ({ page, request }) => {
+  const patientId = await createPatient(request, {
+    first_name: "Synthetic",
+    last_name: `Sidebar header ${Date.now()}`,
+  });
+  await page.setViewportSize({ width: 1200, height: 720 });
+  await primePageAuth(page, request);
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, { waitUntil: "domcontentloaded" });
+  const header = page.getByTestId("patient-header");
+  await expect(header).toBeVisible({ timeout: 20_000 });
+  const columns = () => header.evaluate((element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
+  const fits = () => page.evaluate(() => {
+    const header = document.querySelector('[data-testid="patient-header"]')!;
+    return document.documentElement.scrollWidth <= window.innerWidth + 1 && header.scrollWidth <= header.clientWidth + 1;
+  });
+  await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "false");
+  await expect.poll(columns).toBe(2);
+  await expect.poll(fits).toBe(true);
+  await page.getByTestId("app-sidebar-toggle").click();
+  await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "true");
+  await expect.poll(columns).toBe(4);
+  await expect.poll(fits).toBe(true);
+});
