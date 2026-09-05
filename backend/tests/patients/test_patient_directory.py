@@ -312,7 +312,7 @@ def test_directory_endpoint_capabilities_apply_without_role_bypass(api_client):
     with SessionLocal() as db:
         # Direct synthetic user fixture avoids default grants; no password is
         # usable and the short-lived test token is never printed.
-        user = User(email=f"directory-viewer-{uuid4().hex}@example.test", full_name="Synthetic Viewer",
+        user = User(email=f"directory-viewer-{uuid4().hex}@example.com", full_name="Synthetic Viewer",
             hashed_password="synthetic-not-a-password-hash", role=Role.superadmin)
         db.add(user)
         db.flush()

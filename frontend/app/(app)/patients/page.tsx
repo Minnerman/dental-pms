@@ -119,6 +119,7 @@ export default function PatientsPage() {
 
   return <div className={styles.directory} data-testid="patients-directory">
     <header className={styles.header}><h1>Patients</h1>{canWrite && <Link href="/patients/new" className={`btn btn-primary ${styles.newPatient}`}><span aria-hidden="true">＋</span>New patient</Link>}</header>
+    {canRead && !canWrite && <div className={styles.message} role="status">You can view patients, but you cannot change them.</div>}
     {canRead && <>
       <div className={styles.toolbar}>
         <form className={styles.search} role="search" onSubmit={(event) => { event.preventDefault(); updateFilter({ query: query.trim() }); setRequestAttempt((value) => value + 1); }}>
