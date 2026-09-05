@@ -13,6 +13,7 @@ from app.models.capability import Capability, UserCapability
 from app.models.clinical import (
     Procedure,
     ProcedureStatus,
+    ToothCondition,
     ToothNote,
     TreatmentPlanItem,
     TreatmentPlanStatus,
@@ -28,6 +29,8 @@ from app.schemas.clinical import (
     ProcedureOut,
     TOOTH_PATTERN,
     ToothHistoryOut,
+    ToothConditionsOut,
+    ToothConditionUpdate,
     ToothNoteCreate,
     ToothNoteOut,
     TreatmentPlanItemCreate,
@@ -162,6 +165,137 @@ def _user_has_capability(db: Session, user_id: int, code: str) -> bool:
         )
         is not None
     )
+
+
+def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
+    conditions = db.scalars(
+        select(ToothCondition)
+        .where(ToothCondition.patient_id == patient_id)
+        .order_by(ToothCondition.tooth)
+    ).all()
+    note_teeth = list(
+        db.scalars(
+            select(ToothNote.tooth)
+            .where(ToothNote.patient_id == patient_id)
+            .distinct()
+            .order_by(ToothNote.tooth)
+        )
+    )
+    return ToothConditionsOut(
+        patient_id=patient_id,
+        teeth={condition.tooth: condition for condition in conditions},
+        note_teeth=note_teeth,
+    )
+
+
+@patient_router.get("/clinical/tooth-conditions", response_model=ToothConditionsOut)
+def get_tooth_conditions(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(CLINICAL_VIEW),
+):
+    get_patient_or_404(db, patient_id)
+    return _tooth_conditions_out(db, patient_id)
+
+
+@patient_router.post("/clinical/tooth-conditions", response_model=ToothConditionsOut)
+def update_tooth_conditions(
+    patient_id: int,
+    payload: ToothConditionUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(CLINICAL_WRITE),
+    _viewer: User = Depends(CLINICAL_VIEW),
+    request_id: str | None = Header(default=None, min_length=1, max_length=120),
+):
+    # All observations for a patient share this lock, including whole-arch writes
+    # and retries. Validate every revision before changing any selected tooth.
+    get_patient_or_404(db, patient_id, for_update=True)
+    action = "clinical.tooth_conditions.recorded"
+    request_values = payload.model_dump(mode="json")
+    duplicate = _duplicate_audit(
+        db, patient_id=patient_id, request_id=request_id, actions=[action]
+    )
+    if duplicate:
+        if (duplicate.after_json or {}).get("request") != request_values:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Request-Id was already used for a different tooth-condition update",
+            )
+        # Return the latest state, without replaying old values over newer edits.
+        return _tooth_conditions_out(db, patient_id)
+
+    existing = {
+        row.tooth: row
+        for row in db.scalars(
+            select(ToothCondition).where(
+                ToothCondition.patient_id == patient_id,
+                ToothCondition.tooth.in_(payload.teeth),
+            )
+        )
+    }
+    if any(
+        payload.expected_revisions[tooth]
+        != (existing[tooth].revision if tooth in existing else 0)
+        for tooth in payload.teeth
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tooth conditions changed. Refresh the chart before trying again",
+        )
+
+    before = {
+        tooth: {
+            "condition": existing[tooth].condition,
+            "revision": existing[tooth].revision,
+        }
+        if tooth in existing else {"condition": None, "revision": 0}
+        for tooth in payload.teeth
+    }
+    condition_value = payload.condition.value if payload.condition is not None else None
+    now = datetime.now(timezone.utc)
+    changed_teeth = []
+    for tooth in payload.teeth:
+        row = existing.get(tooth)
+        if row is not None and row.condition == condition_value:
+            continue
+        if row is None:
+            row = ToothCondition(
+                patient_id=patient_id,
+                tooth=tooth,
+                condition=condition_value,
+                revision=1,
+                created_by_user_id=user.id,
+                updated_by_user_id=user.id,
+                updated_at=now,
+            )
+            existing[tooth] = row
+        else:
+            row.condition = condition_value
+            row.revision += 1
+            row.updated_by_user_id = user.id
+            row.updated_at = now
+        db.add(row)
+        changed_teeth.append(tooth)
+    db.flush()
+    log_event(
+        db,
+        actor=user,
+        action=action,
+        entity_type="patient",
+        entity_id=str(patient_id),
+        request_id=request_id,
+        before_data={"teeth": before},
+        after_data={
+            "request": request_values,
+            "changed_teeth": changed_teeth,
+            "teeth": {
+                tooth: {"condition": existing[tooth].condition, "revision": existing[tooth].revision}
+                for tooth in payload.teeth
+            },
+        },
+    )
+    db.commit()
+    return _tooth_conditions_out(db, patient_id)
 
 
 @patient_router.get("/clinical/summary", response_model=ClinicalSummaryOut)

@@ -1,4 +1,4 @@
-/** Original R4-inspired adult silhouettes, drawn in a 100 × 170 box.
+/** Original R4-inspired tooth silhouettes, drawn in a 100 × 170 box.
  * These are schematic illustrations, not patient-specific root/anatomy findings.
  * Roots point up here; the renderer reflects the lower arch toward the surface map.
  * Crown and root paths stay separate so clinical overlays remain independent.
@@ -84,9 +84,54 @@ const lowerMolar: ToothAnatomy = {
   grooves: ["M28 134 C31 145 31 151 27 160", "M61 134 C62 147 57 153 60 161"],
 };
 
-export function getToothAnatomy(toothKey: string): ToothAnatomy {
+// Primary teeth use the same permanent-position slots only when the operator
+// explicitly records deciduous dentition. Positions 4/5 are primary molars,
+// not scaled permanent premolars. These remain schematic illustrations.
+const deciduousIncisor: ToothAnatomy = {
+  crown: "M31 109 C38 103 56 102 65 108 C74 115 80 127 80 139 C80 146 76 152 68 153 C54 155 40 155 29 151 C22 149 19 143 20 136 C21 124 24 115 31 109 Z",
+  roots: ["M31 111 C34 94 36 78 39 64 C41 50 45 38 50 35 C54 33 56 38 55 44 C53 61 59 88 65 111 Q48 118 31 111 Z"],
+  canals: ["M47 113 C47 88 49 61 51 42"],
+  grooves: [],
+};
+
+const deciduousCanine: ToothAnatomy = {
+  crown: "M31 109 C42 101 57 103 66 110 C75 118 81 131 78 141 C75 149 64 152 56 159 C52 163 48 162 44 158 C35 154 24 152 21 143 C18 135 23 118 31 109 Z",
+  roots: ["M31 111 C34 94 33 80 36 64 C39 45 44 25 50 23 C55 21 56 26 54 32 C53 52 61 79 66 112 Q48 119 31 111 Z"],
+  canals: ["M47 114 C47 85 47 55 51 31"],
+  grooves: ["M49 121 C48 134 49 144 51 153"],
+};
+
+const deciduousUpperMolar: ToothAnatomy = {
+  crown: "M22 107 C30 101 40 105 49 104 C60 102 70 103 78 109 C87 117 94 131 90 143 C87 151 81 156 74 152 C67 148 64 148 59 153 C52 159 46 158 40 152 C35 148 31 150 27 153 C19 157 11 151 10 143 C7 130 13 115 22 107 Z",
+  roots: [
+    "M37 112 C38 93 39 76 42 58 C43 44 46 28 51 26 C55 25 57 32 55 38 C53 57 57 82 63 112 Z",
+    "M22 111 C23 95 18 81 13 66 C8 51 6 42 10 40 C14 38 20 50 24 57 C32 74 38 92 40 114 Z",
+    "M59 112 C64 94 71 76 76 62 C80 49 87 38 91 41 C94 44 87 60 85 70 C80 87 78 99 78 112 Q69 118 59 112 Z",
+  ],
+  canals: ["M49 114 Q47 75 51 34", "M31 114 C27 89 18 60 12 46", "M69 114 C71 90 81 63 88 47"],
+  grooves: ["M30 132 Q34 143 27 153", "M63 131 Q59 141 59 153"],
+};
+
+const deciduousLowerMolar: ToothAnatomy = {
+  ...deciduousUpperMolar,
+  roots: [
+    "M22 111 C23 92 19 77 13 60 C9 49 6 40 10 38 C15 36 21 49 27 61 C36 79 42 95 43 114 Z",
+    "M55 113 C63 94 68 78 75 61 C81 46 88 34 92 39 C95 44 86 58 83 73 C79 89 78 102 78 113 Q67 119 55 113 Z",
+  ],
+  canals: ["M32 114 C30 91 18 59 12 44", "M68 115 C72 91 83 58 90 44"],
+};
+
+export function getToothAnatomy(
+  toothKey: string,
+  dentition: "permanent" | "deciduous" = "permanent"
+): ToothAnatomy {
   const upper = toothKey.startsWith("U");
   const position = Number(toothKey.slice(-1));
+  if (dentition === "deciduous" && position >= 1 && position <= 5) {
+    if (position <= 2) return deciduousIncisor;
+    if (position === 3) return deciduousCanine;
+    return upper ? deciduousUpperMolar : deciduousLowerMolar;
+  }
   if (position <= 2) return upper ? (position === 1 ? upperCentral : upperLateral) : lowerIncisor;
   if (position === 3) return canine;
   if (position <= 5) return upper ? (position === 4 ? upperPremolar : upperSecondPremolar) : lowerPremolar;

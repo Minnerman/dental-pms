@@ -3,6 +3,35 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-05: the owner expanded the resumed odontogram slice to native current
+  tooth conditions. This follow-up is isolated on
+  `codex/odontogram-baseline-tooth-actions`, stacked on visual-only PR #713.
+  Tooth labels are 70% larger (11px to 18.7px). Their context menu records
+  missing, deciduous (positions 1–5), implant, unerupted, impacted or present
+  conditions; repeat applies only the last successful single-tooth condition.
+  A confirmed all-in-arch-missing action changes exactly one 16-tooth arch.
+  Missing anatomy/surfaces disappear but labels, tooth notes and treatment
+  history remain accessible. Notes display yellow flags; Tooth details opens
+  the existing tooth history. Unerupted teeth show crown plus wavy gum above,
+  implants replace natural roots, and impacted crowns have a schematic
+  inclination (not a recorded clinical angle).
+  Current observations are separate from planned/history views and all billing.
+  New additive migration `0049_native_tooth_conditions` stores audited,
+  permission-checked, revision-protected observations; it does not backfill
+  default healthy teeth or change historical/R4 records. Errors block edits
+  without erasing last-known findings; pending saves survive tab changes.
+  Isolated synthetic verification: 48 relevant backend tests and 25 focused
+  browser/component tests passed, including no treatment/finance side effects,
+  note-save HTTP compatibility, stale writes, delayed refresh/save responses
+  and all four quadrant glyphs. A separate disposable database proved migration
+  upgrade/downgrade/re-upgrade; only the new table was added.
+  Final production build, typecheck, lint, diff checks and isolated
+  backend/frontend-proxy health/config checks passed.
+  No R4 access, production change, merge or deployment was performed.
+  PR #713 must be resolved before this stacked feature is retargeted to master
+  for required CI/merge review. Deployment and production migration #0049 each
+  still need explicit approval. Do not downgrade a populated observation table
+  as an application rollback; preserve its data.
 - 2026-09-05: the owner resumed only the odontogram tooth-shape improvement.
   The isolated branch starts at merged PR #712 (`d81bb96a`), also verified as
   the current production frontend runtime. Production is unchanged by this work.

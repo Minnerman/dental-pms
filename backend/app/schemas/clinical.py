@@ -1,10 +1,10 @@
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.clinical import ProcedureStatus, TreatmentPlanStatus
+from app.models.clinical import ProcedureStatus, ToothConditionValue, TreatmentPlanStatus
 from app.schemas.actor import ActorOut
 
 MAX_CLINICAL_TEXT_LENGTH = 2_000
@@ -79,6 +79,70 @@ class ToothNoteOut(BaseModel):
     note: str
     created_at: datetime
     created_by: ActorOut
+
+
+class ToothConditionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    teeth: list[str] = Field(min_length=1, max_length=16)
+    condition: ToothConditionValue | None
+    expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+
+    @field_validator("teeth", mode="before")
+    @classmethod
+    def normalize_teeth(cls, value):
+        if not isinstance(value, list) or any(
+            not isinstance(tooth, str) for tooth in value
+        ):
+            raise ValueError("teeth must be a list of tooth identifiers")
+        teeth = [_tooth(tooth) for tooth in value]
+        if len(set(teeth)) != len(teeth):
+            raise ValueError("teeth must not repeat")
+        return sorted(teeth)
+
+    @field_validator("expected_revisions", mode="before")
+    @classmethod
+    def normalize_revision_keys(cls, value):
+        if not isinstance(value, dict) or any(
+            not isinstance(tooth, str) for tooth in value
+        ):
+            raise ValueError("expected_revisions must map tooth identifiers to revisions")
+        normalized = {_tooth(tooth): revision for tooth, revision in value.items()}
+        if len(normalized) != len(value):
+            raise ValueError("expected_revisions must not repeat a tooth")
+        return normalized
+
+    @model_validator(mode="after")
+    def check_scope(self):
+        if set(self.expected_revisions) != set(self.teeth):
+            raise ValueError("expected_revisions must contain exactly the selected teeth")
+        if len(self.teeth) != 1:
+            upper = {f"U{side}{number}" for side in ("R", "L") for number in range(1, 9)}
+            lower = {f"L{side}{number}" for side in ("R", "L") for number in range(1, 9)}
+            if self.condition != ToothConditionValue.missing or set(self.teeth) not in (
+                upper, lower
+            ):
+                raise ValueError("batch updates must mark exactly one complete arch missing")
+        if self.condition == ToothConditionValue.deciduous and any(
+            int(tooth[-1]) > 5 for tooth in self.teeth
+        ):
+            raise ValueError("deciduous teeth are supported only in positions 1-5")
+        return self
+
+
+class ToothConditionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    condition: ToothConditionValue | None
+    revision: int
+    updated_at: datetime
+    updated_by: ActorOut
+
+
+class ToothConditionsOut(BaseModel):
+    patient_id: int
+    teeth: dict[str, ToothConditionOut]
+    note_teeth: list[str]
 
 
 class ProcedureCreate(BaseModel):

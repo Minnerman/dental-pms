@@ -3,7 +3,17 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base
@@ -19,6 +29,40 @@ class TreatmentPlanStatus(str, enum.Enum):
     declined = "declined"
     completed = "completed"
     cancelled = "cancelled"
+
+
+class ToothConditionValue(str, enum.Enum):
+    present = "present"
+    missing = "missing"
+    deciduous = "deciduous"
+    implant = "implant"
+    unerupted = "unerupted"
+    impacted = "impacted"
+
+
+class ToothCondition(Base, AuditMixin):
+    """Native current observations, deliberately separate from treatment/billing.
+
+    A null condition clears only the native override. Its revision remains so an
+    older editor cannot accidentally overwrite a later observation after reset.
+    """
+
+    __tablename__ = "tooth_conditions"
+    __table_args__ = (
+        UniqueConstraint("patient_id", "tooth", name="uq_tooth_conditions_patient_tooth"),
+        CheckConstraint("revision > 0", name="ck_tooth_conditions_revision"),
+        CheckConstraint(
+            "condition IS NULL OR condition IN "
+            "('present', 'missing', 'deciduous', 'implant', 'unerupted', 'impacted')",
+            name="ck_tooth_conditions_value",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    tooth: Mapped[str] = mapped_column(String(3), nullable=False)
+    condition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class ToothNote(Base):

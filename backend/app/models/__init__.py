@@ -24,6 +24,8 @@ from app.models.practice_schedule import PracticeHour, PracticeClosure, Practice
 from app.models.clinical import (
     Procedure,
     ProcedureStatus,
+    ToothCondition,
+    ToothConditionValue,
     ToothNote,
     TreatmentPlanItem,
     TreatmentPlanStatus,
@@ -106,6 +108,8 @@ __all__ = [
     "PracticeOverride",
     "Procedure",
     "ProcedureStatus",
+    "ToothCondition",
+    "ToothConditionValue",
     "ToothNote",
     "TreatmentPlanItem",
     "TreatmentPlanStatus",

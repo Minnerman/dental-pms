@@ -19,6 +19,8 @@ import OdontogramToothSvg, {
   type OdontogramToothRestoration,
   type OdontogramToothType,
 } from "@/components/clinical/OdontogramToothSvg";
+import BaselineToothMenu from "@/components/clinical/BaselineToothMenu";
+import { baselineGlyph, toothConditionLabels, useToothConditions, type ToothCondition } from "@/components/clinical/useToothConditions";
 import StatusIcon from "@/components/ui/StatusIcon";
 import Panel from "@/components/ui/Panel";
 import Table from "@/components/ui/Table";
@@ -175,7 +177,8 @@ const clinicalFeeMaxPence = 100_000_000;
 function clinicalMutationHeaders() {
   return {
     "Content-Type": "application/json",
-    "Request-Id": crypto.randomUUID(),
+    // randomUUID is unavailable on the practice's HTTP origin.
+    "Request-Id": crypto.randomUUID?.() ?? `clinical-${Date.now()}-${Array.from(crypto.getRandomValues(new Uint32Array(3))).join("-")}`,
   };
 }
 
@@ -1294,6 +1297,25 @@ export default function PatientDetailClient({
     canViewClinical && capabilities?.includes("clinical.write")
   );
   const clinicalPatientUnavailable = Boolean(patient?.deleted_at);
+  const baseline = useToothConditions(
+    patientId,
+    tab === "clinical" && clinicalCapabilitiesReady && canViewClinical && !clinicalPatientUnavailable,
+    canWriteClinical && clinicalViewMode === "current" && !clinicalPatientUnavailable
+  );
+  const loadBaselineConditions = baseline.load;
+
+  async function applyBaselineCondition(tooth: string, condition: ToothCondition) {
+    setChartActionMenu(null);
+    await baseline.save([tooth], condition);
+  }
+
+  async function markBaselineArchMissing(tooth: string) {
+    if (!baseline.canSave) return;
+    setChartActionMenu(null);
+    const upper = tooth.startsWith("U");
+    if (!window.confirm(`Mark all 16 teeth in the ${upper ? "upper" : "lower"} arch as missing? Tooth notes and treatment history will be kept. This does not record extractions or add charges.`)) return;
+    await baseline.save(upper ? upperTeeth : lowerTeeth, "missing");
+  }
   const clinicalAccessMode = !clinicalCapabilitiesReady
     ? "loading"
     : clinicalPatientUnavailable
@@ -1418,8 +1440,8 @@ export default function PatientDetailClient({
       const fallbackRect = fallbackElement?.getBoundingClientRect();
       const requestedLeft = position.clientX || fallbackRect?.left || 16;
       const requestedTop = position.clientY || fallbackRect?.bottom || 16;
-      const maxLeft = Math.max(12, window.innerWidth - 268);
-      const maxTop = Math.max(12, window.innerHeight - 270);
+      const maxLeft = Math.max(12, window.innerWidth - 342);
+      const maxTop = Math.max(12, window.innerHeight - (kind === "tooth" ? 590 : 270));
       setChartActionMenu({
         tooth,
         kind,
@@ -2429,6 +2451,7 @@ export default function PatientDetailClient({
       loadClinicalSummary(),
       loadTreatmentPlanOverlay(),
       loadToothState(),
+      loadBaselineConditions(),
     ]);
   }, [
     canViewClinical,
@@ -2437,6 +2460,7 @@ export default function PatientDetailClient({
     loadClinicalSummary,
     loadTreatmentPlanOverlay,
     loadToothState,
+    loadBaselineConditions,
   ]);
 
   async function loadChartingConfig() {
@@ -4787,10 +4811,11 @@ export default function PatientDetailClient({
       badges.push({ label: "H", title: "History" });
     }
     const toothState = (normalized ? toothStateByTooth.get(normalized) : undefined) ?? toothStateByTooth.get(tooth);
-    if (toothState?.missing) {
+    const currentFinding = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : null;
+    if (!currentFinding && toothState?.missing) {
       badges.push({ label: "M", title: "Missing tooth" });
     }
-    if (toothState?.extracted) {
+    if (!currentFinding && toothState?.extracted) {
       badges.push({ label: "X", title: "Extracted tooth" });
     }
     return badges;
@@ -9189,7 +9214,24 @@ export default function PatientDetailClient({
                       </div>
                     </div>
                   )}
-                  <div
+                  {clinicalViewMode === "current" && (
+                    <div className="clinical-baseline-feedback">
+                      <span role="status" data-testid="clinical-baseline-status">
+                        {baseline.saving ? "Saving current condition…" : baseline.loading ? "Loading current conditions…" : baseline.notice || "Right-click a tooth number to record its current condition."}
+                      </span>
+                      {baseline.error && (
+                        <div role="alert" data-testid="clinical-baseline-error">
+                          {baseline.error}{" "}
+                          <button className="btn btn-secondary" type="button"
+                            disabled={baseline.loading || baseline.saving}
+                            onClick={() => void baseline.load()}>
+                            Refresh conditions
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                <div
                     className="patient-route-clinical-grid"
                     data-testid="patient-clinical-grid"
                     data-has-tooth-selection={selectedTooth ? "true" : "false"}
@@ -9224,14 +9266,30 @@ export default function PatientDetailClient({
                                   } ${selectedToothSurfaces.join("") || "none"}`
                                 : `${chartActionMenu.tooth} · Whole tooth`}
                             </div>
+                            {chartActionMenu.kind === "tooth" && (
+                              <>
+                                <BaselineToothMenu
+                                  tooth={chartActionMenu.tooth}
+                                  enabled={baseline.canSave}
+                                  current={baseline.teeth[chartActionMenu.tooth]?.condition}
+                                  lastAction={baseline.lastAction}
+                                  onCondition={(condition) => void applyBaselineCondition(chartActionMenu.tooth, condition)}
+                                  onArchMissing={() => void markBaselineArchMissing(chartActionMenu.tooth)}
+                                />
+                                {clinicalViewMode !== "current" && (
+                                  <div className="clinical-chart-action-menu-hint">Switch to Current to record a condition.</div>
+                                )}
+                              </>
+                            )}
                             <button
                               className="btn btn-secondary"
                               type="button"
                               role="menuitem"
                               onClick={() => openToothTool("note")}
+                              disabled={!canWriteClinical}
                               data-testid="clinical-chart-menu-add-note"
                             >
-                              <Icon name="notes" size={14} /> Add clinical note
+                              <Icon name="notes" size={14} /> Add tooth note
                             </button>
                             <button
                               className="btn btn-secondary"
@@ -9259,7 +9317,7 @@ export default function PatientDetailClient({
                               onClick={() => openToothTool("timeline")}
                               data-testid="clinical-chart-menu-view-timeline"
                             >
-                              <Icon name="timeline" size={14} /> View tooth timeline
+                              <Icon name="timeline" size={14} /> Tooth details
                             </button>
                             {chartActionMenu.kind === "surface" && (
                               <button
@@ -9273,18 +9331,6 @@ export default function PatientDetailClient({
                                 data-testid="clinical-chart-menu-clear-surfaces"
                               >
                                 Clear selected surfaces
-                              </button>
-                            )}
-                            {chartActionMenu.kind === "tooth" && (
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                role="menuitem"
-                                disabled
-                                title="A discrete clinical-state model is required before movement and rotation can be recorded safely."
-                                data-testid="clinical-chart-menu-movement-disabled"
-                              >
-                                Movement / rotation · not yet available
                               </button>
                             )}
                             <div className="clinical-chart-action-menu-hint">
@@ -9312,7 +9358,8 @@ export default function PatientDetailClient({
                                   {upperTeeth.map((tooth, index) => {
                                     const isActive = selectedTooth === tooth;
                                     const toothBadges = getToothBadges(tooth);
-                                    const overlaySummary = getToothOverlaySummary(tooth);
+                                    const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
+                                    const overlaySummary = currentCondition && currentCondition !== "present" ? null : getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     const toothStateSummary = getToothStateSummary(tooth);
                                     const toothType = getOdontogramToothType(tooth);
@@ -9346,6 +9393,13 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           );
                                         }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                                            event.preventDefault();
+                                            applyChartSelection(tooth, []);
+                                            openChartActionMenu(tooth, "tooth", { clientX: 0, clientY: 0 }, event.currentTarget);
+                                          }
+                                        }}
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
@@ -9372,6 +9426,7 @@ export default function PatientDetailClient({
                                           toothKey={tooth}
                                           toothType={toothType}
                                           active={isActive}
+                                          baselineCondition={baselineGlyph(currentCondition)}
                                           selectedSurfaces={isActive ? selectedToothSurfaces : []}
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
@@ -9394,7 +9449,19 @@ export default function PatientDetailClient({
                                             openChartActionMenu(tooth, "surface", position);
                                           }}
                                         />
-                                        <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
+                                        {baseline.noteTeeth.has(tooth) && (
+                                          <span className="clinical-tooth-note-flag"
+                                            data-testid={`tooth-note-flag-${tooth}`}
+                                            role="img" aria-label={`Notes for ${tooth}`}
+                                            title="Tooth notes — open Tooth details"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              applyChartSelection(tooth, []);
+                                              openToothTool("timeline");
+                                            }} />
+                                        )}
+                                        <span className="clinical-tooth-label" data-testid={`tooth-label-${tooth}`}
+                                          title={currentCondition ? toothConditionLabels[currentCondition] : "No native current condition recorded"}>
                                           {tooth}
                                         </span>
                                         {overlaySummary && (
@@ -9544,7 +9611,8 @@ export default function PatientDetailClient({
                                   {lowerTeeth.map((tooth, index) => {
                                     const isActive = selectedTooth === tooth;
                                     const toothBadges = getToothBadges(tooth);
-                                    const overlaySummary = getToothOverlaySummary(tooth);
+                                    const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
+                                    const overlaySummary = currentCondition && currentCondition !== "present" ? null : getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     const toothStateSummary = getToothStateSummary(tooth);
                                     const toothType = getOdontogramToothType(tooth);
@@ -9578,6 +9646,13 @@ export default function PatientDetailClient({
                                             event.currentTarget
                                           );
                                         }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                                            event.preventDefault();
+                                            applyChartSelection(tooth, []);
+                                            openChartActionMenu(tooth, "tooth", { clientX: 0, clientY: 0 }, event.currentTarget);
+                                          }
+                                        }}
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
@@ -9604,6 +9679,7 @@ export default function PatientDetailClient({
                                           toothKey={tooth}
                                           toothType={toothType}
                                           active={isActive}
+                                          baselineCondition={baselineGlyph(currentCondition)}
                                           selectedSurfaces={isActive ? selectedToothSurfaces : []}
                                           restorations={toothStateSummary.restorations}
                                           missing={toothStateSummary.missing}
@@ -9626,7 +9702,19 @@ export default function PatientDetailClient({
                                             openChartActionMenu(tooth, "surface", position);
                                           }}
                                         />
-                                        <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 700 }}>
+                                        {baseline.noteTeeth.has(tooth) && (
+                                          <span className="clinical-tooth-note-flag"
+                                            data-testid={`tooth-note-flag-${tooth}`}
+                                            role="img" aria-label={`Notes for ${tooth}`}
+                                            title="Tooth notes — open Tooth details"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              applyChartSelection(tooth, []);
+                                              openToothTool("timeline");
+                                            }} />
+                                        )}
+                                        <span className="clinical-tooth-label" data-testid={`tooth-label-${tooth}`}
+                                          title={currentCondition ? toothConditionLabels[currentCondition] : "No native current condition recorded"}>
                                           {tooth}
                                         </span>
                                         {overlaySummary && (
