@@ -216,7 +216,7 @@ test("diary interaction parity: select, open, context menu, escape, enter", asyn
     fullPage: true,
   });
 
-  await page.getByRole("heading", { name: "Appointments" }).click();
+  await page.getByRole("heading", { name: "Schedule", exact: true }).click();
   await expect(page.getByTestId("appointments-context-menu")).toHaveCount(0);
 
   await eventCard.click({ button: "right" });
@@ -354,7 +354,7 @@ test("diary polish parity: shortcuts and context status action persist", async (
   await expect(diarySearch).toBeFocused();
   await diarySearch.fill(String(unique));
   await expect(reloadedEvent).toBeVisible();
-  await page.getByRole("heading", { name: "Appointments" }).click();
+  await page.getByRole("heading", { name: "Schedule", exact: true }).click();
 
   await expect(jumpDateInput).toHaveValue("2026-01-15");
   await page.keyboard.press(`${modKey}+ArrowRight`);
@@ -469,7 +469,7 @@ test("diary cut/copy paste guards repeat paste submit", async ({ page, request }
   );
 
   const modKey = process.platform === "darwin" ? "Meta" : "Control";
-  await page.getByRole("heading", { name: "Appointments" }).click();
+  await page.getByRole("heading", { name: "Schedule", exact: true }).click();
   await page.keyboard.press(`${modKey}+v`);
   await page.keyboard.press(`${modKey}+v`);
   await seenPasteRequestPromise;

@@ -38,9 +38,9 @@ def ensure_default_hours(db: Session) -> None:
 
 def load_schedule(db: Session) -> tuple[list[PracticeHour], list[PracticeClosure], list[PracticeOverride]]:
     ensure_default_hours(db)
-    hours = list(db.scalars(select(PracticeHour).order_by(PracticeHour.day_of_week)))
-    closures = list(db.scalars(select(PracticeClosure).order_by(PracticeClosure.start_date)))
-    overrides = list(db.scalars(select(PracticeOverride).order_by(PracticeOverride.date)))
+    hours = list(db.scalars(select(PracticeHour).order_by(PracticeHour.day_of_week, PracticeHour.start_time, PracticeHour.id)))
+    closures = list(db.scalars(select(PracticeClosure).order_by(PracticeClosure.start_date, PracticeClosure.end_date, PracticeClosure.id)))
+    overrides = list(db.scalars(select(PracticeOverride).order_by(PracticeOverride.date, PracticeOverride.start_time, PracticeOverride.id)))
     return hours, closures, overrides
 
 
@@ -51,31 +51,61 @@ def _is_date_closed(target: date, closures: list[PracticeClosure]) -> PracticeCl
     return None
 
 
+def get_practice_sessions(
+    target: date,
+    hours: list[PracticeHour],
+    closures: list[PracticeClosure],
+    overrides: list[PracticeOverride],
+) -> tuple[list[tuple[time, time]], str | None]:
+    day_overrides = [item for item in overrides if item.date == target]
+    if day_overrides:
+        # Be conservative about old malformed/mixed data: a closed override
+        # must not be hidden by row order or accidentally fall back to weekly hours.
+        closed = next((item for item in day_overrides if item.is_closed), None)
+        if closed:
+            return [], closed.reason or "Practice closed (override)."
+        return _open_sessions(day_overrides)
+
+    closure = _is_date_closed(target, closures)
+    if closure:
+        reason = closure.reason or "Practice closed (holiday)."
+        return [], reason
+
+    day_hours = [row for row in hours if row.day_of_week == target.weekday()]
+    if not day_hours or any(row.is_closed for row in day_hours):
+        return [], "Practice closed."
+    return _open_sessions(day_hours)
+
+
+def _open_sessions(rows) -> tuple[list[tuple[time, time]], str | None]:
+    if any(not row.start_time or not row.end_time or
+           row.start_time.tzinfo is not None or row.end_time.tzinfo is not None or
+           row.end_time <= row.start_time for row in rows):
+        return [], "Practice hours not configured."
+    sessions = sorted((row.start_time, row.end_time) for row in rows)
+    if any(current[0] < previous[1] for previous, current in zip(sessions, sessions[1:])):
+        return [], "Practice hours not configured."
+    # Adjacent sessions have no closed gap and can cover a single appointment.
+    merged: list[tuple[time, time]] = []
+    for start, end in sessions:
+        if merged and start == merged[-1][1]:
+            merged[-1] = (merged[-1][0], end)
+        else:
+            merged.append((start, end))
+    return merged, None
+
+
 def get_practice_window(
     target: date,
     hours: list[PracticeHour],
     closures: list[PracticeClosure],
     overrides: list[PracticeOverride],
 ) -> tuple[time | None, time | None, str | None]:
-    override = next((item for item in overrides if item.date == target), None)
-    if override:
-        if override.is_closed:
-            reason = override.reason or "Practice closed (override)."
-            return None, None, reason
-        if override.start_time and override.end_time:
-            return override.start_time, override.end_time, None
-
-    closure = _is_date_closed(target, closures)
-    if closure:
-        reason = closure.reason or "Practice closed (holiday)."
+    """Compatibility envelope for display only; session validation preserves gaps."""
+    sessions, reason = get_practice_sessions(target, hours, closures, overrides)
+    if not sessions:
         return None, None, reason
-
-    day_hours = {row.day_of_week: row for row in hours}.get(target.weekday())
-    if not day_hours or day_hours.is_closed:
-        return None, None, "Practice closed."
-    if not day_hours.start_time or not day_hours.end_time:
-        return None, None, "Practice hours not configured."
-    return day_hours.start_time, day_hours.end_time, None
+    return sessions[0][0], sessions[-1][1], None
 
 
 def validate_appointment_window(
@@ -85,6 +115,9 @@ def validate_appointment_window(
     closures: list[PracticeClosure],
     overrides: list[PracticeOverride],
 ) -> tuple[bool, str | None]:
+    """Advisory hours classification, not an appointment authorisation gate."""
+    if starts_at.tzinfo is None or starts_at.utcoffset() is None or ends_at.tzinfo is None or ends_at.utcoffset() is None:
+        return False, "Appointment times must include a timezone."
     if ends_at <= starts_at:
         return False, "Appointment end time must be after start time."
 
@@ -93,12 +126,11 @@ def validate_appointment_window(
     if start_local.date() != end_local.date():
         return False, "Appointments must start and end on the same day."
 
-    day_start, day_end, reason = get_practice_window(start_local.date(), hours, closures, overrides)
-    if not day_start or not day_end:
+    sessions, reason = get_practice_sessions(start_local.date(), hours, closures, overrides)
+    if not sessions:
         return False, reason or "Practice closed."
 
-    if start_local.time() < day_start or end_local.time() > day_end:
+    if not any(start_local.time() >= day_start and end_local.time() <= day_end for day_start, day_end in sessions):
         return False, "Appointment falls outside practice hours."
 
     return True, None
-

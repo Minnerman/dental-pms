@@ -3,6 +3,50 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 5 September 2026 — the Schedule/working-hours slice is isolated on top of
+  the Home/Patients layout PR #715. All six CI jobs for that layout PR
+  passed at `118f688`; its read-only patient guidance is restored. Neither
+  slice has been merged or deployed by this work. Paused odontogram PRs #713
+  and #714 remain separate and untouched.
+- Schedule now opens in calendar mode for a new user, uses a compact themed
+  day/week grid, and opens a labelled, keyboard-contained booking dialog from
+  a genuine right-click on an empty slot. Existing event context menus,
+  day sheet, note previews and permitted drag/resize workflows remain.
+  Duration choices include 180, 190, 210, 240, 300 and 360 minutes alongside
+  ordinary/custom durations. Out-of-hours appointments stay visible, receive
+  a red edge and remain bookable with existing appointment-write permission.
+- The seven-day practice-hours editor supports multiple sessions per day,
+  lunch breaks, a date calendar with whole/morning/afternoon closures, custom
+  date sessions and closure ranges. It preserves existing rows and requires
+  explicit Save. Half-day boundaries are visible/editable, based on a saved
+  session split where possible; otherwise 12:00 is clearly a suggested default.
+  Changing hours never cancels, moves or otherwise edits existing appointments.
+  Only existing superadmins can save schedule settings.
+- Session validation rejects incomplete, reversed, duplicate, overlapping or
+  mixed open/closed rows before any replacement write. Date-specific sessions
+  replace the whole weekly day and may reopen a range closure; an explicit
+  closed override wins. Adjacent sessions form continuous coverage, while a
+  lunch gap does not. Classification uses Europe/London dates and clock time.
+  Unavailable hours show an explicit warning instead of pretending to be open.
+  Appointment ordering, same-practice-day, capability, conflict and audit
+  safeguards remain; only the former opening-hours rejection is now advisory.
+- Schedule verification: 25 new backend session/permission/persistence
+  cases plus 33 relevant appointment reliability/conflict/lifecycle/audit cases
+  passed. Twenty pure frontend session/DST/legacy-data cases and 24 unique
+  focused browser cases passed (14 new Schedule/preview and 10 existing regressions).
+  One existing reschedule test skipped because its closed-form clinician
+  selector found no options; the real drag/resize and one-step undo tests passed.
+  Typecheck, lint, production-mode build, compilation, diff and isolated
+  health/config/auth/proxy checks passed. An initial local build inherited an
+  invalid test-image NODE_ENV; explicitly setting production mode fixed the
+  build without an application workaround. Seven built-browser checks also
+  passed, including real synthetic booking/settings persistence and a no-write
+  visual preview. Light/dark calendar and booking, split sessions, closures and
+  mobile screenshots were reviewed; calendar toolbar contrast is tested.
+- No migration, dependency change, R4 access/write, production access or
+  infrastructure change is part of this Schedule slice. Its PR is stacked on
+  PR #715; after the base is approved/merged, retarget to master and require
+  updated-head CI before any merge. Deployment needs separate explicit approval.
 - 5 September 2026 — the active, independent layout slice is based on merged
   PR #712 (`d81bb96`). The later tooth-shape PR #713 and draft baseline-action
   PR #714 remain paused, separate and unchanged; this slice does not include
