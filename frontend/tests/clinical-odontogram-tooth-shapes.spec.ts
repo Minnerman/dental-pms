@@ -23,6 +23,18 @@ test("larger tooth silhouettes remain legible and reachable at desktop and narro
     page.getByTestId(`tooth-crown-${tooth}`).getAttribute("d")
   ));
   expect(new Set(crowns).size).toBe(4);
+  expect(await page.getByTestId("tooth-crown-UR1").getAttribute("d")).not.toBe(
+    await page.getByTestId("tooth-crown-LR1").getAttribute("d")
+  );
+  expect(await page.getByTestId("tooth-crown-UR1").getAttribute("d")).not.toBe(
+    await page.getByTestId("tooth-crown-UR2").getAttribute("d")
+  );
+  // Each drawing has its own shading references; selection must not recolour another tooth.
+  const illustrationIds = await chart.locator("defs > [id]").evaluateAll((elements) =>
+    elements.map((element) => element.id)
+  );
+  expect(illustrationIds).toHaveLength(64);
+  expect(new Set(illustrationIds).size).toBe(64);
   expect(await page.getByTestId("tooth-anatomy-UL6").getAttribute("transform")).toContain("scale(-1 1)");
   expect(await page.getByTestId("tooth-anatomy-LL6").getAttribute("transform")).toContain("scale(-1 -1)");
   await expect(page.getByTestId("tooth-crown-groove-UR6-1")).toBeAttached();
@@ -55,6 +67,9 @@ test("larger tooth silhouettes remain legible and reachable at desktop and narro
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.mouse.move(0, 0);
   await chart.screenshot({ path: testInfo.outputPath("tooth-shapes-desktop.png") });
+  await page.getByRole("button", { name: "Toggle theme", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await chart.screenshot({ path: testInfo.outputPath("tooth-shapes-dark.png") });
 });
 
 test("surface markers use the surface map coordinates, not the reflected root coordinates", () => {

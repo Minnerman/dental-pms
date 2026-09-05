@@ -387,12 +387,36 @@
   grid-column: 1 / -1;
 }
 
-.shell :global(.patient-route-odontogram-grid) {
-  /* Keep the first tooth reachable when the arch overflows. */
-  justify-content: start;
-  grid-template-columns: repeat(16, minmax(64px, 1fr)) !important;
-  gap: 3px !important;
+.shell :global(.patient-route-odontogram-scroll) {
+  /* Both arches and their shared midline travel together on narrow screens. */
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  width: 100%;
+}
+
+.shell :global(.stack.patient-route-odontogram-canvas) {
+  /* Sixteen 64px tooth columns, sixteen 3px gaps and a 24px midline gutter. */
+  min-width: 1096px;
+  position: relative;
+  width: 100%;
+}
+
+.shell :global(.patient-route-odontogram-midline) {
+  border-left: 2px dotted rgba(100, 116, 139, 0.72);
+  bottom: 0;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transform: translateX(-1px);
+  width: 0;
+}
+
+.shell :global(.patient-route-odontogram-grid) {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(8, minmax(0, 1fr)) 24px repeat(8, minmax(0, 1fr));
   width: 100%;
 }
 
@@ -607,10 +631,6 @@
   .shell :global(.patient-route-chart-panel),
   .shell :global([data-testid="odontogram-overlay-legend"]) {
     overflow-x: auto;
-  }
-
-  .shell :global(.patient-route-odontogram-grid) {
-    min-width: 730px;
   }
 
   .shell :global(.patient-route-clinical-grid > .stack:first-child) {

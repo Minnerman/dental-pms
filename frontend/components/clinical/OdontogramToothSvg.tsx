@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useId } from "react";
 
 import { getToothAnatomy, getToothAnatomyWidth } from "./toothAnatomy";
 
@@ -275,6 +275,9 @@ function OdontogramToothSvgImpl({
   const extractedState = extracted || extractionFromRestoration;
   const stateDominant = missing || extractedState;
   const isUpperArch = toothKey.startsWith("U");
+  const illustrationId = useId().replace(/:/g, "");
+  const enamelFillId = `enamel-${illustrationId}`;
+  const rootFillId = `root-${illustrationId}`;
   const anatomy = getToothAnatomy(toothKey);
   const anatomyWidth = getToothAnatomyWidth(toothKey);
   const anatomyScaleX = toothKey[1] === "L" ? -anatomyWidth : anatomyWidth;
@@ -291,6 +294,19 @@ function OdontogramToothSvgImpl({
       data-testid={`tooth-svg-${toothKey}`}
       style={{ display: "block", overflow: "visible" }}
     >
+      <defs>
+        <radialGradient id={enamelFillId} cx="42%" cy="38%" r="72%">
+          <stop offset="0%" stopColor={active ? "#f0fff8" : "#ffffff"} />
+          <stop offset="72%" stopColor={active ? "#e5fff3" : "#fafbf8"} />
+          <stop offset="100%" stopColor={active ? "#d4f5e7" : "#e3e7e1"} />
+        </radialGradient>
+        <linearGradient id={rootFillId} x1="0%" x2="100%">
+          <stop offset="0%" stopColor="#e9e5b6" />
+          <stop offset="42%" stopColor="#ffffdf" />
+          <stop offset="78%" stopColor="#faf7cf" />
+          <stop offset="100%" stopColor="#e8e1ac" />
+        </linearGradient>
+      </defs>
       <g
         data-testid={`tooth-anatomy-${toothKey}`}
         data-anatomy-parts="crown root"
@@ -301,17 +317,19 @@ function OdontogramToothSvgImpl({
           <path
             key={`${toothKey}-root-${index}`}
             d={path}
-            fill="rgba(255, 251, 205, 0.96)"
-            stroke="rgba(17, 24, 39, 0.72)"
-            strokeWidth={1.35}
+            fill={`url(#${rootFillId})`}
+            stroke="#686958"
+            strokeWidth={1.05}
+            strokeLinejoin="round"
             data-testid={`tooth-root-${toothKey}-${index + 1}`}
           />
         ))}
         <path
           d={anatomy.crown}
-          fill={active ? "#e5fff3" : "#fffefa"}
-          stroke="rgba(17, 24, 39, 0.78)"
-          strokeWidth={1.55}
+          fill={`url(#${enamelFillId})`}
+          stroke="#444d49"
+          strokeWidth={1.2}
+          strokeLinejoin="round"
           data-testid={`tooth-crown-${toothKey}`}
         />
 

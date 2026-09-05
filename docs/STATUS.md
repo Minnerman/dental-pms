@@ -11,9 +11,14 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   orientation, and central/lateral/posterior width variation. The anatomical
   area is larger; the separate surface map, stored clinical state and billing
   logic are unchanged. Surface-marker positioning follows the new geometry.
-  Seven focused synthetic Playwright checks pass, including size stability,
+  Owner follow-up refines crowns toward the rounded R4 silhouettes, introduces
+  asymmetric curved roots and subtle enamel/root shading, and adds one full-height
+  dotted midline between both right/left arches. Both arches share a scroll canvas
+  and central gutter, preserving tooth size and midline alignment on narrow screens.
+  Eight focused synthetic Playwright checks pass, including size stability,
   click/right-click, multi-surface selection, overlays, keyboard/undo/redo and
-  responsive reachability at 1440/1024/390px. Frontend production build,
+  responsive reachability and midline alignment at 1440/1024/390px. Light/dark
+  synthetic previews are visually checked. Frontend production build,
   typecheck and focused lint pass. No dependencies, migrations, R4 access,
   production data changes, merge or deployment are included. Owner visual
   review is the next gate; the wider paused project remains out of scope.

@@ -9296,19 +9296,20 @@ export default function PatientDetailClient({
                         )}
                         <div key="clinical-chart-main" className="stack" style={{ gap: 16 }}>
                           <Panel title="Odontogram" className="patient-route-chart-panel">
-                            <div className="stack" style={{ gap: 16 }} data-testid="clinical-chart">
+                            <div className="patient-route-odontogram-scroll" data-testid="clinical-chart">
+                              <div className="stack patient-route-odontogram-canvas" data-testid="clinical-chart-canvas" style={{ gap: 16 }}>
+                                <div
+                                  className="patient-route-odontogram-midline"
+                                  data-testid="clinical-chart-midline"
+                                  aria-hidden="true"
+                                />
                               <div className="stack" style={{ gap: 8 }}>
                                 <div className="label">Upper</div>
                                 <div
                                   className="patient-route-odontogram-grid"
                                   data-testid="clinical-upper-arch"
-                                  style={{
-                                    display: "grid",
-                                    gap: 6,
-                                    gridTemplateColumns: "repeat(16, minmax(58px, 1fr))",
-                                  }}
                                 >
-                                  {upperTeeth.map((tooth) => {
+                                  {upperTeeth.map((tooth, index) => {
                                     const isActive = selectedTooth === tooth;
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
@@ -9348,6 +9349,7 @@ export default function PatientDetailClient({
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
+                                          gridColumn: index < 8 ? index + 1 : index + 2,
                                           padding: "6px 0 4px",
                                           minHeight: 84,
                                           fontWeight: 600,
@@ -9538,13 +9540,8 @@ export default function PatientDetailClient({
                                 <div
                                   className="patient-route-odontogram-grid"
                                   data-testid="clinical-lower-arch"
-                                  style={{
-                                    display: "grid",
-                                    gap: 6,
-                                    gridTemplateColumns: "repeat(16, minmax(58px, 1fr))",
-                                  }}
                                 >
-                                  {lowerTeeth.map((tooth) => {
+                                  {lowerTeeth.map((tooth, index) => {
                                     const isActive = selectedTooth === tooth;
                                     const toothBadges = getToothBadges(tooth);
                                     const overlaySummary = getToothOverlaySummary(tooth);
@@ -9584,6 +9581,7 @@ export default function PatientDetailClient({
                                         data-testid={`tooth-button-${tooth}`}
                                         data-selected={isActive ? "true" : "false"}
                                         style={{
+                                          gridColumn: index < 8 ? index + 1 : index + 2,
                                           padding: "6px 0 4px",
                                           minHeight: 84,
                                           fontWeight: 600,
@@ -9768,6 +9766,7 @@ export default function PatientDetailClient({
                                   );
                                 })}
                                 </div>
+                              </div>
                               </div>
                             </div>
                           </Panel>
