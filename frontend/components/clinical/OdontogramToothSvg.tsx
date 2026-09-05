@@ -3,6 +3,7 @@ import { memo, useId, type KeyboardEvent, type MouseEvent } from "react";
 import { getRootDrawingLandmarks, getToothAnatomy, getToothAnatomyWidth, implantScrewAnatomy } from "./toothAnatomy";
 import { britishToothLabel } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation } from "./rootDiagnosis";
+import type { CrownObservation } from "./crownDiagnosis";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
@@ -193,6 +194,10 @@ type Props = {
   baselineCondition?: OdontogramBaselineCondition;
   rootConditions?: Record<string, RootObservation>;
   rootSelected?: boolean;
+  crownCondition?: CrownObservation | null;
+  crownSelected?: boolean;
+  onCrownClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onCrownContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onRootClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onRootContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onSurfaceClick?: (surface: R4SurfaceKey, position: PointerPosition) => void;
@@ -210,6 +215,10 @@ function OdontogramToothSvgImpl({
   baselineCondition,
   rootConditions,
   rootSelected = false,
+  crownCondition,
+  crownSelected = false,
+  onCrownClick,
+  onCrownContextMenu,
   onRootClick,
   onRootContextMenu,
   onSurfaceClick,
@@ -225,6 +234,8 @@ function OdontogramToothSvgImpl({
       ? [index] : []
   ));
   const hasCurrentRootRecord = nativeRootIndexes.size > 0;
+  const supportsNativeCrown = !["missing", "unerupted"].includes(baselineCondition?.status ?? "");
+  const hasCurrentCrownRecord = supportsNativeCrown && crownCondition != null;
   const normalizedRestorations = restorations
     .map((restoration): NormalizedRestoration => ({
       type: normalizeRestorationType(restoration.type),
@@ -234,6 +245,9 @@ function OdontogramToothSvgImpl({
       meta: restoration.meta,
     }))
     .filter((restoration) => {
+      // Crown-only observations (including a neutral reset) do not erase root,
+      // surface or other historical findings. History passes no observation.
+      if (hasCurrentCrownRecord && ["crown", "extraction"].includes(restoration.type)) return false;
       // Explicit root observations take precedence over conflicting, whole-tooth
       // legacy absence/implant symbols without declaring the tooth healthy.
       if (hasCurrentRootRecord && ["implant", "extraction"].includes(restoration.type)) return false;
@@ -316,8 +330,8 @@ function OdontogramToothSvgImpl({
   const otherTooltip = tooltipForType("other");
 
   const extractionFromRestoration = hasRestoration("extraction");
-  const extractedState = !hasCurrentRootRecord && !baselineCondition?.status && (extracted || extractionFromRestoration);
-  const legacyMissing = !hasCurrentRootRecord && !baselineCondition?.status && missing;
+  const extractedState = !hasCurrentRootRecord && !hasCurrentCrownRecord && !baselineCondition?.status && (extracted || extractionFromRestoration);
+  const legacyMissing = !hasCurrentRootRecord && !hasCurrentCrownRecord && !baselineCondition?.status && missing;
   const stateDominant = legacyMissing || extractedState;
   const baselineMissing = baselineCondition?.status === "missing";
   const baselineImplant = baselineCondition?.status === "implant";
@@ -337,6 +351,19 @@ function OdontogramToothSvgImpl({
   const currentRootLayer = rootConditions !== undefined || Boolean(onRootClick || onRootContextMenu);
   const canRecordNaturalRoots = supportsNativeRoots && !stateDominant && !hasRestoration("implant");
   const rootControls = Boolean(onRootClick || onRootContextMenu) && showAnatomy && canRecordNaturalRoots;
+  const crownControls = Boolean(onCrownClick || onCrownContextMenu) && showAnatomy && supportsNativeCrown && !stateDominant;
+  const nativeCrown = hasCurrentCrownRecord ? crownCondition : null;
+  const crownKind = nativeCrown?.kind;
+  const crownRemoved = crownKind === "fractured";
+  const crownPrepared = crownKind === "missing";
+  const crownMaterialColors: Record<string, string> = {
+    metal: "#a7adb5", gold: "#e9c34e", porcelain: "#f0b5d0", composite: "#85c7a0",
+  };
+  const crownMaterial = crownKind ? crownMaterialColors[crownKind] : undefined;
+  const crownIssues = crownMaterial ? [...new Set(nativeCrown?.issues ?? [])] : [];
+  const crownDescription = `${displayLabel} crown area, ${crownRemoved ? "fractured, crown absent" : crownPrepared ? "missing crown, prepared stump" : crownKind ? `${crownKind} crown` : hasCurrentCrownRecord ? "current crown observation reset, unspecified" : "current crown finding unspecified"}${crownIssues.length ? `, ${crownIssues.map((issue) => issue.replaceAll("_", " ")).join(", ")}` : ""}`;
+  const crownClipId = `crown-clip-${illustrationId}`;
+  const crownDefectId = `crown-defect-${illustrationId}`;
   const rootRecorded = (index: number) => canRecordNaturalRoots && nativeRootIndexes.has(index);
   const anyRootRecorded = anatomy.roots.some((_, index) => rootRecorded(index));
   const rootAreaObservations = anatomy.roots.map((_, index) =>
@@ -378,7 +405,7 @@ function OdontogramToothSvgImpl({
       width="72"
       height="202"
       className="odontogram-tooth-svg"
-      role={rootControls ? "group" : "img"}
+      role={rootControls || crownControls ? "group" : "img"}
       aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
       data-baseline-status={baselineCondition?.status}
@@ -399,6 +426,13 @@ function OdontogramToothSvgImpl({
           <stop offset="78%" stopColor="#faf7cf" />
           <stop offset="100%" stopColor="#e8e1ac" />
         </linearGradient>
+        {(crownCondition !== undefined || crownControls) && <>
+          <clipPath id={crownClipId}><path d={anatomy.crown} /></clipPath>
+          <pattern id={crownDefectId} width="9" height="9" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L8 10 M1 -1 L10 8 M-1 8 L8 -1 M1 10 L10 1"
+              fill="none" stroke="#b91c1c" strokeWidth="1.3" />
+          </pattern>
+        </>}
         <linearGradient id={implantFillId} x1="0%" x2="100%">
           <stop offset="0%" stopColor="#7d939d" />
           <stop offset="38%" stopColor="#e3edf0" />
@@ -541,19 +575,67 @@ function OdontogramToothSvgImpl({
         )}
         <g transform={crownTransform} data-testid={`tooth-crown-appearance-${toothKey}`}
           data-impacted={baselineImpacted ? "true" : undefined}>
-        <path
+        <g data-testid={`clinical-crown-${toothKey}`}
+          className={crownControls ? "clinical-crown-target" : undefined}
+          data-crown-kind={hasCurrentCrownRecord ? crownKind ?? "unspecified" : "untouched"}
+          data-crown-recorded={hasCurrentCrownRecord ? "true" : "false"}
+          data-crown-issues={crownIssues.join(",")}
+          data-crown-selected={crownSelected && crownControls ? "true" : "false"}
+          role={crownControls ? "button" : undefined}
+          tabIndex={crownControls ? 0 : undefined}
+          aria-label={crownControls ? `${displayLabel} crown area` : undefined}
+          aria-pressed={crownControls ? crownSelected : undefined}
+          pointerEvents={crownControls ? "visiblePainted" : "none"}
+          onClick={crownControls ? (event) => {
+            event.preventDefault(); event.stopPropagation();
+            (onCrownClick ?? onCrownContextMenu)?.(event);
+          } : undefined}
+          onContextMenu={crownControls ? (event) => {
+            event.preventDefault(); event.stopPropagation();
+            (onCrownContextMenu ?? onCrownClick)?.(event);
+          } : undefined}
+          onKeyDown={crownControls ? (event) => {
+            const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+            if (!context && event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault(); event.stopPropagation();
+            (context ? onCrownContextMenu ?? onCrownClick : onCrownClick ?? onCrownContextMenu)?.(event);
+          } : undefined}
+        >
+        {(crownCondition !== undefined || crownControls) && <title>{crownDescription}</title>}
+        {!crownRemoved && !crownPrepared && <path
           d={anatomy.crown}
-          fill={`url(#${enamelFillId})`}
+          fill={crownMaterial ?? `url(#${enamelFillId})`}
           stroke="#444d49"
           strokeWidth={1.2}
           strokeLinejoin="round"
           data-testid={`tooth-crown-${toothKey}`}
-        />
+          pointerEvents="none"
+        />}
 
-        {anatomy.grooves.map((path, index) => (
+        {!crownRemoved && !crownPrepared && anatomy.grooves.map((path, index) => (
           <path key={index} d={path} fill="none" stroke="#60665f" strokeWidth={1}
-            strokeLinecap="round" data-testid={`tooth-crown-groove-${toothKey}-${index + 1}`} />
+            strokeLinecap="round" pointerEvents="none" data-testid={`tooth-crown-groove-${toothKey}-${index + 1}`} />
         ))}
+        {crownPrepared && <g data-testid={`clinical-crown-stump-${toothKey}`} pointerEvents="none">
+          <path d="M28 101 Q50 95 72 101 L66 137 Q50 144 34 137 Z"
+            fill="#efe3b7" stroke="#796f53" strokeWidth="1.4" strokeLinejoin="round" />
+          <path d="M34 137 Q50 130 66 137 Q50 144 34 137 Z"
+            fill="#fff4d1" stroke="#796f53" strokeWidth="1.1" />
+        </g>}
+        {crownIssues.length > 0 && <g clipPath={`url(#${crownClipId})`} pointerEvents="none">
+          {crownIssues.includes("decayed") && <path
+            data-testid={`clinical-crown-issue-${toothKey}-decayed`}
+            d="M62 120 Q68 117 73 123 L71 130 Q76 138 68 140 Q61 143 57 135 L60 129 Q56 124 62 120 Z"
+            fill="#c52c3c" stroke="#8b1724" strokeWidth="1.4" />}
+          {crownIssues.includes("defective") && <path data-testid={`clinical-crown-issue-${toothKey}-defective`}
+            d={anatomy.crown} fill={`url(#${crownDefectId})`} />}
+          {crownIssues.includes("fractured") && <path data-testid={`clinical-crown-issue-${toothKey}-fractured`}
+            d="M46 96 L55 115 L45 129 L57 143 L50 168" fill="none" stroke="#b91c1c" strokeWidth="3" strokeLinejoin="round" />}
+          {crownIssues.includes("poor_fitting") && <g data-testid={`clinical-crown-issue-${toothKey}-poor_fitting`}>
+            <path d="M12 105 Q50 111 88 105" fill="none" stroke="#fff5ec" strokeWidth="6" />
+            <path d="M12 102 Q50 108 88 102 M12 108 Q50 114 88 108" fill="none" stroke="#b91c1c" strokeWidth="2" />
+          </g>}
+        </g>}
 
         {hasRestoration("crown") && (
           <path
@@ -564,6 +646,15 @@ function OdontogramToothSvgImpl({
             data-testid={`tooth-anatomy-restoration-${toothKey}-crown`}
           />
         )}
+        {crownControls && <>
+          <path className="clinical-crown-halo" d={anatomy.crown} fill="none"
+            stroke="var(--accent, #00bcea)" strokeWidth="6" pointerEvents="none" />
+          {crownSelected && !crownRemoved && <path className="clinical-crown-selection" d={crownPrepared ? "M28 101 Q50 95 72 101 L66 137 Q50 144 34 137 Z" : anatomy.crown}
+            fill="none" stroke="var(--accent, #00bcea)" strokeWidth="1.8" opacity=".65" pointerEvents="none" />}
+          <rect data-testid={`clinical-crown-hit-${toothKey}`} x="0" y="85" width="100" height="90"
+            fill="transparent" clipPath={`url(#${crownClipId})`} pointerEvents="all" />
+        </>}
+        </g>
         </g>
 
         {hasRestoration("root_canal") && remainingLegacyCanals.length > 0 && (

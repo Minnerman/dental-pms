@@ -3,6 +3,42 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-05 (crown diagnosis): Current now has separate tooth, whole-root-area
+  and crown layers. Click a crown to replace the bottom palette with Crown
+  fractured, Crown missing, Metallic, Gold, Porcelain, Composite and Reset crown.
+  Choose a finding and optional material conditions, select several crown areas,
+  then explicitly Apply. Right-click/keyboard context opens the same crown choices;
+  that menu stages its selection before a single-tooth Apply. Crown/menu text is
+  18px; cyan hover/focus pulses respect reduced motion and never resize the tooth.
+  Crown fractured removes only the crown silhouette, retaining roots and a stable
+  re-entry target. Crown missing shows a prepared stump. Material colours are
+  silver-grey, yellow, pink and green. Decayed, Defective, Fractured and Poor fitting
+  may be combined on material crowns, shown as red spot, mesh, crack and cervical
+  gap respectively. Material fracture is distinct from the broken-away crown kind.
+  No selected subcondition means unspecified, never inferred sound. One selected
+  crown can open the existing tooth-note editor; notes are not duplicated in bulk.
+  Root/crown changes preserve each other, and notes/history/plans/finance remain.
+  Whole-tooth reset or incompatible/dentition transitions clear both anatomical
+  layers atomically with before/after audit. Patient/tab/view/layer switches clear
+  drafts. Native missing/unerupted teeth cannot receive crowns; implant crowns can.
+  Additive migration 0053_crown_observation stores a nullable JSONB crown object.
+  SQL NULL means untouched; a neutral reset object remains distinct. No backfill
+  or old migration edits. Downgrade refuses any non-null crown finding, including
+  reset objects, before DDL. Root/tooth/crown share patient locks, exact revisions,
+  pending-save protection and endpoint-aware idempotency. Invalid/stale batches
+  reject atomically; no treatment/finance records are created by diagnosis.
+  Verification: 91 backend cases passed (34 crown, 37 root, 13 tooth, seven
+  reliability); 32 component cases passed (seven crown, 11 root, 14 existing).
+  Final production build and all 33 focused browser cases passed, including all
+  eight new crown workflows and 25 existing tooth/root/palette/shape/midline cases.
+  Typecheck/lint/compilation/diff checks and six isolated health/auth/read checks
+  passed; final synthetic light/dark/mobile previews were visually inspected.
+  Migration 0053 empty downgrade/re-upgrade and populated-data refusal passed in
+  disposable storage. Full backend/default-stack operational wrappers were not
+  run; scoped isolated equivalents were used. No R4 access, production changes,
+  merge or deployment. PR #714
+  remains draft on #713; resolve its parent before master CI/merge review.
+  Production migrations #0049–0053 and deployment need separate explicit approval.
 - 2026-09-05 (whole-root-area correction): the owner clarified that root diagnosis
   applies to the entire root area belonging to each tooth, not separate roots.
   This supersedes the individual-root authoring described in the earlier entry.

@@ -5,12 +5,14 @@ import { apiFetch } from "@/lib/auth";
 import type { OdontogramBaselineCondition } from "./OdontogramToothSvg";
 import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothCondition } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation, type RootPatch } from "./rootDiagnosis";
+import { crownDiagnosisLabel, type CrownObservation } from "./crownDiagnosis";
 export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
 type ConditionRow = DiagnosisPatch & {
   condition: ToothCondition | null;
   revision: number;
   root_observations?: Record<string, RootObservation>;
+  crown_observation?: CrownObservation | null;
   updated_at: string;
   updated_by: { id: number; email: string; role: string } | null;
 };
@@ -153,10 +155,16 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
     }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · Whole root area · ${"condition" in patch ? rootConditionLabel(patch.condition) : patch.apicectomy ? "Apicectomy" : "Apicectomy marker removed"}`);
 
+  const saveCrowns = (teeth: string[], observation: CrownObservation) =>
+    saveObservation(`/api/patients/${patientId}/clinical/crown-conditions`, {
+      teeth, ...observation,
+      expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
+    }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${crownDiagnosisLabel(observation)}`);
+
   return {
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
-    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots,
+    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns,
     save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

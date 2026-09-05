@@ -34,12 +34,14 @@ test("larger tooth silhouettes remain legible and reachable at desktop and narro
     elements.map((element) => element.id)
   );
   // Three shading references per tooth are unchanged; Current now also has
-  // independent root hatch/hit/clip definitions, all globally unique.
+  // independent root and crown hatch/hit/clip definitions, all globally unique.
   await expect(chart.locator("defs > radialGradient, defs > linearGradient")).toHaveCount(96);
   await expect(chart.locator('defs > pattern[id^="root-defect-"]')).toHaveCount(32);
   await expect(chart.locator('defs > clipPath[id^="root-hit-"]')).toHaveCount(32);
   await expect(chart.locator('defs > clipPath[id^="root-clip-"]')).toHaveCount(52);
-  expect(illustrationIds).toHaveLength(212);
+  await expect(chart.locator('defs > pattern[id^="crown-defect-"]')).toHaveCount(32);
+  await expect(chart.locator('defs > clipPath[id^="crown-clip-"]')).toHaveCount(32);
+  expect(illustrationIds).toHaveLength(276);
   expect(new Set(illustrationIds).size).toBe(illustrationIds.length);
   expect(await page.getByTestId("tooth-anatomy-UL6").getAttribute("transform")).toContain("scale(-1 1)");
   expect(await page.getByTestId("tooth-anatomy-LL6").getAttribute("transform")).toContain("scale(-1 -1)");

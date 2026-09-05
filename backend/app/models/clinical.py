@@ -74,6 +74,10 @@ class ToothCondition(Base, AuditMixin):
             "root_observations - '1' - '2' - '3' = '{}'::jsonb",
             name="ck_tooth_conditions_root_keys",
         ),
+        CheckConstraint(
+            "crown_observation IS NULL OR jsonb_typeof(crown_observation) = 'object'",
+            name="ck_tooth_conditions_crown_object",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -85,6 +89,8 @@ class ToothCondition(Base, AuditMixin):
     root_observations: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
+    # SQL NULL is no current override; a non-null neutral object is a reset.
+    crown_observation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

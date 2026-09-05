@@ -25,6 +25,7 @@ from app.schemas.clinical import (
     BpeOut,
     BpeUpdate,
     ClinicalSummaryOut,
+    CrownConditionUpdate,
     ProcedureCreate,
     ProcedureOut,
     RootConditionUpdate,
@@ -47,7 +48,9 @@ router = APIRouter(prefix="/treatment-plan", tags=["clinical"])
 
 CLINICAL_VIEW = require_capability("clinical.view")
 CLINICAL_WRITE = require_capability("clinical.write")
-OBSERVATION_AUDIT_ACTIONS = ["clinical.tooth_conditions.recorded", "clinical.root_conditions.recorded"]
+OBSERVATION_AUDIT_ACTIONS = [
+    "clinical.tooth_conditions.recorded", "clinical.root_conditions.recorded", "clinical.crown_conditions.recorded",
+]
 ACTIVE_APPOINTMENT_STATUSES = {
     AppointmentStatus.booked,
     AppointmentStatus.arrived,
@@ -197,11 +200,12 @@ def _tooth_condition_snapshot(row: ToothCondition | None) -> dict:
         "movement": row.movement if row else None,
         "rotation": row.rotation if row else None,
         "root_observations": row.root_observations if row else {},
+        "crown_observation": row.crown_observation if row else None,
         "revision": row.revision if row else 0,
     }
 
 
-def _whole_tooth_clears_roots(row: ToothCondition | None, observations: dict) -> bool:
+def _whole_tooth_clears_anatomy_observations(row: ToothCondition | None, observations: dict) -> bool:
     if "condition" not in observations:
         return False
     condition = observations["condition"]
@@ -278,8 +282,9 @@ def update_tooth_conditions(
     changed_teeth = []
     for tooth in payload.teeth:
         row = existing.get(tooth)
-        clear_roots = _whole_tooth_clears_roots(row, observations)
-        if row is not None and all(getattr(row, key) == value for key, value in observations.items()) and not (clear_roots and row.root_observations):
+        clear_anatomy = _whole_tooth_clears_anatomy_observations(row, observations)
+        if (row is not None and all(getattr(row, key) == value for key, value in observations.items())
+                and not (clear_anatomy and (row.root_observations or row.crown_observation is not None))):
             continue
         if row is None:
             row = ToothCondition(
@@ -295,9 +300,10 @@ def update_tooth_conditions(
         else:
             for key, value in observations.items():
                 setattr(row, key, value)
-            if clear_roots:
+            if clear_anatomy:
                 # Replacing the map preserves the pre-change audit snapshot.
                 row.root_observations = {}
+                row.crown_observation = None
             row.revision += 1
             row.updated_by_user_id = user.id
             row.updated_at = now
@@ -401,6 +407,74 @@ def update_root_conditions(
         before_data={"teeth": before},
         after_data={"request": request_values, "changed_teeth": list(changed_roots),
                     "changed_roots": changed_roots,
+                    "teeth": {tooth: _tooth_condition_snapshot(existing[tooth]) for tooth in payload.teeth}},
+    )
+    db.commit()
+    return _tooth_conditions_out(db, patient_id)
+
+
+@patient_router.post("/clinical/crown-conditions", response_model=ToothConditionsOut)
+def update_crown_conditions(
+    patient_id: int,
+    payload: CrownConditionUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(CLINICAL_WRITE),
+    _viewer: User = Depends(CLINICAL_VIEW),
+    request_id: str | None = Header(default=None, min_length=1, max_length=120),
+):
+    # Crown/root/tooth changes are one revision domain. Nothing is inferred from
+    # treatment history, and every selected tooth validates before any write.
+    get_patient_or_404(db, patient_id, for_update=True)
+    action = "clinical.crown_conditions.recorded"
+    request_values = payload.model_dump(mode="json")
+    duplicate = _duplicate_audit(
+        db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS,
+    )
+    if duplicate:
+        if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                detail="Request-Id was already used for a different tooth observation")
+        return _tooth_conditions_out(db, patient_id)
+
+    existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
+        ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(payload.teeth),
+    ))}
+    if any(payload.expected_revisions[tooth] != (existing[tooth].revision if tooth in existing else 0)
+           for tooth in payload.teeth):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+            detail="Tooth conditions changed. Refresh the chart before trying again")
+    if any(row.condition in {"missing", "unerupted"} for row in existing.values()):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Crown observations cannot be recorded for a missing or unerupted tooth")
+
+    before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in payload.teeth}
+    observation = {"kind": payload.kind, "issues": payload.issues}
+    changed_teeth = []
+    now = datetime.now(timezone.utc)
+    for tooth in payload.teeth:
+        row = existing.get(tooth)
+        if row is not None and row.crown_observation == observation:
+            continue
+        # Each row receives a new value; neither other teeth nor before-audit
+        # snapshots share a mutable object with this replacement.
+        crown = {"kind": observation["kind"], "issues": list(observation["issues"])}
+        if row is None:
+            row = ToothCondition(patient_id=patient_id, tooth=tooth, revision=1,
+                crown_observation=crown, created_by_user_id=user.id,
+                updated_by_user_id=user.id, updated_at=now)
+            existing[tooth] = row
+        else:
+            row.crown_observation = crown
+            row.revision += 1
+            row.updated_by_user_id = user.id
+            row.updated_at = now
+        db.add(row)
+        changed_teeth.append(tooth)
+    db.flush()
+    log_event(db, actor=user, action=action,
+        entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        before_data={"teeth": before},
+        after_data={"request": request_values, "changed_teeth": changed_teeth,
                     "teeth": {tooth: _tooth_condition_snapshot(existing[tooth]) for tooth in payload.teeth}},
     )
     db.commit()

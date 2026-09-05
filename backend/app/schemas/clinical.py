@@ -177,6 +177,53 @@ class RootConditionUpdate(BaseModel):
         return self
 
 
+CrownKind = Literal["fractured", "missing", "metal", "gold", "porcelain", "composite"]
+CrownIssue = Literal["decayed", "defective", "fractured", "poor_fitting"]
+
+
+class CrownObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: CrownKind | None
+    issues: list[CrownIssue] = Field(max_length=4)
+
+    @field_validator("issues", mode="before")
+    @classmethod
+    def canonical_issues(cls, value):
+        if not isinstance(value, list) or any(not isinstance(issue, str) for issue in value):
+            raise ValueError("issues must be a list of crown issue identifiers")
+        if len(set(value)) != len(value):
+            raise ValueError("issues must not repeat")
+        return sorted(value)
+
+    @model_validator(mode="after")
+    def check_material_issues(self):
+        if self.issues and self.kind not in {"metal", "gold", "porcelain", "composite"}:
+            raise ValueError("issues apply only to a material crown")
+        return self
+
+
+class CrownConditionUpdate(CrownObservation):
+    teeth: list[str] = Field(min_length=1, max_length=32)
+    expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+
+    @field_validator("teeth", mode="before")
+    @classmethod
+    def normalize_teeth(cls, value):
+        return ToothConditionUpdate.normalize_teeth(value)
+
+    @field_validator("expected_revisions", mode="before")
+    @classmethod
+    def normalize_revision_keys(cls, value):
+        return ToothConditionUpdate.normalize_revision_keys(value)
+
+    @model_validator(mode="after")
+    def check_scope(self):
+        if set(self.expected_revisions) != set(self.teeth):
+            raise ValueError("expected_revisions must contain exactly the selected teeth")
+        return self
+
+
 class ToothConditionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -184,6 +231,7 @@ class ToothConditionOut(BaseModel):
     movement: Literal["forward", "backward"] | None
     rotation: Literal["clockwise", "anticlockwise"] | None
     root_observations: dict[Literal["1", "2", "3"], RootObservation]
+    crown_observation: CrownObservation | None
     revision: int
     updated_at: datetime
     updated_by: ActorOut
