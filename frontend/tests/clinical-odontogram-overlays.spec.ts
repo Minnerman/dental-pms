@@ -280,6 +280,12 @@ test("clinical odontogram renders R4 overlays with filters and tooth drill-down"
     "data-surface",
     "M"
   );
+  const marker = await page.getByTestId("tooth-surface-overlay-15-M").boundingBox();
+  const surface = await page.getByTestId("tooth-surface-UR5-M").boundingBox();
+  expect(marker!.x + marker!.width / 2).toBeGreaterThan(surface!.x);
+  expect(marker!.x + marker!.width / 2).toBeLessThan(surface!.x + surface!.width);
+  expect(marker!.y + marker!.height / 2).toBeGreaterThan(surface!.y);
+  expect(marker!.y + marker!.height / 2).toBeLessThan(surface!.y + surface!.height);
   await expect(page.getByTestId("overlay-unassigned-items")).toContainText(
     "Emergency Appointment"
   );

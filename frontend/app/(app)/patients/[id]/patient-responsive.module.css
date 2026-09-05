@@ -387,18 +387,48 @@
   grid-column: 1 / -1;
 }
 
-.shell :global(.patient-route-odontogram-grid) {
-  justify-content: center;
+.shell :global(.patient-route-odontogram-scroll) {
+  /* Both arches and their shared midline travel together on narrow screens. */
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   width: 100%;
 }
 
+.shell :global(.stack.patient-route-odontogram-canvas) {
+  /* Sixteen 64px tooth columns, sixteen 3px gaps and a 24px midline gutter. */
+  min-width: 1096px;
+  position: relative;
+  width: 100%;
+}
+
+.shell :global(.patient-route-odontogram-midline) {
+  border-left: 2px dotted rgba(100, 116, 139, 0.72);
+  bottom: 0;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transform: translateX(-1px);
+  width: 0;
+}
+
+.shell :global(.patient-route-odontogram-grid) {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(8, minmax(0, 1fr)) 24px repeat(8, minmax(0, 1fr));
+  width: 100%;
+}
+
 .shell :global(.patient-route-odontogram-grid > button) {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   background: transparent !important;
   border-color: transparent !important;
   border-radius: 7px !important;
   min-width: 0;
-  min-height: 158px !important;
+  min-height: 210px !important;
   padding: 4px 0 3px !important;
 }
 
@@ -409,8 +439,23 @@
 }
 
 .shell :global(.odontogram-tooth-svg) {
-  height: 122px;
-  width: 64px;
+  height: auto;
+  width: 100%;
+  max-width: 88px;
+  aspect-ratio: 100 / 280;
+}
+
+.shell :global(.patient-route-odontogram-grid > button > div:first-child) {
+  width: 100%;
+}
+
+.shell :global(.odontogram-surface-overlays) {
+  /* Match the SVG box, excluding the tooth label and any badges below it. */
+  inset: 4px auto auto 50% !important;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 88px;
+  aspect-ratio: 100 / 280;
 }
 
 .shell :global(.patient-clinical-tools) {
@@ -586,10 +631,6 @@
   .shell :global(.patient-route-chart-panel),
   .shell :global([data-testid="odontogram-overlay-legend"]) {
     overflow-x: auto;
-  }
-
-  .shell :global(.patient-route-odontogram-grid) {
-    min-width: 730px;
   }
 
   .shell :global(.patient-route-clinical-grid > .stack:first-child) {
