@@ -181,3 +181,12 @@ def test_embedded_browser_smoke_blocks_write_methods_before_network() -> None:
     assert 'page.route("**/api/**"' in SMOKE.NODE_SMOKE
     assert 'route.abort("blockedbyclient")' in SMOKE.NODE_SMOKE
     assert 'new Set(["POST", "PUT", "PATCH", "DELETE"])' in SMOKE.NODE_SMOKE
+
+
+def test_smoke_only_opens_disclosures_not_letter_or_mutation_actions() -> None:
+    assert 'moreActions.locator("summary").click()' in SMOKE.NODE_SMOKE
+    assert 'exportOptions.locator("summary").click()' in SMOKE.NODE_SMOKE
+    assert '/letter.pdf' not in SMOKE.NODE_SMOKE
+    assert '/letters.zip' not in SMOKE.NODE_SMOKE
+    assert 'recalls-generate-letter' not in SMOKE.NODE_SMOKE
+    assert 'recalls-contact-save' not in SMOKE.NODE_SMOKE

@@ -1169,36 +1169,21 @@ def get_recall_letter_pdf(
     if not recall or recall.patient_id != patient_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recall not found")
     pdf_bytes = build_recall_letter_pdf(patient, recall)
-    notes = (
-        f"Recall letter generated (PDF) - Type: {recall.kind.value}, "
-        f"Due: {recall.due_date.isoformat()}"
-    )
-    communication = log_recall_communication(
+    # A preview/download proves generation, not delivery. Contact is recorded
+    # separately by the operator only after sending or speaking to the patient.
+    log_recall_activity(
         db,
+        user=user,
         patient_id=patient_id,
         recall_id=recall_id,
-        channel=PatientRecallCommunicationChannel.letter,
-        direction=PatientRecallCommunicationDirection.outbound,
-        status=PatientRecallCommunicationStatus.sent,
-        notes=notes,
-        created_by_user_id=user.id if user else None,
-        guard_seconds=60,
+        action="recall.letter_generated",
+        metadata={"format": "pdf", "contact_recorded": False},
+        request_id=request_id,
+        ip_address=request.client.host if request.client else None,
     )
-    if communication is not None:
-        log_recall_activity(
-            db,
-            user=user,
-            patient_id=patient_id,
-            recall_id=recall_id,
-            action="recall.letter_generated",
-            metadata={"format": "pdf"},
-            request_id=request_id,
-            ip_address=request.client.host if request.client else None,
-        )
-        db.commit()
-        bump_export_count_cache_epoch("patients.recall_letter_pdf")
+    db.commit()
     filename = f"recall-{patient_id}-{recall_id}.pdf"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 

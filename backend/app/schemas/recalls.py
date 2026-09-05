@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -11,6 +12,7 @@ class RecallDashboardRow(BaseModel):
     patient_id: int
     first_name: str
     last_name: str
+    phone: str | None = None
     recall_kind: PatientRecallKind
     due_date: date
     status: PatientRecallStatus
@@ -22,6 +24,27 @@ class RecallDashboardRow(BaseModel):
     last_contact_note: str | None = None
     last_contact_other_detail: str | None = None
     last_contact_outcome: str | None = None
+
+
+class RecallSummaryPeriods(BaseModel):
+    week_start: date
+    week_end: date
+    month_start: date
+    month_end: date
+
+
+class RecallSummary(BaseModel):
+    as_of_date: date
+    timezone: Literal["Europe/London"] = "Europe/London"
+    periods: RecallSummaryPeriods
+    due_this_week: int
+    overdue: int
+    scheduled_this_month: int | None
+    scheduled_availability: Literal["available", "forbidden"]
+    conversion_rate: None = None
+    conversion_availability: Literal["unavailable"] = "unavailable"
+    conversion_reason: str = "No reliable contacted-to-booked cohort is recorded."
+    definitions: dict[str, str]
 
 
 class RecallContactCreate(BaseModel):

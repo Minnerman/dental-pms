@@ -21,6 +21,8 @@ test("recalls export filename preview matches download and sanitizes", async ({
 }) => {
   await primePageAuth(page, request);
   await page.goto(`${getBaseUrl()}/recalls`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("recalls-export-options").locator("summary").click();
+  await page.getByTestId("recalls-status-menu").locator("summary").click();
 
   const csvPreview = page.getByTestId("recalls-export-filename-csv");
   const zipPreview = page.getByTestId("recalls-export-filename-zip");
@@ -191,6 +193,7 @@ test("recalls export ZIP stays in-flight across remount and guards repeat submit
   await page.goto(`${baseUrl}/recalls`, { waitUntil: "domcontentloaded" });
 
   const exportButton = page.getByTestId("recalls-export-zip");
+  await page.getByTestId("recalls-export-options").locator("summary").click();
   await expect(exportButton).toBeEnabled({ timeout: 15_000 });
 
   let seenRequest!: () => void;
@@ -235,6 +238,7 @@ test("recalls export ZIP stays in-flight across remount and guards repeat submit
   await expect(page).toHaveURL(/\/notes/, { timeout: 15_000 });
   await page.getByRole("link", { name: "Recalls" }).click();
   await expect(page).toHaveURL(/\/recalls/, { timeout: 15_000 });
+  await page.getByTestId("recalls-export-options").locator("summary").click();
 
   const remountedExportButton = page.getByTestId("recalls-export-zip");
   await expect(remountedExportButton).toBeDisabled({ timeout: 15_000 });

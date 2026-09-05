@@ -132,6 +132,8 @@ test("recalls filters update worklist rows, summary count, and reset state", asy
 
   await primePageAuth(page, request);
   await page.goto(`${baseUrl}/recalls`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("recalls-more-filters").locator("summary").click();
+  await page.getByTestId("recalls-export-options").locator("summary").click();
 
   const startDateFilter = page.getByTestId("recalls-filter-start-date");
   const endDateFilter = page.getByTestId("recalls-filter-end-date");
