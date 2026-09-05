@@ -3,6 +3,20 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-05: the owner resumed only the odontogram tooth-shape improvement.
+  The isolated branch starts at merged PR #712 (`d81bb96a`), also verified as
+  the current production frontend runtime. Production is unchanged by this work.
+  R4 screenshots already supplied by the owner inform original schematic SVG
+  silhouettes: shaped crowns, tapered roots, upper/lower and left/right
+  orientation, and central/lateral/posterior width variation. The anatomical
+  area is larger; the separate surface map, stored clinical state and billing
+  logic are unchanged. Surface-marker positioning follows the new geometry.
+  Seven focused synthetic Playwright checks pass, including size stability,
+  click/right-click, multi-surface selection, overlays, keyboard/undo/redo and
+  responsive reachability at 1440/1024/390px. Frontend production build,
+  typecheck and focused lint pass. No dependencies, migrations, R4 access,
+  production data changes, merge or deployment are included. Owner visual
+  review is the next gate; the wider paused project remains out of scope.
 - Production includes the merged R4-inspired chart workflow through PR #711:
   canonical multi-surface selection and storage, synchronized chart entry, and
   treatment-plan completion with its guarded finance effect.

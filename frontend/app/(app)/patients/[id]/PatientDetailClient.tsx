@@ -9469,6 +9469,7 @@ export default function PatientDetailClient({
                                             inset: 0,
                                             pointerEvents: "none",
                                           }}
+                                          className="odontogram-surface-overlays"
                                           data-testid={`tooth-surface-overlays-${overlaySummary.legacyTooth}`}
                                         >
                                           {surfaceOverlays.map((surfaceOverlay) => {
@@ -9704,6 +9705,7 @@ export default function PatientDetailClient({
                                             inset: 0,
                                             pointerEvents: "none",
                                           }}
+                                          className="odontogram-surface-overlays"
                                           data-testid={`tooth-surface-overlays-${overlaySummary.legacyTooth}`}
                                         >
                                           {surfaceOverlays.map((surfaceOverlay) => {

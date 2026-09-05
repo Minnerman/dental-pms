@@ -388,17 +388,23 @@
 }
 
 .shell :global(.patient-route-odontogram-grid) {
-  justify-content: center;
+  /* Keep the first tooth reachable when the arch overflows. */
+  justify-content: start;
+  grid-template-columns: repeat(16, minmax(64px, 1fr)) !important;
+  gap: 3px !important;
   overflow-x: auto;
   width: 100%;
 }
 
 .shell :global(.patient-route-odontogram-grid > button) {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   background: transparent !important;
   border-color: transparent !important;
   border-radius: 7px !important;
   min-width: 0;
-  min-height: 158px !important;
+  min-height: 210px !important;
   padding: 4px 0 3px !important;
 }
 
@@ -409,8 +415,23 @@
 }
 
 .shell :global(.odontogram-tooth-svg) {
-  height: 122px;
-  width: 64px;
+  height: auto;
+  width: 100%;
+  max-width: 88px;
+  aspect-ratio: 100 / 280;
+}
+
+.shell :global(.patient-route-odontogram-grid > button > div:first-child) {
+  width: 100%;
+}
+
+.shell :global(.odontogram-surface-overlays) {
+  /* Match the SVG box, excluding the tooth label and any badges below it. */
+  inset: 4px auto auto 50% !important;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 88px;
+  aspect-ratio: 100 / 280;
 }
 
 .shell :global(.patient-clinical-tools) {
