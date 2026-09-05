@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 import csv
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import require_capability
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.capability import Capability, UserCapability
 from app.models.patient import Patient, RecallStatus
 from app.models.patient_recall import (
     PatientRecall,
@@ -29,11 +32,15 @@ from app.models.patient_recall_communication import (
 from app.models.user import User
 from app.schemas.patient import PatientRecallSettingsOut, RecallUpdate
 from app.schemas.patient_document import PatientDocumentCreate, PatientDocumentOut
-from app.schemas.recalls import RecallContactCreate, RecallDashboardRow, RecallKpiOut
+from app.schemas.recalls import (
+    RecallContactCreate, RecallDashboardRow, RecallKpiOut, RecallSummary,
+    RecallSummaryPeriods,
+)
 from app.models.document_template import DocumentTemplate
 from app.models.patient_document import PatientDocument
 from app.services.audit import log_event
 from app.services.document_render import render_template_with_warnings
+from app.services.dashboard import OPEN_RECALL_STATUSES, PRACTICE_TIMEZONE, london_day_start
 from app.services.recall_letter_pdf import build_recall_letter_pdf
 from app.services.recall_communications import log_recall_communication
 from app.services.recalls_audit import (
@@ -572,6 +579,7 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
         patient_id=patient.id,
         first_name=patient.first_name,
         last_name=patient.last_name,
+        phone=patient.phone,
         recall_kind=recall.kind,
         due_date=recall.due_date,
         status=resolved_status,
@@ -584,6 +592,81 @@ def _load_recall_dashboard_row(db: Session, recall_id: int) -> RecallDashboardRo
         last_contact_other_detail=last_contact_other_detail,
         last_contact_outcome=last_contact_outcome,
     )
+
+
+def _build_recall_summary(
+    db: Session, *, can_view_appointments: bool, now: datetime | None = None
+) -> RecallSummary:
+    """Aggregate native recall records; do not mutate stored status or contacts."""
+    instant = now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError("Recall summary clock must be timezone-aware")
+    today = instant.astimezone(PRACTICE_TIMEZONE).date()
+    week_start = today - timedelta(days=today.weekday())
+    periods = RecallSummaryPeriods(
+        week_start=week_start,
+        week_end=week_start + timedelta(days=6),
+        month_start=today.replace(day=1),
+        month_end=today.replace(day=monthrange(today.year, today.month)[1]),
+    )
+    due_this_week, overdue = db.execute(
+        select(
+            func.count(PatientRecall.id).filter(
+                PatientRecall.due_date >= periods.week_start,
+                PatientRecall.due_date <= periods.week_end,
+            ),
+            func.count(PatientRecall.id).filter(PatientRecall.due_date < today),
+        )
+        .join(Patient, Patient.id == PatientRecall.patient_id)
+        .where(Patient.deleted_at.is_(None), PatientRecall.status.in_(OPEN_RECALL_STATUSES))
+    ).one()
+    scheduled = None
+    if can_view_appointments:
+        scheduled = int(db.scalar(
+            select(func.count(func.distinct(Appointment.id)))
+            .select_from(PatientRecall)
+            .join(Patient, Patient.id == PatientRecall.patient_id)
+            .join(Appointment, (Appointment.id == PatientRecall.linked_appointment_id)
+                  & (Appointment.patient_id == PatientRecall.patient_id))
+            .where(
+                Patient.deleted_at.is_(None),
+                PatientRecall.status != PatientRecallStatus.cancelled,
+                Appointment.deleted_at.is_(None),
+                Appointment.status.not_in((AppointmentStatus.cancelled, AppointmentStatus.no_show)),
+                Appointment.starts_at >= london_day_start(periods.month_start),
+                Appointment.starts_at < london_day_start(periods.month_end + timedelta(days=1)),
+            )
+        ) or 0)
+    return RecallSummary(
+        as_of_date=today,
+        periods=periods,
+        due_this_week=due_this_week,
+        overdue=overdue,
+        scheduled_this_month=scheduled,
+        scheduled_availability="available" if can_view_appointments else "forbidden",
+        definitions={
+            "due_this_week": "Open native recall records due Monday-Sunday for active patients, not unique patients. Includes earlier dates this week that are also overdue.",
+            "overdue": "Open native recall records with due dates before today in Europe/London. Completed, cancelled and archived-patient recalls are excluded; stored statuses are not changed.",
+            "scheduled_this_month": "Distinct native appointments starting this London calendar month and linked to a non-cancelled recall for the same active patient. Cancelled/deleted appointments and no-shows are excluded; completed appointments remain counted. Requires appointments.view.",
+            "scope": "Practice-wide counts are independent of call-list filters and pagination; no R4 queries or inferred conversion rate.",
+            "contact_preferences": "General contact preferences and do-not-contact flags are not recorded; unavailable values are not consent to contact.",
+        },
+    )
+
+
+@router.get("/summary", response_model=RecallSummary)
+def recall_summary(
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_capability("recalls.view")),
+):
+    can_view_appointments = db.scalar(
+        select(Capability.id)
+        .join(UserCapability, UserCapability.capability_id == Capability.id)
+        .where(UserCapability.user_id == user.id, Capability.code == "appointments.view")
+    ) is not None
+    response.headers["Cache-Control"] = "no-store"
+    return _build_recall_summary(db, can_view_appointments=can_view_appointments)
 
 
 @router.get("", response_model=list[RecallDashboardRow])
@@ -665,6 +748,7 @@ def list_recalls(
                 patient_id=patient.id,
                 first_name=patient.first_name,
                 last_name=patient.last_name,
+                phone=patient.phone,
                 recall_kind=recall.kind,
                 due_date=recall.due_date,
                 status=resolved_status,
@@ -1058,17 +1142,8 @@ def export_recall_letters_zip(
                 filename = f"RecallLetter_patient-{patient.id}_{due_date}.pdf"
             pdf_bytes = build_recall_letter_pdf(patient, recall)
             zipf.writestr(filename, pdf_bytes)
-            log_recall_communication(
-                db,
-                patient_id=patient.id,
-                recall_id=recall.id,
-                channel=PatientRecallCommunicationChannel.letter,
-                direction=PatientRecallCommunicationDirection.outbound,
-                status=PatientRecallCommunicationStatus.sent,
-                notes="Recall letters ZIP generated",
-                created_by_user_id=user.id if user else None,
-                guard_seconds=60,
-            )
+            # Generating/downloading a letter is not evidence it was sent.
+            # Keep the batch export audit below, without creating contacts.
     has_filters = _has_export_filters(
         start=start,
         end=end,
@@ -1099,9 +1174,8 @@ def export_recall_letters_zip(
         exported_rows=len(results),
         filename=filename,
     )
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"}
     db.commit()
-    bump_export_count_cache_epoch("recalls.export_letters_zip")
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     logger.info("perf: recalls_export_zip_ms=%.2f rows=%d", elapsed_ms, len(results))
     return Response(content=buffer.getvalue(), media_type="application/zip", headers=headers)

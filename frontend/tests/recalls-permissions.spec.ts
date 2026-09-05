@@ -86,6 +86,7 @@ test("recall booking and export controls follow independent capabilities", async
   await expect(row.getByTestId("recalls-book-action")).toHaveCount(0);
   await expect(row.getByTestId("recalls-mutation-controls")).toHaveCount(0);
   await expect(page.getByTestId("recalls-export-csv")).toBeVisible();
+  await page.getByTestId("recalls-export-options").locator("summary").click();
   await expect(page.getByTestId("recalls-export-zip")).toBeVisible();
 });
 
@@ -223,6 +224,7 @@ test("recall mutation failures never render raw backend responses", async ({
 
   const row = page.getByTestId("recalls-row").filter({ hasText: notes }).first();
   await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByTestId("recalls-more-actions").locator("summary").click();
   await row.getByRole("button", { name: "Mark completed" }).click();
   await expect(page.getByText("Failed to update recall.")).toBeVisible({
     timeout: 15_000,

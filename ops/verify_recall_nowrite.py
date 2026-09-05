@@ -229,6 +229,12 @@ async function frontendReady(base) {
       .waitFor({ state: "visible", timeout: 10_000 });
     checkpoints[12] = true;
 
+    // Opening a disclosure is read-only; never click a recall action or a
+    // generation/download button in this production smoke.
+    const moreActions = firstRow.getByTestId("recalls-more-actions");
+    if (canWrite && await moreActions.isVisible().catch(() => false)) {
+      await moreActions.locator("summary").click();
+    }
     const mutationVisible = await firstRow
       .getByTestId("recalls-mutation-controls")
       .isVisible()
@@ -256,6 +262,10 @@ async function frontendReady(base) {
     checkpoints[14] = true;
   }
 
+  const exportOptions = page.getByTestId("recalls-export-options");
+  if (canExport && await exportOptions.isVisible().catch(() => false)) {
+    await exportOptions.locator("summary").click();
+  }
   const csvVisible = await page
     .getByTestId("recalls-export-csv")
     .isVisible()

@@ -32,6 +32,7 @@ test("recalls worklist mark completed shows in-flight state and guards repeat su
 
   const recallRow = page.locator("table tbody tr").filter({ hasText: recallNotes }).first();
   await expect(recallRow).toBeVisible({ timeout: 15_000 });
+  await recallRow.getByTestId("recalls-more-actions").locator("summary").click();
   const completeButton = recallRow.getByTestId(`recalls-complete-${recall.id}`);
   await expect(completeButton).toBeVisible();
 

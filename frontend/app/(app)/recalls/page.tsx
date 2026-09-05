@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { recallResponseError, sanitizeRecallFilename } from "@/lib/recallErrors";
 import Table from "@/components/ui/Table";
+import Icon from "@/components/ui/Icon";
+import RecallLetterDialog from "./RecallLetterDialog";
+import styles from "./Recalls.module.css";
+import RecallSummary from "./RecallSummary";
 
 type RecallStatus = "upcoming" | "due" | "overdue" | "completed" | "cancelled";
 type RecallKind = "exam" | "hygiene" | "perio" | "implant" | "custom";
@@ -16,6 +20,7 @@ type RecallRow = {
   patient_id: number;
   first_name: string;
   last_name: string;
+  phone?: string | null;
   recall_kind: RecallKind;
   due_date: string;
   status: RecallStatus;
@@ -115,7 +120,7 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatDateInput(value: Date) {
-  return value.toISOString().slice(0, 10);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
 function addMonths(base: Date, months: number) {
@@ -133,6 +138,12 @@ export default function RecallsPage() {
   const [rows, setRows] = useState<RecallRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [letterTarget, setLetterTarget] = useState<RecallRow | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const contactDialog = useRef<HTMLDialogElement>(null);
+  const monthMenu = useRef<HTMLDetailsElement>(null);
+  const [monthYear, setMonthYear] = useState(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<RecallStatus[]>([
     "due",
     "overdue",
@@ -168,7 +179,6 @@ export default function RecallsPage() {
   const [contactNote, setContactNote] = useState("");
   const [contactSaving, setContactSaving] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
-  const [popoverId, setPopoverId] = useState<number | null>(null);
   const [exportCount, setExportCount] = useState<number | null>(null);
   const [exportCountLoading, setExportCountLoading] = useState(false);
   const [exportCountError, setExportCountError] = useState<string | null>(null);
@@ -188,6 +198,47 @@ export default function RecallsPage() {
     capabilities?.includes("appointments.write")
   );
   const canViewPatients = Boolean(capabilities?.includes("patients.view"));
+
+  useEffect(() => {
+    const dialog = contactDialog.current;
+    if (showContactModal && dialog && !dialog.open) dialog.showModal();
+    if (!showContactModal && dialog?.open) dialog.close();
+  }, [showContactModal]);
+
+  useEffect(() => {
+    function dismissMenus(event: PointerEvent | KeyboardEvent) {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      pageRef.current?.querySelectorAll<HTMLDetailsElement>("details[data-testid][open]").forEach((menu) => {
+        // Filter/export panels stay open until explicitly closed; contextual
+        // menus close on outside click or Escape without losing keyboard focus.
+        if (["recalls-more-filters", "recalls-export-options", "recalls-more-actions", "recalls-month-menu", "recalls-status-menu"].includes(menu.dataset.testid || "")) {
+          if (event instanceof PointerEvent && (menu.contains(event.target as Node) || ["recalls-more-filters", "recalls-export-options"].includes(menu.dataset.testid || ""))) return;
+          if (event instanceof KeyboardEvent && menu.contains(document.activeElement)) menu.querySelector("summary")?.focus();
+          menu.open = false;
+        }
+      });
+    }
+    document.addEventListener("pointerdown", dismissMenus);
+    document.addEventListener("keydown", dismissMenus);
+    return () => { document.removeEventListener("pointerdown", dismissMenus); document.removeEventListener("keydown", dismissMenus); };
+  }, []);
+
+  const selectedMonth = startDate && startDate.endsWith("-01") &&
+    endDate === formatDateInput(new Date(Number(startDate.slice(0, 4)), Number(startDate.slice(5, 7)), 0))
+      ? startDate.slice(0, 7) : "";
+  const monthLabel = selectedMonth
+    ? new Date(`${selectedMonth}-01T12:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+    : startDate || endDate ? "Custom date range" : "All dates";
+
+  function selectMonth(year: number, month: number) {
+    setStartDate(formatDateInput(new Date(year, month, 1)));
+    setEndDate(formatDateInput(new Date(year, month + 1, 0)));
+    setStatusFilter(["upcoming", "due", "overdue"]);
+    if (monthMenu.current) {
+      monthMenu.current.open = false;
+      monthMenu.current.querySelector("summary")?.focus();
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -626,6 +677,7 @@ export default function RecallsPage() {
     canViewRecalls,
     capabilities,
     exportPageOnly,
+    refreshVersion,
     router,
   ]);
 
@@ -694,6 +746,7 @@ export default function RecallsPage() {
     }
     if (refresh.ok) {
       setRows((await refresh.json()) as RecallRow[]);
+      setRefreshVersion((value) => value + 1);
     } else {
       throw new Error(await recallResponseError(refresh, "Failed to refresh recalls."));
     }
@@ -802,626 +855,186 @@ export default function RecallsPage() {
   }
 
   return (
-    <div className="stack" data-testid="recalls-page">
-      <div className="row" style={{ alignItems: "center" }}>
-        <div>
-          <h2 style={{ marginTop: 0 }}>Recalls</h2>
-          <p style={{ color: "var(--muted)", margin: 0 }}>
-            Due and overdue recalls with quick actions.
-          </p>
-        </div>
-      </div>
+    <div ref={pageRef} className={styles.page} data-testid="recalls-page">
+      <header className={styles.heading}>
+        <div><h1>Recall call list</h1><p>Patients to follow up, with everything you need close at hand.</p></div>
+        {canExportRecalls && <div className={styles.headerActions}>
+          <button className={styles.button} type="button"
+            onClick={(event) => void exportCsv(event.currentTarget)}
+            disabled={!exportReady || exporting || downloadingZip}
+            data-testid="recalls-export-csv">
+            <Icon name="reports" />{exporting ? "Exporting..." : exportCountLoading ? "Preparing..." : exportCountError ? "Export unavailable" : "Export CSV"}
+          </button>
+          <details className={styles.dropdown} data-testid="recalls-export-options">
+            <summary className={styles.button} aria-label="Export and print options">•••</summary>
+            <div className={styles.exportPanel}>
+              <strong data-testid="recalls-export-summary">Export will include: {exportCountLabel}{exportPageOnly ? ` (this page: ${rows.length})` : ""}</strong>
+              <p data-testid="recalls-export-hint">Exports include active filters and the page toggle.</p>
+              <label className={styles.check}><input type="checkbox" checked={exportPageOnly}
+                onChange={(event) => setExportPageOnly(event.target.checked)} data-testid="recalls-export-page-only" />Export this page only</label>
+              <button className={styles.button} type="button"
+                onClick={(event) => void downloadLettersZip(event.currentTarget)}
+                disabled={!exportReady || downloadingZip || exporting} data-testid="recalls-export-zip">
+                {downloadingZip ? "Preparing..." : "Download letters (ZIP)"}
+              </button>
+              <button className={styles.button} type="button" onClick={() => window.print()}>Print this call-list page</button>
+              <small data-testid="recalls-export-filename-csv">CSV filename: {exportFilenameCsv}</small>
+              <small data-testid="recalls-export-filename-zip">ZIP filename: {exportFilenameZip}</small>
+              <small>Generating letters does not record them as sent. Large lists may take a moment.</small>
+            </div>
+          </details>
+        </div>}
+      </header>
 
-      {!canWriteRecalls && (
-        <div className="notice" data-testid="recalls-read-only-notice">
-          You can view recalls, but you cannot change them.
-        </div>
-      )}
+      {!canWriteRecalls && <div className="notice" data-testid="recalls-read-only-notice">You can view recalls, but you cannot change them.</div>}
       {capabilityError && <div className="notice">{capabilityError}</div>}
 
-      <div
-        className="card print-hidden"
-        style={{ margin: 0 }}
-        data-testid="recalls-filters"
-      >
-        <div className="stack">
-          <div className="grid grid-3">
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Status</label>
-              <div className="stack" style={{ gap: 6 }}>
-                {statusOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    style={{ display: "flex", gap: 8, alignItems: "center" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={statusFilter.includes(option.value)}
-                      onChange={() => toggleStatus(option.value)}
-                    />
-                    {option.label}
-                  </label>
-                ))}
+      {/* Summary counts come from the whole native recall register, not this paginated list. */}
+      <RecallSummary refreshKey={rows} />
+
+      <section className={styles.filters} aria-label="Recall filters" data-testid="recalls-filters">
+        <div className={styles.field}>
+          <span className={styles.label}>Month</span>
+          <details ref={monthMenu} className={styles.dropdown} data-testid="recalls-month-menu"
+            onKeyDown={(event) => { if (event.key === "Escape" && monthMenu.current) { monthMenu.current.open = false; monthMenu.current.querySelector("summary")?.focus(); } }}>
+            <summary className={styles.control}><Icon name="calendar" />{monthLabel}<span className={styles.chevron}>⌄</span></summary>
+            <div className={styles.monthPanel}>
+              <div className={styles.monthHeading}>
+                <button className={styles.iconButton} aria-label="Previous year" onClick={() => setMonthYear((year) => Math.max(1900, year - 1))}>‹</button>
+                <strong>{monthYear}</strong>
+                <button className={styles.iconButton} aria-label="Next year" onClick={() => setMonthYear((year) => Math.min(9998, year + 1))}>›</button>
+              </div>
+              <div className={styles.monthGrid}>{Array.from({ length: 12 }, (_, month) => (
+                <button key={month} type="button" aria-pressed={selectedMonth === `${monthYear}-${String(month + 1).padStart(2, "0")}`}
+                  onClick={() => selectMonth(monthYear, month)}>
+                  {new Date(2026, month, 1).toLocaleDateString("en-GB", { month: "short" })}
+                </button>
+              ))}</div>
+              <div className={styles.monthHeading}>
+                <button className={styles.textButton} onClick={() => { const today = new Date(); setMonthYear(today.getFullYear()); selectMonth(today.getFullYear(), today.getMonth()); }}>This month</button>
+                <button className={styles.textButton} onClick={() => { setStartDate(""); setEndDate(""); if (monthMenu.current) { monthMenu.current.open = false; monthMenu.current.querySelector("summary")?.focus(); } }}>All dates</button>
               </div>
             </div>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Recall type</label>
-              <select
-                className="input"
-                data-testid="recalls-filter-type"
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as RecallKind | "all")}
-              >
-                <option value="all">All types</option>
-                {kindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+          </details>
+        </div>
+        <label className={styles.field}><span className={styles.label}>Reason</span>
+          <select className={styles.control} data-testid="recalls-filter-type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as RecallKind | "all")}>
+            <option value="all">Any reason</option>
+            {kindOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <div className={styles.field}><span className={styles.label}>Status</span>
+          <details className={styles.dropdown} data-testid="recalls-status-menu">
+            <summary className={styles.control}>{statusFilter.length === 0 ? "Any status" : statusFilter.map((s) => statusLabels[s]).join(", ")}<span className={styles.chevron}>⌄</span></summary>
+            <div className={styles.menuPanel}>
+              {statusOptions.map((option) => <label className={styles.check} key={option.value}>
+                <input type="checkbox" checked={statusFilter.includes(option.value)} onChange={() => toggleStatus(option.value)} />{option.label}
+              </label>)}
+              <button className={styles.textButton} onClick={() => setStatusFilter([])}>Any status</button>
             </div>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Due date range</label>
-              <div style={{ display: "grid", gap: 8 }}>
-                <input
-                  className="input"
-                  type="date"
-                  data-testid="recalls-filter-start-date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-                <input
-                  className="input"
-                  type="date"
-                  data-testid="recalls-filter-end-date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-3">
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Contact state</label>
-              <select
-                className="input"
-                data-testid="recalls-filter-contact-state"
-                value={contactState}
-                onChange={(e) =>
-                  setContactState(e.target.value as "all" | "never" | "contacted")
-                }
-              >
-                <option value="all">All</option>
-                <option value="never">Never contacted</option>
-                <option value="contacted">Contacted</option>
-              </select>
-            </div>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Last contact</label>
-              <select
-                className="input"
-                data-testid="recalls-filter-last-contact"
-                value={lastContact}
-                onChange={(e) =>
-                  setLastContact(
-                    e.target.value as "all" | "7d" | "30d" | "older30d"
-                  )
-                }
-              >
-                <option value="all">All</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="older30d">Older than 30 days</option>
-              </select>
-            </div>
-            <div className="stack" style={{ gap: 8 }}>
-              <label className="label">Method</label>
-              <select
-                className="input"
-                data-testid="recalls-filter-method"
-                value={contactMethod}
-                onChange={(e) =>
-                  setContactMethod(e.target.value as "all" | RecallContactChannel)
-                }
-              >
-                <option value="all">All methods</option>
-                {contactChannelOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="row recall-toolbar">
-            <div className="badge">{rows.length} recalls</div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="label" style={{ margin: 0 }}>
-                Per page
-              </span>
-              <select
-                className="input"
-                value={String(pageSize)}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-              >
-                {[25, 50, 100, 200].map((size) => (
-                  <option key={size} value={String(size)}>
-                    {size}
-                  </option>
-                ))}
+          </details>
+        </div>
+        <label className={styles.field}><span className={styles.label}>Contact state</span>
+          <select className={styles.control} data-testid="recalls-filter-contact-state" value={contactState} onChange={(e) => setContactState(e.target.value as "all" | "never" | "contacted")}>
+            <option value="all">Any contact state</option><option value="never">Never contacted</option><option value="contacted">Contacted</option>
+          </select>
+        </label>
+        <details className={styles.moreFilters} data-testid="recalls-more-filters">
+          <summary className={styles.button}><Icon name="settings" />More filters{startDate || endDate || lastContact !== "all" || contactMethod !== "all" ? " •" : ""}</summary>
+          <div className={styles.filterPanel}>
+            <label className={styles.field}><span className={styles.label}>Due from</span><input className={styles.control} type="date" data-testid="recalls-filter-start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
+            <label className={styles.field}><span className={styles.label}>Due to</span><input className={styles.control} type="date" data-testid="recalls-filter-end-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></label>
+            <label className={styles.field}><span className={styles.label}>Last contact</span>
+              <select className={styles.control} data-testid="recalls-filter-last-contact" value={lastContact} onChange={(e) => setLastContact(e.target.value as "all" | "7d" | "30d" | "older30d")}>
+                <option value="all">Any time</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="older30d">Older than 30 days</option>
               </select>
             </label>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={resetFilters}
-              data-testid="recalls-reset-filters"
-            >
-              Reset filters
-            </button>
-            {canExportRecalls && (
-              <>
-                <div className="badge" data-testid="recalls-export-summary">
-                  Export will include: {exportCountLabel}
-                  {exportPageOnly ? ` (this page: ${rows.length})` : ""}
-                </div>
-                <div className="stack" style={{ gap: 2 }}>
-              <span
-                style={{ color: "var(--muted)", fontSize: 12 }}
-                data-testid="recalls-export-hint"
-              >
-                Exports include active filters and the page toggle.
-              </span>
-              <span
-                style={{ color: "var(--muted)", fontSize: 12 }}
-                data-testid="recalls-export-filename-csv"
-              >
-                CSV filename: {exportFilenameCsv}
-              </span>
-              <span
-                style={{ color: "var(--muted)", fontSize: 12 }}
-                data-testid="recalls-export-filename-zip"
-              >
-                ZIP filename: {exportFilenameZip}
-              </span>
-                </div>
-                <label className="row" style={{ gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={exportPageOnly}
-                onChange={(event) => setExportPageOnly(event.target.checked)}
-                data-testid="recalls-export-page-only"
-              />
-              <span>Export this page only</span>
-                </label>
-                <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={(event) => void exportCsv(event.currentTarget)}
-              disabled={!exportReady || exporting || downloadingZip}
-              data-testid="recalls-export-csv"
-            >
-              {exportCountLoading
-                ? "Preparing..."
-                : exportCountError
-                  ? "Export unavailable"
-                  : exporting
-                    ? "Exporting..."
-                    : "Export CSV"}
-                </button>
-                <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={(event) => void downloadLettersZip(event.currentTarget)}
-              disabled={!exportReady || downloadingZip || exporting}
-              data-testid="recalls-export-zip"
-            >
-              {downloadingZip
-                ? "Preparing..."
-                : exportCountLoading
-                  ? "Preparing..."
-                  : exportCountError
-                  ? "Export unavailable"
-                    : "Download letters (ZIP)"}
-                </button>
-                <span style={{ color: "var(--muted)", fontSize: 12 }}>
-                  This may take a moment for large lists.
-                </span>
-              </>
-            )}
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => window.print()}
-            >
-              Print
-            </button>
+            <label className={styles.field}><span className={styles.label}>Method</span>
+              <select className={styles.control} data-testid="recalls-filter-method" value={contactMethod} onChange={(e) => setContactMethod(e.target.value as "all" | RecallContactChannel)}>
+                <option value="all">All methods</option>{contactChannelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <p className={styles.filterHelp}>Dates and statuses apply together. Choose All dates to include earlier overdue recalls. Priority is not recorded in the PMS yet.</p>
           </div>
-          <div className="row" data-testid="recalls-pagination">
-            <div className="badge">
-              Showing {offset + 1}-{offset + rows.length}
-            </div>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => setOffset((prev) => Math.max(0, prev - pageSize))}
-              disabled={offset === 0}
-            >
-              Prev
-            </button>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => setOffset((prev) => prev + pageSize)}
-              disabled={rows.length < pageSize}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
+        </details>
+        <button className={styles.textButton} type="button" onClick={resetFilters} data-testid="recalls-reset-filters">Reset filters</button>
+      </section>
 
-      {error ? (
-        <div className="notice">
-          {error}
-          {showExportLimitHint ? (
-            <div style={{ color: "var(--muted)", marginTop: 6 }}>
-              Too many results. Try narrowing by: Contact state, Last contacted timeframe,
-              Method.
-              {typeof exportLimitCount === "number"
-                ? ` Current matches: ${exportLimitCount}.`
-                : ""}
-            </div>
-          ) : null}
-          {showRecallsLoadHint ? (
-            <div style={{ color: "var(--muted)", marginTop: 6 }}>
-              Server error loading recalls. Try Refresh. If it persists, check backend logs.
-            </div>
-          ) : null}
-        </div>
-      ) : loading ? (
-        <div className="badge">Loading recalls…</div>
-      ) : rows.length === 0 ? (
-        <div className="notice">
-          <div className="stack" style={{ gap: 8 }}>
-            <div>No recalls match your filters.</div>
-            <button className="btn btn-secondary" type="button" onClick={resetFilters}>
-              Clear filters
-            </button>
-          </div>
-        </div>
+      <div className={styles.listCaption}>
+        <span>{loading ? "Loading recalls…" : `${rows.length} recalls on this page`}{!loading && statusFilter.length === 0 ? " · all statuses" : ""}</span>
+        <label className={styles.pageSize}>Per page
+          <select value={String(pageSize)} onChange={(e) => setPageSize(Number(e.target.value))}>
+            {[25, 50, 100, 200].map((size) => <option key={size} value={String(size)}>{size}</option>)}
+          </select>
+        </label>
+      </div>
+      {error && <div className="notice" role="alert">{error}
+        {showExportLimitHint && <p>Try narrowing by contact state, last contact or method.{typeof exportLimitCount === "number" ? ` Current matches: ${exportLimitCount}.` : ""}</p>}
+        {showRecallsLoadHint && <button className={styles.button} onClick={() => void refreshRecalls().then(() => setError(null)).catch(() => setError("Failed to load recalls. Please try again."))}>Refresh</button>}
+      </div>}
+      {loading ? <div className={styles.empty} role="status">Loading recalls…</div> : rows.length === 0 ? (
+        <div className={styles.empty}><Icon name="history" size={28} /><strong>No recalls match your filters.</strong><button className={styles.textButton} onClick={resetFilters}>Clear filters</button></div>
       ) : (
-        <>
-          <Table className="recall-table">
-            <thead>
-              <tr>
-                <th>Patient</th>
-                <th>Type</th>
-                <th>Due date</th>
-                <th>Status</th>
-                <th>Last contact</th>
-                <th>Notes</th>
-                <th className="recall-actions">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} data-testid="recalls-row">
-                  <td>
-                    {canViewPatients ? (
-                      <Link
-                        href={`/patients/${row.patient_id}?tab=recalls`}
-                        data-testid="recalls-patient-navigation"
-                      >
-                        {row.last_name.toUpperCase()}, {row.first_name}
-                      </Link>
-                    ) : (
-                      <span>{row.last_name.toUpperCase()}, {row.first_name}</span>
-                    )}
-                  </td>
-                  <td>{kindLabels[row.recall_kind]}</td>
-                  <td>{formatDate(row.due_date)}</td>
-                  <td>
-                    <span className="badge">{statusLabels[row.status]}</span>
-                  </td>
-                  <td data-testid="recalls-last-contact">
-                    {row.last_contacted_at ? (
-                      <div
-                        style={{ position: "relative", display: "inline-block" }}
-                        onMouseLeave={() => setPopoverId(null)}
-                      >
-                        <button
-                          type="button"
-                          onMouseEnter={() => setPopoverId(row.id)}
-                          onFocus={() => setPopoverId(row.id)}
-                          onBlur={() => setPopoverId(null)}
-                          onClick={() =>
-                            setPopoverId((prev) => (prev === row.id ? null : row.id))
-                          }
-                          aria-haspopup="dialog"
-                          aria-expanded={popoverId === row.id}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            padding: 0,
-                            cursor: "pointer",
-                            color: "inherit",
-                            textAlign: "left",
-                          }}
-                        >
-                          {formatLastContact(row)}
-                        </button>
-                        {popoverId === row.id && (
-                          <div
-                            className="card"
-                            style={{
-                              position: "absolute",
-                              zIndex: 20,
-                              top: "100%",
-                              left: 0,
-                              marginTop: 6,
-                              padding: 12,
-                              minWidth: 220,
-                            }}
-                          >
-                            <div className="stack" style={{ gap: 6 }}>
-                              {buildLastContactDetails(row).map((text, index) => (
-                                <div key={`${text}-${index}`}>{text}</div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div>—</div>
-                    )}
-                    {formatLastContactExtras(row).map((text, index) => (
-                      <div
-                        key={`${text}-${index}`}
-                        style={{ color: "var(--muted)", fontSize: 12 }}
-                      >
-                        {text}
-                      </div>
-                    ))}
-                  </td>
-                  <td title={row.notes || ""}>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        maxWidth: 220,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {row.notes || "—"}
-                    </span>
-                  </td>
-                  <td className="recall-actions">
-                    <div className="table-actions">
-                      {canWriteAppointments && (
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          disabled={actionId === row.id}
-                          onClick={() => handleBook(row)}
-                          data-testid="recalls-book-action"
-                        >
-                          Book appointment
-                        </button>
-                      )}
-                      {canExportRecalls && (
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          data-testid={`recalls-generate-letter-${row.id}`}
-                          disabled={downloadId === row.id}
-                          onClick={(event) =>
-                            void downloadRecallLetter(row, event.currentTarget)
-                          }
-                        >
-                          {downloadId === row.id ? "Generating..." : "Generate letter"}
-                        </button>
-                      )}
-                      {canWriteRecalls && (
-                        <div className="table-actions" data-testid="recalls-mutation-controls">
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            disabled={contactSaving && contactTarget?.id === row.id}
-                            onClick={() => openContactModal(row)}
-                          >
-                            Log contact
-                          </button>
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            data-testid={`recalls-complete-${row.id}`}
-                            disabled={
-                              actionId === row.id ||
-                              row.status === "completed" ||
-                              row.status === "cancelled"
-                            }
-                            onClick={(event) => handleComplete(row, event.currentTarget)}
-                          >
-                            {actionId === row.id ? "Updating..." : "Mark completed"}
-                          </button>
-                          {[3, 6, 12].map((months) => (
-                            <button
-                              key={months}
-                              className="btn btn-secondary"
-                              type="button"
-                              disabled={actionId === row.id}
-                              onClick={() => handleSnooze(row, months)}
-                            >
-                              Snooze {months}m
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {!canWriteRecalls && !canWriteAppointments && !canExportRecalls && (
-                        <span className="badge">View only</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-          <div className="recall-cards print-hidden">
+        <Table className={styles.callList}>
+          <caption className={styles.srOnly}>Recall patients and follow-up actions</caption>
+          <thead className={styles.srOnly}><tr><th scope="col">Patient and recall</th><th scope="col">Actions</th></tr></thead>
+          <tbody>
             {rows.map((row) => (
-              <div className="card recall-card" key={row.id}>
-                <div className="row">
-                  <div>
-                    {canViewPatients ? (
-                      <Link href={`/patients/${row.patient_id}?tab=recalls`}>
-                        <strong>
-                          {row.last_name.toUpperCase()}, {row.first_name}
-                        </strong>
-                      </Link>
-                    ) : (
-                      <strong>{row.last_name.toUpperCase()}, {row.first_name}</strong>
-                    )}
-                    <div style={{ color: "var(--muted)" }}>
-                      {kindLabels[row.recall_kind]} · Due {formatDate(row.due_date)}
-                    </div>
+              <tr key={row.id} data-testid="recalls-row">
+                <td>
+                  <div className={styles.patientLine}>
+                    <span className={styles.avatar} aria-hidden="true">{row.first_name.slice(0, 1)}{row.last_name.slice(0, 1)}</span>
+                    {canViewPatients ? <Link className={styles.patientName} href={`/patients/${row.patient_id}?tab=recalls`} data-testid="recalls-patient-navigation">{row.last_name.toUpperCase()}, {row.first_name}</Link> : <strong>{row.last_name.toUpperCase()}, {row.first_name}</strong>}
+                    <span className={styles.kindBadge}>{kindLabels[row.recall_kind]}</span>
+                    <span className={`${styles.statusBadge} ${row.status === "overdue" ? styles.overdue : row.status === "completed" ? styles.completed : ""}`}>{statusLabels[row.status]}</span>
                   </div>
-                  <span className="badge">{statusLabels[row.status]}</span>
-                </div>
-                <div
-                  style={{ color: "var(--muted)", position: "relative" }}
-                  onMouseLeave={() => setPopoverId(null)}
-                >
-                  {row.last_contacted_at ? (
-                    <>
-                      <span>Last contact </span>
-                      <button
-                        type="button"
-                        onMouseEnter={() => setPopoverId(row.id)}
-                        onFocus={() => setPopoverId(row.id)}
-                        onBlur={() => setPopoverId(null)}
-                        onClick={() =>
-                          setPopoverId((prev) => (prev === row.id ? null : row.id))
-                        }
-                        aria-haspopup="dialog"
-                        aria-expanded={popoverId === row.id}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          cursor: "pointer",
-                          color: "inherit",
-                          textAlign: "left",
-                        }}
-                      >
-                        {formatLastContact(row)}
-                      </button>
-                      {popoverId === row.id && (
-                        <div
-                          className="card"
-                          style={{
-                            position: "absolute",
-                            zIndex: 20,
-                            top: "100%",
-                            left: 0,
-                            marginTop: 6,
-                            padding: 12,
-                            minWidth: 220,
-                          }}
-                        >
-                          <div className="stack" style={{ gap: 6 }}>
-                            {buildLastContactDetails(row).map((text, index) => (
-                              <div key={`${text}-${index}`}>{text}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>Last contact —</>
-                  )}
-                </div>
-                {formatLastContactExtras(row).map((text, index) => (
-                  <div
-                    key={`${text}-${index}`}
-                    style={{ color: "var(--muted)", fontSize: 12 }}
-                  >
-                    {text}
+                  <div className={styles.patientMeta}><span>Due {formatDate(row.due_date)}</span><span><Icon name="phone" size={13} />{row.phone || "No phone recorded"}</span></div>
+                  {row.notes && <details className={styles.recallNote}><summary title={row.notes}>{row.notes}</summary><p>{row.notes}</p></details>}
+                  <div data-testid="recalls-last-contact" className={styles.contactLine}>
+                    {row.last_contacted_at ? (
+                      <details><summary><Icon name="history" size={13} />Last contact: {formatLastContact(row)}</summary>
+                        <div className={styles.contactDetails}>{buildLastContactDetails(row).map((detail, index) => <div key={index}>{detail}</div>)}</div>
+                      </details>
+                    ) : <span>Not contacted</span>}
+                    {formatLastContactExtras(row).map((text, index) => <span key={index}>{text}</span>)}
                   </div>
-                ))}
-                <div>{row.notes || "No notes."}</div>
-                <div className="row">
-                  {canWriteAppointments && (
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      disabled={actionId === row.id}
-                      onClick={() => handleBook(row)}
-                    >
-                      Book appointment
-                    </button>
-                  )}
-                  {canExportRecalls && (
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      data-testid={`recalls-generate-letter-${row.id}`}
-                      disabled={downloadId === row.id}
-                      onClick={(event) =>
-                        void downloadRecallLetter(row, event.currentTarget)
-                      }
-                    >
-                      {downloadId === row.id ? "Generating..." : "Generate letter"}
-                    </button>
-                  )}
-                  {canWriteRecalls && (
-                    <>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={contactSaving && contactTarget?.id === row.id}
-                        onClick={() => openContactModal(row)}
-                      >
-                        Log contact
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        data-testid={`recalls-complete-${row.id}`}
-                        disabled={
-                          actionId === row.id ||
-                          row.status === "completed" ||
-                          row.status === "cancelled"
-                        }
-                        onClick={(event) => handleComplete(row, event.currentTarget)}
-                      >
-                        {actionId === row.id ? "Updating..." : "Mark completed"}
-                      </button>
-                      {[3, 6].map((months) => (
-                        <button
-                          key={months}
-                          className="btn btn-secondary"
-                          type="button"
-                          disabled={actionId === row.id}
-                          onClick={() => handleSnooze(row, months)}
-                        >
-                          Snooze {months}m
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </div>
+                </td>
+                <td className={styles.actions}>
+                  <div className={styles.rowActions}>
+                    {canExportRecalls && <button className={`${styles.button} ${styles.primary}`} type="button" data-testid={`recalls-letter-${row.id}`} onClick={() => setLetterTarget(row)}><Icon name="notes" />Recall letter</button>}
+                    {canWriteRecalls && <button className={styles.button} type="button" onClick={() => openContactModal(row)} disabled={contactSaving && contactTarget?.id === row.id}><Icon name="phone" />Log contact</button>}
+                    {canWriteAppointments && <button className={styles.iconButton} type="button" aria-label="Book appointment" title="Book appointment" data-testid="recalls-book-action" disabled={actionId === row.id} onClick={() => handleBook(row)}><Icon name="calendar" size={18} /></button>}
+                    {(canWriteRecalls || canExportRecalls) && <details className={styles.dropdown} data-testid="recalls-more-actions">
+                      <summary className={styles.iconButton} aria-label={`More recall actions for ${row.first_name} ${row.last_name}`}>•••</summary>
+                      <div className={styles.actionPanel}>
+                        {canExportRecalls && <button className={styles.menuButton} data-testid={`recalls-generate-letter-${row.id}`} disabled={downloadId === row.id} onClick={(event) => void downloadRecallLetter(row, event.currentTarget)}>{downloadId === row.id ? "Generating..." : "Generate letter"}</button>}
+                        {canWriteRecalls && <div className={styles.mutationControls} data-testid="recalls-mutation-controls">
+                          <button className={styles.menuButton} data-testid={`recalls-complete-${row.id}`} disabled={actionId === row.id || row.status === "completed" || row.status === "cancelled"}
+                            onClick={(event) => handleComplete(row, event.currentTarget)}>{actionId === row.id ? "Updating..." : "Mark completed"}</button>
+                          {[3, 6, 12].map((months) => <button className={styles.menuButton} key={months} disabled={actionId === row.id} onClick={() => handleSnooze(row, months)}>Snooze {months}m</button>)}
+                        </div>}
+                      </div>
+                    </details>}
+                    {!canWriteRecalls && !canWriteAppointments && !canExportRecalls && <span className={styles.muted}>View only</span>}
+                  </div>
+                </td>
+              </tr>
             ))}
-          </div>
-        </>
+          </tbody>
+        </Table>
       )}
+      <nav className={styles.pagination} aria-label="Recall pages" data-testid="recalls-pagination">
+        <span>Showing {rows.length === 0 ? 0 : offset + 1}-{offset + rows.length}</span>
+        <button className={styles.button} type="button" onClick={() => setOffset((prev) => Math.max(0, prev - pageSize))} disabled={offset === 0 || loading}>Prev</button>
+        <button className={styles.button} type="button" onClick={() => setOffset((prev) => prev + pageSize)} disabled={rows.length < pageSize || loading}>Next</button>
+      </nav>
+      {letterTarget && canExportRecalls && <RecallLetterDialog patientId={letterTarget.patient_id} recallId={letterTarget.id} patientName={`${letterTarget.first_name} ${letterTarget.last_name}`} onClose={() => setLetterTarget(null)} />}
       {showContactModal && canWriteRecalls && (
-        <div className="card" style={{ margin: 0 }}>
+        <dialog ref={contactDialog} className={styles.contactDialog} aria-labelledby="recall-contact-title" onCancel={(event) => { event.preventDefault(); if (!contactSaving) setShowContactModal(false); }}>
           <div className="stack">
             <div className="row">
               <div>
-                <h3 style={{ marginTop: 0 }}>Log contact</h3>
+                <h3 id="recall-contact-title" style={{ marginTop: 0 }}>Log contact</h3>
                 <p style={{ color: "var(--muted)" }}>
                   {contactTarget
                     ? `${contactTarget.last_name.toUpperCase()}, ${
@@ -1433,6 +1046,7 @@ export default function RecallsPage() {
               <button
                 className="btn btn-secondary"
                 type="button"
+                disabled={contactSaving}
                 onClick={() => setShowContactModal(false)}
               >
                 Close
@@ -1440,16 +1054,13 @@ export default function RecallsPage() {
             </div>
             {contactError && <div className="notice">{contactError}</div>}
             <div
-              style={{
-                display: "grid",
-                gap: 12,
-                gridTemplateColumns: "1fr 1fr",
-              }}
+              className={styles.contactFields}
             >
               <div className="stack" style={{ gap: 8 }}>
-                <label className="label">Method</label>
+                <label className="label" htmlFor="recall-contact-method">Method</label>
                 <select
                   className="input"
+                  id="recall-contact-method"
                   value={contactMethodInput}
                   onChange={(e) =>
                     setContactMethodInput(e.target.value as RecallContactChannel)
@@ -1463,9 +1074,10 @@ export default function RecallsPage() {
                 </select>
               </div>
               <div className="stack" style={{ gap: 8 }}>
-                <label className="label">Outcome</label>
+                <label className="label" htmlFor="recall-contact-outcome">Outcome</label>
                 <input
                   className="input"
+                  id="recall-contact-outcome"
                   value={contactOutcome}
                   onChange={(e) => setContactOutcome(e.target.value)}
                   placeholder="Optional outcome"
@@ -1474,9 +1086,10 @@ export default function RecallsPage() {
               </div>
               {contactMethodInput === "other" && (
                 <div className="stack" style={{ gap: 8, gridColumn: "1 / -1" }}>
-                  <label className="label">Other detail</label>
+                  <label className="label" htmlFor="recall-contact-other">Other detail</label>
                   <input
                     className="input"
+                    id="recall-contact-other"
                     value={contactOtherDetail}
                     onChange={(e) => setContactOtherDetail(e.target.value)}
                     placeholder="e.g. WhatsApp"
@@ -1488,9 +1101,10 @@ export default function RecallsPage() {
                 </div>
               )}
               <div className="stack" style={{ gap: 8, gridColumn: "1 / -1" }}>
-                <label className="label">Note</label>
+                <label className="label" htmlFor="recall-contact-note">Note</label>
                 <textarea
                   className="input"
+                  id="recall-contact-note"
                   rows={3}
                   value={contactNote}
                   onChange={(e) => setContactNote(e.target.value)}
@@ -1509,7 +1123,7 @@ export default function RecallsPage() {
               {contactSaving ? "Saving..." : "Save log"}
             </button>
           </div>
-        </div>
+        </dialog>
       )}
       <style jsx global>{`
         @media print {

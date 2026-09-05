@@ -3,6 +3,47 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 5 September 2026 — the Recall call-list slice branches from PR #715 at
+  `118f688`, independently of Schedule PR #716. It does not include or alter
+  paused odontogram PRs #713/#714. PR #715 must land first; this slice then
+  needs retargeting to master and updated-head CI before review/merge.
+- Recalls now uses compact, responsive patient rows in the shared DentalPin-
+  inspired light/dark shell. Actual phone, reason, due date, status and contact
+  history sit beside Recall letter, Log contact, booking and More actions.
+  Month/year presets include leap-year boundaries; original status, custom
+  date/contact filters, pagination, guarded completion/snooze, CSV, ZIP and
+  capability restrictions remain available in compact disclosures. Default
+  due/overdue filtering across all dates is retained.
+- A capability-scoped, no-store native recall summary provides full-register
+  due-this-week and overdue counts, and distinct linked appointments occurring
+  this London calendar month when appointment viewing is allowed. Counts are
+  independent of list filters; due-this-week includes earlier overdue dates
+  in the same week. Cancelled/deleted/no-show appointments and archived
+  patients are excluded; completed valid bookings remain counted. Conversion
+  and priority are explicitly unrecorded, not fabricated from legacy fields.
+- Each Recall letter button opens a guarded PDF preview with explicit print
+  and download actions, safe errors/retry, keyboard focus handling and a
+  download fallback when the browser has no PDF viewer. The existing A4
+  practice letter is reused; Word/LibreOffice template editing remains an
+  owner-deferred decision. No template/editor dependency or migration added.
+- Verified safety correction: individual PDF and ZIP generation previously
+  wrote sent communications. Both now audit generation only; preview,
+  download and printing do not record patient contact. Explicit Log contact
+  remains the way to record actual sending/contact. Existing historical logs
+  are preserved unchanged, including older generated-letter entries.
+- Recall verification: 34 backend cases (11 new) and 25 unique browser cases
+  (11 new) pass; 13 of those browser cases also pass against the production-
+  mode build. Full Chromium verifies its PDF viewer; the lightweight headless
+  browser limitation led to an explicit no-viewer fallback regression. The
+  synthetic A4 output and light/dark/desktop/mobile layouts were reviewed.
+  Build, typecheck, lint, compilation and diff checks pass. The updated
+  deterministic read-only smoke opens disclosures without triggering actions:
+  all 21 checkpoints pass, along with 12 smoke-tool unit tests. Compose
+  wrappers were not run against production; verification used only the local
+  isolated internal stack with synthetic data. No full-suite/CI pass inferred.
+- No Recall production deployment, production migration, R4 access or real
+  patient contact/printing occurred. Review/merge and a separately explicit
+  production deployment approval remain required.
 - 5 September 2026 — the active, independent layout slice is based on merged
   PR #712 (`d81bb96`). The later tooth-shape PR #713 and draft baseline-action
   PR #714 remain paused, separate and unchanged; this slice does not include

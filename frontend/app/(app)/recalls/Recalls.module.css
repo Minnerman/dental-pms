@@ -1,0 +1,104 @@
+.page { display: grid; gap: 18px; width: 100%; max-width: 1600px; margin-inline: auto; min-width: 0; padding-block: 8px 24px; }
+.heading, .headerActions, .rowActions, .patientLine, .patientMeta, .listCaption, .pagination, .monthHeading { display: flex; align-items: center; gap: 10px; }
+.heading, .listCaption { justify-content: space-between; }
+.heading h1 { margin: 0; font-size: 26px; letter-spacing: -.6px; }
+.heading p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.headerActions { flex-shrink: 0; }
+.button, .control, .iconButton, .textButton, .menuButton { font: inherit; color: var(--text); cursor: pointer; }
+.button, .control, .iconButton { border: 1px solid var(--border); border-radius: 7px; background: var(--panel); min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 7px 11px; font-size: 13px; }
+.button:hover, .iconButton:hover, .menuButton:hover { background: var(--panel-muted); }
+.button:disabled, .menuButton:disabled, .iconButton:disabled { opacity: .5; cursor: not-allowed; }
+.primary { color: var(--accent-text); background: var(--accent-glow); border-color: transparent; }
+.primary:hover { border-color: var(--accent-text); background: var(--accent-glow); }
+.iconButton { border-color: transparent; background: transparent; min-width: 36px; padding: 7px; }
+.textButton { padding: 8px 4px; border: 0; background: transparent; color: var(--accent-text); font-size: 13px; }
+.button:focus-visible, .control:focus-visible, .iconButton:focus-visible, .textButton:focus-visible, .menuButton:focus-visible, .monthGrid button:focus-visible, .patientName:focus-visible, .page summary:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
+.dropdown { position: relative; }
+.dropdown > summary, .moreFilters > summary { list-style: none; }
+.dropdown > summary::-webkit-details-marker, .moreFilters > summary::-webkit-details-marker { display: none; }
+.filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; position: relative; padding-top: 4px; }
+.field { display: grid; gap: 6px; min-width: 130px; flex: 1; }
+.field:first-child { flex: 1.45; min-width: 220px; }
+.label { color: var(--text); font-size: 13px; font-weight: 500; }
+.control { width: 100%; justify-content: flex-start; background: var(--input-bg); color: var(--input-text); text-align: left; min-width: 0; }
+select.control { display: block; padding-right: 22px; }
+.chevron { margin-left: auto; color: var(--muted); }
+.menuPanel, .monthPanel, .exportPanel, .actionPanel { position: absolute; top: calc(100% + 6px); z-index: 25; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); box-shadow: 0 12px 35px #0003; padding: 12px; display: grid; gap: 8px; min-width: 190px; }
+.monthPanel { width: 266px; left: 0; }
+.monthHeading { justify-content: space-between; }
+.monthGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.monthGrid button { font: inherit; font-size: 13px; min-height: 34px; border: 0; border-radius: 6px; background: var(--panel-muted); color: var(--text); cursor: pointer; }
+.monthGrid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.exportPanel { right: 0; width: 325px; max-width: calc(100vw - 36px); text-align: left; line-height: 1.5; }
+.exportPanel p, .exportPanel small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; margin: 0; }
+.exportPanel strong { font-size: 13px; }
+.check { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+.check input { accent-color: var(--accent-text); width: 16px; height: 16px; }
+.moreFilters { display: contents; }
+.moreFilters > summary { order: 0; }
+.moreFilters[open] > summary { background: var(--accent-glow); color: var(--accent-text); }
+.filterPanel { order: 2; width: 100%; display: flex; gap: 12px; flex-wrap: wrap; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+.filterPanel .field { min-width: 145px; }
+.filterHelp { font-size: 12px; color: var(--muted); margin: 0; width: 100%; }
+.listCaption { font-size: 12px; color: var(--muted); margin-bottom: -13px; }
+.pageSize { display: inline-flex; align-items: center; gap: 8px; }
+.pageSize select { color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px; font: inherit; }
+.page .callList { width: 100%; border-collapse: separate; border-spacing: 0 8px; table-layout: fixed; margin-top: -3px; }
+.page .callList td { padding: 14px 16px; background: var(--panel); border-block: 1px solid var(--border); vertical-align: middle; }
+.callList td:first-child { border-left: 1px solid var(--border); border-radius: 10px 0 0 10px; width: 66%; }
+.callList td:last-child { border-right: 1px solid var(--border); border-radius: 0 10px 10px 0; width: 34%; }
+.patientLine { flex-wrap: wrap; gap: 7px; font-size: 14px; }
+.avatar { width: 28px; height: 28px; display: grid; place-items: center; font-size: 11px; color: var(--muted); background: var(--panel-muted); border-radius: 50%; flex-shrink: 0; }
+.patientName { font-weight: 600; }
+.patientName:hover { color: var(--accent-text); text-decoration: underline; }
+.kindBadge, .statusBadge { font-size: 10px; border-radius: 4px; padding: 3px 5px; line-height: 1.1; color: var(--accent-text); background: var(--accent-glow); white-space: nowrap; }
+.statusBadge { color: var(--muted); background: var(--panel-muted); }
+.overdue { color: var(--danger); background: var(--notice-bg); }
+.completed { color: var(--success); }
+.patientMeta { margin: 4px 0 5px 35px; font-size: 12px; color: var(--muted); gap: 16px; flex-wrap: wrap; }
+.patientMeta span { display: inline-flex; align-items: center; gap: 5px; }
+.recallNote { margin: 5px 0 0 35px; color: var(--muted); font-size: 13px; }
+.recallNote summary { cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.recallNote p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 7px 0; color: var(--text); line-height: 1.6; }
+.contactLine { margin: 5px 0 0 35px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.contactLine summary { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.contactDetails { margin-top: 7px; border-left: 2px solid var(--border); padding: 4px 10px; line-height: 1.6; color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+.rowActions { justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.actionPanel { right: 0; min-width: 175px; padding: 6px; }
+.menuButton { display: block; width: 100%; border: 0; background: none; border-radius: 5px; text-align: left; padding: 10px; font-size: 13px; }
+.mutationControls { display: grid; }
+.muted { color: var(--muted); font-size: 12px; }
+.pagination { justify-content: flex-end; color: var(--muted); font-size: 12px; }
+.pagination > span { margin-right: auto; }
+.empty { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); min-height: 180px; display: grid; justify-items: center; align-content: center; gap: 12px; color: var(--muted); font-size: 14px; }
+.contactDialog { border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow-y: auto; color: var(--text); background: var(--panel); box-shadow: 0 20px 70px #0006; }
+.contactDialog::backdrop { background: #0009; }
+.contactDialog :global(.row) { justify-content: space-between; align-items: flex-start; }
+.contactFields { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 1180px) { .callList td:first-child { width: 58%; } .callList td:last-child { width: 42%; } }
+@media (max-width: 760px) {
+  .page { gap: 14px; padding-top: 0; }
+  .heading { align-items: flex-start; flex-wrap: wrap; }
+  .heading h1 { font-size: 24px; }
+  .heading p { max-width: 38ch; line-height: 1.5; }
+  .headerActions { margin-left: auto; }
+  .filters { gap: 10px; }
+  .field, .field:first-child { flex: 1 1 calc(50% - 10px); min-width: 140px; }
+  .page .callList, .callList tbody { display: block; }
+  .callList tr { display: block; margin-bottom: 10px; }
+  .page .callList td { display: block; width: 100%; padding: 12px; }
+  .callList td:first-child { border: 1px solid var(--border); border-bottom: 0; border-radius: 10px 10px 0 0; }
+  .callList td:last-child { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 10px 10px; padding-top: 6px; }
+  .rowActions { justify-content: flex-end; }
+  .patientMeta, .recallNote, .contactLine { margin-left: 0; }
+  .contactFields { grid-template-columns: 1fr; }
+  .contactDialog { padding: 18px; }
+}
+@media print {
+  .heading, .filters, .listCaption, .actions, .pagination, .contactDialog { display: none !important; }
+  .page .callList td { color: #000; background: #fff; border: 1px solid #ccc; }
+  .callList tr { break-inside: avoid; }
+  .page .callList td:first-child { width: 100%; border-radius: 0; }
+  .recallNote summary { white-space: normal; }
+}

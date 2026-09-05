@@ -144,6 +144,7 @@ test("recalls worklist letter download shows in-flight state and guards repeat s
 
   const recallRow = page.locator("table tbody tr").filter({ hasText: recallNotes }).first();
   await expect(recallRow).toBeVisible({ timeout: 15_000 });
+  await recallRow.getByTestId("recalls-more-actions").locator("summary").click();
   const generateButton = recallRow.getByTestId(`recalls-generate-letter-${recall.id}`);
   await expect(generateButton).toBeVisible();
 
