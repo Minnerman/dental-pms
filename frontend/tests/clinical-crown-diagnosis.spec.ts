@@ -423,7 +423,9 @@ test("crown draft cancellation and patient tab mode or surface switches never sa
   for (const tooth of ["UR6", "LR6"]) {
     await selectCrowns(page, "gold", ["UR6", "LR6"]);
     await page.getByTestId(`tooth-surface-${tooth}-M`).click({ button: "right" });
-    await expect(page.getByTestId("clinical-diagnosis-palette")).toBeVisible();
+    await expect(page.getByTestId("clinical-surface-diagnosis-palette")).toBeVisible();
+    await expect(page.getByTestId("clinical-diagnosis-palette")).toHaveCount(0);
+    await expect(page.getByTestId("clinical-surface-apply")).toBeDisabled();
     await expect(page.getByTestId("clinical-crown-diagnosis-palette")).toHaveCount(0);
     await expect(page.locator('[data-crown-selected="true"]')).toHaveCount(0);
     await page.keyboard.press("Escape");

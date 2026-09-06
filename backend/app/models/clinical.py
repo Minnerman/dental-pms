@@ -89,6 +89,11 @@ class ToothCondition(Base, AuditMixin):
             "crown_observation IS NULL OR jsonb_typeof(crown_observation) = 'object'",
             name="ck_tooth_conditions_crown_object",
         ),
+        CheckConstraint(
+            "jsonb_typeof(surface_observations) = 'object' AND "
+            "surface_observations - 'M' - 'O' - 'I' - 'D' - 'B' - 'P' - 'L' = '{}'::jsonb",
+            name="ck_tooth_conditions_surface_keys",
+        ),
         ForeignKeyConstraint(
             ["bridge_group_id", "patient_id"], ["tooth_bridge_groups.id", "tooth_bridge_groups.patient_id"],
             name="fk_tooth_condition_bridge_patient",
@@ -112,6 +117,10 @@ class ToothCondition(Base, AuditMixin):
     )
     # SQL NULL is no current override; a non-null neutral object is a reset.
     crown_observation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    # Missing keys are unspecified; neutral entries explicitly reset a surface.
+    surface_observations: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     bridge_group_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     bridge_role: Mapped[str | None] = mapped_column(String(12), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

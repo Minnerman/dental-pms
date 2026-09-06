@@ -134,10 +134,13 @@ test("Current chart palette and tooth-number menu expose the same diagnosis-only
   await expect(page.getByTestId("clinical-chart-menu-view-timeline")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Diagnosis-only Current mode must not open a treatment menu from a surface.
+  // Surface diagnosis replaces the tooth palette, never opening treatment tools.
   await page.getByTestId("tooth-surface-UR5-M").click();
   await page.getByTestId("tooth-surface-UR5-D").click({ button: "right" });
-  await expect(page.getByTestId("clinical-surface-action-menu")).toHaveCount(0);
+  await expect(page.getByTestId("clinical-surface-action-menu")).toBeVisible();
+  await expect(page.getByTestId("clinical-surface-diagnosis-palette")).toBeVisible();
+  await expect(page.getByTestId("clinical-diagnosis-palette")).toHaveCount(0);
+  await expect(page.getByTestId("clinical-surface-selection")).toContainText("UR5 MD");
   await expect(page.getByTestId("clinical-chart-menu-add-procedure")).toHaveCount(0);
   await expect(page.getByTestId("clinical-chart-menu-add-plan")).toHaveCount(0);
   expect(bodies).toEqual([]);

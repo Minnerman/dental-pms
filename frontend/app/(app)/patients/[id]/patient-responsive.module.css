@@ -526,13 +526,15 @@
 }
 
 .shell :global(.clinical-root-target),
-.shell :global(.clinical-crown-target) {
+.shell :global(.clinical-crown-target),
+.shell :global(.clinical-surface-target) {
   cursor: pointer;
   outline: none;
 }
 
 .shell :global(.clinical-root-halo),
-.shell :global(.clinical-crown-halo) {
+.shell :global(.clinical-crown-halo),
+.shell :global(.clinical-surface-halo) {
   opacity: 0;
   fill: none;
   stroke: #12bce5;
@@ -542,7 +544,8 @@
 }
 
 .shell :global(.clinical-root-selection),
-.shell :global(.clinical-crown-selection) {
+.shell :global(.clinical-crown-selection),
+.shell :global(.clinical-surface-selection) {
   fill: none;
   stroke: #12bce5;
   stroke-width: 3px;
@@ -553,7 +556,9 @@
 .shell :global(.clinical-root-target:hover .clinical-root-halo),
 .shell :global(.clinical-root-target:focus-visible .clinical-root-halo),
 .shell :global(.clinical-crown-target:hover .clinical-crown-halo),
-.shell :global(.clinical-crown-target:focus-visible .clinical-crown-halo) {
+.shell :global(.clinical-crown-target:focus-visible .clinical-crown-halo),
+.shell :global(.clinical-surface-target:hover .clinical-surface-halo),
+.shell :global(.clinical-surface-target:focus-visible .clinical-surface-halo) {
   animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
 }
 
@@ -625,7 +630,9 @@
   .shell :global(.clinical-root-target:hover .clinical-root-halo),
   .shell :global(.clinical-root-target:focus-visible .clinical-root-halo),
   .shell :global(.clinical-crown-target:hover .clinical-crown-halo),
-  .shell :global(.clinical-crown-target:focus-visible .clinical-crown-halo) {
+  .shell :global(.clinical-crown-target:focus-visible .clinical-crown-halo),
+  .shell :global(.clinical-surface-target:hover .clinical-surface-halo),
+  .shell :global(.clinical-surface-target:focus-visible .clinical-surface-halo) {
     animation: none;
     opacity: .85;
   }
@@ -761,6 +768,29 @@
 }
 
 .shell :global(.clinical-diagnosis-symbol.clinical-crown-symbol) { width: 44.85px; height: 44.85px; }
+.shell :global(.clinical-diagnosis-symbol.clinical-surface-symbol) { width: 44.85px; height: 44.85px; }
+.shell :global(.clinical-surface-tiles) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.shell :global(.clinical-surface-controls) { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
+.shell :global(.clinical-surface-control) { display: grid; align-content: start; flex: 1 1 190px; gap: 7px; font-size: 16px; min-width: 0; }
+.shell :global(.clinical-surface-control select) { width: 100%; min-height: 44px; font-size: 18px; padding: 8px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); background: var(--bg); }
+.shell :global(.clinical-surface-defects) { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.shell :global(.clinical-surface-defects legend) { font-size: 16px; padding: 0 5px; }
+.shell :global(.clinical-surface-defects > div) { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.shell :global(.clinical-surface-defects label) { display: flex; align-items: center; gap: 8px; font-size: 16px; min-height: 36px; }
+.shell :global(.clinical-surface-defects input) { width: 18px; height: 18px; accent-color: #0b9ec0; }
+.shell :global(.clinical-surface-controls small) { display: block; color: var(--muted); line-height: 1.5; font-size: 14px; flex-basis: 100%; }
+.shell :global(.clinical-surface-selected-targets) { overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; }
+.shell :global(.clinical-surface-reset-warning) { color: var(--text); line-height: 1.5; }
+.shell :global(.clinical-surface-menu-choices) { display: grid; gap: 5px; }
+.shell :global(.clinical-surface-menu-choices button) { justify-content: flex-start; text-align: left; min-height: 48px; font-size: 18px; gap: 12px; white-space: normal; }
+.shell :global(.clinical-surface-menu-choices button[aria-checked="true"]) { border-color: #0b9ec0; background: rgb(11 158 192 / 15%); }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-surface-symbol) { width: 30px; height: 30px; }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-surface-actions button) { font-size: 18px; min-height: 44px; white-space: normal; }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-surface-defects > div) { grid-template-columns: 1fr; }
+.shell :global([data-testid="clinical-surface-action-menu"] > button),
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-chart-action-menu-title) { font-size: 18px; }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-chart-action-menu-hint),
+.shell :global([data-testid="clinical-surface-action-menu"] small) { font-size: 14px; line-height: 1.5; }
 .shell :global(.clinical-restoration-sections) { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 14px; }
 .shell :global(.clinical-restoration-heading) { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
 .shell :global(.clinical-bridge-tiles) { grid-template-columns: repeat(3, minmax(0, 1fr)); }

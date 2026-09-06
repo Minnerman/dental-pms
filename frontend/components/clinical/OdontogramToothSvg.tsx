@@ -4,6 +4,7 @@ import { getRootDrawingLandmarks, getToothAnatomy, getToothAnatomyWidth, implant
 import { britishToothLabel } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation } from "./rootDiagnosis";
 import type { CrownObservation } from "./crownDiagnosis";
+import { surfaceDiagnosisLabel, surfaceKeysForTooth, surfaceMaterials, surfaceName, type SurfaceKey, type SurfaceObservation } from "./surfaceDiagnosis";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
@@ -198,6 +199,10 @@ type Props = {
   crownSelected?: boolean;
   bridgeRole?: "abutment" | "pontic" | "wing" | null;
   allowMissingCrownSelection?: boolean;
+  surfaceObservations?: Partial<Record<SurfaceKey, SurfaceObservation>>;
+  selectedDiagnosticSurfaces?: SurfaceKey[];
+  onDiagnosticSurfaceClick?: (surface: SurfaceKey, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onDiagnosticSurfaceContextMenu?: (surface: SurfaceKey, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onCrownClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onCrownContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onRootClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
@@ -221,6 +226,10 @@ function OdontogramToothSvgImpl({
   crownSelected = false,
   bridgeRole,
   allowMissingCrownSelection = false,
+  surfaceObservations,
+  selectedDiagnosticSurfaces = [],
+  onDiagnosticSurfaceClick,
+  onDiagnosticSurfaceContextMenu,
   onCrownClick,
   onCrownContextMenu,
   onRootClick,
@@ -237,12 +246,21 @@ function OdontogramToothSvgImpl({
   // A replacement tooth is not evidence that a biological tooth is present.
   // These Current-only observations leave the recorded absence/history intact.
   const artificialTooth = baselineCondition?.status !== "unerupted" && (isDenture || currentBridgeRole === "pontic");
+  const currentSurfaceLayer = surfaceObservations !== undefined;
+  const nativeSurfaceKey = (surface: R4SurfaceKey): SurfaceKey => surface === "L" && toothKey.startsWith("U") ? "P" : surface;
+  const supportsNativeSurfaces = !artificialTooth && !["missing", "unerupted", "implant"].includes(baselineCondition?.status ?? "") && crownCondition?.kind !== "fractured";
   const supportsNativeRoots = !artificialTooth && !["missing", "implant", "unerupted"].includes(baselineCondition?.status ?? "");
   const nativeRootIndexes = new Set(anatomy.roots.flatMap((_, index) =>
     supportsNativeRoots && rootConditions && Object.prototype.hasOwnProperty.call(rootConditions, String(index + 1))
       ? [index] : []
   ));
   const hasCurrentRootRecord = nativeRootIndexes.size > 0;
+  const unresolvedLegacyImplant = restorations.some((restoration) => normalizeRestorationType(restoration.type) === "implant") && !hasCurrentRootRecord
+    && !["present", "unrecorded", "impacted"].includes(baselineCondition?.status ?? "") && baselineCondition?.dentition !== "deciduous";
+  const nativeSurfaceKeys = new Set(surfaceKeysForTooth(toothKey).filter((surface) => supportsNativeSurfaces && !unresolvedLegacyImplant
+    && surfaceObservations && Object.prototype.hasOwnProperty.call(surfaceObservations, surface) && surfaceObservations[surface] != null));
+  const hasCurrentSurfaceRecord = nativeSurfaceKeys.size > 0;
+  const surfaceRecorded = (surface: R4SurfaceKey) => nativeSurfaceKeys.has(nativeSurfaceKey(surface));
   const supportsNativeCrown = baselineCondition?.status !== "unerupted" && (baselineCondition?.status !== "missing" || artificialTooth);
   const hasCurrentCrownRecord = supportsNativeCrown && crownCondition != null;
   const normalizedRestorations = restorations
@@ -254,6 +272,7 @@ function OdontogramToothSvgImpl({
       meta: restoration.meta,
     }))
     .filter((restoration) => {
+      if (hasCurrentSurfaceRecord && restoration.type === "extraction") return false;
       if (artificialTooth && ["root_canal", "post", "implant", "denture", "extraction"].includes(restoration.type)) return false;
       if (currentBridgeRole && restoration.type === "bridge") return false;
       // Crown-only observations (including a neutral reset) do not erase root,
@@ -298,7 +317,7 @@ function OdontogramToothSvgImpl({
       fillingSurfaces.add(surface);
     }
   }
-  const hasWholeToothFilling = restorationsForType("filling").some(
+  const hasWholeToothFilling = !hasCurrentSurfaceRecord && restorationsForType("filling").some(
     (restoration) => restoration.surfaces.length === 0
   );
 
@@ -341,8 +360,12 @@ function OdontogramToothSvgImpl({
   const otherTooltip = tooltipForType("other");
 
   const extractionFromRestoration = hasRestoration("extraction");
-  const extractedState = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !baselineCondition?.status && (extracted || extractionFromRestoration);
-  const legacyMissing = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !baselineCondition?.status && missing;
+  const extractedState = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !hasCurrentSurfaceRecord && !baselineCondition?.status && (extracted || extractionFromRestoration);
+  const legacyMissing = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !hasCurrentSurfaceRecord && !baselineCondition?.status && missing;
+  // Surface evidence can keep its own drawing visible without granting a new
+  // root-authoring interpretation to a previously absent legacy tooth.
+  const rootLegacyAbsence = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !baselineCondition?.status
+    && (missing || extracted || restorations.some((restoration) => restoration.type === "extraction"));
   const stateDominant = legacyMissing || extractedState;
   const baselineMissing = baselineCondition?.status === "missing";
   const baselineImplant = baselineCondition?.status === "implant";
@@ -361,7 +384,9 @@ function OdontogramToothSvgImpl({
   const implantFillId = `implant-${illustrationId}`;
   // Current-only affordances never change the historical tooth illustration.
   const currentRootLayer = rootConditions !== undefined || Boolean(onRootClick || onRootContextMenu);
-  const canRecordNaturalRoots = supportsNativeRoots && !stateDominant && !hasRestoration("implant");
+  const canRecordNaturalRoots = supportsNativeRoots && !stateDominant && !rootLegacyAbsence && !hasRestoration("implant");
+  const canRecordSurfaces = currentSurfaceLayer && supportsNativeSurfaces && !stateDominant && !hasRestoration("implant");
+  const surfaceControls = canRecordSurfaces && Boolean(onDiagnosticSurfaceClick || onDiagnosticSurfaceContextMenu);
   const rootControls = Boolean(onRootClick || onRootContextMenu) && showAnatomy && canRecordNaturalRoots;
   const crownControls = Boolean(onCrownClick || onCrownContextMenu) && (missingCrownPlaceholder || (showAnatomy && supportsNativeCrown && !stateDominant));
   const nativeCrown = hasCurrentCrownRecord ? crownCondition : null;
@@ -378,6 +403,7 @@ function OdontogramToothSvgImpl({
   const crownDescription = `${displayLabel} crown area, ${crownRemoved ? "fractured, crown absent" : crownPrepared ? "missing crown, prepared stump" : crownKindDescription}${currentBridgeRole ? `, bridge ${currentBridgeRole}` : ""}${artificialTooth ? ", artificial replacement tooth, no natural root" : ""}${crownIssues.length ? `, ${crownIssues.map((issue) => issue.replaceAll("_", " ")).join(", ")}` : ""}`;
   const crownClipId = `crown-clip-${illustrationId}`;
   const crownDefectId = `crown-defect-${illustrationId}`;
+  const surfacePatternId = (kind: string) => `surface-${kind}-${illustrationId}`;
   const rootRecorded = (index: number) => canRecordNaturalRoots && nativeRootIndexes.has(index);
   const anyRootRecorded = anatomy.roots.some((_, index) => rootRecorded(index));
   const rootAreaObservations = anatomy.roots.map((_, index) =>
@@ -433,7 +459,7 @@ function OdontogramToothSvgImpl({
       width="72"
       height="202"
       className="odontogram-tooth-svg"
-      role={rootControls || crownControls ? "group" : "img"}
+      role={rootControls || crownControls || surfaceControls ? "group" : "img"}
       aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? artificialTooth ? ", artificial replacement tooth" : ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
       data-baseline-status={baselineCondition?.status}
@@ -456,6 +482,23 @@ function OdontogramToothSvgImpl({
           <stop offset="78%" stopColor="#faf7cf" />
           <stop offset="100%" stopColor="#e8e1ac" />
         </linearGradient>
+        {currentSurfaceLayer && showSurfaceMap && <>
+          <pattern id={surfacePatternId("early")} width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle cx="3" cy="3" r="1.6" fill="#bd2239" />
+          </pattern>
+          <pattern id={surfacePatternId("arrested")} width="10" height="9" patternUnits="userSpaceOnUse">
+            <path d="M1 3 H7" fill="none" stroke="#bd2239" strokeWidth="1.7" />
+          </pattern>
+          <pattern id={surfacePatternId("established")} width="5" height="5" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L4 6 M1 -1 L6 4" fill="none" stroke="#bd2239" strokeWidth="1.7" />
+          </pattern>
+          <pattern id={surfacePatternId("unspecified")} width="12" height="12" patternUnits="userSpaceOnUse">
+            <circle cx="4" cy="4" r="2.5" fill="none" stroke="#bd2239" strokeWidth="1.4" />
+          </pattern>
+          <pattern id={surfacePatternId("defective")} width="8" height="8" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L7 9 M1 -1 L9 7 M-1 7 L7 -1 M1 9 L9 1" fill="none" stroke="#bd2239" strokeWidth="1.4" />
+          </pattern>
+        </>}
         {(crownCondition !== undefined || crownControls || missingCrownPlaceholder) && <>
           <clipPath id={crownClipId}><path d={anatomy.crown} /></clipPath>
           <pattern id={crownDefectId} width="9" height="9" patternUnits="userSpaceOnUse">
@@ -824,7 +867,10 @@ function OdontogramToothSvgImpl({
       {showSurfaceMap && <g
         transform={isUpperArch ? "translate(0 180)" : undefined}
         data-testid={`tooth-surface-map-${toothKey}`}
+        data-current-surfaces={currentSurfaceLayer ? "true" : undefined}
       >
+      <g transform={currentSurfaceLayer && toothKey[1] === "R" ? "translate(100 0) scale(-1 1)" : undefined}
+        data-testid={currentSurfaceLayer ? `clinical-surface-orientation-${toothKey}` : undefined}>
       <path
         d={surfaceOutlinePath[toothType]}
         fill={active ? "rgba(51, 255, 180, 0.12)" : "rgba(255, 255, 255, 0.82)"}
@@ -833,37 +879,70 @@ function OdontogramToothSvgImpl({
       />
 
       {surfaces.map((surface) => {
-        const isSelected = selectedSurfaceKeys.has(surface.key);
-        const hasFilling = fillingSurfaces.has(surface.key);
-        const hasVeneer = veneerSurfaces.has(surface.key);
-        const hasInlayOnlay = inlayOnlaySurfaces.has(surface.key);
+        const diagnosticKey = nativeSurfaceKey(surface.key);
+        const isSelected = currentSurfaceLayer ? selectedDiagnosticSurfaces.includes(diagnosticKey) : selectedSurfaceKeys.has(surface.key);
+        const recorded = surfaceRecorded(surface.key);
+        const observation = recorded && canRecordSurfaces ? surfaceObservations?.[diagnosticKey] : undefined;
+        const description = `${displayLabel} ${surfaceName(diagnosticKey)} surface (${diagnosticKey}), ${observation ? surfaceDiagnosisLabel(observation) : "current finding unspecified"}`;
+        const carious = observation?.kind === "carious" || observation?.condition?.startsWith("carious_");
+        const pattern = observation?.kind === "defective" || observation?.condition === "defective" ? "defective"
+          : carious ? observation?.condition?.startsWith("carious_") ? observation.condition.slice(8) : "unspecified" : null;
+        const material = surfaceMaterials.find((entry) => entry.value === observation?.material);
+        const fill = observation?.kind === "restored" ? material?.colour ?? "#c1c6cb" : observation?.kind === "sealant" ? "#b9e6ef" : "#ffe0e4";
+        const hasFilling = !recorded && fillingSurfaces.has(surface.key);
+        const hasVeneer = !recorded && veneerSurfaces.has(surface.key);
+        const hasInlayOnlay = !recorded && inlayOnlaySurfaces.has(surface.key);
         return (
-          <g key={`${toothKey}-${surface.key}`}>
+          <g key={`${toothKey}-${surface.key}`}
+            data-testid={currentSurfaceLayer ? `clinical-surface-${toothKey}-${diagnosticKey}` : undefined}
+            data-surface-kind={currentSurfaceLayer ? observation ? observation.kind ?? "unspecified" : "untouched" : undefined}
+            data-surface-recorded={currentSurfaceLayer ? observation ? "true" : "false" : undefined}
+            data-surface-material={observation?.material ?? undefined}
+            data-surface-condition={observation?.condition ?? undefined}
+            className={surfaceControls ? "clinical-surface-target" : undefined}
+            role={surfaceControls ? "button" : undefined} tabIndex={surfaceControls ? 0 : undefined}
+            aria-label={surfaceControls ? `${displayLabel} ${surfaceName(diagnosticKey)} surface` : undefined}
+            aria-pressed={surfaceControls ? isSelected : undefined}
+            onClick={surfaceControls ? (event) => {
+              event.preventDefault(); event.stopPropagation();
+              (onDiagnosticSurfaceClick ?? onDiagnosticSurfaceContextMenu)?.(diagnosticKey, event);
+            } : undefined}
+            onContextMenu={surfaceControls ? (event) => {
+              event.preventDefault(); event.stopPropagation();
+              (onDiagnosticSurfaceContextMenu ?? onDiagnosticSurfaceClick)?.(diagnosticKey, event);
+            } : undefined}
+            onKeyDown={surfaceControls ? (event) => {
+              const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+              if (!context && event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault(); event.stopPropagation();
+              (context ? onDiagnosticSurfaceContextMenu ?? onDiagnosticSurfaceClick : onDiagnosticSurfaceClick ?? onDiagnosticSurfaceContextMenu)?.(diagnosticKey, event);
+            } : undefined}>
+            {currentSurfaceLayer && <title>{description}</title>}
             <polygon
               points={surface.points}
               data-surface={surface.key}
               data-selected={isSelected ? "true" : "false"}
               data-testid={`tooth-surface-${toothKey}-${surface.key}`}
-              fill={isSelected ? "rgba(51, 255, 180, 0.42)" : "rgba(148, 163, 184, 0.08)"}
-              stroke={isSelected ? "var(--accent)" : "rgba(51, 65, 85, 0.35)"}
+              fill={currentSurfaceLayer ? "#f4f6f7" : isSelected ? "rgba(51, 255, 180, 0.42)" : "rgba(148, 163, 184, 0.08)"}
+              stroke={currentSurfaceLayer ? isSelected ? "var(--accent, #00bcea)" : "#8a929c" : isSelected ? "var(--accent)" : "rgba(51, 65, 85, 0.35)"}
               strokeWidth={isSelected ? 2.4 : 1.2}
-              style={{ cursor: "pointer" }}
-              onClick={(event) => {
+              style={{ cursor: !currentSurfaceLayer || surfaceControls ? "pointer" : "default" }}
+              onClick={!currentSurfaceLayer ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onSurfaceClick?.(surface.key, {
                   clientX: event.clientX,
                   clientY: event.clientY,
                 });
-              }}
-              onContextMenu={(event) => {
+              } : undefined}
+              onContextMenu={!currentSurfaceLayer ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onSurfaceContextMenu?.(surface.key, {
                   clientX: event.clientX,
                   clientY: event.clientY,
                 });
-              }}
+              } : undefined}
             />
             {hasFilling && (
               <polygon
@@ -895,6 +974,22 @@ function OdontogramToothSvgImpl({
                 data-testid={`tooth-restoration-${toothKey}-inlay_onlay-${surface.key}`}
               />
             )}
+            {observation && <g pointerEvents="none" data-testid={`clinical-surface-finding-${toothKey}-${diagnosticKey}`}
+              data-kind={observation.kind ?? "unspecified"} data-material={observation.material ?? undefined}
+              data-condition={observation.condition ?? undefined}>
+              {observation.kind && <polygon points={surface.points} fill={fill} stroke="#59636c" strokeWidth="1.1"
+                data-testid={`clinical-surface-fill-${toothKey}-${diagnosticKey}`}
+                strokeDasharray={observation.condition === null ? "3 2" : undefined} />}
+              {observation.kind && pattern && <polygon points={surface.points} fill={`url(#${surfacePatternId(pattern)})`}
+                data-testid={`clinical-surface-pattern-${toothKey}-${diagnosticKey}`}
+                data-pattern={pattern === "defective" ? "defective" : "carious"}
+                data-stage={pattern === "defective" ? undefined : pattern} />}
+            </g>}
+            {surfaceControls && <>
+              <polygon className="clinical-surface-halo" points={surface.points} fill="none" stroke="var(--accent, #00bcea)" strokeWidth="6" pointerEvents="none" />
+              {isSelected && <polygon className="clinical-surface-selection" points={surface.points} fill="none"
+                stroke="var(--accent, #00bcea)" strokeWidth="2.4" pointerEvents="none" />}
+            </>}
           </g>
         );
       })}
@@ -1031,7 +1126,7 @@ function OdontogramToothSvgImpl({
         </g>
       )}
 
-      {hasRestoration("veneer") && (
+      {hasRestoration("veneer") && !surfaceRecorded("B") && (
         <path
           d={surfaceOutlinePath[toothType]}
           fill="none"
@@ -1046,7 +1141,7 @@ function OdontogramToothSvgImpl({
         </path>
       )}
 
-      {hasRestoration("inlay_onlay") && (
+      {hasRestoration("inlay_onlay") && !hasCurrentSurfaceRecord && (
         <circle
           cx="50"
           cy="50"
@@ -1113,7 +1208,7 @@ function OdontogramToothSvgImpl({
           />
         </g>
       )}
-      </g>}
+      </g></g>}
     </svg>
   );
 }

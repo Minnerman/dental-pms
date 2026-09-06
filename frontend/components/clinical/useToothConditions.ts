@@ -6,6 +6,7 @@ import type { OdontogramBaselineCondition } from "./OdontogramToothSvg";
 import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothCondition } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation, type RootPatch } from "./rootDiagnosis";
 import { crownDiagnosisLabel, type CrownObservation, type BridgeRole, type BridgeGroup, type BridgeDraft } from "./crownDiagnosis";
+import { surfaceDiagnosisLabel, surfaceSelectionLabel, type SurfaceKey, type SurfaceObservation, type SurfaceTarget } from "./surfaceDiagnosis";
 export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
 type ConditionRow = DiagnosisPatch & {
@@ -13,6 +14,7 @@ type ConditionRow = DiagnosisPatch & {
   revision: number;
   root_observations?: Record<string, RootObservation>;
   crown_observation?: CrownObservation | null;
+  surface_observations?: Partial<Record<SurfaceKey, SurfaceObservation>>;
   bridge_group_id?: number | null;
   bridge_role?: BridgeRole | null;
   updated_at: string;
@@ -164,6 +166,12 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
     }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${crownDiagnosisLabel(observation)}`);
 
+  const saveSurfaces = (targets: SurfaceTarget[], observation: SurfaceObservation) =>
+    saveObservation(`/api/patients/${patientId}/clinical/surface-conditions`, {
+      targets, observation,
+      expected_revisions: Object.fromEntries(targets.map(({ tooth }) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
+    }, `${surfaceSelectionLabel(targets)} · ${surfaceDiagnosisLabel(observation)}`);
+
   const saveBridge = (draft: BridgeDraft) => saveObservation(`/api/patients/${patientId}/clinical/bridges`, {
     ...draft,
     expected_revisions: Object.fromEntries(draft.members.map(({ tooth }) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
@@ -177,7 +185,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
     bridges: currentChart?.bridges ?? [],
-    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns, saveBridge, resetBridge,
+    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns, saveSurfaces, saveBridge, resetBridge,
     save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

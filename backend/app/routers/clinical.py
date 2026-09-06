@@ -35,6 +35,7 @@ from app.schemas.clinical import (
     ProcedureCreate,
     ProcedureOut,
     RootConditionUpdate,
+    SurfaceConditionUpdate,
     schematic_root_count,
     TOOTH_PATTERN,
     ToothHistoryOut,
@@ -57,6 +58,7 @@ CLINICAL_WRITE = require_capability("clinical.write")
 OBSERVATION_AUDIT_ACTIONS = [
     "clinical.tooth_conditions.recorded", "clinical.root_conditions.recorded", "clinical.crown_conditions.recorded",
     "clinical.bridge.created", "clinical.bridge.reset",
+    "clinical.surface_conditions.recorded",
 ]
 ACTIVE_APPOINTMENT_STATUSES = {
     AppointmentStatus.booked,
@@ -192,8 +194,17 @@ def _meaningful_roots(row: ToothCondition | None) -> bool:
                             for value in row.root_observations.values()))
 
 
+def _meaningful_surfaces(row: ToothCondition | None) -> bool:
+    return bool(row and any(value.get("kind") is not None for value in row.surface_observations.values()))
+
+
 def _artificial_site_allowed(row: ToothCondition | None) -> bool:
-    return (row is None or row.condition in {None, "missing", "unrecorded"}) and not _meaningful_roots(row)
+    return ((row is None or row.condition in {None, "missing", "unrecorded"})
+            and not _meaningful_roots(row) and not _meaningful_surfaces(row))
+
+
+def _has_anatomy_observations(row: ToothCondition) -> bool:
+    return bool(row.root_observations or row.crown_observation is not None or row.surface_observations)
 
 
 def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
@@ -229,6 +240,7 @@ def _tooth_condition_snapshot(row: ToothCondition | None) -> dict:
         "rotation": row.rotation if row else None,
         "root_observations": row.root_observations if row else {},
         "crown_observation": row.crown_observation if row else None,
+        "surface_observations": row.surface_observations if row else {},
         "bridge_group_id": row.bridge_group_id if row else None,
         "bridge_role": row.bridge_role if row else None,
         "revision": row.revision if row else 0,
@@ -316,7 +328,7 @@ def update_tooth_conditions(
                 detail="Reset the denture crown before recording an incompatible tooth condition")
         if row.bridge_group_id is not None and "condition" in observations:
             clears_recorded_anatomy = (_whole_tooth_clears_anatomy_observations(row, observations)
-                                      and (row.root_observations or row.crown_observation is not None))
+                                      and _has_anatomy_observations(row))
             if observations["condition"] != row.condition or clears_recorded_anatomy:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="Reset the complete bridge before changing a member's tooth condition")
@@ -326,7 +338,7 @@ def update_tooth_conditions(
         row = existing.get(tooth)
         clear_anatomy = _whole_tooth_clears_anatomy_observations(row, observations)
         if (row is not None and all(getattr(row, key) == value for key, value in observations.items())
-                and not (clear_anatomy and (row.root_observations or row.crown_observation is not None))):
+                and not (clear_anatomy and _has_anatomy_observations(row))):
             continue
         if row is None:
             row = ToothCondition(
@@ -346,6 +358,7 @@ def update_tooth_conditions(
                 # Replacing the map preserves the pre-change audit snapshot.
                 row.root_observations = {}
                 row.crown_observation = None
+                row.surface_observations = {}
             row.revision += 1
             row.updated_by_user_id = user.id
             row.updated_at = now
@@ -498,7 +511,7 @@ def update_crown_conditions(
         if payload.kind in DENTURE_CROWN_KINDS:
             if not _artificial_site_allowed(row):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="A denture tooth requires a missing or unspecified tooth without current root findings")
+                    detail="A denture tooth requires a missing or unspecified tooth without current root or surface findings; reset incompatible findings first")
         elif condition == "unerupted" or (condition == "missing" and not (
                 row and row.bridge_role == "pontic" and payload.kind in MATERIAL_CROWN_KINDS
                 or payload.kind is None and old_crown is not None and old_crown.get("kind") in DENTURE_CROWN_KINDS | {None})):
@@ -539,6 +552,83 @@ def update_crown_conditions(
     return _tooth_conditions_out(db, patient_id)
 
 
+@patient_router.post("/clinical/surface-conditions", response_model=ToothConditionsOut)
+def update_surface_conditions(
+    patient_id: int,
+    payload: SurfaceConditionUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(CLINICAL_WRITE),
+    _viewer: User = Depends(CLINICAL_VIEW),
+    request_id: str | None = Header(default=None, min_length=1, max_length=120),
+):
+    # These are current findings on natural surfaces, not procedures or charges.
+    # The existing patient lock serializes every layer and whole-tooth reset.
+    get_patient_or_404(db, patient_id, for_update=True)
+    action = "clinical.surface_conditions.recorded"
+    request_values = payload.model_dump(mode="json")
+    duplicate = _duplicate_audit(db, patient_id=patient_id, request_id=request_id,
+        actions=OBSERVATION_AUDIT_ACTIONS)
+    if duplicate:
+        if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                detail="Request-Id was already used for a different tooth observation")
+        return _tooth_conditions_out(db, patient_id)
+
+    teeth = [target.tooth for target in payload.targets]
+    existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
+        ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(teeth),
+    ))}
+    if any(payload.expected_revisions[tooth] != (existing[tooth].revision if tooth in existing else 0)
+           for tooth in teeth):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+            detail="Tooth conditions changed. Refresh the chart before trying again")
+    for row in existing.values():
+        crown_kind = (row.crown_observation or {}).get("kind")
+        if (row.condition in {"missing", "unerupted", "implant"} or row.bridge_role == "pontic"
+                or crown_kind in DENTURE_CROWN_KINDS | {"fractured"}):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Surface findings require a natural tooth or a crowned natural support, not a missing, unerupted, implant, pontic, denture or absent crown")
+
+    before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in teeth}
+    changed_surfaces = {}
+    now = datetime.now(timezone.utc)
+    for target in payload.targets:
+        row = existing.get(target.tooth)
+        surfaces = dict(row.surface_observations) if row else {}
+        changed = []
+        for surface in target.surfaces:
+            observation = payload.observation.model_dump(mode="json")
+            if surface not in surfaces or surfaces[surface] != observation:
+                # Replace entries and maps, preserving independent other surfaces
+                # and the immutable before-audit snapshot.
+                surfaces[surface] = observation
+                changed.append(surface)
+        if not changed:
+            continue
+        changed_surfaces[target.tooth] = changed
+        if row is None:
+            row = ToothCondition(patient_id=patient_id, tooth=target.tooth, revision=1,
+                surface_observations=surfaces, created_by_user_id=user.id,
+                updated_by_user_id=user.id, updated_at=now)
+            existing[target.tooth] = row
+        else:
+            row.surface_observations = surfaces
+            row.revision += 1
+            row.updated_by_user_id = user.id
+            row.updated_at = now
+        db.add(row)
+    db.flush()
+    log_event(db, actor=user, action=action,
+        entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        before_data={"teeth": before},
+        after_data={"request": request_values, "changed_teeth": list(changed_surfaces),
+                    "changed_surfaces": changed_surfaces,
+                    "teeth": {tooth: _tooth_condition_snapshot(existing[tooth]) for tooth in teeth}},
+    )
+    db.commit()
+    return _tooth_conditions_out(db, patient_id)
+
+
 @patient_router.post("/clinical/bridges", response_model=ToothConditionsOut)
 def create_bridge(
     patient_id: int,
@@ -572,7 +662,7 @@ def create_bridge(
         if member.role == "pontic":
             if not _artificial_site_allowed(row):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="A pontic requires a missing or unspecified tooth without current root findings")
+                    detail="A pontic requires a missing or unspecified tooth without current root or surface findings; reset incompatible findings first")
         elif row and (row.condition in {"missing", "unerupted"} or
                       member.role == "wing" and row.condition == "implant"):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

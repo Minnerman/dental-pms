@@ -3,6 +3,45 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (surface diagnosis): Current adds a fourth, independent surface
+  level. Left-click or keyboard-select M/O/I/D/B/P/L surfaces across teeth;
+  right-click opens the same Caries, Defective, Restored, Fissure sealant and
+  Reset selected surfaces choices as the bottom rectangles. The full selection
+  is shown before explicit Apply. A single saved surface opens with its exact
+  recorded values; mixed selections never infer a shared material or condition.
+  Caries supports Early/Arrested/Established or unspecified; restoration material
+  choices mirror the supplied R4 screenshots, with explicit Unknown as default.
+  Restored/sealant conditions and nine defect details remain separately recorded.
+  No unspecified value is interpreted as sound. Material fills and red caries/
+  defect patterns identify each saved surface. Current mesial geometry mirrors
+  on UR/LR toward the arch centre; upper palatal is P and lower lingual is L.
+  History/Planned legacy codes, geometry, procedures and notes remain unchanged.
+  Native missing, unerupted, implant, pontic, denture and absent-crown sites reject
+  natural surface authoring. Existing crowned natural supports/stumps remain
+  chartable. Reset selected surfaces stores neutral overrides only for those
+  surfaces, preserving other surfaces, tooth/root/crown/bridge records and notes.
+  Whole-tooth anatomical resets clear the surface map atomically; artificial-site
+  creation rejects meaningful native surface findings until explicitly reset.
+  Additive migration 0055_surface_observations adds a JSONB map on existing
+  revisioned tooth rows. Shared patient locks, exact target revisions, atomic
+  audit and endpoint-aware replay guards extend to surface saves. No backfill,
+  R4 access, treatment/finance changes or production deployment.
+  Verification: 175 backend cases, 48 distinct glyph cases, empty migration
+  downgrade/re-upgrade and populated downgrade refusal passed. Production build,
+  typecheck/lint/compilation/diff checks and six isolated health/auth/read checks
+  passed. All 51 distinct focused browser cases passed: release run 50/51, followed
+  by 2/2 shape checks after updating the obsolete definition count from 276 to
+  436 (five new surface patterns per tooth, each explicitly asserted). No app
+  change or renderer workaround was needed. Old palette boundary expectations
+  now require the surface palette instead of whole-tooth controls. Development
+  test-only fixes covered accessible combobox selectors, deliberate menu dismissal
+  and subpixel icon dimensions. Final synthetic light/dark/mobile previews were
+  visually inspected, including mobile menu scrolling. Full backend/default-stack
+  wrappers were not run; scoped isolated equivalents were used. PR #714 remains
+  draft above open #713; parent resolution and required master CI/review remain
+  gates. Production migrations 0049–0055 and deployment require separate approval.
+  Disposable surface-test containers/network/data have been removed; previews
+  and test reports remain outside Git.
 - 2026-09-06 (bonded crowns, bridges and dentures): Current/Diagnosis now adds
   dark-brown Porcelain B. Crown. Crown/bridge/denture palette icons are 30% larger
   (34.5 to 44.85px), while existing 18px labels and tooth/root icon sizes remain.

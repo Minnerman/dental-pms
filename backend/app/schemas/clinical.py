@@ -229,6 +229,114 @@ class CrownConditionUpdate(CrownObservation):
         return self
 
 
+# Current native surface notation is deliberately separate from legacy
+# procedure/note surface parsing, whose historical L values stay unchanged.
+SurfaceKey = Literal["M", "O", "I", "D", "B", "P", "L"]
+NATIVE_SURFACE_ORDER = ("M", "O", "I", "D", "B", "P", "L")
+SurfaceMaterial = Literal[
+    "amalgam", "precious_metal", "carbon_fibre", "gold", "glass_ionomer",
+    "cast_metal_alloy", "metallic", "porcelain", "resin", "stainless_steel",
+    "unknown", "vmk", "combination",
+]
+SurfaceCondition = Literal["sound", "carious_early", "carious_arrested", "carious_established", "defective"]
+SurfaceDefect = Literal[
+    "open_contact", "cracked", "broken", "faceted", "overhang", "over_contour",
+    "under_contour", "cosmetic", "leaking",
+]
+CARIOUS_SURFACE_CONDITIONS = {"carious_early", "carious_arrested", "carious_established"}
+
+
+class SurfaceObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["carious", "defective", "restored", "sealant"] | None
+    material: SurfaceMaterial | None
+    condition: SurfaceCondition | None
+    defects: list[SurfaceDefect] = Field(max_length=9)
+
+    @field_validator("defects", mode="before")
+    @classmethod
+    def canonical_defects(cls, value):
+        if not isinstance(value, list) or any(not isinstance(defect, str) for defect in value):
+            raise ValueError("defects must be a list of surface defect identifiers")
+        if len(set(value)) != len(value):
+            raise ValueError("defects must not repeat")
+        return sorted(value)
+
+    @model_validator(mode="after")
+    def check_observation(self):
+        if self.kind is None:
+            if self.material is not None or self.condition is not None or self.defects:
+                raise ValueError("a surface reset requires null material/condition and no defects")
+        elif self.kind == "carious":
+            if self.material is not None or self.condition not in CARIOUS_SURFACE_CONDITIONS | {None} or self.defects:
+                raise ValueError("carious surfaces allow only an optional caries stage")
+        elif self.kind == "defective":
+            if self.material is not None or self.condition != "defective":
+                raise ValueError("defective surfaces require defective condition and no material")
+        elif self.kind == "restored":
+            if self.material is None:
+                raise ValueError("restored surfaces require an explicit material, including unknown if necessary")
+        elif self.kind == "sealant" and self.material is not None:
+            raise ValueError("sealant surfaces do not have a restoration material")
+        if self.defects and self.condition != "defective":
+            raise ValueError("surface defects require a defective condition")
+        return self
+
+
+class SurfaceTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tooth: str
+    surfaces: list[SurfaceKey] = Field(min_length=1, max_length=5)
+    _normalize_tooth = field_validator("tooth")(_tooth)
+
+    @field_validator("surfaces", mode="before")
+    @classmethod
+    def canonical_surfaces(cls, value):
+        if not isinstance(value, list) or any(not isinstance(surface, str) for surface in value):
+            raise ValueError("surfaces must be a list of surface identifiers")
+        surfaces = [surface.strip().upper() for surface in value]
+        if len(set(surfaces)) != len(surfaces):
+            raise ValueError("surfaces must not repeat")
+        if any(surface not in NATIVE_SURFACE_ORDER for surface in surfaces):
+            raise ValueError("unsupported native surface identifier")
+        return sorted(surfaces, key=NATIVE_SURFACE_ORDER.index)
+
+    @model_validator(mode="after")
+    def check_anatomy(self):
+        anterior = int(self.tooth[-1]) <= 3
+        if ("I" in self.surfaces and not anterior) or ("O" in self.surfaces and anterior):
+            raise ValueError("use incisal for positions 1-3 and occlusal for positions 4-8")
+        if ("P" in self.surfaces and not self.tooth.startswith("U")) or (
+                "L" in self.surfaces and not self.tooth.startswith("L")):
+            raise ValueError("use palatal for upper teeth and lingual for lower teeth")
+        return self
+
+
+class SurfaceConditionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    targets: list[SurfaceTarget] = Field(min_length=1, max_length=32)
+    observation: SurfaceObservation
+    expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+
+    @field_validator("expected_revisions", mode="before")
+    @classmethod
+    def normalize_revision_keys(cls, value):
+        return ToothConditionUpdate.normalize_revision_keys(value)
+
+    @model_validator(mode="after")
+    def check_scope(self):
+        teeth = [target.tooth for target in self.targets]
+        if len(set(teeth)) != len(teeth):
+            raise ValueError("supply only one target per tooth")
+        if set(self.expected_revisions) != set(teeth):
+            raise ValueError("expected_revisions must contain exactly the target teeth")
+        self.targets.sort(key=lambda target: target.tooth)
+        return self
+
+
 ARCH_TEETH = {
     "upper": [f"UR{n}" for n in range(8, 0, -1)] + [f"UL{n}" for n in range(1, 9)],
     "lower": [f"LR{n}" for n in range(8, 0, -1)] + [f"LL{n}" for n in range(1, 9)],
@@ -311,6 +419,7 @@ class ToothConditionOut(BaseModel):
     rotation: Literal["clockwise", "anticlockwise"] | None
     root_observations: dict[Literal["1", "2", "3"], RootObservation]
     crown_observation: CrownObservation | None
+    surface_observations: dict[SurfaceKey, SurfaceObservation]
     bridge_group_id: int | None
     bridge_role: BridgeRole | None
     revision: int
