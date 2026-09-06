@@ -3,9 +3,9 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
-const crownKinds = ["fractured", "missing", "metal", "gold", "porcelain", "composite"] as const;
+const crownKinds = ["missing", "metal", "gold", "porcelain", "porcelain_bonded", "composite"] as const;
 const crownIssues = ["decayed", "defective", "fractured", "poor_fitting"] as const;
-type CrownKind = typeof crownKinds[number];
+type CrownKind = typeof crownKinds[number] | "fractured";
 type CrownIssue = typeof crownIssues[number];
 type CrownObservation = { kind: CrownKind | null; issues: CrownIssue[] };
 type CrownMutation = CrownObservation & { teeth: string[]; expected_revisions: Record<string, number> };
@@ -97,6 +97,9 @@ async function crownDrawing(page: Page, tooth: string, observation: CrownObserva
   await expect(page.getByTestId(`clinical-crown-hit-${tooth}`)).toBeAttached();
   await expect(page.getByTestId(`clinical-crown-stump-${tooth}`)).toHaveCount(observation?.kind === "missing" ? 1 : 0);
   await expect(page.getByTestId(`tooth-crown-${tooth}`)).toHaveCount(observation?.kind === "fractured" || observation?.kind === "missing" ? 0 : 1);
+  if (observation?.kind === "porcelain_bonded") {
+    await expect(page.getByTestId(`tooth-crown-${tooth}`)).toHaveAttribute("fill", "#70483b");
+  }
 }
 
 function observeWrites(page: Page, patientId: string) {
@@ -133,7 +136,11 @@ test("crown palette and staged context menu are separate from root and tooth cho
   await expect(page.getByTestId("clinical-crown-action-menu")).toHaveCount(0);
   await expect(page.getByTestId("crown-diagnosis-selection")).toContainText("UR6");
   await expect(page.getByTestId("crown-diagnosis-apply")).toBeDisabled();
-  await expect(page.getByTestId("clinical-crown-diagnosis-palette").locator('[data-testid^="crown-diagnosis-palette-"]')).toHaveCount(7);
+  const palette = page.getByTestId("clinical-crown-diagnosis-palette");
+  for (const kind of [...crownKinds, "reset", "denture_cocr", "denture_acrylic"]) {
+    await expect(palette.getByTestId(`crown-diagnosis-palette-${kind}`)).toHaveCount(1);
+  }
+  await expect(palette.getByTestId("crown-diagnosis-palette-fractured")).toHaveCount(0);
   await page.getByTestId("crown-diagnosis-palette-metal").click();
   for (const issue of crownIssues) await expect(page.getByTestId(`crown-diagnosis-issue-${issue}`)).not.toBeChecked();
   await page.getByTestId("crown-diagnosis-issue-decayed").check();
@@ -152,6 +159,7 @@ test("crown palette and staged context menu are separate from root and tooth cho
   await page.keyboard.press("Escape");
 
   const menu = await openCrownMenu(page, "UR6");
+  await expect(menu.getByTestId("clinical-crown-condition-fractured")).toHaveCount(0);
   await expect(page.getByTestId("clinical-root-action-menu")).toHaveCount(0);
   await expect(page.getByTestId("clinical-tooth-action-menu")).toHaveCount(0);
   await expect(page.getByTestId("clinical-chart-menu-add-procedure")).toHaveCount(0);
@@ -170,6 +178,36 @@ test("crown palette and staged context menu are separate from root and tooth cho
   expect(writes.other).toEqual([]);
 });
 
+test("previously recorded fractured crowns remain visible without offering new standalone fracture authoring", async ({ page, request }) => {
+  const { patientId, headers } = await setup(page, request, "Legacy crown fracture inspection");
+  const empty = await snapshot(request, patientId, headers);
+  await page.route(`**${toothPath(patientId)}`, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({ json: { ...empty, teeth: { UR3: {
+      condition: null, movement: null, rotation: null, revision: 1,
+      root_observations: {}, crown_observation: { kind: "fractured", issues: [] },
+      bridge_group_id: null, bridge_role: null, updated_at: null, updated_by: null,
+    } } } });
+  });
+  await openChart(page, patientId);
+  const writes = observeWrites(page, patientId);
+  await crownDrawing(page, "UR3", { kind: "fractured", issues: [] });
+  await expect(page.getByTestId("tooth-root-UR3-1")).toBeAttached();
+  await activateCrown(page, "UR3");
+  await expect(page.getByTestId("crown-diagnosis-palette-fractured")).toHaveCount(0);
+  const menu = await openCrownMenu(page, "UR3");
+  await expect(menu.getByTestId("clinical-crown-condition-fractured")).toHaveCount(0);
+  await expect(menu).toContainText(/broken[- ]away|fractured/i);
+  await expect(menu.getByTestId("clinical-crown-apply")).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await ready(page);
+  await crownDrawing(page, "UR3", { kind: "fractured", issues: [] });
+  expect(writes.crowns).toEqual([]);
+  expect(writes.other).toEqual([]);
+  expect((await snapshot(request, patientId, headers)).teeth).toEqual({});
+});
+
 test("multi-crown Apply records six kinds and combined issues without shrinking roots or billing", async ({ page, request }) => {
   const { patientId, headers } = await setup(page, request, "Crown batch conditions");
   const originalFinance = await readJson(request, `/api/patients/${patientId}/finance-summary`, headers);
@@ -178,7 +216,7 @@ test("multi-crown Apply records six kinds and combined issues without shrinking 
   const originalBox = await page.getByTestId("tooth-svg-UR6").boundingBox();
   let revision = 0;
   for (const kind of crownKinds) {
-    const issues: CrownIssue[] = kind === "metal" ? ["decayed", "defective"] : kind === "gold" ? ["fractured", "poor_fitting"] : kind === "porcelain" ? [...crownIssues] : [];
+    const issues: CrownIssue[] = kind === "metal" ? ["decayed", "defective"] : kind === "gold" ? ["fractured", "poor_fitting"] : kind === "porcelain" ? [...crownIssues] : kind === "porcelain_bonded" ? ["defective", "poor_fitting"] : [];
     await selectCrowns(page, kind, ["UR6", "LR6"], issues);
     if (revision === 0) {
       await page.getByTestId("clinical-crown-UR5").click();
@@ -318,7 +356,7 @@ test("missing and unerupted teeth cannot accept crowns while implant crowns and 
   const writes = observeWrites(page, patientId);
   await expect(page.getByTestId("patient-clinical-section")).toHaveAttribute("data-clinical-mode", "read-only");
   await activateCrown(page, "LR5");
-  for (const kind of [...crownKinds, "reset"]) await expect(page.getByTestId(`crown-diagnosis-palette-${kind}`)).toBeDisabled();
+  for (const kind of [...crownKinds, "reset", "denture_cocr", "denture_acrylic"]) await expect(page.getByTestId(`crown-diagnosis-palette-${kind}`)).toBeDisabled();
   await expect(page.getByTestId("crown-diagnosis-apply")).toBeDisabled();
   await expect(page.getByTestId("crown-diagnosis-note")).toBeDisabled();
   const menu = await openCrownMenu(page, "LR5");
@@ -418,7 +456,7 @@ test("crown findings and combined-issue choices remain legible in light dark and
   const { patientId, headers } = await setup(page, request, "Crown visual preview");
   const fixtures: Array<{ tooth: string; kind: CrownKind; issues: CrownIssue[] }> = [
     { tooth: "UR6", kind: "metal", issues: ["decayed", "defective"] },
-    { tooth: "UR3", kind: "fractured", issues: [] },
+    { tooth: "UR3", kind: "porcelain_bonded", issues: [] },
     { tooth: "UL3", kind: "missing", issues: [] },
     { tooth: "UL6", kind: "gold", issues: ["poor_fitting"] },
     { tooth: "LR6", kind: "porcelain", issues: [] },

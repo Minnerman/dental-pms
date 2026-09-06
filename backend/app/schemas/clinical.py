@@ -177,7 +177,10 @@ class RootConditionUpdate(BaseModel):
         return self
 
 
-CrownKind = Literal["fractured", "missing", "metal", "gold", "porcelain", "composite"]
+CrownKind = Literal["fractured", "missing", "metal", "gold", "porcelain", "porcelain_bonded", "composite", "denture_cocr", "denture_acrylic"]
+CrownWriteKind = Literal["missing", "metal", "gold", "porcelain", "porcelain_bonded", "composite", "denture_cocr", "denture_acrylic"]
+MATERIAL_CROWN_KINDS = {"metal", "gold", "porcelain", "porcelain_bonded", "composite"}
+DENTURE_CROWN_KINDS = {"denture_cocr", "denture_acrylic"}
 CrownIssue = Literal["decayed", "defective", "fractured", "poor_fitting"]
 
 
@@ -198,12 +201,14 @@ class CrownObservation(BaseModel):
 
     @model_validator(mode="after")
     def check_material_issues(self):
-        if self.issues and self.kind not in {"metal", "gold", "porcelain", "composite"}:
+        if self.issues and self.kind not in MATERIAL_CROWN_KINDS:
             raise ValueError("issues apply only to a material crown")
         return self
 
 
 class CrownConditionUpdate(CrownObservation):
+    # Retired standalone fracture remains readable, but cannot be newly authored.
+    kind: CrownWriteKind | None
     teeth: list[str] = Field(min_length=1, max_length=32)
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
 
@@ -224,6 +229,80 @@ class CrownConditionUpdate(CrownObservation):
         return self
 
 
+ARCH_TEETH = {
+    "upper": [f"UR{n}" for n in range(8, 0, -1)] + [f"UL{n}" for n in range(1, 9)],
+    "lower": [f"LR{n}" for n in range(8, 0, -1)] + [f"LL{n}" for n in range(1, 9)],
+}
+BridgeRole = Literal["abutment", "pontic", "wing"]
+
+
+class BridgeMember(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tooth: str
+    role: BridgeRole
+    _normalize_tooth = field_validator("tooth")(_tooth)
+
+
+class BridgeCrown(CrownObservation):
+    kind: Literal["metal", "gold", "porcelain", "porcelain_bonded", "composite"]
+
+
+class BridgeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    members: list[BridgeMember] = Field(min_length=2, max_length=16)
+    crown: BridgeCrown | None = None
+    expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+
+    @field_validator("crown", mode="before")
+    @classmethod
+    def explicit_crown_must_be_material(cls, value):
+        if value is None:
+            raise ValueError("omit crown to preserve observations, or provide a material crown")
+        return value
+
+    @field_validator("expected_revisions", mode="before")
+    @classmethod
+    def normalize_revision_keys(cls, value):
+        return ToothConditionUpdate.normalize_revision_keys(value)
+
+    @model_validator(mode="after")
+    def validate_span(self):
+        teeth = [member.tooth for member in self.members]
+        if len(set(teeth)) != len(teeth):
+            raise ValueError("bridge teeth must not repeat")
+        if set(self.expected_revisions) != set(teeth):
+            raise ValueError("expected_revisions must contain exactly the bridge members")
+        if len({tooth[0] for tooth in teeth}) != 1:
+            raise ValueError("a bridge must stay within one arch")
+        order = ARCH_TEETH["upper" if teeth[0].startswith("U") else "lower"]
+        indexes = sorted(order.index(tooth) for tooth in teeth)
+        if indexes[-1] - indexes[0] + 1 != len(indexes):
+            raise ValueError("assign an explicit role to every tooth position in the bridge span")
+        roles = {member.role for member in self.members}
+        if "pontic" not in roles or not roles.intersection({"abutment", "wing"}):
+            raise ValueError("a bridge requires at least one pontic and one support")
+        self.members.sort(key=lambda member: order.index(member.tooth))
+        return self
+
+
+class BridgeReset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]] = Field(min_length=2, max_length=16)
+
+    @field_validator("expected_revisions", mode="before")
+    @classmethod
+    def normalize_revision_keys(cls, value):
+        return ToothConditionUpdate.normalize_revision_keys(value)
+
+
+class BridgeOut(BaseModel):
+    id: int
+    arch: Literal["upper", "lower"]
+    span_start: str
+    span_end: str
+    members: list[BridgeMember]
+
+
 class ToothConditionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -232,6 +311,8 @@ class ToothConditionOut(BaseModel):
     rotation: Literal["clockwise", "anticlockwise"] | None
     root_observations: dict[Literal["1", "2", "3"], RootObservation]
     crown_observation: CrownObservation | None
+    bridge_group_id: int | None
+    bridge_role: BridgeRole | None
     revision: int
     updated_at: datetime
     updated_by: ActorOut
@@ -241,6 +322,7 @@ class ToothConditionsOut(BaseModel):
     patient_id: int
     teeth: dict[str, ToothConditionOut]
     note_teeth: list[str]
+    bridges: list[BridgeOut]
 
 
 class ProcedureCreate(BaseModel):

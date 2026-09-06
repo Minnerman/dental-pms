@@ -3,6 +3,48 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (bonded crowns, bridges and dentures): Current/Diagnosis now adds
+  dark-brown Porcelain B. Crown. Crown/bridge/denture palette icons are 30% larger
+  (34.5 to 44.85px), while existing 18px labels and tooth/root icon sizes remain.
+  Standalone Crown fractured is retired from new authoring; previously recorded
+  values still render without reinterpretation. Fractured remains a material
+  crown subcondition alongside Decayed, Defective and Poor fitting.
+  Below the crown row are Bridge Abutment, Bridge Pontic, Bridge Wing, Denture
+  Co-Cr and Denture Acrylic. Denture bases are blue-grey and rose, with rootless
+  artificial teeth. Arming a denture tile exposes dashed targets at missing
+  positions for multi-tooth Apply. No natural tooth status is inferred or changed.
+  Pontics/dentures reject explicit conflicting biology or meaningful root findings.
+  Bridge choices open an explicit same-arch first/last-tooth editor: every unit
+  needs a role, with at least one support and one pontic. Cantilever and midline
+  spans are supported; gaps, overlaps and guessed roles are not. Default material
+  preserves existing/unspecified crowns; an explicitly chosen material replaces
+  all member crown observations. Wings use a curved silver bracket. A measured
+  black connector with pale contrast outline follows exactly each recorded group,
+  including scroll/resize; neighbouring groups never join automatically.
+  Material-only crown edits preserve group identity. Anatomical changes or partial
+  crown reset/replacement cannot dismantle a group. Confirmed Reset whole bridge
+  clears all member crowns/group roles, retaining native tooth/root observations,
+  notes, history, plans and finance. Keyboard focus is contained during pending
+  saves and restored to the crown after context-menu cancellation. Unconfirmed
+  saves require cancelling the local draft, refreshing and reviewing saved data.
+  Additive migration 0054_tooth_bridge_groups creates explicit group identity and
+  constrained same-patient membership. No backfill or old migration edits. Empty
+  downgrade/re-upgrade passed; downgrade refuses live groups or extended crown
+  kinds before DDL. Shared patient lock, exact revisions, atomic audit and replay
+  safeguards cover tooth/root/crown/bridge writes. No treatment/charges are created.
+  Verification: 122 backend cases passed (32 bridge/denture, 33 crown, 37 root,
+  13 tooth, seven reliability); 38 glyph cases passed. Final production build and
+  all 41 browser cases passed without retries (seven bridge/denture, nine crown,
+  eight root, 14 tooth palette, two shape, one midline). Typecheck/lint/compilation,
+  diff checks and six isolated health/auth/read checks passed. Final synthetic
+  light/dark/mobile previews inspected. A development SVG visibility assertion
+  was corrected to inspect the visible stroke and exact connector alignment;
+  no renderer change was made to satisfy that test. Full backend/default-stack
+  operational wrappers were not run; scoped isolated equivalents were used.
+  PR #714 remains draft, stacked on open PR #713; parent resolution and required
+  master CI/review are still gates. No R4 access, production change, merge or
+  deployment. Production migrations 0049–0054 and deployment require explicit
+  separate approval. Disposable test stack is cleaned up; previews stay outside Git.
 - 2026-09-05 (crown diagnosis): Current now has separate tooth, whole-root-area
   and crown layers. Click a crown to replace the bottom palette with Crown
   fractured, Crown missing, Metallic, Gold, Porcelain, Composite and Reset crown.

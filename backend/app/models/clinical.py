@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     Text,
@@ -44,6 +45,16 @@ class ToothConditionValue(str, enum.Enum):
     impacted = "impacted"
 
 
+class ToothBridgeGroup(Base, AuditMixin):
+    """Explicit native bridge identity; members live on revisioned tooth rows."""
+
+    __tablename__ = "tooth_bridge_groups"
+    __table_args__ = (UniqueConstraint("id", "patient_id", name="uq_tooth_bridge_group_patient"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False, index=True)
+
+
 class ToothCondition(Base, AuditMixin):
     """Native current observations, deliberately separate from treatment/billing.
 
@@ -78,6 +89,16 @@ class ToothCondition(Base, AuditMixin):
             "crown_observation IS NULL OR jsonb_typeof(crown_observation) = 'object'",
             name="ck_tooth_conditions_crown_object",
         ),
+        ForeignKeyConstraint(
+            ["bridge_group_id", "patient_id"], ["tooth_bridge_groups.id", "tooth_bridge_groups.patient_id"],
+            name="fk_tooth_condition_bridge_patient",
+        ),
+        CheckConstraint(
+            "(bridge_group_id IS NULL AND bridge_role IS NULL) OR "
+            "(bridge_group_id IS NOT NULL AND bridge_role IS NOT NULL "
+            "AND bridge_role IN ('abutment', 'pontic', 'wing'))",
+            name="ck_tooth_conditions_bridge_role",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -91,6 +112,8 @@ class ToothCondition(Base, AuditMixin):
     )
     # SQL NULL is no current override; a non-null neutral object is a reset.
     crown_observation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    bridge_group_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    bridge_role: Mapped[str | None] = mapped_column(String(12), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

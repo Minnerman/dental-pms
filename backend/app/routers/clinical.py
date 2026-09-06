@@ -14,6 +14,7 @@ from app.models.clinical import (
     Procedure,
     ProcedureStatus,
     ToothCondition,
+    ToothBridgeGroup,
     ToothNote,
     TreatmentPlanItem,
     TreatmentPlanStatus,
@@ -26,6 +27,11 @@ from app.schemas.clinical import (
     BpeUpdate,
     ClinicalSummaryOut,
     CrownConditionUpdate,
+    BridgeCreate,
+    BridgeReset,
+    ARCH_TEETH,
+    MATERIAL_CROWN_KINDS,
+    DENTURE_CROWN_KINDS,
     ProcedureCreate,
     ProcedureOut,
     RootConditionUpdate,
@@ -50,6 +56,7 @@ CLINICAL_VIEW = require_capability("clinical.view")
 CLINICAL_WRITE = require_capability("clinical.write")
 OBSERVATION_AUDIT_ACTIONS = [
     "clinical.tooth_conditions.recorded", "clinical.root_conditions.recorded", "clinical.crown_conditions.recorded",
+    "clinical.bridge.created", "clinical.bridge.reset",
 ]
 ACTIVE_APPOINTMENT_STATUSES = {
     AppointmentStatus.booked,
@@ -173,6 +180,22 @@ def _user_has_capability(db: Session, user_id: int, code: str) -> bool:
     )
 
 
+def _bridge_snapshot(group_id: int, members: list[ToothCondition]) -> dict:
+    arch = "upper" if members[0].tooth.startswith("U") else "lower"
+    ordered = sorted(members, key=lambda member: ARCH_TEETH[arch].index(member.tooth))
+    return {"id": group_id, "arch": arch, "span_start": ordered[0].tooth, "span_end": ordered[-1].tooth,
+            "members": [{"tooth": member.tooth, "role": member.bridge_role} for member in ordered]}
+
+
+def _meaningful_roots(row: ToothCondition | None) -> bool:
+    return bool(row and any(value.get("condition") is not None or value.get("apicectomy")
+                            for value in row.root_observations.values()))
+
+
+def _artificial_site_allowed(row: ToothCondition | None) -> bool:
+    return (row is None or row.condition in {None, "missing", "unrecorded"}) and not _meaningful_roots(row)
+
+
 def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
     conditions = db.scalars(
         select(ToothCondition)
@@ -187,10 +210,15 @@ def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
             .order_by(ToothNote.tooth)
         )
     )
+    bridge_members = {}
+    for condition in conditions:
+        if condition.bridge_group_id is not None:
+            bridge_members.setdefault(condition.bridge_group_id, []).append(condition)
     return ToothConditionsOut(
         patient_id=patient_id,
         teeth={condition.tooth: condition for condition in conditions},
         note_teeth=note_teeth,
+        bridges=[_bridge_snapshot(group_id, members) for group_id, members in sorted(bridge_members.items())],
     )
 
 
@@ -201,6 +229,8 @@ def _tooth_condition_snapshot(row: ToothCondition | None) -> dict:
         "rotation": row.rotation if row else None,
         "root_observations": row.root_observations if row else {},
         "crown_observation": row.crown_observation if row else None,
+        "bridge_group_id": row.bridge_group_id if row else None,
+        "bridge_role": row.bridge_role if row else None,
         "revision": row.revision if row else 0,
     }
 
@@ -278,6 +308,18 @@ def update_tooth_conditions(
         for key in ("condition", "movement", "rotation")
         if key in request_values
     }
+    for row in existing.values():
+        if ((row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS
+                and "condition" in observations and observations["condition"] not in {None, "missing", "unrecorded"}
+                and not _whole_tooth_clears_anatomy_observations(row, observations)):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Reset the denture crown before recording an incompatible tooth condition")
+        if row.bridge_group_id is not None and "condition" in observations:
+            clears_recorded_anatomy = (_whole_tooth_clears_anatomy_observations(row, observations)
+                                      and (row.root_observations or row.crown_observation is not None))
+            if observations["condition"] != row.condition or clears_recorded_anatomy:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Reset the complete bridge before changing a member's tooth condition")
     now = datetime.now(timezone.utc)
     changed_teeth = []
     for tooth in payload.teeth:
@@ -365,6 +407,9 @@ def update_root_conditions(
     for tooth in payload.teeth:
         row = existing.get(tooth)
         condition = row.condition if row else None
+        if row and (row.bridge_role == "pontic" or (row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Natural root observations cannot be recorded for a pontic or denture tooth")
         if condition in {"missing", "implant", "unerupted"}:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Roots cannot be recorded for a missing, implant or unerupted tooth")
@@ -443,9 +488,22 @@ def update_crown_conditions(
            for tooth in payload.teeth):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
             detail="Tooth conditions changed. Refresh the chart before trying again")
-    if any(row.condition in {"missing", "unerupted"} for row in existing.values()):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Crown observations cannot be recorded for a missing or unerupted tooth")
+    for tooth in payload.teeth:
+        row = existing.get(tooth)
+        condition = row.condition if row else None
+        old_crown = row.crown_observation if row else None
+        if row and row.bridge_group_id is not None and payload.kind not in MATERIAL_CROWN_KINDS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Reset the complete bridge before clearing or replacing a member's crown")
+        if payload.kind in DENTURE_CROWN_KINDS:
+            if not _artificial_site_allowed(row):
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="A denture tooth requires a missing or unspecified tooth without current root findings")
+        elif condition == "unerupted" or (condition == "missing" and not (
+                row and row.bridge_role == "pontic" and payload.kind in MATERIAL_CROWN_KINDS
+                or payload.kind is None and old_crown is not None and old_crown.get("kind") in DENTURE_CROWN_KINDS | {None})):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A missing tooth requires an explicit pontic or denture observation")
 
     before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in payload.teeth}
     observation = {"kind": payload.kind, "issues": payload.issues}
@@ -477,6 +535,122 @@ def update_crown_conditions(
         after_data={"request": request_values, "changed_teeth": changed_teeth,
                     "teeth": {tooth: _tooth_condition_snapshot(existing[tooth]) for tooth in payload.teeth}},
     )
+    db.commit()
+    return _tooth_conditions_out(db, patient_id)
+
+
+@patient_router.post("/clinical/bridges", response_model=ToothConditionsOut)
+def create_bridge(
+    patient_id: int,
+    payload: BridgeCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(CLINICAL_WRITE),
+    _viewer: User = Depends(CLINICAL_VIEW),
+    request_id: str | None = Header(default=None, min_length=1, max_length=120),
+):
+    get_patient_or_404(db, patient_id, for_update=True)
+    action = "clinical.bridge.created"
+    request_values = payload.model_dump(mode="json", exclude_unset=True)
+    duplicate = _duplicate_audit(db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS)
+    if duplicate:
+        if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request-Id was already used for a different observation")
+        return _tooth_conditions_out(db, patient_id)
+    teeth = [member.tooth for member in payload.members]
+    existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
+        ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(teeth)))}
+    if any(payload.expected_revisions[tooth] != (existing[tooth].revision if tooth in existing else 0) for tooth in teeth):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tooth conditions changed. Refresh before creating the bridge")
+    for member in payload.members:
+        row = existing.get(member.tooth)
+        if row and row.bridge_group_id is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A selected tooth already belongs to a bridge")
+        crown_kind = payload.crown.kind if payload.crown else (row.crown_observation or {}).get("kind") if row else None
+        if crown_kind is not None and crown_kind not in MATERIAL_CROWN_KINDS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Provide an explicit bridge material to replace incompatible crown observations")
+        if member.role == "pontic":
+            if not _artificial_site_allowed(row):
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="A pontic requires a missing or unspecified tooth without current root findings")
+        elif row and (row.condition in {"missing", "unerupted"} or
+                      member.role == "wing" and row.condition == "implant"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A support requires an available tooth; an implant cannot be a wing")
+
+    before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in teeth}
+    now = datetime.now(timezone.utc)
+    group = ToothBridgeGroup(patient_id=patient_id, created_by_user_id=user.id,
+        updated_by_user_id=user.id, updated_at=now)
+    db.add(group)
+    db.flush()
+    for member in payload.members:
+        row = existing.get(member.tooth)
+        if row is None:
+            row = ToothCondition(patient_id=patient_id, tooth=member.tooth, revision=1,
+                created_by_user_id=user.id, updated_by_user_id=user.id, updated_at=now)
+            existing[member.tooth] = row
+        else:
+            row.revision += 1
+            row.updated_by_user_id = user.id
+            row.updated_at = now
+        row.bridge_group_id, row.bridge_role = group.id, member.role
+        if payload.crown:
+            row.crown_observation = payload.crown.model_dump(mode="json")
+        db.add(row)
+    db.flush()
+    log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        before_data={"bridge": None, "teeth": before},
+        after_data={"request": request_values, "bridge": _bridge_snapshot(group.id, list(existing.values())),
+                    "changed_teeth": teeth, "teeth": {tooth: _tooth_condition_snapshot(existing[tooth]) for tooth in teeth}})
+    db.commit()
+    return _tooth_conditions_out(db, patient_id)
+
+
+@patient_router.post("/clinical/bridges/{bridge_id}/reset", response_model=ToothConditionsOut)
+def reset_bridge(
+    patient_id: int,
+    bridge_id: int,
+    payload: BridgeReset,
+    db: Session = Depends(get_db),
+    user: User = Depends(CLINICAL_WRITE),
+    _viewer: User = Depends(CLINICAL_VIEW),
+    request_id: str | None = Header(default=None, min_length=1, max_length=120),
+):
+    get_patient_or_404(db, patient_id, for_update=True)
+    action = "clinical.bridge.reset"
+    request_values = {"bridge_id": bridge_id, **payload.model_dump(mode="json")}
+    duplicate = _duplicate_audit(db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS)
+    if duplicate:
+        if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request-Id was already used for a different observation")
+        return _tooth_conditions_out(db, patient_id)
+    group = db.scalar(select(ToothBridgeGroup).where(ToothBridgeGroup.id == bridge_id, ToothBridgeGroup.patient_id == patient_id))
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bridge not found")
+    members = list(db.scalars(select(ToothCondition).where(ToothCondition.patient_id == patient_id,
+                                                         ToothCondition.bridge_group_id == bridge_id)))
+    if set(payload.expected_revisions) != {row.tooth for row in members}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Reset requires exactly every current bridge member")
+    if any(payload.expected_revisions[row.tooth] != row.revision for row in members):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bridge member conditions changed. Refresh before resetting")
+    before_bridge = _bridge_snapshot(group.id, members)
+    before = {row.tooth: _tooth_condition_snapshot(row) for row in members}
+    now = datetime.now(timezone.utc)
+    for row in members:
+        row.bridge_group_id = None
+        row.bridge_role = None
+        row.crown_observation = {"kind": None, "issues": []}
+        row.revision += 1
+        row.updated_by_user_id = user.id
+        row.updated_at = now
+    db.flush()
+    db.delete(group)
+    log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        before_data={"bridge": before_bridge, "teeth": before},
+        after_data={"request": request_values, "bridge": None,
+                    "changed_teeth": [member["tooth"] for member in before_bridge["members"]],
+                    "teeth": {row.tooth: _tooth_condition_snapshot(row) for row in members}})
     db.commit()
     return _tooth_conditions_out(db, patient_id)
 

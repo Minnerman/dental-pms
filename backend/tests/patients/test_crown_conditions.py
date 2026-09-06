@@ -116,7 +116,7 @@ def test_crown_reset_is_explicit_not_healthy_and_keeps_roots_notes_and_history(a
             {"patient": patient_id}) == 2
 
 
-@pytest.mark.parametrize("kind,issues", [("fractured", []), ("missing", []), ("composite", ["fractured"])])
+@pytest.mark.parametrize("kind,issues", [("missing", []), ("composite", ["fractured"])])
 def test_crown_fracture_missing_and_material_fracture_remain_distinct(api_client, auth_headers, kind, issues):
     patient_id = _patient(api_client, auth_headers)
     response = api_client.post(crown_path(patient_id), headers=auth_headers, json=payload(kind=kind, issues=issues))
@@ -187,7 +187,7 @@ def test_one_stale_revision_rejects_entire_crown_batch(api_client, auth_headers)
     before = api_client.get(_path(patient_id), headers=auth_headers).json()
     before_audits = audits(patient_id)
     assert api_client.post(crown_path(patient_id), headers=auth_headers,
-        json=payload(["LL1", "UR6"], kind="fractured")).status_code == 409
+        json=payload(["LL1", "UR6"], kind="porcelain")).status_code == 409
     assert api_client.get(_path(patient_id), headers=auth_headers).json() == before
     assert audits(patient_id) == before_audits
 
@@ -317,7 +317,7 @@ def test_crown_and_other_observations_race_has_one_atomic_winner(api_client, aut
 
     def crown_edit():
         return api_client.post(crown_path(patient_id), headers=auth_headers,
-            json=payload(["UR6", "LL1"], revisions, "fractured"))
+            json=payload(["UR6", "LL1"], revisions, "composite", ["fractured"]))
 
     def other_edit():
         if other == "root":

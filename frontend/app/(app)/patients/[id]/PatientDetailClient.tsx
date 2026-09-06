@@ -25,7 +25,9 @@ import { rootAreaSummary, rootDiagnosisAction, type RootPatch, type RootDiagnosi
 import RootDiagnosisPalette from "@/components/clinical/RootDiagnosisPalette";
 import CrownConditionMenu from "@/components/clinical/CrownConditionMenu";
 import CrownDiagnosisPalette from "@/components/clinical/CrownDiagnosisPalette";
-import type { CrownObservation } from "@/components/clinical/crownDiagnosis";
+import { isDentureCrown, type CrownObservation, type BridgeRole, type BridgeGroup, type BridgeDraft } from "@/components/clinical/crownDiagnosis";
+import BridgeEditor from "@/components/clinical/BridgeEditor";
+import BridgeConnections from "@/components/clinical/BridgeConnections";
 import { baselineGlyph, toothConditionLabels, useToothConditions } from "@/components/clinical/useToothConditions";
 import { actionSupportsTeeth, britishToothLabel, type DiagnosisAction } from "@/components/clinical/toothDiagnosis";
 import DiagnosisPalette from "@/components/clinical/DiagnosisPalette";
@@ -1320,6 +1322,7 @@ export default function PatientDetailClient({
   }, [baseline.loading]);
   const [diagnosisSelection, setDiagnosisSelection] = useState<{ patient: string; action: DiagnosisAction | null; teeth: string[] }>({ patient: patientId, action: null, teeth: [] });
   const [diagnosisLayer, setDiagnosisLayer] = useState<"tooth" | "root" | "crown">("tooth");
+  const [bridgeDialog, setBridgeDialog] = useState<{ patient: string; tooth: string; role: BridgeRole } | null>(null);
   const [crownSelection, setCrownSelection] = useState<{ patient: string; observation: CrownObservation | null; teeth: string[] }>({ patient: patientId, observation: null, teeth: [] });
   const crownObservation = clinicalViewMode === "current" && diagnosisLayer === "crown" && crownSelection.patient === patientId ? crownSelection.observation : null;
   const crownTeeth = clinicalViewMode === "current" && diagnosisLayer === "crown" && crownSelection.patient === patientId ? crownSelection.teeth : [];
@@ -1335,6 +1338,7 @@ export default function PatientDetailClient({
     setRootSelection({ patient: patientId, action: null, teeth: [] });
     setCrownSelection({ patient: patientId, observation: null, teeth: [] });
     setDiagnosisLayer("tooth");
+    setBridgeDialog(null);
     setChartActionMenu(null);
     if (clinicalViewMode === "current") {
       setSelectedToothSurfaces([]);
@@ -1353,6 +1357,7 @@ export default function PatientDetailClient({
   }
   function showToothDiagnosis() {
     setDiagnosisLayer("tooth");
+    setBridgeDialog(null);
     cancelRootSelection();
     cancelCrownSelection();
     setChartActionMenu(null);
@@ -1370,6 +1375,30 @@ export default function PatientDetailClient({
     if (saved && diagnosisContext.current === context) {
       setCrownSelection((previous) => previous === selection ? { patient: patientId, observation: null, teeth: [] } : previous);
     }
+  }
+  function openBridgeEditor(role: BridgeRole, tooth = crownTeeth[0] ?? selectedTooth ?? "UR4") {
+    if (!baseline.canSave) return;
+    if (chartActionMenu) {
+      const trigger = chartActionTriggerRef.current;
+      if (trigger instanceof HTMLElement || trigger instanceof SVGElement) trigger.focus();
+    }
+    cancelDiagnosisSelection(); cancelRootSelection(); cancelCrownSelection();
+    setChartActionMenu(null);
+    setDiagnosisLayer("crown");
+    setBridgeDialog({ patient: patientId, tooth, role });
+  }
+  async function saveBridgeDraft(draft: BridgeDraft) {
+    const context = diagnosisContext.current;
+    const selection = bridgeDialog;
+    const saved = await baseline.saveBridge(draft);
+    if (saved && diagnosisContext.current === context) setBridgeDialog((previous) => previous === selection ? null : previous);
+  }
+  async function resetWholeBridge(bridge: BridgeGroup) {
+    if (!baseline.canSave) return;
+    if (!window.confirm(`Reset the whole bridge ${bridge.span_start}–${bridge.span_end}? Its bridge roles and all member crown findings will be cleared. Tooth and root conditions, notes and history are retained. No treatment or charge is created.`)) return;
+    setChartActionMenu(null);
+    cancelCrownSelection();
+    await baseline.resetBridge(bridge);
   }
   function chooseRootAction(action: RootDiagnosisAction) {
     if (!baseline.canSave) return;
@@ -4070,7 +4099,7 @@ export default function PatientDetailClient({
     if (tab !== "clinical" || clinicalTab !== "chart") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || (event.target instanceof Element
-        && event.target.closest('.clinical-root-target, .clinical-crown-target, [data-testid="clinical-root-action-menu"], [data-testid="clinical-root-diagnosis-palette"], [data-testid="clinical-crown-action-menu"], [data-testid="clinical-crown-diagnosis-palette"]'))) return;
+        && event.target.closest('.clinical-root-target, .clinical-crown-target, [data-testid="clinical-root-action-menu"], [data-testid="clinical-root-diagnosis-palette"], [data-testid="clinical-crown-action-menu"], [data-testid="clinical-crown-diagnosis-palette"], [data-testid="clinical-bridge-editor"]'))) return;
       if (isEditableShortcutTarget(event.target)) return;
       const key = event.key;
       const keyLower = key.toLowerCase();
@@ -9494,6 +9523,9 @@ export default function PatientDetailClient({
                             {chartActionMenu.kind === "crown" && (
                               <CrownConditionMenu key={`${chartActionMenu.tooth}:${baseline.teeth[chartActionMenu.tooth]?.revision ?? 0}`}
                                 enabled={baseline.canSave} current={baseline.teeth[chartActionMenu.tooth]?.crown_observation}
+                                onBridge={(role) => openBridgeEditor(role, chartActionMenu.tooth)}
+                                bridge={baseline.bridges.find((bridge) => bridge.id === baseline.teeth[chartActionMenu.tooth]?.bridge_group_id)}
+                                onBridgeReset={(bridge) => void resetWholeBridge(bridge)}
                                 onApply={(observation) => void applyCrownCondition(chartActionMenu.tooth, observation)} />
                             )}
                             {chartActionMenu.kind === "root" && (
@@ -9591,6 +9623,7 @@ export default function PatientDetailClient({
                                   className="patient-route-odontogram-grid"
                                   data-testid="clinical-upper-arch"
                                 >
+                                {clinicalViewMode === "current" && <BridgeConnections bridges={baseline.bridges} upper />}
                                   {upperTeeth.map((tooth, index) => {
                                     const isActive = diagnosisAction ? diagnosisTeeth.includes(tooth) : selectedTooth === tooth;
                                     const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
@@ -9674,6 +9707,8 @@ export default function PatientDetailClient({
                                           onRootClick={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event) : undefined}
                                           onRootContextMenu={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event, true) : undefined}
                                           crownCondition={clinicalViewMode === "current" ? baseline.teeth[tooth]?.crown_observation ?? null : undefined}
+                                          bridgeRole={clinicalViewMode === "current" ? baseline.teeth[tooth]?.bridge_role : undefined}
+                                          allowMissingCrownSelection={clinicalViewMode === "current" && isDentureCrown(crownObservation?.kind)}
                                           crownSelected={crownTeeth.includes(tooth)}
                                           onCrownClick={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event) : undefined}
                                           onCrownContextMenu={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event, true) : undefined}
@@ -9868,6 +9903,7 @@ export default function PatientDetailClient({
                                   className="patient-route-odontogram-grid"
                                   data-testid="clinical-lower-arch"
                                 >
+                                {clinicalViewMode === "current" && <BridgeConnections bridges={baseline.bridges} upper={false} />}
                                   {lowerTeeth.map((tooth, index) => {
                                     const isActive = diagnosisAction ? diagnosisTeeth.includes(tooth) : selectedTooth === tooth;
                                     const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
@@ -9951,6 +9987,8 @@ export default function PatientDetailClient({
                                           onRootClick={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event) : undefined}
                                           onRootContextMenu={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event, true) : undefined}
                                           crownCondition={clinicalViewMode === "current" ? baseline.teeth[tooth]?.crown_observation ?? null : undefined}
+                                          bridgeRole={clinicalViewMode === "current" ? baseline.teeth[tooth]?.bridge_role : undefined}
+                                          allowMissingCrownSelection={clinicalViewMode === "current" && isDentureCrown(crownObservation?.kind)}
                                           crownSelected={crownTeeth.includes(tooth)}
                                           onCrownClick={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event) : undefined}
                                           onCrownContextMenu={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event, true) : undefined}
@@ -10147,6 +10185,7 @@ export default function PatientDetailClient({
                             {diagnosisLayer === "crown" ? <CrownDiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
                               observation={crownObservation} selected={crownTeeth} onChoose={chooseCrownObservation}
                               canNote={canWriteClinical && !clinicalPatientUnavailable} onNote={addCrownToothNote}
+                              onBridge={(role) => openBridgeEditor(role)} bridges={baseline.bridges} onBridgeReset={(bridge) => void resetWholeBridge(bridge)}
                               onApply={() => void applyCrownSelection()} onCancel={cancelCrownSelection} onBack={showToothDiagnosis} />
                             : diagnosisLayer === "root" ? <RootDiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
                               action={rootAction} selected={rootTeeth} onChoose={chooseRootAction}
@@ -10156,6 +10195,10 @@ export default function PatientDetailClient({
                               onChoose={chooseDiagnosisAction} onApply={() => void applyDiagnosisSelection()} onCancel={cancelDiagnosisSelection}
                               onArchMissing={(tooth) => void markBaselineArchMissing(tooth)}
                               onNote={() => openToothTool("note")} onDetails={() => openToothTool("timeline")} />}
+                            {bridgeDialog?.patient === patientId && <BridgeEditor key={`${bridgeDialog.patient}:${bridgeDialog.tooth}:${bridgeDialog.role}`}
+                              tooth={bridgeDialog.tooth} role={bridgeDialog.role} bridges={baseline.bridges}
+                              enabled={baseline.canSave} saving={baseline.saving} error={baseline.error}
+                              onSave={(draft) => void saveBridgeDraft(draft)} onCancel={() => { if (!baseline.saving) setBridgeDialog(null); }} />}
                             {!baseline.loading && !baseline.error && <DentitionGuide dateOfBirth={patient?.date_of_birth}
                               hasFindings={Object.keys(baseline.teeth).length > 0 || clinicalNotes.length > 0 || clinicalProcedures.length > 0 || toothStateByTooth.size > 0}
                             />}

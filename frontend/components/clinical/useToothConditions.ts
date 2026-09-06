@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/auth";
 import type { OdontogramBaselineCondition } from "./OdontogramToothSvg";
 import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothCondition } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation, type RootPatch } from "./rootDiagnosis";
-import { crownDiagnosisLabel, type CrownObservation } from "./crownDiagnosis";
+import { crownDiagnosisLabel, type CrownObservation, type BridgeRole, type BridgeGroup, type BridgeDraft } from "./crownDiagnosis";
 export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
 type ConditionRow = DiagnosisPatch & {
@@ -13,6 +13,8 @@ type ConditionRow = DiagnosisPatch & {
   revision: number;
   root_observations?: Record<string, RootObservation>;
   crown_observation?: CrownObservation | null;
+  bridge_group_id?: number | null;
+  bridge_role?: BridgeRole | null;
   updated_at: string;
   updated_by: { id: number; email: string; role: string } | null;
 };
@@ -20,6 +22,7 @@ type ConditionChart = {
   patient_id: number;
   teeth: Record<string, ConditionRow>;
   note_teeth: string[];
+  bridges?: BridgeGroup[];
 };
 
 export function baselineGlyph(row?: DiagnosisPatch): OdontogramBaselineCondition | undefined {
@@ -118,7 +121,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       if (!response.ok) {
         if (response.status === 409) throw new Error("The tooth chart changed elsewhere. Refresh and review it before trying again.");
         if (response.status === 403) throw new Error("You do not have permission to change current tooth conditions.");
-        if (response.status === 422) throw new Error("This condition is not valid for the selected tooth. Refresh and check the selection.");
+        if (response.status === 422) throw new Error("This condition is not valid for the selection. Review tooth and root findings; bridge units must be changed or reset as a whole group before changing their anatomy.");
         throw new Error("The change could not be confirmed. Refresh the chart before trying again.");
       }
       const data = await response.json() as ConditionChart;
@@ -161,10 +164,20 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       expected_revisions: Object.fromEntries(teeth.map((tooth) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
     }, `${teeth.length === 1 ? teeth[0] : `${teeth.length} teeth`} · ${crownDiagnosisLabel(observation)}`);
 
+  const saveBridge = (draft: BridgeDraft) => saveObservation(`/api/patients/${patientId}/clinical/bridges`, {
+    ...draft,
+    expected_revisions: Object.fromEntries(draft.members.map(({ tooth }) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
+  }, "Bridge");
+
+  const resetBridge = (bridge: BridgeGroup) => saveObservation(`/api/patients/${patientId}/clinical/bridges/${bridge.id}/reset`, {
+    expected_revisions: Object.fromEntries(bridge.members.map(({ tooth }) => [tooth, currentChart?.teeth[tooth]?.revision ?? 0])),
+  }, "Whole bridge reset");
+
   return {
     teeth: currentChart?.teeth ?? {},
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
-    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns,
+    bridges: currentChart?.bridges ?? [],
+    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns, saveBridge, resetBridge,
     save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }
