@@ -10,6 +10,16 @@ async function waitForPatientClinicalPage(page: Page, patientId: string) {
   await expect(page.getByText("Loading patient…")).toHaveCount(0);
 }
 
+async function openEarlierPlanManager(page: Page) {
+  await page.getByTestId("clinical-chart-view-planned").click();
+  await expect(page.getByTestId("planning-not-started")).toBeVisible();
+  const earlier = page.getByTestId("planning-earlier-items");
+  await earlier.locator("summary").click();
+  await earlier.getByRole("button", { name: "Open earlier plan items", exact: true }).click();
+  await expect(page.getByTestId("patient-treatment-plan-section")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Earlier treatment items", exact: true })).toBeVisible();
+}
+
 test("patient clinical route shows empty-state guidance when notes and procedures are empty", async ({
   page,
   request,
@@ -231,7 +241,7 @@ test("patient chart tooth note add shows in-flight state and guards repeat submi
   const token = await primePageAuth(page, request);
   const noteBody = `Chart tooth note ${unique}`;
 
-  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical?clinicalView=planned`, {
     waitUntil: "domcontentloaded",
   });
   await waitForPatientClinicalPage(page, patientId);
@@ -469,9 +479,7 @@ test("patient treatment plan accept shows in-flight state and guards repeat subm
   });
   await waitForPatientClinicalPage(page, patientId);
 
-  const treatmentTab = page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ });
-  await treatmentTab.click();
-  await expect(treatmentTab).toHaveClass(/active/);
+  await openEarlierPlanManager(page);
 
   const acceptButton = page.getByTestId(
     `patient-treatment-plan-status-${createdItem.id}-accepted`
@@ -559,7 +567,7 @@ test("patient treatment plan accept shows in-flight state and guards repeat subm
   ).toBeTruthy();
 });
 
-test("planned chart completion records the procedure and finance charge together", async ({
+test("earlier plan manager completion records the procedure and finance charge together", async ({
   page,
   request,
 }) => {
@@ -582,16 +590,14 @@ test("planned chart completion records the procedure and finance charge together
     waitUntil: "domcontentloaded",
   });
   await waitForPatientClinicalPage(page, patientId);
-  await page.getByTestId("clinical-chart-view-planned").click();
+  await openEarlierPlanManager(page);
 
-  const planItem = page.getByTestId(`clinical-chart-plan-item-${createdItem.id}`);
+  const completeButton = page.getByTestId(`patient-treatment-plan-status-${createdItem.id}-completed`);
+  const planItem = completeButton.locator("xpath=ancestor::tr[1]");
   await expect(planItem).toBeVisible();
-  await expect(planItem).toContainText("UL4 · MODB · FILL");
+  await expect(planItem).toContainText("UL4");
+  await expect(planItem).toContainText("FILL");
   await expect(planItem).toContainText("£54.50");
-
-  const completeButton = page.getByTestId(
-    `clinical-chart-plan-complete-${createdItem.id}`
-  );
   await expect(completeButton).toBeEnabled();
   let confirmation = "";
   page.once("dialog", async (dialog) => {
@@ -607,7 +613,7 @@ test("planned chart completion records the procedure and finance charge together
   expect((await completionResponse).ok()).toBeTruthy();
   expect(confirmation).toContain("£54.50");
 
-  await expect(planItem).toHaveAttribute("data-status", "completed", {
+  await expect(planItem.locator(".status-icon")).toHaveAttribute("data-status", "completed", {
     timeout: 15_000,
   });
   await expect(
@@ -630,8 +636,8 @@ test("planned chart completion records the procedure and finance charge together
   const ledger = await ledgerResponse.json();
   expect(
     clinicalSummary.recent_procedures.filter(
-      (procedure: { procedure_code?: string; fee_pence?: number }) =>
-        procedure.procedure_code === "FILL" && procedure.fee_pence === 5_450
+      (procedure: { procedure_code?: string; fee_pence?: number; tooth?: string; surface?: string }) =>
+        procedure.procedure_code === "FILL" && procedure.fee_pence === 5_450 && procedure.tooth === "UL4" && procedure.surface === "MODB"
     )
   ).toHaveLength(1);
   expect(
@@ -656,31 +662,41 @@ test("patient treatment plan add shows in-flight state and guards repeat submit"
   });
   const token = await primePageAuth(page, request);
   const planCode = "PLAN";
-  const planDescription = `Planned treatment ${unique}`;
+  const planDescription = `Synthetic catalogue treatment ${unique}`;
+  const treatmentResponse = await request.post(`${baseUrl}/api/treatments`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { code: planCode, name: planDescription, is_active: true },
+  });
+  expect(treatmentResponse.ok()).toBeTruthy();
+  const treatmentId = (await treatmentResponse.json()).id as number;
+  const feeResponse = await request.put(`${baseUrl}/api/treatments/${treatmentId}/fees`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: [{ patient_category: "CLINIC_PRIVATE", fee_type: "FIXED", amount_pence: 5500 }],
+  });
+  expect(feeResponse.ok()).toBeTruthy();
 
   await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
     waitUntil: "domcontentloaded",
   });
   await waitForPatientClinicalPage(page, patientId);
 
-  await page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ }).click();
-  await expect(page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ })).toHaveClass(
-    /active/
-  );
-
-  const openButton = page.getByTestId("patient-treatment-plan-open");
+  await page.getByTestId("clinical-chart-view-planned").click();
+  await page.getByTestId("planning-start").click();
+  await expect(page.getByTestId("treatment-planning-chart")).toBeVisible();
+  const openButton = page.getByTestId("planning-add-treatment");
   await expect(openButton).toBeVisible();
   await openButton.click();
 
-  await expect(page.getByRole("heading", { name: "Add treatment plan item" })).toBeVisible();
-  await page.getByTestId("patient-treatment-plan-code").fill(planCode);
-  await page.getByTestId("patient-treatment-plan-description").fill(planDescription);
+  await expect(page.getByTestId("planning-treatment-dialog")).toBeVisible();
+  await page.getByTestId("planning-catalogue-search").fill(planDescription);
+  await page.getByTestId(`planning-catalogue-item-${treatmentId}`).click();
+  await page.getByTestId("planning-drawing-kind").selectOption("other");
 
-  const addItemButton = page.getByTestId("patient-treatment-plan-add");
+  const addItemButton = page.getByTestId("planning-save");
   await expect(addItemButton).toBeEnabled();
 
   let requestCount = 0;
-  const planRoutePattern = new RegExp(`/api/patients/${patientId}/treatment-plan$`);
+  const planRoutePattern = new RegExp(`/api/patients/${patientId}/planning/items$`);
   let seenCreateRequest!: () => void;
   const seenCreateRequestPromise = new Promise<void>((resolve) => {
     seenCreateRequest = resolve;
@@ -704,40 +720,45 @@ test("patient treatment plan add shows in-flight state and guards repeat submit"
   const createResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
-      response.url().includes(`/api/patients/${patientId}/treatment-plan`)
+      response.url().includes(`/api/patients/${patientId}/planning/items`)
   );
 
-  const clickState = await addItemButton.evaluate((button) => {
+  const beforeDisabled = await addItemButton.evaluate((button) => {
     if (!(button instanceof HTMLButtonElement)) {
       throw new Error("Add item button not found");
     }
     const beforeDisabled = button.disabled;
+    // Both submits occur before React can commit its disabled presentation.
+    // The synchronous mutation lock must still admit only one request.
     button.click();
-    const afterFirstDisabled = button.disabled;
     button.click();
-    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
+    return beforeDisabled;
   });
   await seenCreateRequestPromise;
 
-  expect(clickState.beforeDisabled).toBe(false);
-  expect(clickState.afterFirstDisabled).toBe(true);
-  expect(clickState.afterSecondDisabled).toBe(true);
-  await expect(addItemButton).toBeDisabled();
-  await expect(addItemButton).toHaveText("Saving...");
-  await page.waitForTimeout(250);
-  expect(requestCount).toBe(1);
-
-  releaseCreateRequest();
+  try {
+    expect(beforeDisabled).toBe(false);
+    await expect(addItemButton).toBeDisabled();
+    await expect(addItemButton).toHaveText("Saving…");
+    await expect(page.getByTestId("planning-cancel")).toBeDisabled();
+    await expect(page.getByTestId("planning-catalogue-search")).toBeDisabled();
+    await expect(page.getByTestId("planning-target-level")).toBeDisabled();
+    await expect(page.getByTestId("planning-treatment-dialog")).toBeVisible();
+    await page.waitForTimeout(250);
+    expect(requestCount).toBe(1);
+  } finally { releaseCreateRequest(); }
 
   const createResponse = await createResponsePromise;
   expect(createResponse.ok()).toBeTruthy();
   expect(createResponse.request().postDataJSON()).toMatchObject({
-    procedure_code: planCode,
-    description: planDescription,
+    treatment_id: treatmentId,
+    target: { level: "general", tooth: null, surfaces: [] },
+    drawing_kind: "other",
+    fee_mode: "catalogue",
   });
   await page.unroute(planRoutePattern);
 
-  await expect(page.getByRole("heading", { name: "Add treatment plan item" })).toHaveCount(0, {
+  await expect(page.getByTestId("planning-treatment-dialog")).toBeHidden({
     timeout: 15_000,
   });
   await expect(page.getByText(planDescription, { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -790,9 +811,7 @@ test("patient treatment plan edit shows in-flight state and persists updated fie
   });
   await waitForPatientClinicalPage(page, patientId);
 
-  const treatmentTab = page.getByRole("button", { name: /^Treatment plan \(\d+\)$/ });
-  await treatmentTab.click();
-  await expect(treatmentTab).toHaveClass(/active/);
+  await openEarlierPlanManager(page);
 
   const editButton = page.getByTestId(`patient-treatment-plan-edit-${createdItem.id}`);
   await expect(editButton).toBeEnabled();

@@ -33,8 +33,20 @@ test("larger tooth silhouettes remain legible and reachable at desktop and narro
   const illustrationIds = await chart.locator("defs > [id]").evaluateAll((elements) =>
     elements.map((element) => element.id)
   );
-  expect(illustrationIds).toHaveLength(64);
-  expect(new Set(illustrationIds).size).toBe(64);
+  // Three shading references per tooth are unchanged; Current now also has
+  // independent root/crown definitions and five surface patterns per tooth,
+  // all globally unique so one finding cannot recolour another tooth.
+  await expect(chart.locator("defs > radialGradient, defs > linearGradient")).toHaveCount(96);
+  await expect(chart.locator('defs > pattern[id^="root-defect-"]')).toHaveCount(32);
+  await expect(chart.locator('defs > clipPath[id^="root-hit-"]')).toHaveCount(32);
+  await expect(chart.locator('defs > clipPath[id^="root-clip-"]')).toHaveCount(52);
+  await expect(chart.locator('defs > pattern[id^="crown-defect-"]')).toHaveCount(32);
+  await expect(chart.locator('defs > clipPath[id^="crown-clip-"]')).toHaveCount(32);
+  for (const pattern of ["early", "arrested", "established", "unspecified", "defective"]) {
+    await expect(chart.locator(`defs > pattern[id^="surface-${pattern}-"]`)).toHaveCount(32);
+  }
+  expect(illustrationIds).toHaveLength(436);
+  expect(new Set(illustrationIds).size).toBe(illustrationIds.length);
   expect(await page.getByTestId("tooth-anatomy-UL6").getAttribute("transform")).toContain("scale(-1 1)");
   expect(await page.getByTestId("tooth-anatomy-LL6").getAttribute("transform")).toContain("scale(-1 -1)");
   await expect(page.getByTestId("tooth-crown-groove-UR6-1")).toBeAttached();

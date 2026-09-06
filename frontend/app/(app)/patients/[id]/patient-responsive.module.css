@@ -5,7 +5,7 @@
 
 .shell :global(.patient-route-page) {
   margin: 0 auto;
-  max-width: 1600px;
+  max-width: none;
   width: 100%;
 }
 
@@ -420,7 +420,7 @@
   width: 100%;
 }
 
-.shell :global(.patient-route-odontogram-grid > button) {
+.shell :global(.clinical-tooth-cell) {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -429,13 +429,16 @@
   border-radius: 7px !important;
   min-width: 0;
   min-height: 210px !important;
-  padding: 4px 0 3px !important;
+  padding: 24px 0 3px !important;
+  border: 1px solid transparent;
+  cursor: pointer;
 }
 
-.shell :global(.patient-route-odontogram-grid > button:hover),
-.shell :global(.patient-route-odontogram-grid > button[data-selected="true"]) {
-  background: var(--tab-active-bg) !important;
-  border-color: var(--accent) !important;
+.shell :global(.clinical-tooth-cell:hover),
+.shell :global(.clinical-tooth-cell[data-selected="true"]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  transform: none;
 }
 
 .shell :global(.odontogram-tooth-svg) {
@@ -443,15 +446,17 @@
   width: 100%;
   max-width: 88px;
   aspect-ratio: 100 / 280;
+  margin-bottom: 24px;
+  overflow: visible;
 }
 
-.shell :global(.patient-route-odontogram-grid > button > div:first-child) {
+.shell :global(.clinical-tooth-cell > div:first-child) {
   width: 100%;
 }
 
 .shell :global(.odontogram-surface-overlays) {
   /* Match the SVG box, excluding the tooth label and any badges below it. */
-  inset: 4px auto auto 50% !important;
+  inset: 24px auto auto 50% !important;
   transform: translateX(-50%);
   width: 100%;
   max-width: 88px;
@@ -468,6 +473,465 @@
   width: auto;
 }
 
+.shell :global(.clinical-tooth-label) {
+  font-size: 18.7px;
+  font-weight: 700;
+  line-height: 1;
+  position: relative;
+  border-radius: 4px;
+  padding: 3px 2px;
+  isolation: isolate;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.shell :global(.clinical-tooth-label::before) {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid #0b9ec0;
+  background: rgb(11 158 192 / 13%);
+  border-radius: 7px;
+  box-shadow: 0 0 9px rgb(11 158 192 / 35%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.shell :global(.clinical-tooth-label:hover::before),
+.shell :global(.clinical-tooth-label:focus-visible::before) {
+  animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
+}
+
+.shell :global(.clinical-tooth-cell[data-selected="true"] .clinical-tooth-label),
+.shell :global(.clinical-tooth-cell[data-batch-selected="true"] .clinical-tooth-label) {
+  box-shadow: 0 0 0 2px #0b9ec0;
+  color: var(--text);
+}
+
+@keyframes diagnosis-ready-pulse {
+  0%, 100% { opacity: .25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(.clinical-tooth-label:hover::before),
+  .shell :global(.clinical-tooth-label:focus-visible::before) {
+    animation: none;
+    opacity: .8;
+  }
+}
+
+.shell :global(.clinical-root-target),
+.shell :global(.clinical-crown-target),
+.shell :global(.clinical-surface-target) {
+  cursor: pointer;
+  outline: none;
+}
+
+.shell :global(.clinical-root-halo),
+.shell :global(.clinical-crown-halo),
+.shell :global(.clinical-surface-halo) {
+  opacity: 0;
+  fill: none;
+  stroke: #12bce5;
+  stroke-width: 6px;
+  filter: drop-shadow(0 0 3px rgb(18 188 229 / 65%));
+  pointer-events: none;
+}
+
+.shell :global(.clinical-root-selection),
+.shell :global(.clinical-crown-selection),
+.shell :global(.clinical-surface-selection) {
+  fill: none;
+  stroke: #12bce5;
+  stroke-width: 3px;
+  opacity: .65;
+  pointer-events: none;
+}
+
+.shell :global(.clinical-root-target:hover .clinical-root-halo),
+.shell :global(.clinical-root-target:focus-visible .clinical-root-halo),
+.shell :global(.clinical-crown-target:hover .clinical-crown-halo),
+.shell :global(.clinical-crown-target:focus-visible .clinical-crown-halo),
+.shell :global(.clinical-surface-target:hover .clinical-surface-halo),
+.shell :global(.clinical-surface-target:focus-visible .clinical-surface-halo) {
+  animation: diagnosis-ready-pulse 1.6s ease-in-out infinite;
+}
+
+.shell :global(.clinical-root-swatch) {
+  display: inline-block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 26px;
+  background-color: #f4ce53;
+  border: 1px solid #876624;
+  border-radius: 5px 5px 9px 9px;
+}
+
+.shell :global(.clinical-chart-action-menu[data-testid="clinical-root-action-menu"] > button) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  font-size: 18px;
+  line-height: 1.35;
+  min-height: 48px;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] .clinical-chart-action-menu-title) {
+  font-size: 16.5px;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] .clinical-chart-action-menu-hint) {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] .clinical-root-swatch) {
+  flex-basis: 30px;
+  width: 30px;
+  height: 39px;
+}
+
+.shell :global(.clinical-root-palette-swatch) {
+  flex: none;
+  width: 27px;
+  height: 34.5px;
+}
+
+.shell :global([data-testid="clinical-root-action-menu"] > button[aria-checked="true"]) {
+  border-color: #0b9ec0;
+  box-shadow: inset 3px 0 0 #0b9ec0;
+  background: rgb(11 158 192 / 13%);
+}
+
+.shell :global(.clinical-root-swatch[data-condition^="post_core"]) {
+  background-color: #c4b5fd;
+  border-color: #7552a6;
+}
+
+.shell :global(.clinical-root-swatch[data-condition$="defective"]) {
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0 4px, #d22f49 4px 5px, transparent 5px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 4px, #d22f49 4px 5px, transparent 5px 8px);
+}
+
+.shell :global(.clinical-root-apical-symbol) {
+  width: 20px;
+  font-size: 22px;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(.clinical-root-target:hover .clinical-root-halo),
+  .shell :global(.clinical-root-target:focus-visible .clinical-root-halo),
+  .shell :global(.clinical-crown-target:hover .clinical-crown-halo),
+  .shell :global(.clinical-crown-target:focus-visible .clinical-crown-halo),
+  .shell :global(.clinical-surface-target:hover .clinical-surface-halo),
+  .shell :global(.clinical-surface-target:focus-visible .clinical-surface-halo) {
+    animation: none;
+    opacity: .85;
+  }
+}
+
+.shell :global(.clinical-diagnosis-palette),
+.shell :global(.clinical-dentition-guide) {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+
+.shell :global(.clinical-diagnosis-heading),
+.shell :global(.clinical-diagnosis-buttons) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.shell :global(.clinical-diagnosis-heading span),
+.shell :global(.clinical-diagnosis-palette p),
+.shell :global(.clinical-diagnosis-palette small),
+.shell :global(.clinical-dentition-guide p) {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.shell :global(.clinical-crown-menu-choices) {
+  display: grid;
+  gap: 5px;
+}
+
+.shell :global([data-testid="clinical-crown-action-menu"] button) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  white-space: normal;
+  font-size: 18px;
+  line-height: 1.35;
+  min-height: 48px;
+}
+
+.shell :global([data-testid="clinical-crown-action-menu"] button[aria-checked="true"]) {
+  border-color: #0b9ec0;
+  box-shadow: inset 3px 0 0 #0b9ec0;
+  background: rgb(11 158 192 / 13%);
+}
+
+.shell :global([data-testid="clinical-crown-action-menu"] .clinical-chart-action-menu-title) {
+  font-size: 16.5px;
+}
+
+.shell :global([data-testid="clinical-crown-action-menu"] .clinical-chart-action-menu-hint),
+.shell :global([data-testid="clinical-crown-action-menu"] small) {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.shell :global(.clinical-crown-symbol) { flex: none; }
+.shell :global(.clinical-crown-symbol[data-kind="metal"] .clinical-crown-symbol-fill) { fill: #b8c2cc; stroke: #586575; }
+.shell :global(.clinical-crown-symbol[data-kind="gold"] .clinical-crown-symbol-fill) { fill: #efc94e; stroke: #8a661b; }
+.shell :global(.clinical-crown-symbol[data-kind="porcelain"] .clinical-crown-symbol-fill) { fill: #efb3d0; stroke: #945d7b; }
+.shell :global(.clinical-crown-symbol[data-kind="porcelain_bonded"] .clinical-crown-symbol-fill) { fill: #70483b; stroke: #c19682; }
+.shell :global(.clinical-crown-symbol[data-kind="composite"] .clinical-crown-symbol-fill) { fill: #7dceb1; stroke: #386d58; }
+
+.shell :global(.clinical-crown-issues) {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.shell :global(.clinical-crown-issues legend) { font-size: 15px; padding: 0 4px; }
+.shell :global(.clinical-crown-issues > div) { display: flex; flex-wrap: wrap; gap: 12px 20px; }
+.shell :global(.clinical-crown-issues label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.shell :global(.clinical-crown-issues input) { width: 18px; height: 18px; accent-color: #089dbf; }
+.shell :global(.clinical-crown-issues small) { display: block; margin-top: 8px; }
+
+.shell :global(.clinical-diagnosis-tiles) {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shell :global(.clinical-crown-tiles) { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+
+.shell :global(.clinical-diagnosis-tiles button) {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  white-space: normal;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.shell :global(.clinical-diagnosis-tiles button[aria-pressed="true"]) {
+  border-color: #0b9ec0;
+  background: rgb(11 158 192 / 15%);
+  box-shadow: inset 0 0 0 1px #0b9ec0;
+}
+
+.shell :global(.clinical-diagnosis-tiles [data-testid="diagnosis-palette-reset"]) {
+  grid-column: span 2;
+}
+
+.shell :global(.clinical-diagnosis-symbol) {
+  color: #0b9ec0;
+  font-size: 34.5px;
+  width: 34.5px;
+  height: 34.5px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.shell :global(.clinical-diagnosis-symbol.clinical-crown-symbol) { width: 44.85px; height: 44.85px; }
+.shell :global(.clinical-diagnosis-symbol.clinical-surface-symbol) { width: 44.85px; height: 44.85px; }
+.shell :global(.clinical-surface-tiles) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.shell :global(.clinical-surface-controls) { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
+.shell :global(.clinical-surface-control) { display: grid; align-content: start; flex: 1 1 190px; gap: 7px; font-size: 16px; min-width: 0; }
+.shell :global(.clinical-surface-control select) { width: 100%; min-height: 44px; font-size: 18px; padding: 8px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); background: var(--bg); }
+.shell :global(.clinical-surface-defects) { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.shell :global(.clinical-surface-defects legend) { font-size: 16px; padding: 0 5px; }
+.shell :global(.clinical-surface-defects > div) { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.shell :global(.clinical-surface-defects label) { display: flex; align-items: center; gap: 8px; font-size: 16px; min-height: 36px; }
+.shell :global(.clinical-surface-defects input) { width: 18px; height: 18px; accent-color: #0b9ec0; }
+.shell :global(.clinical-surface-controls small) { display: block; color: var(--muted); line-height: 1.5; font-size: 14px; flex-basis: 100%; }
+.shell :global(.clinical-surface-selected-targets) { overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; }
+.shell :global(.clinical-surface-reset-warning) { color: var(--text); line-height: 1.5; }
+.shell :global(.clinical-surface-menu-choices) { display: grid; gap: 5px; }
+.shell :global(.clinical-surface-menu-choices button) { justify-content: flex-start; text-align: left; min-height: 48px; font-size: 18px; gap: 12px; white-space: normal; }
+.shell :global(.clinical-surface-menu-choices button[aria-checked="true"]) { border-color: #0b9ec0; background: rgb(11 158 192 / 15%); }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-surface-symbol) { width: 30px; height: 30px; }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-surface-actions button) { font-size: 18px; min-height: 44px; white-space: normal; }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-surface-defects > div) { grid-template-columns: 1fr; }
+.shell :global([data-testid="clinical-surface-action-menu"] > button),
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-chart-action-menu-title) { font-size: 18px; }
+.shell :global([data-testid="clinical-surface-action-menu"] .clinical-chart-action-menu-hint),
+.shell :global([data-testid="clinical-surface-action-menu"] small) { font-size: 14px; line-height: 1.5; }
+.shell :global(.clinical-restoration-sections) { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 14px; }
+.shell :global(.clinical-restoration-heading) { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+.shell :global(.clinical-bridge-tiles) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.shell :global(.clinical-denture-tiles) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shell :global(.clinical-bridge-list) { display: grid; gap: 8px; margin: 12px 0; }
+.shell :global(.clinical-bridge-list > div) { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border); padding: 10px; border-radius: 8px; }
+.shell :global(.clinical-bridge-list span) { font-size: 13px; overflow-wrap: anywhere; }
+.shell :global(.patient-route-odontogram-grid) { position: relative; }
+.shell :global(.clinical-bridge-backdrop) { position: fixed; inset: 0; z-index: 1400; background: rgb(0 0 0 / 55%); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.shell :global(.clinical-bridge-editor) { width: min(680px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); padding: 24px; box-shadow: 0 16px 60px rgb(0 0 0 / 25%); }
+.shell :global(.clinical-bridge-editor h3) { font-size: 22px; margin: 0 0 10px; }
+.shell :global(.clinical-bridge-editor p), .shell :global(.clinical-bridge-editor small) { font-size: 14px; line-height: 1.5; color: var(--muted); }
+.shell :global(.clinical-bridge-editor [role="alert"]) { color: var(--danger, #b42318); }
+.shell :global(.clinical-bridge-editor select) { width: 100%; min-height: 42px; font-size: 16px; padding: 6px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
+.shell :global(.clinical-bridge-endpoints) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.shell :global(.clinical-bridge-endpoints label), .shell :global(.clinical-bridge-material) { display: grid; gap: 6px; font-size: 16px; }
+.shell :global(.clinical-bridge-members) { display: grid; gap: 8px; margin: 16px 0; }
+.shell :global(.clinical-bridge-members label) { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 10px; }
+.shell :global(.clinical-bridge-members strong) { font-size: 18px; }
+.shell :global(.clinical-bridge-editor .clinical-diagnosis-buttons) { margin: 18px 0 10px; }
+.shell :global(.clinical-bridge-editor button) { min-height: 42px; font-size: 16px; }
+
+.shell :global(.clinical-diagnosis-menu-symbol) {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: #0b9ec0;
+}
+
+@media (max-width: 900px) {
+  .shell :global(.clinical-diagnosis-tiles) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .shell :global(.clinical-bridge-tiles) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shell :global(.clinical-denture-tiles) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 540px) {
+  .shell :global(.clinical-diagnosis-tiles) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shell :global(.clinical-restoration-sections) { grid-template-columns: 1fr; }
+  .shell :global(.clinical-bridge-editor) { padding: 16px; }
+}
+
+.shell :global(.clinical-diagnosis-selection) {
+  margin: 12px 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.shell :global(.clinical-diagnosis-selection [role="alert"]) {
+  display: block;
+  color: var(--danger, #b42318);
+  margin-top: 6px;
+}
+
+.shell :global(.clinical-diagnosis-selection > span) {
+  display: block;
+  margin-top: 6px;
+}
+
+.shell :global(.clinical-diagnosis-secondary) {
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+  padding-top: 12px;
+}
+
+.shell :global(.clinical-diagnosis-workspace) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.shell :global(.clinical-diagnosis-levels) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.shell :global(.clinical-diagnosis-level-label) {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.shell :global(.clinical-diagnosis-levels > button) {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shell :global(.clinical-diagnosis-levels > button[aria-selected="true"]) {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border-color: var(--accent);
+}
+
+.shell :global(.clinical-diagnosis-levels > button:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell :global(.clinical-diagnosis-levels > button:disabled) {
+  opacity: .55;
+  cursor: wait;
+}
+
+@media (max-width: 540px) {
+  .shell :global(.clinical-diagnosis-levels) {
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .shell :global(.clinical-diagnosis-level-label) {
+    flex-basis: 100%;
+    margin-right: 2px;
+    font-size: 13px;
+  }
+
+  .shell :global(.clinical-diagnosis-levels > button) {
+    flex-basis: calc(50% - 2px);
+    padding: 7px 2px;
+    font-size: 13px;
+  }
+}
+
+.shell :global(.clinical-baseline-feedback) {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .shell :global(.clinical-chart-action-menu) {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -476,6 +940,9 @@
   display: grid;
   gap: 4px;
   min-width: 230px;
+  max-width: min(330px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   padding: 7px;
   position: fixed;
   z-index: 70;
@@ -491,6 +958,7 @@
 }
 
 .shell :global(.clinical-chart-action-menu button) {
+  border-radius: 6px;
   justify-content: flex-start;
   min-height: 32px;
   text-align: left;
@@ -650,4 +1118,109 @@
   .shell :global(.row) {
     align-items: flex-start;
   }
+}
+.shell :global(.summary-grid.patient-personal-grid) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.shell :global(.patient-personal-details),
+.shell :global(.patient-personal-grid > .stack > .card) {
+  margin: 0;
+  min-width: 0;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.shell :global(.patient-personal-details h3) {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.shell :global(.patient-personal-form),
+.shell :global(.patient-personal-form fieldset),
+.shell :global(.patient-personal-address),
+.shell :global(.patient-personal-extra-fields),
+.shell :global(.patient-personal-phones) {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.shell :global(.patient-personal-form fieldset) {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.shell :global(.patient-personal-pair),
+.shell :global(.patient-personal-phone-row) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.shell :global(.patient-personal-phone-row) {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+}
+
+.shell :global(.patient-personal-field) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.shell :global(.patient-personal-field > label) {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.shell :global(.patient-personal-field > .input) {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 7px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.shell :global(.patient-personal-phones > small) {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.shell :global(.patient-personal-extra) {
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+}
+
+.shell :global(.patient-personal-extra > summary) {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.shell :global(.patient-personal-extra-fields) { margin-top: 8px; }
+.shell :global(.patient-personal-save-row) { display: flex; flex-wrap: wrap; gap: 6px; }
+.shell :global(.patient-personal-save-row > .btn) { font-size: 12px; padding: 7px 9px; }
+.shell :global(.patient-personal-grid .stack) { gap: 10px; }
+.shell :global(.patient-personal-care-column .grid-3) { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.shell :global(.patient-personal-activity-column .patient-route-appointment-grid) {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 6px !important;
+}
+
+@media (min-width: 1180px) {
+  .shell :global(.summary-grid.patient-personal-grid) {
+    grid-template-columns: minmax(0, .95fr) minmax(0, .95fr) minmax(300px, 1.1fr);
+    grid-template-areas: "care activity personal";
+  }
+  .shell :global(.patient-personal-details) { grid-area: personal; }
+  .shell :global(.patient-personal-care-column) { grid-area: care; }
+  .shell :global(.patient-personal-activity-column) { grid-area: activity; }
 }

@@ -3,6 +3,498 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (compact planning rows and audited Uncomplete): Outstanding and
+  completed work now uses two-line selectable rows with a single action toolbar
+  beside the totals. Full quote/fee/target details remain available in Details;
+  keyboard selection and pending/stale/uncertain-request protections are retained.
+  P/C markers are 50% larger with fixed planning-only clearance from anatomy,
+  notes and movement markers, without chart jumps. Uncomplete requires a reason,
+  clinical/billing permissions and finance confirmation, restores the exact prior
+  Proposed/Accepted status, retains the original voided procedure/charge and adds
+  a matching negative adjustment (none for zero fees). No payment deletion, refund
+  or automatic diagnosis changes. Re-completion creates a distinct audited cycle.
+  Safe pre-0060 recovery uses existing immutable revisions only; ambiguous or
+  invoice-linked records fail closed. Additive migration 0060 is required.
+  Verification: 107 targeted backend tests, 10 focused planning browser tests and
+  6 focused marker tests passed. Real API complete/uncomplete/re-complete verified
+  ledger totals, one active procedure, retained voided journal/reason and unchanged
+  diagnosis. Empty migration roundtrip and populated rollback refusal passed;
+  typecheck, targeted lint, Python compilation, build and diff checks passed.
+  Light/dark, 1280px/mobile and the refreshed manual preview were inspected.
+  The localhost preview now uses a verified v6 copy on a persistent volume;
+  all original columns across 63 tables matched before/after 0060 and app startup.
+  Original diagnosis/planning API responses matched, including the owner's three
+  proposed and one completed synthetic items. No test mutation of those items.
+  Original v5 remains untouched; durable private archive/hash and handover are
+  outside Git. Do not switch back after new v6 entries without reconciliation.
+  No R4 access, production migration/deployment or merge. Draft stacked PR and
+  protected-master review/CI/deployment gates remain separate; see
+  TREATMENT_PLANNING.md for correction and writable rollback boundaries.
+- 2026-09-06 (first treatment-planning workspace): Planned now explicitly captures
+  the current native diagnosis and safe existing local imported projection once,
+  preserving the baseline separately from proposed/completed drawings. No R4
+  access or inferred historical findings. Compact tooth/whole-root/crown/surface
+  levels and general Add treatment use the existing practice catalogue/category
+  fees; BPE and diagnosis palettes are absent from planning. Patient quotes retain
+  catalogue identity/pricing, with explicit agreed amounts, reasoned overrides,
+  waivers and restoration of the saved standard fee. Earlier items stay separate.
+  Completion confirms the saved amount and reuses the atomic procedure/ledger
+  path, with no duplicate charge, automatic invoice or diagnosis update.
+  Revision checks, request fingerprints and locks protect concurrent edits and
+  retries. Imported patient-link conflicts fail closed; native root/crown/surface
+  evidence takes precedence over stale imported absence. Additive migration 0059
+  is required; empty downgrade/re-upgrade and populated downgrade refusal passed.
+  Verification: 85 distinct targeted backend checks passed across the full guard
+  and focused pricing rerun. All 39 distinct focused browser checks passed:
+  22 glyph/baseline checks and 17 planning/adjacent/compatibility/permission checks.
+  Final new eight-case suite passed on the frozen production build, including
+  real snapshot/add/fee/history/complete/finance checks, retry/save locks,
+  keyboard-modal protection, primary labels and 1280px/mobile layout containment.
+  Typecheck, targeted lint, Python compilation, build and diff checks passed;
+  light/dark previews were inspected. Verified grid overflow, hidden fee-reason
+  payload and global-shortcut modal bypass were fixed. Existing tests were adapted
+  for deliberately removed Current procedure controls and React DOM timing while
+  preserving immediate duplicate-request protection; no app workaround added.
+  The synthetic localhost preview uses a restored v5 copy on a persistent volume.
+  All original columns across 60 tables matched before/after migration; only the
+  intentional demo catalogue tables differed after seeding. Existing notes and
+  diagnosis are preserved. Fifteen clearly labelled demonstration treatments/fees
+  are NOT the practice price list. Original preview containers remain untouched;
+  private archive/full-restore evidence and handover are outside Git.
+  First version: one workspace per patient; multiple courses, connected planned
+  bridge groups, crown-material colours and diagnosis updates after completion
+  remain deferred. See TREATMENT_PLANNING.md, including writable rollback limits.
+  No production migration/deployment, merge, R4 access or AI integration. Existing
+  stacked-parent, protected-master review/CI and deployment gates remain separate.
+- 2026-09-06 (practice sidebar and full-width clinical workspace): Restored the
+  proven left navigation in the odontogram branch, retaining existing routes,
+  roles, patient search, theme and sign-out. Collapse to a 64px icon rail or
+  resize the expanded menu from 200–320px by pointer/keyboard. Only layout
+  scalars are stored; unused patient-name tab bookkeeping was removed. The
+  patient page no longer has a 1600px width cap. Modest edge padding, independent
+  chart scrolling and the existing right notes divider preserve usable space.
+  Mobile navigation supports focus containment/return, backdrop/Escape dismissal
+  and reduced motion. A failed initial-focus check persisted after a first
+  next-frame correction; direct diagnostics identified interpolated hidden
+  visibility. Immediate opening visibility plus cancellable next-frame focus
+  fixed the cause while retaining the slide animation.
+  A sparkle AI control sits beside Note text and explicitly says Not connected.
+  No AI provider/model exists in this app: the control receives no note text,
+  makes no requests and cannot correct, apply or save text. Processing choice
+  and privacy/setup requirements remain unresolved; see PRODUCT_DECISIONS.md.
+  Verification: all nine distinct focused browser checks passed across initial
+  and focused reruns, including layout/draft/geometry preservation, mobile
+  keyboard access, real note create/amend/history and reception search/sign-out.
+  Final build/typecheck/targeted lint/diff checks and independent review passed.
+  Light/dark, narrow and actual refreshed synthetic previews were inspected.
+  The localhost preview received only the frozen frontend replacement, keeping
+  the same running v4 backend and database. Session/journal/template responses
+  matched through old/new frontends; no test note was written during the switch.
+  The old frontend remains for app-only rollback. No backend/schema change,
+  migration, R4 access, production change, merge or deployment in this update.
+  Existing stacked-parent, protected-master CI/review and deployment gates remain.
+- 2026-09-06 (clinical notes beside the odontogram): Added a right-hand, resizable,
+  hideable clinical-notes panel with dated groups, search/category/tooth filters,
+  bounded older-record paging and editable patient/tooth notes. Yellow tooth-note
+  markers reveal and filter the panel. Layout preferences contain no patient
+  text; drafts stay in memory, with patient/request guards and pending-save locks.
+  Native edits retain explicit content/metadata revisions, original authorship
+  and creation dates. Amendments require the expected revision; older compatible
+  PATCH routes also retain revisions. Request fingerprints prevent duplicate or
+  cross-operation replays; ambiguous pre-feature replay IDs fail closed.
+  Pre-feature content is labelled a captured baseline, never a reconstructed
+  original. Native note capacity is 100,000 characters; imported text is not
+  shortened to that limit. Templates have explicit dropdown answers, categories,
+  revisioned definitions and optional code labels. Insertion prepares an editable
+  draft only; saving retains final text and template/version/code references.
+  No procedure, prescription, charge or delivery is inferred from a template.
+  The read-only journal projects existing native notes, diagnoses, procedures,
+  plans, BPE/medical-field updates, generated documents, recall contact logs and
+  locally stored imported notes, with per-source permission and lifecycle gates.
+  Imports retain raw text, source identity, dates and author codes. Unknown and
+  conflicting identities are not guessed; raw R4 tooth codes are not converted
+  by the native tooth filter. Questionnaire notes do not imply a medical subtype.
+  Generated documents and manual contact statuses are distinct from verified
+  delivery. Structured soft-tissue examination support and full R4 history
+  coverage are not claimed. See CLINICAL_NOTES_MIGRATION_CONTRACT.md for the
+  screenshot/public-R4-help review, source-preservation and future reconciliation
+  gates. No R4 system access was performed.
+  Additive 0058_clinical_note_revisions adds native revisions, template definitions
+  and replay receipts without rewriting existing content. Isolated verification:
+  43 native/adjacent backend tests and 12 journal tests passed. Migration upgrade,
+  empty downgrade/re-upgrade and populated downgrade refusal/preservation passed.
+  All 22 distinct browser checks passed (nine new panel cases and 13 adjacent
+  note/permission/tooth-note guards), including real create/amend/history,
+  template authoring, stale-response protection and pointer/keyboard resizing.
+  Test-only locator/geometry corrections and an explicit Planned route for the
+  legacy surface-note guard were required; the final application build was
+  unchanged. Build, typecheck, targeted lint, Python compilation and diff checks
+  passed; light/dark and narrow-screen previews were inspected.
+  Actual-preview review then prompted a presentation-only diagnosis correction:
+  action-specific readable snapshots replace duplicate JSON summaries; original
+  generated text/full details remain under Source details, with line breaks.
+  Native, tooth and imported note bodies are unchanged. An additional focused
+  browser guard passed (23 distinct browser cases overall), along with a fresh
+  build/typecheck/lint and independent review. Unknown actions fail closed to
+  source details; no clinical meaning is guessed. The final frontend-only switch
+  retained the same running backend and saved preview database.
+  The local synthetic preview was refreshed from a separate clone: comparison
+  of all original columns across 56 existing tables passed before switching.
+  The clone alone received 0058; original preview/database remain for rollback.
+  A missing local authentication environment setting was corrected before the
+  final successful authentication and read-only journal/template smoke checks.
+  Production migration/deployment and parent-PR/required-CI gates remain separate.
+  Ideal Postcodes is recorded in PRODUCT_DECISIONS.md as the later address-lookup
+  choice; no subscription, external integration or patient-data sharing enabled.
+- 2026-09-06 (compact diagnosis and Personal contacts): Diagnosis now uses one
+  compact Tooth / Root / Crown / Surface row, retaining keyboard navigation,
+  explicit Apply and pending-save locks. Repeated palette headings/instructions
+  are reduced. Apicectomy markers are 10% wider and 50% thicker; saved clinical
+  observations are unchanged. Newly chosen Restored surface findings default to
+  Sound, visibly staged before Apply. Existing unspecified restorations remain
+  unspecified through material edits and reselection; no historical conversion.
+  Personal uses three desktop columns with compact editable details on the right,
+  care/activity alongside, and a single-column narrow-screen layout. All previous
+  editable fields remain available, with care/referral, alerts and notes grouped.
+  Separate Home landline, Work and Mobile numbers each have a Whose number label;
+  the legacy primary phone also has an optional label and is not reclassified.
+  Labels neither infer number ownership nor grant messaging consent. Save now
+  preserves hidden Denplan, visit, access and primary-contact values instead of
+  clearing them solely because category/care setting differs. Existing permissions,
+  archive/restore guards and pending-save controls remain in place.
+  Additive 0057_labelled_patient_phones adds seven nullable contact fields, without
+  backfill or changes to legacy numbers. New values are length-validated, trimmed,
+  and blank-normalized to null; omitted PATCH fields retain their stored values.
+  Patient create/update audit covers the new fields. Downgrade refuses any recorded
+  new contact data before removing columns. On the separate synthetic test stack,
+  0057 upgrade/downgrade/re-upgrade passed; connection-local migration fixtures
+  proved original-field preservation and downgrade refusal for each added field.
+  Verification: 20 focused backend cases passed (14 new contact/migration cases,
+  six existing patient reliability/audit/transaction cases); 22 distinct Personal
+  browser cases passed (20 initially, two after test-only corrections), plus 16
+  clinical browser cases and 24 glyph/component checks. Build, typecheck, lint,
+  Python compilation, diff checks and independent reviews passed. SMS/email
+  delivery and a postcode/address lookup provider remain deferred; no external
+  messaging or lookup integration was enabled by this change.
+  The frozen local manual preview was refreshed using a separate database clone.
+  Fingerprints confirmed preservation of every existing record across all 56
+  application tables, with new contact fields left null. Health and the refreshed
+  Personal page passed; the original test copy remains running for rollback.
+  No production or R4 access/change, merge or deployment. Existing parent-PR,
+  required CI/review and separately authorised production migration/deployment
+  gates remain, now including 0057 and any earlier undeployed migrations.
+- 2026-09-06 (manual diagnosis corrections): Four explicit Tooth level / Root
+  level / Crown level / Surface level tabs select the corresponding rectangular
+  palette without requiring an anatomy click. Switching levels clears staged
+  observations, not saved findings; tabs are locked during pending saves.
+  Unerupted upper crowns now have the gum wave below, lower crowns above.
+  Missing teeth show large mirrored mesial/distal arrows in the empty tooth slot.
+  Tooth present is removed from new authoring; neutral Reset remains, and old
+  explicit records are retained. Dentition is now independent of tooth status:
+  setting Deciduous preserves an existing unerupted/missing/impacted condition,
+  and subsequent status changes preserve British A-E labels. Implant/reset
+  clears identity to unspecified. Additive 0056_independent_dentition copies only
+  existing explicit native deciduous identity; no age/history inference or audit/
+  revision rewriting. Downgrade refuses independent identity the old schema
+  cannot represent. Identity changes retain shared locks/revisions/audit and
+  invalidate incompatible anatomy atomically, respecting bridge guards.
+  Saved notes immediately refresh a yellow folded note marker above each tooth;
+  click, Enter or Space opens/focuses that tooth's timeline. Unsaved note text is
+  keyed by patient/tooth; delayed history responses cannot populate another tooth.
+  Verification: 196 focused backend cases, 51 glyph cases plus targeted final
+  accessibility/identity assertions, and all 25 final browser cases passed.
+  Browser coverage includes six new correction cases, 11 baseline/race cases
+  and eight root/crown/bridge/surface preservation guards. Build, typecheck,
+  lint, compilation, diff checks, migration round-trip/backfill/refusal guards
+  and independent code review passed. Light/dark glyphs and the actual updated
+  local chart were visually inspected. Initial browser attempt was stopped for
+  missing synthetic credential environment; the corrected final run passed
+  without retries. Default-stack wrappers were not used; isolated equivalents
+  used synthetic data and R4 disabled.
+  The owner's local manual preview was upgraded by cloning into a separate
+  isolated stack; fingerprints verified preservation of existing fields across
+  all 56 application tables before startup. Only the clone received 0056. The
+  same loopback link now serves the corrected frozen build; original tmpfs DB
+  and containers remain running for rollback (do not stop/restart the original
+  DB or its data may be lost). Test-created records remain in a separate test
+  database, never in the owner's manual chart. Existing labels already lost to
+  the old bug require explicit reselection, not inferred restoration. No R4 or
+  production access/change, merge, or treatment/finance work. PR #714 remains
+  draft above open #713; master CI/review and separately authorised production
+  migrations 0049–0056/deployment remain gates.
+- 2026-09-06 (surface diagnosis): Current adds a fourth, independent surface
+  level. Left-click or keyboard-select M/O/I/D/B/P/L surfaces across teeth;
+  right-click opens the same Caries, Defective, Restored, Fissure sealant and
+  Reset selected surfaces choices as the bottom rectangles. The full selection
+  is shown before explicit Apply. A single saved surface opens with its exact
+  recorded values; mixed selections never infer a shared material or condition.
+  Caries supports Early/Arrested/Established or unspecified; restoration material
+  choices mirror the supplied R4 screenshots, with explicit Unknown as default.
+  Restored/sealant conditions and nine defect details remain separately recorded.
+  No unspecified value is interpreted as sound. Material fills and red caries/
+  defect patterns identify each saved surface. Current mesial geometry mirrors
+  on UR/LR toward the arch centre; upper palatal is P and lower lingual is L.
+  History/Planned legacy codes, geometry, procedures and notes remain unchanged.
+  Native missing, unerupted, implant, pontic, denture and absent-crown sites reject
+  natural surface authoring. Existing crowned natural supports/stumps remain
+  chartable. Reset selected surfaces stores neutral overrides only for those
+  surfaces, preserving other surfaces, tooth/root/crown/bridge records and notes.
+  Whole-tooth anatomical resets clear the surface map atomically; artificial-site
+  creation rejects meaningful native surface findings until explicitly reset.
+  Additive migration 0055_surface_observations adds a JSONB map on existing
+  revisioned tooth rows. Shared patient locks, exact target revisions, atomic
+  audit and endpoint-aware replay guards extend to surface saves. No backfill,
+  R4 access, treatment/finance changes or production deployment.
+  Verification: 175 backend cases, 48 distinct glyph cases, empty migration
+  downgrade/re-upgrade and populated downgrade refusal passed. Production build,
+  typecheck/lint/compilation/diff checks and six isolated health/auth/read checks
+  passed. All 51 distinct focused browser cases passed: release run 50/51, followed
+  by 2/2 shape checks after updating the obsolete definition count from 276 to
+  436 (five new surface patterns per tooth, each explicitly asserted). No app
+  change or renderer workaround was needed. Old palette boundary expectations
+  now require the surface palette instead of whole-tooth controls. Development
+  test-only fixes covered accessible combobox selectors, deliberate menu dismissal
+  and subpixel icon dimensions. Final synthetic light/dark/mobile previews were
+  visually inspected, including mobile menu scrolling. Full backend/default-stack
+  wrappers were not run; scoped isolated equivalents were used. PR #714 remains
+  draft above open #713; parent resolution and required master CI/review remain
+  gates. Production migrations 0049–0055 and deployment require separate approval.
+  Disposable surface-test containers/network/data have been removed; previews
+  and test reports remain outside Git.
+- 2026-09-06 (bonded crowns, bridges and dentures): Current/Diagnosis now adds
+  dark-brown Porcelain B. Crown. Crown/bridge/denture palette icons are 30% larger
+  (34.5 to 44.85px), while existing 18px labels and tooth/root icon sizes remain.
+  Standalone Crown fractured is retired from new authoring; previously recorded
+  values still render without reinterpretation. Fractured remains a material
+  crown subcondition alongside Decayed, Defective and Poor fitting.
+  Below the crown row are Bridge Abutment, Bridge Pontic, Bridge Wing, Denture
+  Co-Cr and Denture Acrylic. Denture bases are blue-grey and rose, with rootless
+  artificial teeth. Arming a denture tile exposes dashed targets at missing
+  positions for multi-tooth Apply. No natural tooth status is inferred or changed.
+  Pontics/dentures reject explicit conflicting biology or meaningful root findings.
+  Bridge choices open an explicit same-arch first/last-tooth editor: every unit
+  needs a role, with at least one support and one pontic. Cantilever and midline
+  spans are supported; gaps, overlaps and guessed roles are not. Default material
+  preserves existing/unspecified crowns; an explicitly chosen material replaces
+  all member crown observations. Wings use a curved silver bracket. A measured
+  black connector with pale contrast outline follows exactly each recorded group,
+  including scroll/resize; neighbouring groups never join automatically.
+  Material-only crown edits preserve group identity. Anatomical changes or partial
+  crown reset/replacement cannot dismantle a group. Confirmed Reset whole bridge
+  clears all member crowns/group roles, retaining native tooth/root observations,
+  notes, history, plans and finance. Keyboard focus is contained during pending
+  saves and restored to the crown after context-menu cancellation. Unconfirmed
+  saves require cancelling the local draft, refreshing and reviewing saved data.
+  Additive migration 0054_tooth_bridge_groups creates explicit group identity and
+  constrained same-patient membership. No backfill or old migration edits. Empty
+  downgrade/re-upgrade passed; downgrade refuses live groups or extended crown
+  kinds before DDL. Shared patient lock, exact revisions, atomic audit and replay
+  safeguards cover tooth/root/crown/bridge writes. No treatment/charges are created.
+  Verification: 122 backend cases passed (32 bridge/denture, 33 crown, 37 root,
+  13 tooth, seven reliability); 38 glyph cases passed. Final production build and
+  all 41 browser cases passed without retries (seven bridge/denture, nine crown,
+  eight root, 14 tooth palette, two shape, one midline). Typecheck/lint/compilation,
+  diff checks and six isolated health/auth/read checks passed. Final synthetic
+  light/dark/mobile previews inspected. A development SVG visibility assertion
+  was corrected to inspect the visible stroke and exact connector alignment;
+  no renderer change was made to satisfy that test. Full backend/default-stack
+  operational wrappers were not run; scoped isolated equivalents were used.
+  PR #714 remains draft, stacked on open PR #713; parent resolution and required
+  master CI/review are still gates. No R4 access, production change, merge or
+  deployment. Production migrations 0049–0054 and deployment require explicit
+  separate approval. Disposable test stack is cleaned up; previews stay outside Git.
+- 2026-09-05 (crown diagnosis): Current now has separate tooth, whole-root-area
+  and crown layers. Click a crown to replace the bottom palette with Crown
+  fractured, Crown missing, Metallic, Gold, Porcelain, Composite and Reset crown.
+  Choose a finding and optional material conditions, select several crown areas,
+  then explicitly Apply. Right-click/keyboard context opens the same crown choices;
+  that menu stages its selection before a single-tooth Apply. Crown/menu text is
+  18px; cyan hover/focus pulses respect reduced motion and never resize the tooth.
+  Crown fractured removes only the crown silhouette, retaining roots and a stable
+  re-entry target. Crown missing shows a prepared stump. Material colours are
+  silver-grey, yellow, pink and green. Decayed, Defective, Fractured and Poor fitting
+  may be combined on material crowns, shown as red spot, mesh, crack and cervical
+  gap respectively. Material fracture is distinct from the broken-away crown kind.
+  No selected subcondition means unspecified, never inferred sound. One selected
+  crown can open the existing tooth-note editor; notes are not duplicated in bulk.
+  Root/crown changes preserve each other, and notes/history/plans/finance remain.
+  Whole-tooth reset or incompatible/dentition transitions clear both anatomical
+  layers atomically with before/after audit. Patient/tab/view/layer switches clear
+  drafts. Native missing/unerupted teeth cannot receive crowns; implant crowns can.
+  Additive migration 0053_crown_observation stores a nullable JSONB crown object.
+  SQL NULL means untouched; a neutral reset object remains distinct. No backfill
+  or old migration edits. Downgrade refuses any non-null crown finding, including
+  reset objects, before DDL. Root/tooth/crown share patient locks, exact revisions,
+  pending-save protection and endpoint-aware idempotency. Invalid/stale batches
+  reject atomically; no treatment/finance records are created by diagnosis.
+  Verification: 91 backend cases passed (34 crown, 37 root, 13 tooth, seven
+  reliability); 32 component cases passed (seven crown, 11 root, 14 existing).
+  Final production build and all 33 focused browser cases passed, including all
+  eight new crown workflows and 25 existing tooth/root/palette/shape/midline cases.
+  Typecheck/lint/compilation/diff checks and six isolated health/auth/read checks
+  passed; final synthetic light/dark/mobile previews were visually inspected.
+  Migration 0053 empty downgrade/re-upgrade and populated-data refusal passed in
+  disposable storage. Full backend/default-stack operational wrappers were not
+  run; scoped isolated equivalents were used. No R4 access, production changes,
+  merge or deployment. PR #714
+  remains draft on #713; resolve its parent before master CI/merge review.
+  Production migrations #0049–0053 and deployment need separate explicit approval.
+- 2026-09-05 (whole-root-area correction): the owner clarified that root diagnosis
+  applies to the entire root area belonging to each tooth, not separate roots.
+  This supersedes the individual-root authoring described in the earlier entry.
+  One broad hit area per tooth includes gaps between roots, with one keyboard
+  target and grouped pulsing/selection outlines. Click replaces the tooth palette
+  with six root rectangles: the four filling/post-core conditions, Apicectomy,
+  and Reset root area. Choose a rectangle, select multiple teeth's root areas,
+  then explicitly Apply. Tooth-number/surface interactions or the return button
+  restore tooth choices and clear unfinished root selection. Root clicks no longer
+  reopen tooth-details tools. Right-click opens a whole-root-area menu whose text
+  is 50% larger (buttons 12→18px, title 11→16.5px, hints 10→15px).
+  Root batch writes validate every selected tooth/revision before patching all
+  drawable roots, with one revision increment per changed tooth and atomic audit.
+  Shared Request-Id replay now also requires matching endpoint audit action,
+  preventing identical-JSON cross-endpoint collisions. Prior per-root maps remain
+  readable; mixed findings are shown honestly, including indeterminate apicectomy.
+  Explicit patches preserve omitted attributes. Existing schema/migration #0052
+  is unchanged; no new migration or automatic clinical conversion was introduced.
+  Old individual-root request bodies are rejected rather than reinterpreted.
+  Current whole-tooth conditions, notes/history, plans and finance are preserved.
+  Verification: 57 backend cases passed (37 root/batch, 13 tooth/reset, 7 adjacent
+  reliability). Across focused component checks, 11 root-area/summary/menu and 14
+  existing glyph cases passed. Final production build and all 25 focused browser
+  cases passed, covering palette switching, all-root multi-tooth persistence,
+  conflicts, pending saves, permissions, History and light/dark/mobile layouts.
+  Typecheck, lint, compilation, diff checks and six isolated health/auth/read
+  checks passed. Final chart-plus-palette/menu previews use synthetic data only.
+  Default-stack operational wrappers/full backend suite were not run; isolated
+  equivalents were used. PR #714 remains draft, stacked on #713, with master CI
+  and merge review still gated on resolving the parent. No R4 access, production
+  change, merge or deployment. Production migrations #0049–0052 and deployment
+  still need separate explicit approval.
+- 2026-09-05 (root diagnosis): PR #714 now includes independent Current / Diagnosis
+  observations on each natural root. Click, right-click or keyboard activation
+  opens Filled sound / Filled defective (yellow, with red crosshatching for
+  defective) and Post & core sound / defective (light purple, with the same
+  defect mesh). Apicectomy adds a transverse apical line. Reset root records an
+  explicit neutral root; Reset the tooth clears all its root observations as
+  well as whole-tooth condition/movement/rotation. Notes/history remain intact.
+  Root shafts are 16% wider in Current only, with an individual cyan hover/focus
+  pulse and reduced-motion support. Existing crowns, implants, surface geometry
+  and History/Planned drawings remain unchanged. Root numbers denote schematic
+  positions, not inferred anatomical names or measured clinical anatomy.
+  Native root findings override conflicting legacy absence/implant drawings
+  only in Current; neutral root resets do not revive old root findings. Untouched
+  historical absent/implant teeth and native missing/implant/unerupted teeth do
+  not expose root authoring. Explicit native whole-tooth absence takes priority.
+  Root and tooth writes share an atomic patient lock, revision, audit and request
+  replay safeguards. No procedure, treatment plan, invoice or ledger is created.
+  Additive migration `0052_root_observations` adds a JSONB map without a clinical
+  backfill. Its downgrade refuses any nonempty map, including explicit resets;
+  rollback must preserve observation data and compatible schema/application code.
+  Verification: 46 backend tests passed (26 root, 13 tooth/reset, 7 adjacent
+  reliability). Empty 0052 downgrade/re-upgrade and populated-data refusal passed
+  in disposable storage. Eight new root glyph and 14 existing glyph tests passed.
+  A broader release guard passed 65/67 cases; the two old test contracts were
+  corrected for the new root menu target and added SVG definitions. The final
+  rebuilt artifact passed all 25 targeted browser cases, including those two
+  corrections and a new native-root/legacy-missing badge regression. Production
+  build, typecheck, lint, Python compilation, diff checks and six isolated
+  health/auth/read checks passed. Final synthetic light/dark/mobile previews
+  were visually reviewed. Full backend/default-stack wrappers were not run.
+  PR #714 remains draft, stacked on #713, with master CI/merge review gated on
+  resolving its parent. No R4 access, production changes, merge or deployment.
+  Production migrations #0049–0052 and deployment need separate explicit approval.
+- 2026-09-05 (root/reset refinement): the owner approved the threaded implant
+  and requested better natural roots, a single Reset action and larger palette
+  controls. Native SVG roots now have smoother taper, curved tips and distinct
+  incisor/canine/premolar/molar variants. Approved implant, crown/groove geometry,
+  surface targets and tooth dimensions are fingerprint-verified unchanged.
+  Palette labels increase from 12px to 18px and consistent original line icons
+  from 23px to 34.5px (both 50%). Icons are centred; Reset fills two grid columns.
+  Reset the tooth replaces both Clear movement and Clear rotation in the shared
+  11-action palette/menu. It records an explicit `unrecorded` current condition
+  and clears movement/rotation, returning a neutral numeric-labelled tooth.
+  This is not a healthy/present diagnosis. Notes, treatment history, plans,
+  finance and audit remain intact. Historical visual marks stay in History
+  rather than reappearing in Current after reset or later movement edits.
+  Additive migration `0051_unrecorded_tooth_condition` expands only the allowed
+  condition constraint; no backfill or rewrite of existing migrations. Null
+  remains distinct (no native override). Downgrade refuses before DDL if reset
+  observations exist. Rollback must preserve data/schema and use compatible
+  application code; older condition enums cannot read the new value.
+  Verification: 20 relevant backend tests and 52 focused release-build browser/
+  component cases passed, including single/batch reset preservation, atomic
+  stale-write rejection, audit/retry, legacy Current/History separation,
+  root/canal containment, unchanged implants/crowns, and responsive typography.
+  Final production build, typecheck, lint, Python compilation and diff checks
+  passed. Six isolated health/auth/read checks passed. Migration #0051 empty
+  downgrade/re-upgrade and populated-data refusal were verified in disposable
+  synthetic storage only. Light/dark/mobile previews were visually checked.
+  PR #714 remains draft, stacked on #713; master CI/merge review remains gated
+  on resolving the parent. No merge, production migration/deployment, R4 access
+  or infrastructure change. Production migrations #0049–0051 and deployment
+  still require separate explicit approval.
+- 2026-09-05 (diagnosis palette): PR #714 includes the resumed diagnosis-only,
+  whole-tooth workflow. A shared rectangular palette and tooth-number context
+  menu expose the same conditions and independent movement/rotation actions.
+  Palette users choose an action, select multiple teeth, then explicitly Apply;
+  repeat remembers the last successful single- or multi-tooth action. Arch-wide
+  missing still requires confirmation. Current mode does not open root, crown,
+  surface or treatment-entry editors, and current tooth notes cannot inherit a
+  hidden surface selection from Planned mode. Planned/history workflows remain.
+  Forward means mesial (towards the arch centre), backward means distal, as
+  confirmed by the owner. Positional symbols are schematic, not measured angles.
+  Current implants use tapered threaded screw glyphs. Primary teeth display
+  British A–E labels while retaining canonical numeric storage identifiers.
+  Only tooth numbers pulse on hover/focus, with reduced-motion support; anatomy
+  no longer has a broad green selection halo or changes size on selection.
+  Empty first charts can show age-based, explicitly unconfirmed dentition
+  guidance. This guide never saves findings or infers missing teeth; it is not
+  a clinical diagnosis and existing chart observations are never overwritten.
+  Additive migration `0050_tooth_position_observations` adds nullable movement
+  and rotation columns without backfill. Attribute patches preserve omitted
+  fields and retain atomic revision checks, permissions and audit history.
+  Synthetic isolated verification: 52 relevant backend tests and 46 focused
+  browser/component cases passed. Production build, typecheck, focused lint,
+  Python compilation and diff checks passed. Six isolated health/auth/read
+  checkpoints passed instead of invoking default-stack operational scripts.
+  Migration #0050 upgrade/downgrade/re-upgrade passed on an explicitly empty
+  disposable observation table. Light/dark, wide/mobile and reduced-motion
+  previews were checked; screenshots contain synthetic patients only.
+  No R4 access, production changes, merge or deployment. PR #714 remains draft
+  and stacked on #713; resolve the parent before retargeting for master CI and
+  merge review. Production migrations #0049 and #0050, and deployment, require
+  separate explicit approval. Preserve observation data during rollback; do not
+  downgrade a populated table simply to roll back application code.
+- 2026-09-05: the owner expanded the resumed odontogram slice to native current
+  tooth conditions. This follow-up is isolated on
+  `codex/odontogram-baseline-tooth-actions`, stacked on visual-only PR #713.
+  Tooth labels are 70% larger (11px to 18.7px). Their context menu records
+  missing, deciduous (positions 1–5), implant, unerupted, impacted or present
+  conditions; repeat applies only the last successful single-tooth condition.
+  A confirmed all-in-arch-missing action changes exactly one 16-tooth arch.
+  Missing anatomy/surfaces disappear but labels, tooth notes and treatment
+  history remain accessible. Notes display yellow flags; Tooth details opens
+  the existing tooth history. Unerupted teeth show crown plus wavy gum above,
+  implants replace natural roots, and impacted crowns have a schematic
+  inclination (not a recorded clinical angle).
+  Current observations are separate from planned/history views and all billing.
+  New additive migration `0049_native_tooth_conditions` stores audited,
+  permission-checked, revision-protected observations; it does not backfill
+  default healthy teeth or change historical/R4 records. Errors block edits
+  without erasing last-known findings; pending saves survive tab changes.
+  Isolated synthetic verification: 48 relevant backend tests and 25 focused
+  browser/component tests passed, including no treatment/finance side effects,
+  note-save HTTP compatibility, stale writes, delayed refresh/save responses
+  and all four quadrant glyphs. A separate disposable database proved migration
+  upgrade/downgrade/re-upgrade; only the new table was added.
+  Final production build, typecheck, lint, diff checks and isolated
+  backend/frontend-proxy health/config checks passed.
+  No R4 access, production change, merge or deployment was performed.
+  PR #713 must be resolved before this stacked feature is retargeted to master
+  for required CI/merge review. Deployment and production migration #0049 each
+  still need explicit approval. Do not downgrade a populated observation table
+  as an application rollback; preserve its data.
 - 2026-09-05: the owner resumed only the odontogram tooth-shape improvement.
   The isolated branch starts at merged PR #712 (`d81bb96a`), also verified as
   the current production frontend runtime. Production is unchanged by this work.

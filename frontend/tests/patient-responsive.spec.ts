@@ -70,7 +70,8 @@ test("patient summary and detail views stay within viewport on narrow screens", 
     .toBe("static");
   await expectNoHorizontalOverflow(routeShell);
 
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
   await expect(page.getByTestId("patient-notes-field")).toBeVisible({ timeout: 15_000 });
   await expectNoHorizontalOverflow(routeShell);
 

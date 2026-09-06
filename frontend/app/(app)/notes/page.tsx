@@ -17,6 +17,7 @@ type Note = {
   appointment_id?: number | null;
   body: string;
   note_type: "clinical" | "admin";
+  revision?: number;
   created_at: string;
   updated_at: string;
   created_by: Actor;
@@ -294,7 +295,7 @@ export default function NotesPage() {
       const response = await apiFetch(`/api/notes/${noteId}`, {
         method: "PATCH",
         headers: { "Request-Id": crypto.randomUUID() },
-        body: JSON.stringify({ body: editBody.trim(), note_type: editType }),
+        body: JSON.stringify({ body: editBody.trim(), note_type: editType, expected_revision: selectedNote?.revision }),
       });
       if (response.status === 401) {
         clearToken();

@@ -13,7 +13,7 @@ test("odontogram surface clicks build a multi-surface selection", async ({
     last_name: `Surface ${Date.now()}`,
   });
 
-  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, {
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical?clinicalView=planned`, {
     waitUntil: "domcontentloaded",
   });
   await expect(page).toHaveURL(new RegExp(`/patients/${patientId}/clinical`));

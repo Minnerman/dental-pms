@@ -1,10 +1,21 @@
-import { memo, useId } from "react";
+import { memo, useId, type KeyboardEvent, type MouseEvent } from "react";
 
-import { getToothAnatomy, getToothAnatomyWidth } from "./toothAnatomy";
+import { getRootDrawingLandmarks, getToothAnatomy, getToothAnatomyWidth, implantScrewAnatomy } from "./toothAnatomy";
+import { britishToothLabel } from "./toothDiagnosis";
+import { rootConditionLabel, type RootObservation } from "./rootDiagnosis";
+import type { CrownObservation } from "./crownDiagnosis";
+import { surfaceDiagnosisLabel, surfaceKeysForTooth, surfaceMaterials, surfaceName, type SurfaceKey, type SurfaceObservation } from "./surfaceDiagnosis";
+import type { PlanningDrawingKind } from "./treatmentPlanning";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
 export type OdontogramToothType = "incisor" | "canine" | "premolar" | "molar";
+export type OdontogramBaselineCondition = {
+  status?: "present" | "missing" | "implant" | "unerupted" | "impacted" | "unrecorded";
+  dentition?: "permanent" | "deciduous";
+  movement?: "forward" | "backward" | null;
+  rotation?: "clockwise" | "anticlockwise" | null;
+};
 export type OdontogramRestorationType =
   | "filling"
   | "crown"
@@ -25,6 +36,15 @@ export type OdontogramToothRestoration = {
   type: OdontogramRestorationType;
   surfaces?: R4SurfaceKey[];
   meta?: Record<string, unknown>;
+};
+
+/** A separate treatment layer: these symbols never alter the captured findings. */
+export type OdontogramPlannedOverlay = {
+  id: number | string;
+  kind: PlanningDrawingKind;
+  label: string;
+  surfaces?: SurfaceKey[];
+  status: "planned" | "completed";
 };
 
 type SurfaceShape = {
@@ -182,8 +202,26 @@ type Props = {
   missing?: boolean;
   extracted?: boolean;
   active?: boolean;
+  hasToothNote?: boolean;
+  onToothNoteClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  baselineCondition?: OdontogramBaselineCondition;
+  rootConditions?: Record<string, RootObservation>;
+  rootSelected?: boolean;
+  crownCondition?: CrownObservation | null;
+  crownSelected?: boolean;
+  bridgeRole?: "abutment" | "pontic" | "wing" | null;
+  allowMissingCrownSelection?: boolean;
+  surfaceObservations?: Partial<Record<SurfaceKey, SurfaceObservation>>;
+  selectedDiagnosticSurfaces?: SurfaceKey[];
+  onDiagnosticSurfaceClick?: (surface: SurfaceKey, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onDiagnosticSurfaceContextMenu?: (surface: SurfaceKey, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onCrownClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onCrownContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onRootClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
+  onRootContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onSurfaceClick?: (surface: R4SurfaceKey, position: PointerPosition) => void;
   onSurfaceContextMenu?: (surface: R4SurfaceKey, position: PointerPosition) => void;
+  plannedOverlays?: OdontogramPlannedOverlay[];
 };
 
 function OdontogramToothSvgImpl({
@@ -194,12 +232,53 @@ function OdontogramToothSvgImpl({
   missing = false,
   extracted = false,
   active = false,
+  hasToothNote = false,
+  onToothNoteClick,
+  baselineCondition,
+  rootConditions,
+  rootSelected = false,
+  crownCondition,
+  crownSelected = false,
+  bridgeRole,
+  allowMissingCrownSelection = false,
+  surfaceObservations,
+  selectedDiagnosticSurfaces = [],
+  onDiagnosticSurfaceClick,
+  onDiagnosticSurfaceContextMenu,
+  onCrownClick,
+  onCrownContextMenu,
+  onRootClick,
+  onRootContextMenu,
   onSurfaceClick,
   onSurfaceContextMenu,
+  plannedOverlays = [],
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
   const selectedSurfaceKeys = new Set(selectedSurfaces);
   const availableSurfaceKeys = new Set<R4SurfaceKey>(surfaces.map((surface) => surface.key));
+  const anatomy = getToothAnatomy(toothKey, baselineCondition?.dentition);
+  const currentBridgeRole = baselineCondition?.status === "unerupted" ? null : bridgeRole;
+  const isDenture = crownCondition?.kind === "denture_cocr" || crownCondition?.kind === "denture_acrylic";
+  // A replacement tooth is not evidence that a biological tooth is present.
+  // These Current-only observations leave the recorded absence/history intact.
+  const artificialTooth = baselineCondition?.status !== "unerupted" && (isDenture || currentBridgeRole === "pontic");
+  const currentSurfaceLayer = surfaceObservations !== undefined;
+  const nativeSurfaceKey = (surface: R4SurfaceKey): SurfaceKey => surface === "L" && toothKey.startsWith("U") ? "P" : surface;
+  const supportsNativeSurfaces = !artificialTooth && !["missing", "unerupted", "implant"].includes(baselineCondition?.status ?? "") && crownCondition?.kind !== "fractured";
+  const supportsNativeRoots = !artificialTooth && !["missing", "implant", "unerupted"].includes(baselineCondition?.status ?? "");
+  const nativeRootIndexes = new Set(anatomy.roots.flatMap((_, index) =>
+    supportsNativeRoots && rootConditions && Object.prototype.hasOwnProperty.call(rootConditions, String(index + 1))
+      ? [index] : []
+  ));
+  const hasCurrentRootRecord = nativeRootIndexes.size > 0;
+  const unresolvedLegacyImplant = restorations.some((restoration) => normalizeRestorationType(restoration.type) === "implant") && !hasCurrentRootRecord
+    && !["present", "unrecorded", "impacted"].includes(baselineCondition?.status ?? "") && baselineCondition?.dentition !== "deciduous";
+  const nativeSurfaceKeys = new Set(surfaceKeysForTooth(toothKey).filter((surface) => supportsNativeSurfaces && !unresolvedLegacyImplant
+    && surfaceObservations && Object.prototype.hasOwnProperty.call(surfaceObservations, surface) && surfaceObservations[surface] != null));
+  const hasCurrentSurfaceRecord = nativeSurfaceKeys.size > 0;
+  const surfaceRecorded = (surface: R4SurfaceKey) => nativeSurfaceKeys.has(nativeSurfaceKey(surface));
+  const supportsNativeCrown = baselineCondition?.status !== "unerupted" && (baselineCondition?.status !== "missing" || artificialTooth);
+  const hasCurrentCrownRecord = supportsNativeCrown && crownCondition != null;
   const normalizedRestorations = restorations
     .map((restoration): NormalizedRestoration => ({
       type: normalizeRestorationType(restoration.type),
@@ -208,6 +287,31 @@ function OdontogramToothSvgImpl({
       ),
       meta: restoration.meta,
     }))
+    .filter((restoration) => {
+      if (hasCurrentSurfaceRecord && restoration.type === "extraction") return false;
+      if (artificialTooth && ["root_canal", "post", "implant", "denture", "extraction"].includes(restoration.type)) return false;
+      if (currentBridgeRole && restoration.type === "bridge") return false;
+      // Crown-only observations (including a neutral reset) do not erase root,
+      // surface or other historical findings. History passes no observation.
+      if (hasCurrentCrownRecord && ["crown", "extraction"].includes(restoration.type)) return false;
+      // Explicit root observations take precedence over conflicting, whole-tooth
+      // legacy absence/implant symbols without declaring the tooth healthy.
+      if (hasCurrentRootRecord && ["implant", "extraction"].includes(restoration.type)) return false;
+      if (!baselineCondition) return true;
+      // Reset is an explicit neutral current view, not a healthy/present finding.
+      // Historical restorations stay available in History and are never deleted.
+      if (baselineCondition.status === "unrecorded") return false;
+      // A current primary/unerupted tooth must not inherit the permanent
+      // predecessor's historical restorations. The history itself is untouched.
+      if (baselineCondition.dentition === "deciduous" || baselineCondition.status === "unerupted") {
+        return false;
+      }
+      if (baselineCondition.status === "implant" || baselineCondition.status === "impacted") {
+        return !["root_canal", "post", "implant", "extraction"].includes(restoration.type);
+      }
+      if (baselineCondition.status === "present" && restoration.type === "implant") return false;
+      return true;
+    })
     .sort((a, b) => restorationSortKey(a).localeCompare(restorationSortKey(b)));
 
   const restorationsByType = new Map<NormalizedRestorationType, NormalizedRestoration[]>();
@@ -229,7 +333,7 @@ function OdontogramToothSvgImpl({
       fillingSurfaces.add(surface);
     }
   }
-  const hasWholeToothFilling = restorationsForType("filling").some(
+  const hasWholeToothFilling = !hasCurrentSurfaceRecord && restorationsForType("filling").some(
     (restoration) => restoration.surfaces.length === 0
   );
 
@@ -272,16 +376,103 @@ function OdontogramToothSvgImpl({
   const otherTooltip = tooltipForType("other");
 
   const extractionFromRestoration = hasRestoration("extraction");
-  const extractedState = extracted || extractionFromRestoration;
-  const stateDominant = missing || extractedState;
+  const extractedState = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !hasCurrentSurfaceRecord && !baselineCondition?.status && (extracted || extractionFromRestoration);
+  const legacyMissing = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !hasCurrentSurfaceRecord && !baselineCondition?.status && missing;
+  // Surface evidence can keep its own drawing visible without granting a new
+  // root-authoring interpretation to a previously absent legacy tooth.
+  const rootLegacyAbsence = !artificialTooth && !hasCurrentRootRecord && !hasCurrentCrownRecord && !baselineCondition?.status
+    && (missing || extracted || restorations.some((restoration) => restoration.type === "extraction"));
+  const stateDominant = legacyMissing || extractedState;
+  const baselineMissing = baselineCondition?.status === "missing";
+  const baselineImplant = baselineCondition?.status === "implant";
+  const baselineUnerupted = baselineCondition?.status === "unerupted";
+  const baselineImpacted = baselineCondition?.status === "impacted";
+  const isDeciduous = baselineCondition?.dentition === "deciduous";
+  const displayLabel = britishToothLabel(toothKey, isDeciduous ? "deciduous" : undefined);
+  const missingCrownPlaceholder = allowMissingCrownSelection && !artificialTooth && !baselineUnerupted && (baselineMissing || stateDominant);
+  const showAnatomy = (!baselineMissing || artificialTooth) && !missingCrownPlaceholder;
+  const showSurfaceMap = (!baselineMissing || artificialTooth) && !baselineUnerupted && !missingCrownPlaceholder;
+  const showNaturalRoots = !artificialTooth && !baselineImplant && !baselineUnerupted;
   const isUpperArch = toothKey.startsWith("U");
   const illustrationId = useId().replace(/:/g, "");
   const enamelFillId = `enamel-${illustrationId}`;
   const rootFillId = `root-${illustrationId}`;
-  const anatomy = getToothAnatomy(toothKey);
-  const anatomyWidth = getToothAnatomyWidth(toothKey);
+  const implantFillId = `implant-${illustrationId}`;
+  // Current-only affordances never change the historical tooth illustration.
+  const currentRootLayer = rootConditions !== undefined || Boolean(onRootClick || onRootContextMenu);
+  const canRecordNaturalRoots = supportsNativeRoots && !stateDominant && !rootLegacyAbsence && !hasRestoration("implant");
+  const canRecordSurfaces = currentSurfaceLayer && supportsNativeSurfaces && !stateDominant && !hasRestoration("implant");
+  const surfaceControls = canRecordSurfaces && Boolean(onDiagnosticSurfaceClick || onDiagnosticSurfaceContextMenu);
+  const rootControls = Boolean(onRootClick || onRootContextMenu) && showAnatomy && canRecordNaturalRoots;
+  const crownControls = Boolean(onCrownClick || onCrownContextMenu) && (missingCrownPlaceholder || (showAnatomy && supportsNativeCrown && !stateDominant));
+  const nativeCrown = hasCurrentCrownRecord ? crownCondition : null;
+  const crownKind = nativeCrown?.kind;
+  const crownRemoved = crownKind === "fractured";
+  const crownPrepared = crownKind === "missing";
+  const crownMaterialColors: Record<string, string> = {
+    metal: "#a7adb5", gold: "#e9c34e", porcelain: "#f0b5d0", composite: "#85c7a0",
+    porcelain_bonded: "#70483b",
+  };
+  const crownMaterial = crownKind ? crownMaterialColors[crownKind] : undefined;
+  const crownIssues = crownMaterial ? [...new Set(nativeCrown?.issues ?? [])] : [];
+  const crownKindDescription = crownKind === "denture_cocr" ? "Co-Cr denture tooth" : crownKind === "denture_acrylic" ? "acrylic denture tooth" : crownKind === "porcelain_bonded" ? "porcelain bonded crown" : crownKind ? `${crownKind} crown` : hasCurrentCrownRecord ? "current crown observation reset, unspecified" : "current crown finding unspecified";
+  const crownDescription = `${displayLabel} crown area, ${crownRemoved ? "fractured, crown absent" : crownPrepared ? "missing crown, prepared stump" : crownKindDescription}${currentBridgeRole ? `, bridge ${currentBridgeRole}` : ""}${artificialTooth ? ", artificial replacement tooth, no natural root" : ""}${crownIssues.length ? `, ${crownIssues.map((issue) => issue.replaceAll("_", " ")).join(", ")}` : ""}`;
+  const crownClipId = `crown-clip-${illustrationId}`;
+  const crownDefectId = `crown-defect-${illustrationId}`;
+  const surfacePatternId = (kind: string) => `surface-${kind}-${illustrationId}`;
+  const rootRecorded = (index: number) => canRecordNaturalRoots && nativeRootIndexes.has(index);
+  const anyRootRecorded = anatomy.roots.some((_, index) => rootRecorded(index));
+  const rootAreaObservations = anatomy.roots.map((_, index) =>
+    rootRecorded(index) ? rootConditions?.[String(index + 1)] : undefined
+  );
+  const rootAreaCondition = rootAreaObservations.every((item) => (item?.condition ?? null) === (rootAreaObservations[0]?.condition ?? null))
+    ? rootAreaObservations[0]?.condition ?? "unspecified" : "mixed";
+  const rootAreaApicectomy = rootAreaObservations.every((item) => item?.apicectomy)
+    ? "true" : rootAreaObservations.some((item) => item?.apicectomy) ? "mixed" : "false";
+  const rootAreaDescription = `${displayLabel} root area, ${rootAreaCondition === "mixed" ? "mixed or partial root findings" : rootAreaCondition === "unspecified" ? "current root finding unspecified" : rootConditionLabel(rootAreaCondition)}${rootAreaApicectomy === "true" ? ", apicectomy recorded" : rootAreaApicectomy === "mixed" ? ", apicectomy recorded in part of the root area" : ""}`;
+  const rootZoneBottom = Math.max(...anatomy.roots.map((_, index) => getRootDrawingLandmarks(anatomy, index).cervical.y)) + 3;
+  const remainingLegacyCanals = anatomy.canals.map((path, index) => ({ path, index }))
+    .filter(({ index }) => !rootRecorded(index));
+  const rootTransform = (index: number) => {
+    const { shaftX } = getRootDrawingLandmarks(anatomy, index);
+    return currentRootLayer ? `translate(${shaftX} 0) scale(1.16 1) translate(${-shaftX} 0)` : undefined;
+  };
+  const defectPatternId = `root-defect-${illustrationId}`;
+  const rootHitClipId = `root-hit-${illustrationId}`;
+  const anatomyWidth = getToothAnatomyWidth(toothKey) * (isDeciduous ? 0.86 : 1);
   const anatomyScaleX = toothKey[1] === "L" ? -anatomyWidth : anatomyWidth;
   const anatomyTransform = `translate(50 ${isUpperArch ? 0 : 280}) scale(${anatomyScaleX} ${isUpperArch ? 1 : -1}) translate(-50 0)`;
+  // The inclination is a visual status marker, not a measured clinical angle.
+  // Left/right mirroring makes both quadrants incline toward the adjacent tooth
+  // on the midline side without moving the tooth slot or surface hit targets.
+  const crownTransform = baselineImpacted ? "rotate(-28 50 125)" : undefined;
+  const movement = baselineCondition?.movement;
+  const rotation = baselineCondition?.rotation;
+  const movementDirection = (toothKey[1] === "R" ? 1 : -1) * (movement === "backward" ? -1 : 1);
+  const missingMovement = Boolean(movement) && !artificialTooth && (baselineMissing || stateDominant);
+  const noteControls = hasToothNote && Boolean(onToothNoteClick);
+  const baselineDescription = [
+    baselineCondition?.status === "unrecorded" ? "current observations reset, unspecified" : isDeciduous ? "current condition deciduous" : baselineCondition?.status ? `current condition ${baselineCondition.status}` : "",
+    isDeciduous && baselineCondition?.status && !["present", "unrecorded"].includes(baselineCondition.status) ? `current condition ${baselineCondition.status}` : "",
+    movement ? `movement ${movement} (${movement === "forward" ? "toward" : "away from"} the midline)` : "",
+    rotation ? `rotation ${rotation}` : "",
+  ].filter(Boolean).map((description) => `, ${description}`).join("");
+  const handleCrownClick = (event: MouseEvent<SVGElement>) => {
+    event.preventDefault(); event.stopPropagation();
+    (onCrownClick ?? onCrownContextMenu)?.(event);
+  };
+  const handleCrownContextMenu = (event: MouseEvent<SVGElement>) => {
+    event.preventDefault(); event.stopPropagation();
+    (onCrownContextMenu ?? onCrownClick)?.(event);
+  };
+  const handleCrownKeyDown = (event: KeyboardEvent<SVGElement>) => {
+    const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+    if (!context && event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault(); event.stopPropagation();
+    (context ? onCrownContextMenu ?? onCrownClick : onCrownClick ?? onCrownContextMenu)?.(event);
+  };
+  const plannedCount = plannedOverlays.filter((item) => item.status === "planned").length;
+  const completedCount = plannedOverlays.filter((item) => item.status === "completed").length;
 
   return (
     <svg
@@ -289,9 +480,15 @@ function OdontogramToothSvgImpl({
       width="72"
       height="202"
       className="odontogram-tooth-svg"
-      role="img"
-      aria-label={`${toothKey} ${toothType}, anatomical tooth and surface map`}
+      role={rootControls || crownControls || surfaceControls || noteControls ? "group" : "img"}
+      aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? artificialTooth ? ", artificial replacement tooth" : ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}${plannedOverlays.length ? `, treatment overlay: ${plannedCount} planned, ${completedCount} completed` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
+      data-baseline-status={baselineCondition?.status}
+      data-dentition={baselineCondition?.dentition}
+      data-movement={movement ?? undefined}
+      data-rotation={rotation ?? undefined}
+      data-bridge-role={currentBridgeRole ?? undefined}
+      data-artificial-tooth={artificialTooth ? isDenture ? "denture" : "pontic" : undefined}
       style={{ display: "block", overflow: "visible" }}
     >
       <defs>
@@ -306,37 +503,249 @@ function OdontogramToothSvgImpl({
           <stop offset="78%" stopColor="#faf7cf" />
           <stop offset="100%" stopColor="#e8e1ac" />
         </linearGradient>
+        {currentSurfaceLayer && showSurfaceMap && <>
+          <pattern id={surfacePatternId("early")} width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle cx="3" cy="3" r="1.6" fill="#bd2239" />
+          </pattern>
+          <pattern id={surfacePatternId("arrested")} width="10" height="9" patternUnits="userSpaceOnUse">
+            <path d="M1 3 H7" fill="none" stroke="#bd2239" strokeWidth="1.7" />
+          </pattern>
+          <pattern id={surfacePatternId("established")} width="5" height="5" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L4 6 M1 -1 L6 4" fill="none" stroke="#bd2239" strokeWidth="1.7" />
+          </pattern>
+          <pattern id={surfacePatternId("unspecified")} width="12" height="12" patternUnits="userSpaceOnUse">
+            <circle cx="4" cy="4" r="2.5" fill="none" stroke="#bd2239" strokeWidth="1.4" />
+          </pattern>
+          <pattern id={surfacePatternId("defective")} width="8" height="8" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L7 9 M1 -1 L9 7 M-1 7 L7 -1 M1 9 L9 1" fill="none" stroke="#bd2239" strokeWidth="1.4" />
+          </pattern>
+        </>}
+        {(crownCondition !== undefined || crownControls || missingCrownPlaceholder) && <>
+          <clipPath id={crownClipId}><path d={anatomy.crown} /></clipPath>
+          <pattern id={crownDefectId} width="9" height="9" patternUnits="userSpaceOnUse">
+            {crownKind === "porcelain_bonded" && <path d="M-1 1 L8 10 M1 -1 L10 8 M-1 8 L8 -1 M1 10 L10 1"
+              fill="none" stroke="#ffe5d8" strokeWidth="2.6" />}
+            <path d="M-1 1 L8 10 M1 -1 L10 8 M-1 8 L8 -1 M1 10 L10 1"
+              fill="none" stroke="#b91c1c" strokeWidth="1.3" />
+          </pattern>
+        </>}
+        <linearGradient id={implantFillId} x1="0%" x2="100%">
+          <stop offset="0%" stopColor="#7d939d" />
+          <stop offset="38%" stopColor="#e3edf0" />
+          <stop offset="72%" stopColor="#acbfc7" />
+          <stop offset="100%" stopColor="#657e89" />
+        </linearGradient>
+        {currentRootLayer && showNaturalRoots && <>
+          <pattern id={defectPatternId} width="6" height="6" patternUnits="userSpaceOnUse">
+            <path d="M-1 1 L5 7 M1 -1 L7 5 M-1 5 L5 -1 M1 7 L7 1"
+              fill="none" stroke="#b91c1c" strokeWidth="1.1" />
+          </pattern>
+          <clipPath id={rootHitClipId}>
+            <path d={`M0 0 H100 V170 H0 Z ${anatomy.crown}`} clipRule="evenodd" />
+          </clipPath>
+          {anatomy.roots.map((path, index) => (
+            <clipPath key={index} id={`root-clip-${illustrationId}-${index + 1}`}>
+              <path d={path} />
+            </clipPath>
+          ))}
+        </>}
       </defs>
-      <g
+      {missingCrownPlaceholder && <g transform={anatomyTransform}>
+        <g data-testid={`clinical-crown-${toothKey}`} className={crownControls ? "clinical-crown-target" : undefined}
+          data-crown-placeholder="true" data-crown-kind="untouched" data-crown-recorded="false"
+          data-crown-selected={crownSelected && crownControls ? "true" : "false"}
+          role={crownControls ? "button" : undefined} tabIndex={crownControls ? 0 : undefined}
+          aria-label={crownControls ? `${displayLabel} crown area` : undefined}
+          aria-pressed={crownControls ? crownSelected : undefined}
+          onClick={crownControls ? handleCrownClick : undefined}
+          onContextMenu={crownControls ? handleCrownContextMenu : undefined}
+          onKeyDown={crownControls ? handleCrownKeyDown : undefined}>
+          <title>{`${displayLabel}, missing tooth position; select to record a denture tooth`}</title>
+          <path data-testid={`clinical-crown-placeholder-${toothKey}`} d={anatomy.crown}
+            transform="translate(50 125) scale(.72) translate(-50 -125)" fill="none"
+            stroke="var(--muted, #85858a)" strokeWidth="2" strokeDasharray="4 4" pointerEvents="none" />
+          {crownControls && <rect data-testid={`clinical-crown-hit-${toothKey}`} x="0" y="85" width="100" height="90"
+            fill="transparent" clipPath={`url(#${crownClipId})`} pointerEvents="all" />}
+        </g>
+      </g>}
+      {showAnatomy && <g
         data-testid={`tooth-anatomy-${toothKey}`}
-        data-anatomy-parts="crown root"
+        data-anatomy-parts={artificialTooth ? isDenture ? "artificial crown denture base" : "artificial crown" : baselineUnerupted ? "crown gum" : baselineImplant ? "crown implant" : "crown root"}
+        data-dentition={baselineCondition?.dentition}
         transform={anatomyTransform}
         pointerEvents="none"
       >
-        {anatomy.roots.map((path, index) => (
+        {showNaturalRoots && <g
+          className={rootControls ? "clinical-root-target" : undefined}
+          data-testid={`clinical-root-${toothKey}`}
+          data-root-selected={rootSelected && rootControls ? "true" : "false"}
+          data-root-condition={rootAreaCondition}
+          data-root-recorded={anyRootRecorded ? "true" : "false"}
+          data-apicectomy={rootAreaApicectomy}
+          role={rootControls ? "button" : undefined}
+          tabIndex={rootControls ? 0 : undefined}
+          aria-label={rootControls ? `${displayLabel} root area` : undefined}
+          aria-pressed={rootControls ? rootSelected : undefined}
+          pointerEvents={rootControls ? "visiblePainted" : "none"}
+          onClick={rootControls ? (event) => {
+            event.preventDefault(); event.stopPropagation();
+            (onRootClick ?? onRootContextMenu)?.(event);
+          } : undefined}
+          onContextMenu={rootControls ? (event) => {
+            event.preventDefault(); event.stopPropagation();
+            (onRootContextMenu ?? onRootClick)?.(event);
+          } : undefined}
+          onKeyDown={rootControls ? (event) => {
+            const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+            if (!context && event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault(); event.stopPropagation();
+            (context ? onRootContextMenu ?? onRootClick : onRootClick ?? onRootContextMenu)?.(event);
+          } : undefined}
+        >
+        {currentRootLayer && <title>{rootAreaDescription}</title>}
+        {anatomy.roots.map((path, index) => {
+          const rootNumber = index + 1;
+          const recorded = rootRecorded(index);
+          const observation = recorded ? rootConditions?.[String(rootNumber)] : undefined;
+          const condition = observation?.condition;
+          const postCore = condition?.startsWith("post_core") ?? false;
+          const defective = condition?.endsWith("defective") ?? false;
+          const landmarks = getRootDrawingLandmarks(anatomy, index);
+          const findingColor = postCore ? "#c4a7ee" : "#ffd84d";
+          const findingWidth = postCore ? 9 : 7;
+          // A gap longer than the entire normalized path prevents a second
+          // rounded dash/dot at the apex of this cervical-only post symbol.
+          const postDash = postCore ? "62 200" : undefined;
+          return <g key={`${toothKey}-root-${index}`} transform={rootTransform(index)}>
+            <g
+              data-testid={`clinical-root-drawing-${toothKey}-${rootNumber}`}
+              data-root-condition={condition ?? "unspecified"}
+              data-root-recorded={recorded ? "true" : "false"}
+              data-apicectomy={observation?.apicectomy ? "true" : "false"}
+              pointerEvents="none"
+            >
+              <path d={path} fill={`url(#${rootFillId})`} stroke="#686958"
+                strokeWidth={1.05} strokeLinejoin="round" pointerEvents="none"
+                data-testid={`tooth-root-${toothKey}-${rootNumber}`} />
+              {condition && <g clipPath={`url(#root-clip-${illustrationId}-${rootNumber})`}
+                pointerEvents="none" data-testid={`clinical-root-finding-${toothKey}-${rootNumber}`} data-condition={condition}>
+                <path d={anatomy.canals[index]} fill="none" stroke={findingColor}
+                  strokeWidth={findingWidth} strokeLinecap="round" pathLength={100}
+                  strokeDasharray={postDash} />
+                {postCore && <rect x={landmarks.cervical.x - 8} y={landmarks.cervical.y - 16}
+                  width="16" height="9" rx="2" fill={findingColor} />}
+                {defective && <g data-testid={`clinical-root-defect-${toothKey}-${rootNumber}`}>
+                  <path d={anatomy.canals[index]} fill="none" stroke={`url(#${defectPatternId})`}
+                    strokeWidth={findingWidth} strokeLinecap="round" pathLength={100}
+                    strokeDasharray={postDash} />
+                  {postCore && <rect x={landmarks.cervical.x - 8} y={landmarks.cervical.y - 16}
+                    width="16" height="9" rx="2" fill={`url(#${defectPatternId})`} />}
+                </g>}
+              </g>}
+              {observation?.apicectomy && <g pointerEvents="none"
+                data-testid={`clinical-root-apicectomy-${toothKey}-${rootNumber}`}>
+                <path d={`M${landmarks.apical.x - 7.7} ${landmarks.apical.y} H${landmarks.apical.x + 7.7}`}
+                  fill="none" stroke="#fff9eb" strokeWidth="6.75" />
+                <path d={`M${landmarks.apical.x - 7.7} ${landmarks.apical.y} H${landmarks.apical.x + 7.7}`}
+                  fill="none" stroke="#574329" strokeWidth="3.45" />
+              </g>}
+            </g>
+          </g>;
+        })}
+        {rootControls && <g clipPath={`url(#${rootHitClipId})`}>
+          {anatomy.roots.map((path, index) => <g key={index} transform={rootTransform(index)}>
+            <path className="clinical-root-halo" d={path} fill="none"
+              stroke="var(--accent, #00bcea)" strokeWidth="8" pointerEvents="none" />
+            {rootSelected && <path className="clinical-root-selection" d={path} fill="none"
+              stroke="var(--accent, #00bcea)" strokeWidth="1.8" opacity=".65" pointerEvents="none" />}
+          </g>)}
+          <rect x="0" y="0" width="100" height={rootZoneBottom} fill="transparent"
+            pointerEvents="all" data-testid={`clinical-root-hit-${toothKey}`} />
+        </g>}
+        </g>}
+        {baselineImplant && !artificialTooth && (
+          <g data-testid={`tooth-baseline-implant-${toothKey}`}>
+            <path d={implantScrewAnatomy.body} fill={`url(#${implantFillId})`}
+              stroke="#425d69" strokeWidth={1.3} strokeLinejoin="round"
+              data-testid={`tooth-implant-body-${toothKey}`} />
+            {implantScrewAnatomy.threads.map((path, index) => (
+              <path key={index} d={path} fill={`url(#${implantFillId})`}
+                stroke="#425d69" strokeWidth={1} strokeLinejoin="round"
+                data-testid={`tooth-implant-thread-${toothKey}-${index + 1}`} />
+            ))}
+            <path d={implantScrewAnatomy.collar} fill={`url(#${implantFillId})`}
+              stroke="#425d69" strokeWidth={1.3} strokeLinejoin="round"
+              data-testid={`tooth-implant-collar-${toothKey}`} />
+          </g>
+        )}
+        {baselineUnerupted && (
           <path
-            key={`${toothKey}-root-${index}`}
-            d={path}
-            fill={`url(#${rootFillId})`}
-            stroke="#686958"
-            strokeWidth={1.05}
-            strokeLinejoin="round"
-            data-testid={`tooth-root-${toothKey}-${index + 1}`}
+            d="M8 177 Q15 184 22 177 T36 177 T50 177 T64 177 T78 177 T92 177"
+            fill="none" stroke="#9e6674" strokeWidth={2.8} strokeLinecap="round"
+            data-testid={`tooth-baseline-gum-${toothKey}`}
+            data-gum-side={isUpperArch ? "below-crown" : "above-crown"}
           />
-        ))}
-        <path
+        )}
+        <g transform={crownTransform} data-testid={`tooth-crown-appearance-${toothKey}`}
+          data-impacted={baselineImpacted ? "true" : undefined}>
+        <g data-testid={`clinical-crown-${toothKey}`}
+          className={crownControls ? "clinical-crown-target" : undefined}
+          data-crown-kind={hasCurrentCrownRecord ? crownKind ?? "unspecified" : "untouched"}
+          data-crown-recorded={hasCurrentCrownRecord ? "true" : "false"}
+          data-crown-issues={crownIssues.join(",")}
+          data-crown-selected={crownSelected && crownControls ? "true" : "false"}
+          data-bridge-role={currentBridgeRole ?? undefined}
+          data-artificial-tooth={artificialTooth ? isDenture ? "denture" : "pontic" : undefined}
+          role={crownControls ? "button" : undefined}
+          tabIndex={crownControls ? 0 : undefined}
+          aria-label={crownControls ? `${displayLabel} crown area` : undefined}
+          aria-pressed={crownControls ? crownSelected : undefined}
+          pointerEvents={crownControls ? "visiblePainted" : "none"}
+          onClick={crownControls ? handleCrownClick : undefined}
+          onContextMenu={crownControls ? handleCrownContextMenu : undefined}
+          onKeyDown={crownControls ? handleCrownKeyDown : undefined}
+        >
+        {(crownCondition !== undefined || crownControls || currentBridgeRole) && <title>{crownDescription}</title>}
+        {isDenture && artificialTooth && <path data-testid={`clinical-denture-base-${toothKey}`}
+          data-denture-kind={crownKind} d="M9 104 Q11 88 29 88 L71 88 Q89 88 91 104 L87 119 Q50 111 13 119 Z"
+          fill={crownKind === "denture_cocr" ? "#9eabb9" : "#d995ac"}
+          stroke={crownKind === "denture_cocr" ? "#516575" : "#915369"} strokeWidth="1.4" pointerEvents="none" />}
+        {!crownRemoved && !crownPrepared && <path
           d={anatomy.crown}
-          fill={`url(#${enamelFillId})`}
+          fill={crownMaterial ?? (artificialTooth ? "#fff7df" : `url(#${enamelFillId})`)}
           stroke="#444d49"
           strokeWidth={1.2}
           strokeLinejoin="round"
           data-testid={`tooth-crown-${toothKey}`}
-        />
+          pointerEvents="none"
+        />}
 
-        {anatomy.grooves.map((path, index) => (
-          <path key={index} d={path} fill="none" stroke="#60665f" strokeWidth={1}
-            strokeLinecap="round" data-testid={`tooth-crown-groove-${toothKey}-${index + 1}`} />
+        {!crownRemoved && !crownPrepared && anatomy.grooves.map((path, index) => (
+          <path key={index} d={path} fill="none" stroke={crownKind === "porcelain_bonded" ? "#d8b3a2" : "#60665f"} strokeWidth={1}
+            strokeLinecap="round" pointerEvents="none" data-testid={`tooth-crown-groove-${toothKey}-${index + 1}`} />
         ))}
+        {crownPrepared && <g data-testid={`clinical-crown-stump-${toothKey}`} pointerEvents="none">
+          <path d="M28 101 Q50 95 72 101 L66 137 Q50 144 34 137 Z"
+            fill="#efe3b7" stroke="#796f53" strokeWidth="1.4" strokeLinejoin="round" />
+          <path d="M34 137 Q50 130 66 137 Q50 144 34 137 Z"
+            fill="#fff4d1" stroke="#796f53" strokeWidth="1.1" />
+        </g>}
+        {crownIssues.length > 0 && <g clipPath={`url(#${crownClipId})`} pointerEvents="none">
+          {crownIssues.includes("decayed") && <path
+            data-testid={`clinical-crown-issue-${toothKey}-decayed`}
+            d="M62 120 Q68 117 73 123 L71 130 Q76 138 68 140 Q61 143 57 135 L60 129 Q56 124 62 120 Z"
+            fill="#c52c3c" stroke={crownKind === "porcelain_bonded" ? "#ffe5d8" : "#8b1724"} strokeWidth={crownKind === "porcelain_bonded" ? 2.4 : 1.4} />}
+          {crownIssues.includes("defective") && <path data-testid={`clinical-crown-issue-${toothKey}-defective`}
+            d={anatomy.crown} fill={`url(#${crownDefectId})`} />}
+          {crownIssues.includes("fractured") && crownKind === "porcelain_bonded" && <path
+            d="M46 96 L55 115 L45 129 L57 143 L50 168" fill="none" stroke="#ffe5d8" strokeWidth="5.4" strokeLinejoin="round" />}
+          {crownIssues.includes("fractured") && <path data-testid={`clinical-crown-issue-${toothKey}-fractured`}
+            d="M46 96 L55 115 L45 129 L57 143 L50 168" fill="none" stroke="#b91c1c" strokeWidth="3" strokeLinejoin="round" />}
+          {crownIssues.includes("poor_fitting") && <g data-testid={`clinical-crown-issue-${toothKey}-poor_fitting`}>
+            <path d="M12 105 Q50 111 88 105" fill="none" stroke="#fff5ec" strokeWidth="6" />
+            <path d="M12 102 Q50 108 88 102 M12 108 Q50 114 88 108" fill="none" stroke="#b91c1c" strokeWidth="2" />
+          </g>}
+        </g>}
 
         {hasRestoration("crown") && (
           <path
@@ -347,17 +756,32 @@ function OdontogramToothSvgImpl({
             data-testid={`tooth-anatomy-restoration-${toothKey}-crown`}
           />
         )}
+        {currentBridgeRole === "wing" && <g data-testid={`clinical-bridge-wing-${toothKey}`} pointerEvents="none">
+          <path d="M87 106 Q104 130 87 153" fill="none" stroke="#52616e" strokeWidth="7" strokeLinecap="round" />
+          <path d="M87 106 Q104 130 87 153" fill="none" stroke="#c9d2da" strokeWidth="4.5" strokeLinecap="round" />
+        </g>}
+        {crownControls && <>
+          <path className="clinical-crown-halo" d={anatomy.crown} fill="none"
+            stroke="var(--accent, #00bcea)" strokeWidth="6" pointerEvents="none" />
+          {crownSelected && !crownRemoved && <path className="clinical-crown-selection" d={crownPrepared ? "M28 101 Q50 95 72 101 L66 137 Q50 144 34 137 Z" : anatomy.crown}
+            fill="none" stroke="var(--accent, #00bcea)" strokeWidth="1.8" opacity=".65" pointerEvents="none" />}
+          <rect data-testid={`clinical-crown-hit-${toothKey}`} x="0" y="85" width="100" height="90"
+            fill="transparent" clipPath={`url(#${crownClipId})`} pointerEvents="all" />
+        </>}
+        </g>
+        </g>
 
-        {hasRestoration("root_canal") && (
+        {hasRestoration("root_canal") && remainingLegacyCanals.length > 0 && (
           <g data-testid={`tooth-anatomy-restoration-${toothKey}-root_canal`}>
-            {anatomy.canals.map((path, index) => (
+            {remainingLegacyCanals.map(({ path, index }) => (
               <path key={index} d={path} fill="none" stroke="rgba(220, 38, 38, 0.92)"
-                strokeWidth={2.2} strokeLinecap="round" />
+                strokeWidth={2.2} strokeLinecap="round" transform={rootTransform(index)}
+                data-root-index={index + 1} />
             ))}
           </g>
         )}
 
-        {hasRestoration("post") && (
+        {hasRestoration("post") && !anyRootRecorded && (
           <rect
             x="46"
             y="74"
@@ -400,7 +824,7 @@ function OdontogramToothSvgImpl({
         {stateDominant && (
           <rect x="4" y="0" width="92" height="170" fill="rgba(255,255,255,0.55)" />
         )}
-        {missing && (
+        {legacyMissing && (
           <line
             x1="20"
             y1="160"
@@ -420,12 +844,76 @@ function OdontogramToothSvgImpl({
             strokeWidth={4}
           />
         )}
-      </g>
+      </g>}
 
-      <g
+      {(showAnatomy || missingMovement) && (movement || rotation) && (
+        <g
+          transform={`translate(50 ${missingMovement ? 140 : isUpperArch ? -14 : 294})`}
+          pointerEvents="none"
+          data-testid={`tooth-position-markers-${toothKey}`}
+          data-marker-side={missingMovement ? "missing-slot" : isUpperArch ? "above" : "below"}
+        >
+          {movement && (
+            <g
+              transform={missingMovement ? `scale(${movementDirection * 2.2} 2.2)`
+                : `translate(${rotation ? hasToothNote && isUpperArch ? -10 : -21 : 0} 0) scale(${movementDirection} 1)`}
+              data-testid={`tooth-movement-${toothKey}`}
+              data-direction={movement}
+              data-marker-size={missingMovement ? "large" : "standard"}
+              stroke="var(--odontogram-movement, #b96708)"
+              strokeWidth={2.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            >
+              <path d="M-13 0 H13 M6 -7 L13 0 L6 7" />
+            </g>
+          )}
+          {rotation && (
+            <g
+              transform={`translate(${missingMovement ? 0 : movement ? 21 : 0} ${missingMovement ? 34 : 0}) scale(${rotation === "anticlockwise" ? -1 : 1} 1)`}
+              data-testid={`tooth-rotation-${toothKey}`}
+              data-direction={rotation}
+              stroke="var(--odontogram-rotation, #8057c8)"
+              strokeWidth={2.3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            >
+              <path d="M8 6 A10 10 0 1 1 9 -4 M9 -4 L3 -5 M9 -4 L10 -10" />
+            </g>
+          )}
+        </g>
+      )}
+
+      {hasToothNote && <g
+        data-testid={`tooth-note-flag-${toothKey}`}
+        role={noteControls ? "button" : "img"}
+        tabIndex={noteControls ? 0 : undefined}
+        aria-label={`${noteControls ? "Open notes" : "Notes"} for ${displayLabel}`}
+        style={{ cursor: noteControls ? "pointer" : "default" }}
+        onClick={noteControls ? (event) => {
+          event.preventDefault(); event.stopPropagation(); onToothNoteClick?.(event);
+        } : undefined}
+        onKeyDown={noteControls ? (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault(); event.stopPropagation(); onToothNoteClick?.(event);
+        } : undefined}
+      >
+        <title>{`Tooth notes for ${displayLabel}`}</title>
+        <rect x="0" y="-25" width="24" height="24" fill="transparent" />
+        <path d="M2 -23 H22 V-9 L16 -3 H2 Z" fill="#ffe66b" stroke="#967b13" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M16 -3 V-9 H22" fill="#e0bc36" stroke="#967b13" strokeWidth="1.1" strokeLinejoin="round" />
+        <path d="M6 -18 H18 M6 -14 H17 M6 -10 H12" fill="none" stroke="#8a711b" strokeWidth="1.1" strokeLinecap="round" />
+      </g>}
+
+      {showSurfaceMap && <g
         transform={isUpperArch ? "translate(0 180)" : undefined}
         data-testid={`tooth-surface-map-${toothKey}`}
+        data-current-surfaces={currentSurfaceLayer ? "true" : undefined}
       >
+      <g transform={currentSurfaceLayer && toothKey[1] === "R" ? "translate(100 0) scale(-1 1)" : undefined}
+        data-testid={currentSurfaceLayer ? `clinical-surface-orientation-${toothKey}` : undefined}>
       <path
         d={surfaceOutlinePath[toothType]}
         fill={active ? "rgba(51, 255, 180, 0.12)" : "rgba(255, 255, 255, 0.82)"}
@@ -434,37 +922,70 @@ function OdontogramToothSvgImpl({
       />
 
       {surfaces.map((surface) => {
-        const isSelected = selectedSurfaceKeys.has(surface.key);
-        const hasFilling = fillingSurfaces.has(surface.key);
-        const hasVeneer = veneerSurfaces.has(surface.key);
-        const hasInlayOnlay = inlayOnlaySurfaces.has(surface.key);
+        const diagnosticKey = nativeSurfaceKey(surface.key);
+        const isSelected = currentSurfaceLayer ? selectedDiagnosticSurfaces.includes(diagnosticKey) : selectedSurfaceKeys.has(surface.key);
+        const recorded = surfaceRecorded(surface.key);
+        const observation = recorded && canRecordSurfaces ? surfaceObservations?.[diagnosticKey] : undefined;
+        const description = `${displayLabel} ${surfaceName(diagnosticKey)} surface (${diagnosticKey}), ${observation ? surfaceDiagnosisLabel(observation) : "current finding unspecified"}`;
+        const carious = observation?.kind === "carious" || observation?.condition?.startsWith("carious_");
+        const pattern = observation?.kind === "defective" || observation?.condition === "defective" ? "defective"
+          : carious ? observation?.condition?.startsWith("carious_") ? observation.condition.slice(8) : "unspecified" : null;
+        const material = surfaceMaterials.find((entry) => entry.value === observation?.material);
+        const fill = observation?.kind === "restored" ? material?.colour ?? "#c1c6cb" : observation?.kind === "sealant" ? "#b9e6ef" : "#ffe0e4";
+        const hasFilling = !recorded && fillingSurfaces.has(surface.key);
+        const hasVeneer = !recorded && veneerSurfaces.has(surface.key);
+        const hasInlayOnlay = !recorded && inlayOnlaySurfaces.has(surface.key);
         return (
-          <g key={`${toothKey}-${surface.key}`}>
+          <g key={`${toothKey}-${surface.key}`}
+            data-testid={currentSurfaceLayer ? `clinical-surface-${toothKey}-${diagnosticKey}` : undefined}
+            data-surface-kind={currentSurfaceLayer ? observation ? observation.kind ?? "unspecified" : "untouched" : undefined}
+            data-surface-recorded={currentSurfaceLayer ? observation ? "true" : "false" : undefined}
+            data-surface-material={observation?.material ?? undefined}
+            data-surface-condition={observation?.condition ?? undefined}
+            className={surfaceControls ? "clinical-surface-target" : undefined}
+            role={surfaceControls ? "button" : undefined} tabIndex={surfaceControls ? 0 : undefined}
+            aria-label={surfaceControls ? `${displayLabel} ${surfaceName(diagnosticKey)} surface` : undefined}
+            aria-pressed={surfaceControls ? isSelected : undefined}
+            onClick={surfaceControls ? (event) => {
+              event.preventDefault(); event.stopPropagation();
+              (onDiagnosticSurfaceClick ?? onDiagnosticSurfaceContextMenu)?.(diagnosticKey, event);
+            } : undefined}
+            onContextMenu={surfaceControls ? (event) => {
+              event.preventDefault(); event.stopPropagation();
+              (onDiagnosticSurfaceContextMenu ?? onDiagnosticSurfaceClick)?.(diagnosticKey, event);
+            } : undefined}
+            onKeyDown={surfaceControls ? (event) => {
+              const context = event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+              if (!context && event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault(); event.stopPropagation();
+              (context ? onDiagnosticSurfaceContextMenu ?? onDiagnosticSurfaceClick : onDiagnosticSurfaceClick ?? onDiagnosticSurfaceContextMenu)?.(diagnosticKey, event);
+            } : undefined}>
+            {currentSurfaceLayer && <title>{description}</title>}
             <polygon
               points={surface.points}
               data-surface={surface.key}
               data-selected={isSelected ? "true" : "false"}
               data-testid={`tooth-surface-${toothKey}-${surface.key}`}
-              fill={isSelected ? "rgba(51, 255, 180, 0.42)" : "rgba(148, 163, 184, 0.08)"}
-              stroke={isSelected ? "var(--accent)" : "rgba(51, 65, 85, 0.35)"}
+              fill={currentSurfaceLayer ? "#f4f6f7" : isSelected ? "rgba(51, 255, 180, 0.42)" : "rgba(148, 163, 184, 0.08)"}
+              stroke={currentSurfaceLayer ? isSelected ? "var(--accent, #00bcea)" : "#8a929c" : isSelected ? "var(--accent)" : "rgba(51, 65, 85, 0.35)"}
               strokeWidth={isSelected ? 2.4 : 1.2}
-              style={{ cursor: "pointer" }}
-              onClick={(event) => {
+              style={{ cursor: !currentSurfaceLayer || surfaceControls ? "pointer" : "default" }}
+              onClick={!currentSurfaceLayer ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onSurfaceClick?.(surface.key, {
                   clientX: event.clientX,
                   clientY: event.clientY,
                 });
-              }}
-              onContextMenu={(event) => {
+              } : undefined}
+              onContextMenu={!currentSurfaceLayer ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onSurfaceContextMenu?.(surface.key, {
                   clientX: event.clientX,
                   clientY: event.clientY,
                 });
-              }}
+              } : undefined}
             />
             {hasFilling && (
               <polygon
@@ -496,6 +1017,22 @@ function OdontogramToothSvgImpl({
                 data-testid={`tooth-restoration-${toothKey}-inlay_onlay-${surface.key}`}
               />
             )}
+            {observation && <g pointerEvents="none" data-testid={`clinical-surface-finding-${toothKey}-${diagnosticKey}`}
+              data-kind={observation.kind ?? "unspecified"} data-material={observation.material ?? undefined}
+              data-condition={observation.condition ?? undefined}>
+              {observation.kind && <polygon points={surface.points} fill={fill} stroke="#59636c" strokeWidth="1.1"
+                data-testid={`clinical-surface-fill-${toothKey}-${diagnosticKey}`}
+                strokeDasharray={observation.condition === null ? "3 2" : undefined} />}
+              {observation.kind && pattern && <polygon points={surface.points} fill={`url(#${surfacePatternId(pattern)})`}
+                data-testid={`clinical-surface-pattern-${toothKey}-${diagnosticKey}`}
+                data-pattern={pattern === "defective" ? "defective" : "carious"}
+                data-stage={pattern === "defective" ? undefined : pattern} />}
+            </g>}
+            {surfaceControls && <>
+              <polygon className="clinical-surface-halo" points={surface.points} fill="none" stroke="var(--accent, #00bcea)" strokeWidth="6" pointerEvents="none" />
+              {isSelected && <polygon className="clinical-surface-selection" points={surface.points} fill="none"
+                stroke="var(--accent, #00bcea)" strokeWidth="2.4" pointerEvents="none" />}
+            </>}
           </g>
         );
       })}
@@ -549,7 +1086,7 @@ function OdontogramToothSvgImpl({
         </g>
       )}
 
-      {hasRestoration("root_canal") && (
+      {hasRestoration("root_canal") && !anyRootRecorded && (
         <g
           pointerEvents="none"
           data-tooltip={rootCanalTooltip}
@@ -564,7 +1101,7 @@ function OdontogramToothSvgImpl({
         </g>
       )}
 
-      {hasRestoration("post") && (
+      {hasRestoration("post") && !anyRootRecorded && (
         <g
           pointerEvents="none"
           data-tooltip={postTooltip}
@@ -632,7 +1169,7 @@ function OdontogramToothSvgImpl({
         </g>
       )}
 
-      {hasRestoration("veneer") && (
+      {hasRestoration("veneer") && !surfaceRecorded("B") && (
         <path
           d={surfaceOutlinePath[toothType]}
           fill="none"
@@ -647,7 +1184,7 @@ function OdontogramToothSvgImpl({
         </path>
       )}
 
-      {hasRestoration("inlay_onlay") && (
+      {hasRestoration("inlay_onlay") && !hasCurrentSurfaceRecord && (
         <circle
           cx="50"
           cy="50"
@@ -688,7 +1225,7 @@ function OdontogramToothSvgImpl({
         />
       )}
 
-      {missing && (
+      {legacyMissing && (
         <line
           x1="16"
           y1="86"
@@ -714,7 +1251,69 @@ function OdontogramToothSvgImpl({
           />
         </g>
       )}
-      </g>
+      </g></g>}
+      {plannedOverlays.length > 0 && <g pointerEvents="none" data-testid={`tooth-planning-layer-${toothKey}`}>
+        {plannedOverlays.map((item) => {
+          const ink = item.status === "completed" ? "var(--planning-complete, #626a74)" : "var(--planning-ink, #493896)";
+          const dash = item.status === "planned" ? "6 4" : undefined;
+          const isSurfaceWork = (item.surfaces?.length ?? 0) > 0;
+          const targets = surfaces.filter((surface) => item.surfaces?.includes(nativeSurfaceKey(surface.key)));
+          const title = `${item.status === "planned" ? "Planned" : "Completed"}: ${item.label}${item.surfaces?.length ? ` · ${item.surfaces.join("")}` : ""}. Captured diagnosis unchanged.`;
+          return <g key={item.id} data-testid={`tooth-planning-overlay-${toothKey}-${item.id}`}
+            data-drawing-kind={item.kind} data-plan-status={item.status} aria-label={title}>
+            <title>{title}</title>
+            <g transform={anatomyTransform} fill="none" stroke={ink} strokeWidth="3.5" strokeDasharray={dash}
+              strokeLinecap="round" strokeLinejoin="round">
+              {item.kind === "extraction" && <path data-testid={`tooth-planning-extraction-${toothKey}-${item.id}`}
+                d="M15 18 L85 164 M85 18 L15 164" strokeWidth="4.5" />}
+              {item.kind === "implant" && <g data-testid={`tooth-planning-implant-${toothKey}-${item.id}`}>
+                <path d={implantScrewAnatomy.body} /><path d={implantScrewAnatomy.collar} />
+                {implantScrewAnatomy.threads.map((path, index) => <path key={index} d={path} strokeWidth="1.8" strokeDasharray="none" />)}
+              </g>}
+              {(item.kind === "root_canal" || item.kind === "post_core") && anatomy.canals.map((path, index) => <g key={index}
+                transform={rootTransform(index)} data-testid={`tooth-planning-root-${toothKey}-${item.id}-${index + 1}`}>
+                <path d={path} stroke="var(--planning-halo, #faf8ff)" strokeWidth="8" pathLength="100"
+                  strokeDasharray={item.kind === "post_core" ? "60 200" : undefined} />
+                <path d={path} strokeWidth="4.5" pathLength="100"
+                  strokeDasharray={item.kind === "post_core" ? "60 200" : item.status === "planned" ? "8 5" : undefined} />
+                {item.kind === "post_core" && <path d={`M${getRootDrawingLandmarks(anatomy, index).cervical.x - 7} ${getRootDrawingLandmarks(anatomy, index).cervical.y - 13} h14 v8 h-14 Z`} />}
+              </g>)}
+              {item.kind === "apicectomy" && anatomy.roots.map((_, index) => {
+                const apex = getRootDrawingLandmarks(anatomy, index).apical;
+                return <path key={index} d={`M${apex.x - 9} ${apex.y} H${apex.x + 9}`} transform={rootTransform(index)}
+                  data-testid={`tooth-planning-apicectomy-${toothKey}-${item.id}-${index + 1}`} strokeWidth="4.5" />;
+              })}
+              {(["crown", "bridge", "denture", "veneer"].includes(item.kind) || item.kind === "inlay_onlay" && !isSurfaceWork) && <g transform={crownTransform}>
+                <path d={anatomy.crown} stroke="var(--planning-halo, #faf8ff)" strokeWidth="6.5" />
+                <path d={anatomy.crown} data-testid={`tooth-planning-crown-${toothKey}-${item.id}`} />
+                {item.kind === "bridge" && <path d="M20 125 H80" strokeWidth="5" />}
+                {item.kind === "denture" && <path d="M17 103 Q50 89 83 103" strokeWidth="6" />}
+                {(item.kind === "inlay_onlay" || item.kind === "veneer") && <path d="M32 120 Q50 111 68 120 L65 145 Q50 155 35 145 Z" strokeWidth="2.5" />}
+              </g>}
+            </g>
+            {isSurfaceWork && <g transform={isUpperArch ? "translate(0 180)" : undefined}>
+              <g transform={toothKey[1] === "R" ? "translate(100 0) scale(-1 1)" : undefined}>
+                {targets.map((surface) => <g key={surface.key} data-testid={`tooth-planning-surface-${toothKey}-${item.id}-${nativeSurfaceKey(surface.key)}`}>
+                  <polygon points={surface.points} fill="none" stroke="var(--planning-halo, #faf8ff)" strokeWidth="7" strokeLinejoin="round" />
+                  <polygon points={surface.points} fill="none" stroke={ink} strokeWidth="3.5" strokeDasharray={dash} strokeLinejoin="round" />
+                </g>)}
+              </g>
+            </g>}
+          </g>;
+        })}
+        {/* Planning-only space is reserved by TreatmentPlanningChart even when
+            there are no items. Keep enlarged badges clear of notes and anatomy. */}
+        {[{ status: "planned", count: plannedCount, x: 25, symbol: "P" }, { status: "completed", count: completedCount, x: 75, symbol: "C" }].filter((item) => item.count > 0).map((item) => <g key={item.status}
+          data-testid={`tooth-planning-count-${toothKey}-${item.status}`} transform={`translate(${item.x} -41)`}
+          aria-label={`${item.count} ${item.status} treatment${item.count === 1 ? "" : "s"}`}>
+          <title>{`${item.count} ${item.status} treatment${item.count === 1 ? "" : "s"}`}</title>
+          <rect x="-22.5" y="-12" width="45" height="24" rx="7.5" fill="var(--planning-halo, #faf8ff)"
+            stroke={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"} strokeWidth="2.1" />
+          <text x="0" y="6" textAnchor="middle" fontSize="18" fontWeight="700"
+            textLength={item.count > 99 ? 36 : undefined} lengthAdjust={item.count > 99 ? "spacingAndGlyphs" : undefined}
+            fill={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"}>{item.symbol}{item.count > 1 ? item.count : ""}</text>
+        </g>)}
+      </g>}
     </svg>
   );
 }
