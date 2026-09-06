@@ -5,6 +5,7 @@ import { britishToothLabel } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation } from "./rootDiagnosis";
 import type { CrownObservation } from "./crownDiagnosis";
 import { surfaceDiagnosisLabel, surfaceKeysForTooth, surfaceMaterials, surfaceName, type SurfaceKey, type SurfaceObservation } from "./surfaceDiagnosis";
+import type { PlanningDrawingKind } from "./treatmentPlanning";
 
 import type { R4SurfaceKey } from "@/lib/charting/r4SurfaceCodeToSurfaceKey";
 
@@ -35,6 +36,15 @@ export type OdontogramToothRestoration = {
   type: OdontogramRestorationType;
   surfaces?: R4SurfaceKey[];
   meta?: Record<string, unknown>;
+};
+
+/** A separate treatment layer: these symbols never alter the captured findings. */
+export type OdontogramPlannedOverlay = {
+  id: number | string;
+  kind: PlanningDrawingKind;
+  label: string;
+  surfaces?: SurfaceKey[];
+  status: "planned" | "completed";
 };
 
 type SurfaceShape = {
@@ -211,6 +221,7 @@ type Props = {
   onRootContextMenu?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   onSurfaceClick?: (surface: R4SurfaceKey, position: PointerPosition) => void;
   onSurfaceContextMenu?: (surface: R4SurfaceKey, position: PointerPosition) => void;
+  plannedOverlays?: OdontogramPlannedOverlay[];
 };
 
 function OdontogramToothSvgImpl({
@@ -240,6 +251,7 @@ function OdontogramToothSvgImpl({
   onRootContextMenu,
   onSurfaceClick,
   onSurfaceContextMenu,
+  plannedOverlays = [],
 }: Props) {
   const surfaces = surfaceShapesByToothType[toothType];
   const selectedSurfaceKeys = new Set(selectedSurfaces);
@@ -459,6 +471,8 @@ function OdontogramToothSvgImpl({
     event.preventDefault(); event.stopPropagation();
     (context ? onCrownContextMenu ?? onCrownClick : onCrownClick ?? onCrownContextMenu)?.(event);
   };
+  const plannedCount = plannedOverlays.filter((item) => item.status === "planned").length;
+  const completedCount = plannedOverlays.filter((item) => item.status === "completed").length;
 
   return (
     <svg
@@ -467,7 +481,7 @@ function OdontogramToothSvgImpl({
       height="202"
       className="odontogram-tooth-svg"
       role={rootControls || crownControls || surfaceControls || noteControls ? "group" : "img"}
-      aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? artificialTooth ? ", artificial replacement tooth" : ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}`}
+      aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? artificialTooth ? ", artificial replacement tooth" : ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}${plannedOverlays.length ? `, treatment overlay: ${plannedCount} planned, ${completedCount} completed` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
       data-baseline-status={baselineCondition?.status}
       data-dentition={baselineCondition?.dentition}
@@ -1238,6 +1252,63 @@ function OdontogramToothSvgImpl({
         </g>
       )}
       </g></g>}
+      {plannedOverlays.length > 0 && <g pointerEvents="none" data-testid={`tooth-planning-layer-${toothKey}`}>
+        {plannedOverlays.map((item) => {
+          const ink = item.status === "completed" ? "var(--planning-complete, #626a74)" : "var(--planning-ink, #493896)";
+          const dash = item.status === "planned" ? "6 4" : undefined;
+          const isSurfaceWork = (item.surfaces?.length ?? 0) > 0;
+          const targets = surfaces.filter((surface) => item.surfaces?.includes(nativeSurfaceKey(surface.key)));
+          const title = `${item.status === "planned" ? "Planned" : "Completed"}: ${item.label}${item.surfaces?.length ? ` · ${item.surfaces.join("")}` : ""}. Captured diagnosis unchanged.`;
+          return <g key={item.id} data-testid={`tooth-planning-overlay-${toothKey}-${item.id}`}
+            data-drawing-kind={item.kind} data-plan-status={item.status} aria-label={title}>
+            <title>{title}</title>
+            <g transform={anatomyTransform} fill="none" stroke={ink} strokeWidth="3.5" strokeDasharray={dash}
+              strokeLinecap="round" strokeLinejoin="round">
+              {item.kind === "extraction" && <path data-testid={`tooth-planning-extraction-${toothKey}-${item.id}`}
+                d="M15 18 L85 164 M85 18 L15 164" strokeWidth="4.5" />}
+              {item.kind === "implant" && <g data-testid={`tooth-planning-implant-${toothKey}-${item.id}`}>
+                <path d={implantScrewAnatomy.body} /><path d={implantScrewAnatomy.collar} />
+                {implantScrewAnatomy.threads.map((path, index) => <path key={index} d={path} strokeWidth="1.8" strokeDasharray="none" />)}
+              </g>}
+              {(item.kind === "root_canal" || item.kind === "post_core") && anatomy.canals.map((path, index) => <g key={index}
+                transform={rootTransform(index)} data-testid={`tooth-planning-root-${toothKey}-${item.id}-${index + 1}`}>
+                <path d={path} stroke="var(--planning-halo, #faf8ff)" strokeWidth="8" pathLength="100"
+                  strokeDasharray={item.kind === "post_core" ? "60 200" : undefined} />
+                <path d={path} strokeWidth="4.5" pathLength="100"
+                  strokeDasharray={item.kind === "post_core" ? "60 200" : item.status === "planned" ? "8 5" : undefined} />
+                {item.kind === "post_core" && <path d={`M${getRootDrawingLandmarks(anatomy, index).cervical.x - 7} ${getRootDrawingLandmarks(anatomy, index).cervical.y - 13} h14 v8 h-14 Z`} />}
+              </g>)}
+              {item.kind === "apicectomy" && anatomy.roots.map((_, index) => {
+                const apex = getRootDrawingLandmarks(anatomy, index).apical;
+                return <path key={index} d={`M${apex.x - 9} ${apex.y} H${apex.x + 9}`} transform={rootTransform(index)}
+                  data-testid={`tooth-planning-apicectomy-${toothKey}-${item.id}-${index + 1}`} strokeWidth="4.5" />;
+              })}
+              {(["crown", "bridge", "denture", "veneer"].includes(item.kind) || item.kind === "inlay_onlay" && !isSurfaceWork) && <g transform={crownTransform}>
+                <path d={anatomy.crown} stroke="var(--planning-halo, #faf8ff)" strokeWidth="6.5" />
+                <path d={anatomy.crown} data-testid={`tooth-planning-crown-${toothKey}-${item.id}`} />
+                {item.kind === "bridge" && <path d="M20 125 H80" strokeWidth="5" />}
+                {item.kind === "denture" && <path d="M17 103 Q50 89 83 103" strokeWidth="6" />}
+                {(item.kind === "inlay_onlay" || item.kind === "veneer") && <path d="M32 120 Q50 111 68 120 L65 145 Q50 155 35 145 Z" strokeWidth="2.5" />}
+              </g>}
+            </g>
+            {isSurfaceWork && <g transform={isUpperArch ? "translate(0 180)" : undefined}>
+              <g transform={toothKey[1] === "R" ? "translate(100 0) scale(-1 1)" : undefined}>
+                {targets.map((surface) => <g key={surface.key} data-testid={`tooth-planning-surface-${toothKey}-${item.id}-${nativeSurfaceKey(surface.key)}`}>
+                  <polygon points={surface.points} fill="none" stroke="var(--planning-halo, #faf8ff)" strokeWidth="7" strokeLinejoin="round" />
+                  <polygon points={surface.points} fill="none" stroke={ink} strokeWidth="3.5" strokeDasharray={dash} strokeLinejoin="round" />
+                </g>)}
+              </g>
+            </g>}
+          </g>;
+        })}
+        {[{ status: "planned", count: plannedCount, x: 43, symbol: "P" }, { status: "completed", count: completedCount, x: 80, symbol: "C" }].filter((item) => item.count > 0).map((item) => <g key={item.status}
+          data-testid={`tooth-planning-count-${toothKey}-${item.status}`} transform={`translate(${item.x} ${isUpperArch ? 177 : 103})`}>
+          <rect x="-15" y="-8" width="30" height="16" rx="5" fill="var(--planning-halo, #faf8ff)"
+            stroke={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"} strokeWidth="1.4" />
+          <text x="0" y="4" textAnchor="middle" fontSize="12" fontWeight="700"
+            fill={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"}>{item.symbol}{item.count > 1 ? item.count : ""}</text>
+        </g>)}
+      </g>}
     </svg>
   );
 }

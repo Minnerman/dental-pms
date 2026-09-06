@@ -184,6 +184,10 @@ class Procedure(Base):
 
 class TreatmentPlanItem(Base, AuditMixin):
     __tablename__ = "treatment_plan_items"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_plan_item_revision"),
+        ForeignKeyConstraint(["plan_id", "patient_id"], ["patient_treatment_plans.id", "patient_treatment_plans.patient_id"], name="fk_plan_item_patient_workspace"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
@@ -195,6 +199,12 @@ class TreatmentPlanItem(Base, AuditMixin):
     procedure_code: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     fee_pence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # NULL workspace/details are genuine pre-feature items, never auto-adopted.
+    plan_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    treatment_id: Mapped[int | None] = mapped_column(ForeignKey("treatments.id"), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    planning_details: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    completed_procedure_id: Mapped[int | None] = mapped_column(ForeignKey("procedures.id"), nullable=True, unique=True)
     status: Mapped[TreatmentPlanStatus] = mapped_column(
         Enum(TreatmentPlanStatus, name="treatment_plan_status"),
         default=TreatmentPlanStatus.proposed,

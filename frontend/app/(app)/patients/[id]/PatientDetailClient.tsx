@@ -45,6 +45,7 @@ import PatientAttachments from "./PatientAttachments";
 import PatientPersonalDetails from "@/components/PatientPersonalDetails";
 import ClinicalNotesPanel from "@/components/clinical/ClinicalNotesPanel";
 import ClinicalNotesWorkspace from "@/components/clinical/ClinicalNotesWorkspace";
+import TreatmentPlanningPanel from "@/components/clinical/TreatmentPlanningPanel";
 
 type Actor = {
   id: number;
@@ -503,6 +504,7 @@ type TreatmentPlanStatus =
 type TreatmentPlanItem = {
   id: number;
   patient_id: number;
+  plan_id?: number | null;
   appointment_id?: number | null;
   tooth?: string | null;
   surface?: string | null;
@@ -3554,12 +3556,6 @@ export default function PatientDetailClient({
     setPlanFee("");
   }
 
-  function openTreatmentPlanModal() {
-    if (!canWriteClinical || clinicalPatientUnavailable) return;
-    resetTreatmentPlanForm();
-    setShowPlanModal(true);
-  }
-
   function startEditTreatmentPlanItem(item: TreatmentPlanItem) {
     if (!canWriteClinical || clinicalPatientUnavailable) return;
     setEditingTreatmentPlanId(item.id);
@@ -4223,6 +4219,7 @@ export default function PatientDetailClient({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (document.querySelector("dialog[open]")) return;
       if (isEditableShortcutTarget(event.target)) return;
       const position = Number.parseInt(event.key, 10);
       if (!Number.isFinite(position) || position < 1 || position > PATIENT_TABS.length) return;
@@ -4234,7 +4231,7 @@ export default function PatientDetailClient({
   }, [activateLockedTab]);
 
   useEffect(() => {
-    if (tab !== "clinical" || clinicalTab !== "chart") return;
+    if (tab !== "clinical" || clinicalTab !== "chart" || clinicalViewMode === "planned") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || (event.target instanceof Element
         && event.target.closest('.clinical-root-target, .clinical-crown-target, .clinical-surface-target, [data-testid="clinical-root-action-menu"], [data-testid="clinical-root-diagnosis-palette"], [data-testid="clinical-crown-action-menu"], [data-testid="clinical-crown-diagnosis-palette"], [data-testid="clinical-surface-action-menu"], [data-testid="clinical-surface-diagnosis-palette"], [data-testid="clinical-bridge-editor"]'))) return;
@@ -5000,22 +4997,7 @@ export default function PatientDetailClient({
     return treatmentPlanItems.filter((item) => item.tooth === selectedTooth);
   }, [selectedTooth, treatmentPlanItems]);
 
-  const chartTreatmentPlanItems = useMemo(
-    () =>
-      treatmentPlanItems.filter((item) =>
-        ["proposed", "accepted", "completed"].includes(item.status)
-      ),
-    [treatmentPlanItems]
-  );
-
-  const chartTreatmentPlanTotal = useMemo(
-    () =>
-      chartTreatmentPlanItems.reduce(
-        (total, item) => total + (item.fee_pence ?? 0),
-        0
-      ),
-    [chartTreatmentPlanItems]
-  );
+  const earlierTreatmentPlanItems = treatmentPlanItems.filter((item) => item.plan_id == null);
 
   const overlayItemsByTooth = useMemo(() => {
     const map = new Map<string, ToothOverlaySummary>();
@@ -8846,14 +8828,14 @@ export default function PatientDetailClient({
                   <div className="clinical-section-toolbar">
                     <div className="tabs">
                     <button
-                      className={`tab ${clinicalTab === "chart" ? "active" : ""}`}
-                      onClick={() => setClinicalTab("chart")}
+                      className={`tab ${clinicalTab === "chart" && clinicalViewMode !== "planned" ? "active" : ""}`}
+                      onClick={() => { setClinicalTab("chart"); setClinicalViewMode("current"); }}
                     >
                       Chart
                     </button>
                     <button
-                      className={`tab ${clinicalTab === "treatment" ? "active" : ""}`}
-                      onClick={() => setClinicalTab("treatment")}
+                      className={`tab ${clinicalTab === "treatment" || clinicalViewMode === "planned" && clinicalTab === "chart" ? "active" : ""}`}
+                      onClick={() => { setClinicalTab("chart"); setClinicalViewMode("planned"); }}
                     >
                       Treatment plan ({treatmentPlanItems.length})
                     </button>
@@ -8940,7 +8922,7 @@ export default function PatientDetailClient({
                       </button>
                     </div>
                   </div>
-                  <div
+                  {clinicalViewMode !== "planned" && <div
                     className="row"
                     style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}
                     data-testid="clinical-selection-toolbar"
@@ -8950,9 +8932,9 @@ export default function PatientDetailClient({
                         ? clinicalViewMode === "current" ? `Tooth ${currentToothLabel(selectedTooth)} · Diagnosis` : `Tooth ${selectedTooth} · Surfaces ${selectedToothSurfaces.join("") || "None"}`
                         : "Select a tooth"}
                     </span>
+                  </div>}
                   </div>
-                  </div>
-                  <details className="clinical-chart-options">
+                  {clinicalViewMode !== "planned" && <details className="clinical-chart-options">
                     <summary><Icon name="settings" size={14} /> Chart options</summary>
                     <div className="clinical-chart-options-content">
                   <div className="clinical-state-legend">
@@ -9104,9 +9086,9 @@ export default function PatientDetailClient({
                     </div>
                   </details>
                     </div>
-                  </details>
+                  </details>}
                   </div>
-                  {r4TreatmentOverlayError && (
+                  {clinicalViewMode !== "planned" && r4TreatmentOverlayError && (
                     <div className="notice">
                       <div
                         className="row"
@@ -9149,7 +9131,11 @@ export default function PatientDetailClient({
                     refreshKey={`${clinicalLastUpdated ?? ""}:${Object.entries(baseline.teeth).map(([tooth, finding]) => `${tooth}-${finding.revision}`).join(",")}`}
                     focusRequest={journalFocusRequest.patient === patientId && journalFocusRequest.nonce > 0 ? journalFocusRequest : undefined}
                     onSaved={handleJournalSaved} onSavingChange={setJournalSaving} onClose={close} />}>
-                <div
+                {clinicalViewMode === "planned" ? <TreatmentPlanningPanel key={patientId} patientId={patientId}
+                  canWriteClinical={canWriteClinical && !clinicalPatientUnavailable} canWriteBilling={canWriteBilling}
+                  onOpenEarlierItems={() => setClinicalTab("treatment")}
+                  onOpenToothNotes={openSavedToothNotes}
+                  onChanged={() => { void refreshClinicalData(); void loadLedger(); void loadLedgerBalance(); void loadFinanceSummary(); }} /> : <div
                     className="patient-route-clinical-grid"
                     data-testid="patient-clinical-grid"
                     data-has-tooth-selection={selectedTooth ? "true" : "false"}
@@ -9896,115 +9882,6 @@ export default function PatientDetailClient({
                             />}
                           </>}
 
-                          {clinicalViewMode === "planned" && (
-                            <Panel
-                              title={`Treatment plan · ${formatCurrency(chartTreatmentPlanTotal)}`}
-                              className="clinical-chart-plan-panel"
-                            >
-                              <div
-                                className="stack"
-                                style={{ gap: 8 }}
-                                data-testid="clinical-chart-treatment-plan"
-                              >
-                                {treatmentPlanNotice && (
-                                  <div className="notice">{treatmentPlanNotice}</div>
-                                )}
-                                {chartTreatmentPlanItems.length === 0 ? (
-                                  <div className="notice">
-                                    No active treatment plan items. Select a tooth to add one.
-                                  </div>
-                                ) : (
-                                  chartTreatmentPlanItems.map((item) => {
-                                    const completing =
-                                      treatmentPlanStatusAction?.itemId === item.id &&
-                                      treatmentPlanStatusAction.status === "completed";
-                                    const completed = item.status === "completed";
-                                    return (
-                                      <div
-                                        className="card"
-                                        key={item.id}
-                                        data-testid={`clinical-chart-plan-item-${item.id}`}
-                                        data-status={item.status}
-                                        style={{
-                                          margin: 0,
-                                          padding: "9px 11px",
-                                          opacity: completed ? 0.55 : 1,
-                                          background: completed
-                                            ? "rgba(148, 163, 184, 0.10)"
-                                            : undefined,
-                                        }}
-                                      >
-                                        <div
-                                          className="row"
-                                          style={{ alignItems: "center", gap: 10 }}
-                                        >
-                                          <div style={{ minWidth: 0, flex: 1 }}>
-                                            <strong>
-                                              {item.tooth || "General"}
-                                              {item.surface ? ` · ${item.surface}` : ""}
-                                              {` · ${item.procedure_code}`}
-                                            </strong>
-                                            <div
-                                              title={item.description}
-                                              style={{
-                                                color: "var(--muted)",
-                                                overflow: "hidden",
-                                                textOverflow: "ellipsis",
-                                                whiteSpace: "nowrap",
-                                              }}
-                                            >
-                                              {item.description}
-                                            </div>
-                                          </div>
-                                          <strong>
-                                            {item.fee_pence != null
-                                              ? formatCurrency(item.fee_pence)
-                                              : "—"}
-                                          </strong>
-                                          <span className="badge">
-                                            {treatmentStatusLabels[item.status]}
-                                          </span>
-                                          {!completed && (
-                                            <button
-                                              className="btn btn-secondary"
-                                              type="button"
-                                              data-testid={`clinical-chart-plan-complete-${item.id}`}
-                                              onClick={(event) =>
-                                                void updateTreatmentPlanStatus(
-                                                  item,
-                                                  "completed",
-                                                  event.currentTarget
-                                                )
-                                              }
-                                              disabled={
-                                                !canWriteClinical ||
-                                                !canWriteBilling ||
-                                                completing
-                                              }
-                                              title={
-                                                !canWriteBilling
-                                                  ? "Billing permission is required to complete treatment."
-                                                  : undefined
-                                              }
-                                            >
-                                              {completing ? "Completing…" : "Complete"}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })
-                                )}
-                                <button
-                                  className="btn btn-secondary"
-                                  type="button"
-                                  onClick={() => setClinicalTab("treatment")}
-                                >
-                                  Manage plan
-                                </button>
-                              </div>
-                            </Panel>
-                          )}
 
                           {clinicalViewMode !== "current" && <Panel title="Unassigned treatment items" className="clinical-unassigned-panel">
                             <div className="stack" style={{ gap: 8 }} data-testid="overlay-unassigned-items">
@@ -10394,7 +10271,6 @@ export default function PatientDetailClient({
                                 tabIndex={-1}
                               >
                                 <div className="label">Tooth timeline</div>
-                                {clinicalViewMode !== "planned" && (
                                   <div
                                     className="stack"
                                     style={{ gap: 8 }}
@@ -10427,7 +10303,6 @@ export default function PatientDetailClient({
                                       </div>
                                     )}
                                   </div>
-                                )}
                                 {clinicalViewMode !== "history" && (
                                   <div className="stack" style={{ gap: 8 }}>
                                     <div className="label">Planned</div>
@@ -10458,11 +10333,13 @@ export default function PatientDetailClient({
                             </div>
                         </Panel>
                         )}
-                      </div>
+                      </div>}
                 </ClinicalNotesWorkspace>
                     </div>
                   ) : clinicalTab === "treatment" ? (
                     <div className="stack" data-testid="patient-treatment-plan-section">
+                      <h3>Earlier treatment items</h3>
+                      <p className="muted">These items predate the copied-chart planning workspace and have not been added to its chart.</p>
                       {treatmentPlanNotice && <div className="notice">{treatmentPlanNotice}</div>}
                       <div className="row">
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -10470,10 +10347,9 @@ export default function PatientDetailClient({
                             className="btn btn-primary"
                             type="button"
                             data-testid="patient-treatment-plan-open"
-                            onClick={openTreatmentPlanModal}
-                            disabled={!canWriteClinical}
+                            onClick={() => { setClinicalTab("chart"); setClinicalViewMode("planned"); }}
                           >
-                            Add item
+                            Back to treatment planning
                           </button>
                           <button
                             className="btn btn-secondary"
@@ -10485,9 +10361,9 @@ export default function PatientDetailClient({
                         </div>
                       </div>
 
-                      {treatmentPlanItems.length === 0 ? (
+                      {earlierTreatmentPlanItems.length === 0 ? (
                         <div className="notice">
-                          No treatment plan items yet. Add an item to start planning.
+                          No earlier treatment items.
                         </div>
                       ) : (
                         <Table>
@@ -10503,7 +10379,7 @@ export default function PatientDetailClient({
                             </tr>
                           </thead>
                           <tbody>
-                            {treatmentPlanItems.map((item) => {
+                            {earlierTreatmentPlanItems.map((item) => {
                               const isFinal = ["completed", "declined", "cancelled"].includes(
                                 item.status
                               );

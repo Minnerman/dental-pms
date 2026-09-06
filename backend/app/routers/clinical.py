@@ -49,6 +49,7 @@ from app.schemas.clinical import (
     validate_tooth_surface,
 )
 from app.services.audit import log_event
+from app.services.clinical_completion import complete_plan_item
 from app.schemas.clinical_note import ToothNoteAmendment, NativeNoteHistoryOut
 from app.services import native_notes
 
@@ -1119,6 +1120,8 @@ def update_treatment_plan_item(
             status_code=status.HTTP_404_NOT_FOUND, detail="Treatment plan item not found"
         )
     get_patient_or_404(db, item.patient_id)
+    if item.plan_id is not None:
+        raise HTTPException(409, "Use the revision-aware planning workspace to change this item")
     duplicate = _duplicate_audit(
         db,
         patient_id=item.patient_id,
@@ -1180,44 +1183,7 @@ def update_treatment_plan_item(
     completed_procedure: Procedure | None = None
     completion_charge: PatientLedgerEntry | None = None
     if "status" in changed_fields and item.status == TreatmentPlanStatus.completed:
-        completed_procedure = Procedure(
-            patient_id=item.patient_id,
-            appointment_id=item.appointment_id,
-            tooth=item.tooth,
-            surface=item.surface,
-            procedure_code=item.procedure_code,
-            description=item.description,
-            fee_pence=item.fee_pence,
-            status=ProcedureStatus.completed,
-            performed_at=datetime.now(timezone.utc),
-            created_by_user_id=user.id,
-        )
-        db.add(completed_procedure)
-        db.flush()
-        if item.fee_pence:
-            ledger_reference = f"TREATMENT-PLAN:{item.id}"
-            existing_charge_id = db.scalar(
-                select(PatientLedgerEntry.id).where(
-                    PatientLedgerEntry.patient_id == item.patient_id,
-                    PatientLedgerEntry.reference == ledger_reference,
-                )
-            )
-            if existing_charge_id is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Treatment plan charge already exists",
-                )
-            completion_charge = PatientLedgerEntry(
-                patient_id=item.patient_id,
-                entry_type=LedgerEntryType.charge,
-                amount_pence=item.fee_pence,
-                reference=ledger_reference,
-                note=f"Completed treatment plan item {item.id}",
-                created_by_user_id=user.id,
-                updated_by_user_id=user.id,
-            )
-            db.add(completion_charge)
-            db.flush()
+        completed_procedure, completion_charge = complete_plan_item(db, item, user)
 
     if non_status_fields:
         log_event(

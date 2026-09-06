@@ -3,6 +3,42 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (first treatment-planning workspace): Planned now explicitly captures
+  the current native diagnosis and safe existing local imported projection once,
+  preserving the baseline separately from proposed/completed drawings. No R4
+  access or inferred historical findings. Compact tooth/whole-root/crown/surface
+  levels and general Add treatment use the existing practice catalogue/category
+  fees; BPE and diagnosis palettes are absent from planning. Patient quotes retain
+  catalogue identity/pricing, with explicit agreed amounts, reasoned overrides,
+  waivers and restoration of the saved standard fee. Earlier items stay separate.
+  Completion confirms the saved amount and reuses the atomic procedure/ledger
+  path, with no duplicate charge, automatic invoice or diagnosis update.
+  Revision checks, request fingerprints and locks protect concurrent edits and
+  retries. Imported patient-link conflicts fail closed; native root/crown/surface
+  evidence takes precedence over stale imported absence. Additive migration 0059
+  is required; empty downgrade/re-upgrade and populated downgrade refusal passed.
+  Verification: 85 distinct targeted backend checks passed across the full guard
+  and focused pricing rerun. All 39 distinct focused browser checks passed:
+  22 glyph/baseline checks and 17 planning/adjacent/compatibility/permission checks.
+  Final new eight-case suite passed on the frozen production build, including
+  real snapshot/add/fee/history/complete/finance checks, retry/save locks,
+  keyboard-modal protection, primary labels and 1280px/mobile layout containment.
+  Typecheck, targeted lint, Python compilation, build and diff checks passed;
+  light/dark previews were inspected. Verified grid overflow, hidden fee-reason
+  payload and global-shortcut modal bypass were fixed. Existing tests were adapted
+  for deliberately removed Current procedure controls and React DOM timing while
+  preserving immediate duplicate-request protection; no app workaround added.
+  The synthetic localhost preview uses a restored v5 copy on a persistent volume.
+  All original columns across 60 tables matched before/after migration; only the
+  intentional demo catalogue tables differed after seeding. Existing notes and
+  diagnosis are preserved. Fifteen clearly labelled demonstration treatments/fees
+  are NOT the practice price list. Original preview containers remain untouched;
+  private archive/full-restore evidence and handover are outside Git.
+  First version: one workspace per patient; multiple courses, connected planned
+  bridge groups, crown-material colours and diagnosis updates after completion
+  remain deferred. See TREATMENT_PLANNING.md, including writable rollback limits.
+  No production migration/deployment, merge, R4 access or AI integration. Existing
+  stacked-parent, protected-master review/CI and deployment gates remain separate.
 - 2026-09-06 (practice sidebar and full-width clinical workspace): Restored the
   proven left navigation in the odontogram branch, retaining existing routes,
   roles, patient search, theme and sign-out. Collapse to a 64px icon rail or

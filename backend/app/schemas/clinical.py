@@ -529,6 +529,7 @@ class TreatmentPlanItemOut(BaseModel):
 
     id: int
     patient_id: int
+    plan_id: int | None = None
     appointment_id: Optional[int] = None
     tooth: Optional[str] = None
     surface: Optional[str] = None

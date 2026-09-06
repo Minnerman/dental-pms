@@ -47,12 +47,22 @@ test("clinical viewers get a converged read-only chart and plan", async ({
   await page.getByTestId("tooth-button-UR8").click();
   await expect(page.getByTestId("patient-chart-note-body")).toBeDisabled();
   await expect(page.getByTestId("patient-chart-note-add")).toBeDisabled();
+  // Current is diagnosis-only; historical treatment controls remain protected.
+  await expect(page.getByTestId("patient-chart-procedure-code")).toHaveCount(0);
+  await expect(page.getByTestId("patient-chart-procedure-add")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.getByTestId("clinical-chart-view-history").click();
+  await page.getByTestId("tooth-button-UR8").click();
   await expect(page.getByTestId("patient-chart-procedure-code")).toBeDisabled();
   await expect(page.getByTestId("patient-chart-procedure-add")).toBeDisabled();
 
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.getByRole("button", { name: /^Treatment plan/ }).click();
-  await expect(page.getByTestId("patient-treatment-plan-section")).toBeVisible();
-  await expect(page.getByTestId("patient-treatment-plan-open")).toBeDisabled();
+  await expect(page.getByTestId("treatment-planning-panel")).toBeVisible();
+  await expect(page.getByTestId("planning-read-only")).toBeVisible();
+  await expect(page.getByTestId("planning-start")).toBeDisabled();
   expect(writeRequests).toEqual([]);
 });
 
