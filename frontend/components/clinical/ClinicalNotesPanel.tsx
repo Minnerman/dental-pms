@@ -1,9 +1,10 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { noteResponseError } from "@/lib/noteErrors";
 import ClinicalNoteTemplates, { noteCategories, type TemplateInsert } from "./ClinicalNoteTemplates";
+import NoteWritingAssistant from "./NoteWritingAssistant";
 import { groupJournal, journalCategories, journalDayLabel, journalLabels, journalDetailLines, journalDiagnosisLines, noteRequestHeaders, noteTeeth, safeJournalLink, JOURNAL_NOTE_MAX_LENGTH, type JournalCategory, type JournalItem, type JournalResponse } from "./clinicalNotes";
 import styles from "./ClinicalNotesPanel.module.css";
 
@@ -21,6 +22,7 @@ export default function ClinicalNotesPanel({ patientId, capabilities, selectedTo
   const router = useRouter();
   const panel = useRef<HTMLElement>(null);
   const bodyInput = useRef<HTMLTextAreaElement>(null);
+  const noteBodyId = useId();
   const [category, setCategory] = useState<JournalCategory>("all");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -198,7 +200,11 @@ export default function ClinicalNotesPanel({ patientId, capabilities, selectedTo
             <label>Category<select data-testid="clinical-notes-type" value={draft.category} disabled={saving} onChange={(event) => changeDraft({ category: event.target.value })}>{noteCategories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           </div>}
           {!draft.editing && <ClinicalNoteTemplates canRead={canReadNotes} canWrite={canWriteNotes} disabled={saving} onInsert={insertTemplate} onUnauthorized={unauthorized} onBusyChange={templateBusy} />}
-          <label>{draft.editing ? "Amended note text" : "Note text"}<textarea data-testid="clinical-notes-body" ref={bodyInput} rows={4} maxLength={JOURNAL_NOTE_MAX_LENGTH} disabled={saving || !writer} value={draft.body} onChange={(event) => changeDraft({ body: event.target.value })} /></label>
+          <div className={styles.noteEditor}>
+            <label htmlFor={noteBodyId}>{draft.editing ? "Amended note text" : "Note text"}</label>
+            <NoteWritingAssistant key={`${patientId}:${draft.tooth}:${draft.editing?.key ?? "new"}`} disabled={saving || templateSaving || !writer} />
+            <textarea id={noteBodyId} data-testid="clinical-notes-body" ref={bodyInput} rows={4} maxLength={JOURNAL_NOTE_MAX_LENGTH} disabled={saving || !writer} value={draft.body} onChange={(event) => changeDraft({ body: event.target.value })} />
+          </div>
           {draft.editing ? <label>Reason for amendment (optional)<input disabled={saving} value={draft.reason} onChange={(event) => changeDraft({ reason: event.target.value })} /></label>
             : <details><summary>Clinical date / code labels</summary><div className={styles.form}><label>Clinical date (optional)<input type="date" disabled={saving} value={draft.clinical_date} onChange={(event) => changeDraft({ clinical_date: event.target.value })} /></label><label>Code labels (optional, comma-separated)<input value={draft.codes.join(",")} disabled={saving} onChange={(event) => changeDraft({ codes: event.target.value.split(",") })} /></label></div></details>}
           <div className={styles.actions}><button type="button" data-testid="clinical-notes-save" disabled={!writer || saving || templateSaving || !draft.body.trim()} onClick={() => void save()}>{saving ? "Saving…" : draft.editing ? "Save amendment" : "Save note"}</button>

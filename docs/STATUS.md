@@ -3,6 +3,33 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (practice sidebar and full-width clinical workspace): Restored the
+  proven left navigation in the odontogram branch, retaining existing routes,
+  roles, patient search, theme and sign-out. Collapse to a 64px icon rail or
+  resize the expanded menu from 200–320px by pointer/keyboard. Only layout
+  scalars are stored; unused patient-name tab bookkeeping was removed. The
+  patient page no longer has a 1600px width cap. Modest edge padding, independent
+  chart scrolling and the existing right notes divider preserve usable space.
+  Mobile navigation supports focus containment/return, backdrop/Escape dismissal
+  and reduced motion. A failed initial-focus check persisted after a first
+  next-frame correction; direct diagnostics identified interpolated hidden
+  visibility. Immediate opening visibility plus cancellable next-frame focus
+  fixed the cause while retaining the slide animation.
+  A sparkle AI control sits beside Note text and explicitly says Not connected.
+  No AI provider/model exists in this app: the control receives no note text,
+  makes no requests and cannot correct, apply or save text. Processing choice
+  and privacy/setup requirements remain unresolved; see PRODUCT_DECISIONS.md.
+  Verification: all nine distinct focused browser checks passed across initial
+  and focused reruns, including layout/draft/geometry preservation, mobile
+  keyboard access, real note create/amend/history and reception search/sign-out.
+  Final build/typecheck/targeted lint/diff checks and independent review passed.
+  Light/dark, narrow and actual refreshed synthetic previews were inspected.
+  The localhost preview received only the frozen frontend replacement, keeping
+  the same running v4 backend and database. Session/journal/template responses
+  matched through old/new frontends; no test note was written during the switch.
+  The old frontend remains for app-only rollback. No backend/schema change,
+  migration, R4 access, production change, merge or deployment in this update.
+  Existing stacked-parent, protected-master CI/review and deployment gates remain.
 - 2026-09-06 (clinical notes beside the odontogram): Added a right-hand, resizable,
   hideable clinical-notes panel with dated groups, search/category/tooth filters,
   bounded older-record paging and editable patient/tooth notes. Yellow tooth-note

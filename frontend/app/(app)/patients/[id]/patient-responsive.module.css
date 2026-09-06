@@ -5,7 +5,7 @@
 
 .shell :global(.patient-route-page) {
   margin: 0 auto;
-  max-width: 1600px;
+  max-width: none;
   width: 100%;
 }
 

@@ -25,6 +25,8 @@
 .actions button, .actions a { font-size: 11px; }
 .filters, .form { display: grid; gap: 8px; min-width: 0; }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px; }
+.noteEditor { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; align-items: center; }
+.noteEditor textarea { grid-column: 1 / -1; }
 .textButton { justify-self: start; font-size: 11px !important; }
 .composer { border: 1px solid var(--border); border-radius: 7px; padding: 8px; background: var(--badge-bg); }
 .composer > summary { font-size: 13px; }

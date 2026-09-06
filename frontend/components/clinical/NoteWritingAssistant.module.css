@@ -1,0 +1,24 @@
+.trigger.trigger {
+  display: inline-flex;
+  justify-self: end;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #586bd1 45%, var(--border));
+  background: linear-gradient(125deg, color-mix(in srgb, #03b8cc 12%, var(--panel)), color-mix(in srgb, #8270d5 14%, var(--panel)));
+  color: var(--text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
+  font-size: 12px;
+  font-weight: 700;
+}
+.trigger svg { color: #596ac7; flex-shrink: 0; }
+.trigger.trigger:hover:not(:disabled) { border-color: #596ac7; background: color-mix(in srgb, #8270d5 20%, var(--panel)); }
+.trigger.trigger:focus-visible { outline: 2px solid #596ac7; outline-offset: 2px; }
+.connection { color: var(--muted); font-size: 9px; font-weight: 500; }
+.explanation { grid-column: 1 / -1; padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-size: 12px; }
+.explanation strong { font-size: 12px; }
+.explanation p { margin: 5px 0 0; color: var(--muted); }
+:global(html[data-theme="dark"]) .trigger svg { color: #b4baff; }
+:global(html[data-theme="dark"]) .trigger.trigger:focus-visible { outline-color: #b4baff; }
