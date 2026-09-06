@@ -102,7 +102,11 @@ test("preserved partial apicectomy drawings stay transverse in all quadrants and
       });
       await expect(page.locator(`[data-testid^="clinical-root-apicectomy-${tooth}-"]`)).toHaveCount(1);
       const marker = page.getByTestId(`clinical-root-apicectomy-${tooth}-${chosen}`);
-      await expect(marker.locator("path").last()).toHaveAttribute("d", `M${landmarks.apical.x - 7} ${landmarks.apical.y} H${landmarks.apical.x + 7}`);
+      await expect(marker.locator("path").last()).toHaveAttribute("d", `M${landmarks.apical.x - 7.7} ${landmarks.apical.y} H${landmarks.apical.x + 7.7}`);
+      await expect(marker.locator("path").first()).toHaveAttribute("stroke-width", String(4.5 * 1.5));
+      await expect(marker.locator("path").last()).toHaveAttribute("stroke-width", "3.45");
+      const localLength = await marker.locator("path").last().evaluate((element) => (element as SVGPathElement).getTotalLength());
+      expect(localLength).toBeCloseTo(14 * 1.1, 4);
       const geometry = await marker.locator("path").last().evaluate((element) => {
         const path = element as SVGPathElement;
         const a = path.getPointAtLength(0).matrixTransform(path.getScreenCTM()!);

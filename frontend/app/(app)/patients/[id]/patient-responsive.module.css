@@ -862,23 +862,32 @@
 
 .shell :global(.clinical-diagnosis-levels) {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--panel);
 }
 
+.shell :global(.clinical-diagnosis-level-label) {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  font-size: 15px;
+  color: var(--text);
+}
+
 .shell :global(.clinical-diagnosis-levels > button) {
-  flex: 1 1 145px;
-  padding: 11px 16px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 6px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -896,6 +905,26 @@
 .shell :global(.clinical-diagnosis-levels > button:disabled) {
   opacity: .55;
   cursor: wait;
+}
+
+@media (max-width: 540px) {
+  .shell :global(.clinical-diagnosis-levels) {
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .shell :global(.clinical-diagnosis-level-label) {
+    flex-basis: 100%;
+    margin-right: 2px;
+    font-size: 13px;
+  }
+
+  .shell :global(.clinical-diagnosis-levels > button) {
+    flex-basis: calc(50% - 2px);
+    padding: 7px 2px;
+    font-size: 13px;
+  }
 }
 
 .shell :global(.clinical-baseline-feedback) {
@@ -1089,4 +1118,109 @@
   .shell :global(.row) {
     align-items: flex-start;
   }
+}
+.shell :global(.summary-grid.patient-personal-grid) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.shell :global(.patient-personal-details),
+.shell :global(.patient-personal-grid > .stack > .card) {
+  margin: 0;
+  min-width: 0;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.shell :global(.patient-personal-details h3) {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.shell :global(.patient-personal-form),
+.shell :global(.patient-personal-form fieldset),
+.shell :global(.patient-personal-address),
+.shell :global(.patient-personal-extra-fields),
+.shell :global(.patient-personal-phones) {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.shell :global(.patient-personal-form fieldset) {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.shell :global(.patient-personal-pair),
+.shell :global(.patient-personal-phone-row) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.shell :global(.patient-personal-phone-row) {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+}
+
+.shell :global(.patient-personal-field) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.shell :global(.patient-personal-field > label) {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.shell :global(.patient-personal-field > .input) {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 7px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.shell :global(.patient-personal-phones > small) {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.shell :global(.patient-personal-extra) {
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+}
+
+.shell :global(.patient-personal-extra > summary) {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.shell :global(.patient-personal-extra-fields) { margin-top: 8px; }
+.shell :global(.patient-personal-save-row) { display: flex; flex-wrap: wrap; gap: 6px; }
+.shell :global(.patient-personal-save-row > .btn) { font-size: 12px; padding: 7px 9px; }
+.shell :global(.patient-personal-grid .stack) { gap: 10px; }
+.shell :global(.patient-personal-care-column .grid-3) { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.shell :global(.patient-personal-activity-column .patient-route-appointment-grid) {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 6px !important;
+}
+
+@media (min-width: 1180px) {
+  .shell :global(.summary-grid.patient-personal-grid) {
+    grid-template-columns: minmax(0, .95fr) minmax(0, .95fr) minmax(300px, 1.1fr);
+    grid-template-areas: "care activity personal";
+  }
+  .shell :global(.patient-personal-details) { grid-area: personal; }
+  .shell :global(.patient-personal-care-column) { grid-area: care; }
+  .shell :global(.patient-personal-activity-column) { grid-area: activity; }
 }

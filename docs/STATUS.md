@@ -3,6 +3,43 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (compact diagnosis and Personal contacts): Diagnosis now uses one
+  compact Tooth / Root / Crown / Surface row, retaining keyboard navigation,
+  explicit Apply and pending-save locks. Repeated palette headings/instructions
+  are reduced. Apicectomy markers are 10% wider and 50% thicker; saved clinical
+  observations are unchanged. Newly chosen Restored surface findings default to
+  Sound, visibly staged before Apply. Existing unspecified restorations remain
+  unspecified through material edits and reselection; no historical conversion.
+  Personal uses three desktop columns with compact editable details on the right,
+  care/activity alongside, and a single-column narrow-screen layout. All previous
+  editable fields remain available, with care/referral, alerts and notes grouped.
+  Separate Home landline, Work and Mobile numbers each have a Whose number label;
+  the legacy primary phone also has an optional label and is not reclassified.
+  Labels neither infer number ownership nor grant messaging consent. Save now
+  preserves hidden Denplan, visit, access and primary-contact values instead of
+  clearing them solely because category/care setting differs. Existing permissions,
+  archive/restore guards and pending-save controls remain in place.
+  Additive 0057_labelled_patient_phones adds seven nullable contact fields, without
+  backfill or changes to legacy numbers. New values are length-validated, trimmed,
+  and blank-normalized to null; omitted PATCH fields retain their stored values.
+  Patient create/update audit covers the new fields. Downgrade refuses any recorded
+  new contact data before removing columns. On the separate synthetic test stack,
+  0057 upgrade/downgrade/re-upgrade passed; connection-local migration fixtures
+  proved original-field preservation and downgrade refusal for each added field.
+  Verification: 20 focused backend cases passed (14 new contact/migration cases,
+  six existing patient reliability/audit/transaction cases); 22 distinct Personal
+  browser cases passed (20 initially, two after test-only corrections), plus 16
+  clinical browser cases and 24 glyph/component checks. Build, typecheck, lint,
+  Python compilation, diff checks and independent reviews passed. SMS/email
+  delivery and a postcode/address lookup provider remain deferred; no external
+  messaging or lookup integration was enabled by this change.
+  The frozen local manual preview was refreshed using a separate database clone.
+  Fingerprints confirmed preservation of every existing record across all 56
+  application tables, with new contact fields left null. Health and the refreshed
+  Personal page passed; the original test copy remains running for rollback.
+  No production or R4 access/change, merge or deployment. Existing parent-PR,
+  required CI/review and separately authorised production migration/deployment
+  gates remain, now including 0057 and any earlier undeployed migrations.
 - 2026-09-06 (manual diagnosis corrections): Four explicit Tooth level / Root
   level / Crown level / Surface level tabs select the corresponding rectangular
   palette without requiring an anatomy click. Switching levels clears staged

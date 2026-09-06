@@ -42,6 +42,7 @@ import Table from "@/components/ui/Table";
 import Icon from "@/components/ui/Icon";
 import PatientDocuments from "./PatientDocuments";
 import PatientAttachments from "./PatientAttachments";
+import PatientPersonalDetails from "@/components/PatientPersonalDetails";
 
 type Actor = {
   id: number;
@@ -107,6 +108,13 @@ type Patient = {
   last_name: string;
   date_of_birth?: string | null;
   phone?: string | null;
+  phone_label?: string | null;
+  home_phone?: string | null;
+  home_phone_label?: string | null;
+  work_phone?: string | null;
+  work_phone_label?: string | null;
+  mobile_phone?: string | null;
+  mobile_phone_label?: string | null;
   email?: string | null;
   address_line1?: string | null;
   address_line2?: string | null;
@@ -4667,7 +4675,13 @@ export default function PatientDetailClient({
     setPendingScrollTarget(null);
   }, [pendingScrollTarget, tab, showBookingModal, scrollToAnchor]);
 
-  const phoneHref = buildPhoneHref(patient?.phone);
+  const callContact = [
+    { number: patient?.phone, label: "Primary phone", owner: patient?.phone_label },
+    { number: patient?.mobile_phone, label: "Mobile phone", owner: patient?.mobile_phone_label },
+    { number: patient?.home_phone, label: "Home landline", owner: patient?.home_phone_label },
+    { number: patient?.work_phone, label: "Work phone", owner: patient?.work_phone_label },
+  ].find((contact) => contact.number?.trim());
+  const phoneHref = buildPhoneHref(callContact?.number);
   const emailHref = patient?.email ? `mailto:${patient.email}` : null;
   const patientHeaderIdentifiers = [
     { label: "Patient", value: patient ? `#${patient.id}` : "—" },
@@ -5522,26 +5536,27 @@ export default function PatientDetailClient({
           last_name: patient.last_name,
           email: patient.email,
           phone: patient.phone,
+          phone_label: patient.phone_label,
+          home_phone: patient.home_phone,
+          home_phone_label: patient.home_phone_label,
+          work_phone: patient.work_phone,
+          work_phone_label: patient.work_phone_label,
+          mobile_phone: patient.mobile_phone,
+          mobile_phone_label: patient.mobile_phone_label,
           date_of_birth: patient.date_of_birth,
           address_line1: patient.address_line1,
           address_line2: patient.address_line2,
           city: patient.city,
           postcode: patient.postcode,
           patient_category: patient.patient_category,
-          denplan_plan_name:
-            patient.patient_category === "DENPLAN" ? patient.denplan_plan_name : null,
-          denplan_member_no:
-            patient.patient_category === "DENPLAN" ? patient.denplan_member_no : null,
+          denplan_plan_name: patient.denplan_plan_name,
+          denplan_member_no: patient.denplan_member_no,
           care_setting: patient.care_setting,
-          visit_address_text:
-            patient.care_setting === "CLINIC" ? null : patient.visit_address_text,
-          access_notes: patient.care_setting === "CLINIC" ? null : patient.access_notes,
-          primary_contact_name:
-            patient.care_setting === "CLINIC" ? null : patient.primary_contact_name,
-          primary_contact_phone:
-            patient.care_setting === "CLINIC" ? null : patient.primary_contact_phone,
-          primary_contact_relationship:
-            patient.care_setting === "CLINIC" ? null : patient.primary_contact_relationship,
+          visit_address_text: patient.visit_address_text,
+          access_notes: patient.access_notes,
+          primary_contact_name: patient.primary_contact_name,
+          primary_contact_phone: patient.primary_contact_phone,
+          primary_contact_relationship: patient.primary_contact_relationship,
           referral_source: patient.referral_source,
           referral_contact_name: patient.referral_contact_name,
           referral_contact_phone: patient.referral_contact_phone,
@@ -6650,7 +6665,8 @@ export default function PatientDetailClient({
                 <div className="label">Quick actions</div>
                 <div className="patient-header-action-row">
                   {phoneHref ? (
-                    <a className="btn btn-secondary patient-icon-action" href={phoneHref}>
+                    <a className="btn btn-secondary patient-icon-action" href={phoneHref}
+                      title={`${callContact?.label}: ${callContact?.number}${callContact?.owner ? ` · ${callContact.owner}` : ""}`}>
                       <Icon name="phone" /> <span>Call</span>
                     </a>
                   ) : (
@@ -6708,8 +6724,8 @@ export default function PatientDetailClient({
                 data-testid="patient-overview-grid"
               >
                 <div>
-                  <div className="label">Phone</div>
-                  <div>{patient.phone || "—"}</div>
+                  <div className="label">{callContact?.label || "Phone"}</div>
+                  <div>{callContact?.number || "—"}{callContact?.owner ? ` · ${callContact.owner}` : ""}</div>
                 </div>
                 <div>
                   <div className="label">Email</div>
@@ -6918,18 +6934,7 @@ export default function PatientDetailClient({
                     }}
                   >
                     <div>
-                      <div className="label">Patient home</div>
-                      <div style={{ fontSize: 22, fontWeight: 700 }}>
-                        {patient.first_name} {patient.last_name}
-                      </div>
-                      <div style={{ color: "var(--muted)" }}>
-                        DOB {patient.date_of_birth || "—"} · Age{" "}
-                        {formatAge(patient.date_of_birth)} · Phone{" "}
-                        {patient.phone || "—"}
-                      </div>
-                      <div style={{ color: "var(--muted)" }}>
-                        Address {buildAddress(patient) || "—"}
-                      </div>
+                      <h3 style={{ margin: 0 }}>Personal</h3>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {canViewRecalls && (
@@ -6974,8 +6979,18 @@ export default function PatientDetailClient({
                   </div>
                   {bookingNotice && <div className="notice">{bookingNotice}</div>}
 
-                  <div className="summary-grid">
-                    <div className="stack">
+                  <div className="summary-grid patient-personal-grid" data-testid="patient-personal-grid">
+                    <PatientPersonalDetails
+                      patient={patient}
+                      canWrite={canWritePatients}
+                      permissionsReady={capabilities !== null}
+                      saving={savingPatient}
+                      archiveAction={patientArchiveAction}
+                      onChange={(patch) => setPatient((prev) => prev ? { ...prev, ...patch } : prev)}
+                      onSubmit={savePatient}
+                      onArchive={(event) => void updatePatientArchiveState(patient.deleted_at ? "restore" : "archive", event.currentTarget)}
+                    />
+                    <div className="stack patient-personal-care-column" data-testid="patient-personal-care-column">
                       <div className="card" style={{ margin: 0 }}>
                         <div className="stack">
                           <div className="row">
@@ -7228,7 +7243,7 @@ export default function PatientDetailClient({
                       </div>
                     </div>
 
-                    <div className="stack">
+                    <div className="stack patient-personal-activity-column" data-testid="patient-personal-activity-column">
                       <div
                         className="card patient-scroll-target"
                         id="patient-appointments"
@@ -7432,478 +7447,6 @@ export default function PatientDetailClient({
                     </div>
                   </div>
 
-                  <details className="card" style={{ margin: 0 }}>
-                    <summary className="label">Patient details</summary>
-                    <div className="stack" style={{ marginTop: 12 }}>
-                      <form onSubmit={savePatient} className="stack">
-                  {patient.deleted_at ? (
-                    <div className="notice">Archived patient details are read-only until restored.</div>
-                  ) : capabilities !== null && !canWritePatients ? (
-                    <div className="notice">You can view this patient, but you cannot change it.</div>
-                  ) : null}
-                  <fieldset
-                    data-testid="patient-details-fields"
-                    disabled={!canWritePatients || Boolean(patient.deleted_at)}
-                    style={{ border: 0, padding: 0, margin: 0, display: "contents" }}
-                  >
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">First name</label>
-                      <input
-                        className="input"
-                        value={patient.first_name}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, first_name: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Last name</label>
-                      <input
-                        className="input"
-                        value={patient.last_name}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, last_name: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Email</label>
-                      <input
-                        className="input"
-                        value={patient.email ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, email: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Phone</label>
-                      <input
-                        className="input"
-                        value={patient.phone ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, phone: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Date of birth</label>
-                      <input
-                        className="input"
-                        value={patient.date_of_birth ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, date_of_birth: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Patient category</label>
-                      <select
-                        className="input"
-                        value={patient.patient_category}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  patient_category: e.target.value as PatientCategory,
-                                }
-                              : prev
-                          )
-                        }
-                      >
-                        <option value="CLINIC_PRIVATE">Clinic (Private)</option>
-                        <option value="DOMICILIARY_PRIVATE">Domiciliary (Private)</option>
-                        <option value="DENPLAN">Denplan</option>
-                      </select>
-                      {patient.patient_category === "DENPLAN" && (
-                        <p style={{ margin: 0, color: "var(--muted)", fontSize: 12 }}>
-                          Most care included; excluded items can be added as private charges via
-                          estimates.
-                        </p>
-                      )}
-                    </div>
-                    {patient.patient_category === "DENPLAN" ? (
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="label">Denplan plan name</label>
-                        <input
-                          className="input"
-                          value={patient.denplan_plan_name ?? ""}
-                          onChange={(e) =>
-                            setPatient((prev) =>
-                              prev ? { ...prev, denplan_plan_name: e.target.value } : prev
-                            )
-                          }
-                        />
-                        <label className="label">Denplan member number</label>
-                        <input
-                          className="input"
-                          value={patient.denplan_member_no ?? ""}
-                          onChange={(e) =>
-                            setPatient((prev) =>
-                              prev ? { ...prev, denplan_member_no: e.target.value } : prev
-                            )
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="label">Denplan plan name</label>
-                        <input className="input" value="—" readOnly />
-                        <label className="label">Denplan member number</label>
-                        <input className="input" value="—" readOnly />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Care setting</label>
-                      <select
-                        className="input"
-                        value={patient.care_setting}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, care_setting: e.target.value as CareSetting } : prev
-                          )
-                        }
-                      >
-                        <option value="CLINIC">Clinic</option>
-                        <option value="HOME">Home</option>
-                        <option value="CARE_HOME">Care home</option>
-                        <option value="HOSPITAL">Hospital</option>
-                      </select>
-                    </div>
-                    {patient.care_setting !== "CLINIC" ? (
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="label">Visit address</label>
-                        <textarea
-                          className="input"
-                          rows={2}
-                          value={patient.visit_address_text ?? ""}
-                          onChange={(e) =>
-                            setPatient((prev) =>
-                              prev ? { ...prev, visit_address_text: e.target.value } : prev
-                            )
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="label">Visit address</label>
-                        <input className="input" value="—" readOnly />
-                      </div>
-                    )}
-                  </div>
-
-                  {patient.care_setting !== "CLINIC" && (
-                    <div className="stack" style={{ gap: 12 }}>
-                      <div className="stack" style={{ gap: 8 }}>
-                        <label className="label">Access notes</label>
-                        <textarea
-                          className="input"
-                          rows={2}
-                          value={patient.access_notes ?? ""}
-                          onChange={(e) =>
-                            setPatient((prev) =>
-                              prev ? { ...prev, access_notes: e.target.value } : prev
-                            )
-                          }
-                        />
-                      </div>
-                      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr 1fr" }}>
-                        <div className="stack" style={{ gap: 8 }}>
-                          <label className="label">Primary contact</label>
-                          <input
-                            className="input"
-                            value={patient.primary_contact_name ?? ""}
-                            onChange={(e) =>
-                              setPatient((prev) =>
-                                prev ? { ...prev, primary_contact_name: e.target.value } : prev
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="stack" style={{ gap: 8 }}>
-                          <label className="label">Contact phone</label>
-                          <input
-                            className="input"
-                            value={patient.primary_contact_phone ?? ""}
-                            onChange={(e) =>
-                              setPatient((prev) =>
-                                prev ? { ...prev, primary_contact_phone: e.target.value } : prev
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="stack" style={{ gap: 8 }}>
-                          <label className="label">Relationship</label>
-                          <input
-                            className="input"
-                            value={patient.primary_contact_relationship ?? ""}
-                            onChange={(e) =>
-                              setPatient((prev) =>
-                                prev
-                                  ? { ...prev, primary_contact_relationship: e.target.value }
-                                  : prev
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Referral source</label>
-                      <input
-                        className="input"
-                        value={patient.referral_source ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, referral_source: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Referral contact</label>
-                      <input
-                        className="input"
-                        value={patient.referral_contact_name ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, referral_contact_name: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Referral phone</label>
-                      <input
-                        className="input"
-                        value={patient.referral_contact_phone ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, referral_contact_phone: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Referral notes</label>
-                      <textarea
-                        className="input"
-                        rows={2}
-                        value={patient.referral_notes ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, referral_notes: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Address line 1</label>
-                      <input
-                        className="input"
-                        value={patient.address_line1 ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, address_line1: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Address line 2</label>
-                      <input
-                        className="input"
-                        value={patient.address_line2 ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, address_line2: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">City</label>
-                      <input
-                        className="input"
-                        value={patient.city ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, city: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Postcode</label>
-                      <input
-                        className="input"
-                        value={patient.postcode ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, postcode: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-3">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Allergies</label>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={patient.allergies ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, allergies: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Medical alerts</label>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={patient.medical_alerts ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, medical_alerts: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Safeguarding notes</label>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={patient.safeguarding_notes ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, safeguarding_notes: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-2">
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Financial alerts</label>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={patient.alerts_financial ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, alerts_financial: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="stack" style={{ gap: 8 }}>
-                      <label className="label">Access needs</label>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={patient.alerts_access ?? ""}
-                        onChange={(e) =>
-                          setPatient((prev) =>
-                            prev ? { ...prev, alerts_access: e.target.value } : prev
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="stack" style={{ gap: 8 }}>
-                    <label className="label">Notes</label>
-                    <textarea
-                      data-testid="patient-notes-field"
-                      className="input"
-                      rows={4}
-                      value={patient.notes ?? ""}
-                      onChange={(e) =>
-                        setPatient((prev) => (prev ? { ...prev, notes: e.target.value } : prev))
-                      }
-                    />
-                  </div>
-
-                  </fieldset>
-
-                  <div className="row">
-                    {canWritePatients && !patient.deleted_at && (
-                      <button
-                        className="btn btn-primary"
-                        data-testid="patient-save-changes"
-                        disabled={savingPatient}
-                      >
-                        {savingPatient ? "Saving..." : "Save changes"}
-                      </button>
-                    )}
-                    {canWritePatients && (
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        onClick={(event) =>
-                          void updatePatientArchiveState(
-                            patient.deleted_at ? "restore" : "archive",
-                            event.currentTarget
-                          )
-                        }
-                        disabled={savingPatient || patientArchiveAction !== null}
-                        data-testid="patient-archive-toggle"
-                      >
-                        {patientArchiveAction === "archive"
-                          ? "Archiving..."
-                          : patientArchiveAction === "restore"
-                            ? "Restoring..."
-                            : patient.deleted_at
-                              ? "Restore patient"
-                              : "Archive patient"}
-                      </button>
-                    )}
-                  </div>
-                  </form>
-                </div>
-              </details>
                 </div>
               ) : tab === "charting" ? (
                 <div className="stack" data-testid="charting-viewer">

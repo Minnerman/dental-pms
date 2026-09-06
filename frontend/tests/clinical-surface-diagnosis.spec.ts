@@ -9,7 +9,7 @@ type Mutation = { targets: Target[]; observation: Observation; expected_revision
 type Snapshot = { teeth: Record<string, { revision: number; condition: string | null; surface_observations: Record<string, Observation>; root_observations: Record<string, unknown>; crown_observation: unknown }>; note_teeth: string[] };
 const kinds = ["carious", "defective", "restored", "sealant", "reset"] as const;
 const blank: Observation = { kind: null, material: null, condition: null, defects: [] };
-const gold: Observation = { kind: "restored", material: "gold", condition: null, defects: [] };
+const gold: Observation = { kind: "restored", material: "gold", condition: "sound", defects: [] };
 const path = (id: string, action = "tooth-conditions") => `/api/patients/${id}/clinical/${action}`;
 
 async function setup(page: Page, request: APIRequestContext, name: string) {
@@ -83,7 +83,7 @@ function writes(page: Page, id: string) {
   return { surfaces, other };
 }
 
-test("surface palette and keyboard context menu preserve selections with honest unspecified defaults", async ({ page, request }) => {
+test("surface palette preserves selections with Sound restored defaults and unchanged caries and sealant defaults", async ({ page, request }) => {
   const { patientId, headers } = await setup(page, request, "controls");
   await open(page, patientId);
   const observed = writes(page, patientId);
@@ -98,7 +98,8 @@ test("surface palette and keyboard context menu preserve selections with honest 
   await page.getByTestId("surface-diagnosis-stage").selectOption("carious_established");
   await page.getByTestId("surface-diagnosis-palette-restored").click();
   await expect(page.getByRole("combobox", { name: "Restoration material", exact: true })).toHaveValue("unknown");
-  await expect(page.getByRole("combobox", { name: "Surface condition", exact: true })).toHaveValue("");
+  await expect(page.getByRole("combobox", { name: "Surface condition", exact: true })).toHaveValue("sound");
+  await expect(page.getByTestId("surface-diagnosis-condition").locator('option[value=""]')).toHaveCount(0);
   await expect(page.getByTestId("surface-diagnosis-material").locator('option:not([disabled])')).toHaveCount(13);
   await page.getByTestId("surface-diagnosis-condition").selectOption("defective");
   await page.getByTestId("surface-diagnosis-defect-overhang").check();
@@ -128,6 +129,32 @@ test("surface palette and keyboard context menu preserve selections with honest 
   expect(observed.surfaces).toEqual([]);
   expect(observed.other).toEqual([]);
   expect((await snapshot(request, patientId, headers)).teeth).toEqual({});
+});
+
+test("editing an existing unspecified restoration preserves its condition through material changes", async ({ page, request }) => {
+  const { patientId, headers } = await setup(page, request, "existing unspecified restoration");
+  const existing = { ...gold, condition: null };
+  const targets = [{ tooth: "UR6", surfaces: ["M"] }];
+  await post(request, path(patientId, "surface-conditions"), headers, { targets, observation: existing, expected_revisions: { UR6: 0 } });
+  await open(page, patientId);
+  await page.getByTestId("clinical-surface-UR6-M").click({ button: "right" });
+  const menu = page.getByTestId("clinical-surface-action-menu");
+  const condition = menu.getByTestId("clinical-surface-condition");
+  await expect(condition).toHaveValue("");
+  await expect(condition.locator('option[value=""]')).toHaveText("Not recorded (existing)");
+  await expect(condition.locator('option[value=""]')).toHaveJSProperty("disabled", true);
+  await menu.getByTestId("clinical-surface-material").selectOption("amalgam");
+  await expect(condition).toHaveValue("");
+  await menu.getByTestId("clinical-surface-condition-restored").click();
+  await expect(condition).toHaveValue("");
+  await expect(menu.getByTestId("clinical-surface-material")).toHaveValue("amalgam");
+  equalMutation(await apply(page, patientId, true), {
+    targets, observation: { ...existing, material: "amalgam" }, expected_revisions: { UR6: 1 },
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await ready(page);
+  expect((await snapshot(request, patientId, headers)).teeth.UR6.surface_observations.M).toEqual({ ...existing, material: "amalgam" });
+  await drawing(page, "UR6", "M", { ...existing, material: "amalgam" });
 });
 
 test("MOD and MIDBP atomic saves and selected-surface reset preserve roots crowns notes and finance", async ({ page, request }) => {
@@ -167,10 +194,10 @@ test("MOD and MIDBP atomic saves and selected-surface reset preserve roots crown
   const edit = page.getByTestId("clinical-surface-action-menu");
   await expect(edit.getByTestId("clinical-surface-condition-restored")).toHaveAttribute("aria-checked", "true");
   await expect(edit.getByTestId("clinical-surface-material")).toHaveValue("gold");
-  await expect(edit.getByTestId("clinical-surface-condition")).toHaveValue("");
-  await edit.getByTestId("clinical-surface-condition").selectOption("sound");
-  equalMutation(await apply(page, patientId, true), { targets: [{ tooth: "UR6", surfaces: ["M"] }], observation: { ...gold, condition: "sound" }, expected_revisions: { UR6: 4 } });
-  await drawing(page, "UR6", "M", { ...gold, condition: "sound" });
+  await expect(edit.getByTestId("clinical-surface-condition")).toHaveValue("sound");
+  await edit.getByTestId("clinical-surface-condition").selectOption("carious_early");
+  equalMutation(await apply(page, patientId, true), { targets: [{ tooth: "UR6", surfaces: ["M"] }], observation: { ...gold, condition: "carious_early" }, expected_revisions: { UR6: 4 } });
+  await drawing(page, "UR6", "M", { ...gold, condition: "carious_early" });
   await drawing(page, "UR6", "D", gold);
   stored = await snapshot(request, patientId, headers);
   expect(stored.teeth.UR6.root_observations).toEqual(before.teeth.UR6.root_observations);
@@ -192,7 +219,7 @@ test("caries stages defects restorations and sealants retain exact independent o
     { tooth: "UR6", surface: "D", observation: { ...blank, kind: "carious", condition: "carious_arrested" } },
     { tooth: "UR6", surface: "B", observation: { ...blank, kind: "carious", condition: "carious_established" } },
     { tooth: "UR6", surface: "P", observation: { ...blank, kind: "defective", condition: "defective", defects: ["cracked", "leaking"] } },
-    { tooth: "LR6", surface: "O", observation: { ...blank, kind: "restored", material: "unknown" } },
+    { tooth: "LR6", surface: "O", observation: { ...blank, kind: "restored", material: "unknown", condition: "sound" } },
     { tooth: "LL6", surface: "O", observation: { ...blank, kind: "sealant", condition: "sound" } },
   ];
   const revisions: Record<string, number> = {};

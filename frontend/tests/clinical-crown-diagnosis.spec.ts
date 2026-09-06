@@ -382,7 +382,7 @@ test("pending and failed crown saves block other mutations without drawing unsav
   try {
     await page.getByTestId("crown-diagnosis-apply").click();
     await expect(page.getByTestId("clinical-baseline-status")).toContainText(/saving/i);
-    for (const id of ["crown-diagnosis-apply", "crown-diagnosis-back", "crown-diagnosis-cancel", "crown-diagnosis-palette-metal"]) await expect(page.getByTestId(id)).toBeDisabled();
+    for (const id of ["crown-diagnosis-apply", "diagnosis-level-tooth", "crown-diagnosis-cancel", "crown-diagnosis-palette-metal"]) await expect(page.getByTestId(id)).toBeDisabled();
     await page.getByTestId("clinical-root-UR6").click({ button: "right" });
     await expect(page.getByTestId("clinical-root-action-menu")).toHaveCount(0);
     await page.getByTestId("clinical-crown-UR6").click({ button: "right" });
@@ -418,7 +418,7 @@ test("crown draft cancellation and patient tab mode or surface switches never sa
   await expect(page.locator('[data-crown-selected="true"]')).toHaveCount(0);
   await expect(page.getByTestId("crown-diagnosis-apply")).toBeDisabled();
   await selectCrowns(page, "gold", ["UR6"]);
-  await page.getByTestId("crown-diagnosis-back").click();
+  await page.getByTestId("diagnosis-level-tooth").click();
   await expect(page.getByTestId("clinical-diagnosis-palette")).toBeVisible();
   for (const tooth of ["UR6", "LR6"]) {
     await selectCrowns(page, "gold", ["UR6", "LR6"]);

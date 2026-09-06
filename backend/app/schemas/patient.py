@@ -12,7 +12,25 @@ from app.models.patient_recall import (
 from app.schemas.actor import ActorOut
 
 
-class PatientBase(BaseModel):
+class PatientContactFields(BaseModel):
+    phone_label: Optional[str] = Field(default=None, max_length=120)
+    home_phone: Optional[str] = Field(default=None, max_length=50)
+    home_phone_label: Optional[str] = Field(default=None, max_length=120)
+    work_phone: Optional[str] = Field(default=None, max_length=50)
+    work_phone_label: Optional[str] = Field(default=None, max_length=120)
+    mobile_phone: Optional[str] = Field(default=None, max_length=50)
+    mobile_phone_label: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("phone_label", "home_phone", "home_phone_label", "work_phone",
+                     "work_phone_label", "mobile_phone", "mobile_phone_label", mode="before")
+    @classmethod
+    def normalize_optional_contact_fields(cls, value: object) -> object:
+        # Keep formatting/extensions within numbers, and do not reclassify the
+        # existing phone or infer who owns a number or whether SMS is permitted.
+        return value.strip() or None if isinstance(value, str) else value
+
+
+class PatientBase(PatientContactFields):
     nhs_number: Optional[str] = None
     title: Optional[str] = None
     first_name: str = Field(min_length=1, max_length=120)
@@ -67,7 +85,7 @@ class PatientCreate(PatientBase):
     pass
 
 
-class PatientUpdate(BaseModel):
+class PatientUpdate(PatientContactFields):
     nhs_number: Optional[str] = None
     title: Optional[str] = None
     first_name: Optional[str] = Field(default=None, min_length=1, max_length=120)

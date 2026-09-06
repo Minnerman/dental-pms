@@ -10,8 +10,6 @@ export default function DiagnosisPalette(props: Props) {
   const { enabled, saving, action, selected, lastAction } = props;
   const invalid = action && !actionSupportsTeeth(action, selected);
   return <section className="clinical-diagnosis-palette" data-testid="clinical-diagnosis-palette" aria-label="Whole-tooth diagnosis">
-    <div className="clinical-diagnosis-heading"><strong>Diagnosis · Whole tooth</strong><span>Use the level tabs, or click a tooth number, root, crown or surface. Right-click opens its menu.</span></div>
-    <p>Choose a condition, select one or more tooth numbers, then Apply. No treatment or charges are created.</p>
     <div className="clinical-diagnosis-tiles">
       {diagnosisActions.map((item) => <button key={item.id} className="btn btn-secondary" type="button"
         data-testid={`diagnosis-palette-${item.id}`} aria-pressed={action === item.id}

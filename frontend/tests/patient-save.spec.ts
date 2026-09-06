@@ -46,7 +46,8 @@ test("patient personal save shows in-flight state and guards repeat submit", asy
   await page.getByTestId("patient-tab-Personal").click();
   await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
 
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
   const notesField = page.getByTestId("patient-notes-field");
   await expect(notesField).toBeVisible();
   await notesField.fill(updatedNotes);
@@ -147,7 +148,8 @@ test("patient header last updated metadata changes after save", async ({ page, r
 
   await page.getByTestId("patient-tab-Personal").click();
   await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
   const notesField = page.getByTestId("patient-notes-field");
   await expect(notesField).toBeVisible();
   await notesField.fill(updatedNotes);
@@ -229,17 +231,12 @@ test("patient header quick actions show call and email when contact details are 
 
   await page.getByTestId("patient-tab-Personal").click();
   await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
 
-  const patientDetails = page.locator("details.card").filter({
-    has: page.getByTestId("patient-save-changes"),
-  });
-  const emailField = patientDetails.locator(
-    'xpath=.//label[normalize-space()="Email"]/following-sibling::input[1]'
-  );
-  const phoneField = patientDetails.locator(
-    'xpath=.//label[normalize-space()="Phone"]/following-sibling::input[1]'
-  );
+  const patientDetails = page.getByTestId("patient-personal-details");
+  const emailField = patientDetails.getByLabel("Email", { exact: true });
+  const phoneField = patientDetails.getByLabel("Primary phone", { exact: true });
   await expect(emailField).toBeVisible();
   await expect(phoneField).toBeVisible();
 
@@ -330,7 +327,8 @@ test("patient audit page shows created and updated entries", async ({ page, requ
   await page.getByTestId("patient-tab-Personal").click();
   await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
 
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
   const notesField = page.getByTestId("patient-notes-field");
   await expect(notesField).toBeVisible();
   await notesField.fill(updatedNotes);
@@ -373,7 +371,8 @@ test("patient archive shows in-flight state and guards repeat submit", async ({
 
   await page.getByTestId("patient-tab-Personal").click();
   await expect(page.getByTestId("patient-tab-Personal")).toHaveAttribute("aria-selected", "true");
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
   await expect(page.getByTestId("patient-notes-field")).toBeVisible();
 
   const archiveButton = page.getByTestId("patient-archive-toggle");

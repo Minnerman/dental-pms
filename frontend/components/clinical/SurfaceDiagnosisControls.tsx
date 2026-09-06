@@ -67,7 +67,8 @@ export function SurfaceKindChoices({ observation, disabled, onChange, prefix, me
       return <button key={value ?? "reset"} type="button" className="btn btn-secondary"
         data-testid={`${prefix}-${value ?? "reset"}`} disabled={disabled}
         role={menu ? "menuitemradio" : undefined} aria-checked={menu ? selected : undefined}
-        aria-pressed={menu ? undefined : selected} onClick={() => onChange(newSurfaceObservation(value))}>
+        aria-pressed={menu ? undefined : selected}
+        onClick={() => onChange(value === "restored" && selected && observation ? observation : newSurfaceObservation(value))}>
         <SurfaceSymbol kind={value} />{label}
       </button>;
     })}
@@ -106,7 +107,9 @@ export function SurfaceObservationControls({ observation, disabled, onChange, pr
       Surface condition
       <select data-testid={`${prefix}-condition`} value={observation.condition ?? ""} disabled={disabled}
         onChange={(event) => setCondition(event.target.value ? event.target.value as SurfaceCondition : null)}>
-        <option value="">Condition unspecified</option>
+        {observation.kind === "restored"
+          ? observation.condition === null && <option value="" disabled>Not recorded (existing)</option>
+          : <option value="">Condition unspecified</option>}
         {surfaceConditions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
       </select>
     </label>}
@@ -120,7 +123,7 @@ export function SurfaceObservationControls({ observation, disabled, onChange, pr
       </label>)}</div>
       <small>No details selected means the defect type is unspecified.</small>
     </fieldset>}
-    {observation.kind !== null && <small className="clinical-surface-unspecified-help">
+    {observation.kind !== null && (observation.kind !== "restored" || observation.condition === null) && <small className="clinical-surface-unspecified-help">
       Record only what is known. An unspecified stage or condition does not mean early caries or sound tooth structure.
     </small>}
   </div>;

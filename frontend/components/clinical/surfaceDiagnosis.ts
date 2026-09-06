@@ -48,7 +48,7 @@ export const surfaceOrder: SurfaceKey[] = ["M", "O", "I", "D", "B", "P", "L"];
 export const surfaceKeysForTooth = (tooth: string): SurfaceKey[] => ["M", Number(tooth.slice(-1)) <= 3 ? "I" : "O", "D", "B", tooth.startsWith("U") ? "P" : "L"];
 export const surfaceName = (surface: SurfaceKey) => ({ M: "Mesial", O: "Occlusal", I: "Incisal", D: "Distal", B: "Buccal", P: "Palatal", L: "Lingual" })[surface];
 export function newSurfaceObservation(kind: SurfaceKind | null): SurfaceObservation {
-  return { kind, material: kind === "restored" ? "unknown" : null, condition: kind === "defective" ? "defective" : null, defects: [] };
+  return { kind, material: kind === "restored" ? "unknown" : null, condition: kind === "restored" ? "sound" : kind === "defective" ? "defective" : null, defects: [] };
 }
 export function surfaceDiagnosisLabel(observation: SurfaceObservation) {
   if (observation.kind === null) return "Reset selected surfaces · unspecified";

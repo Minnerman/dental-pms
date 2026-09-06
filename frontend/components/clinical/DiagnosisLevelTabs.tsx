@@ -23,6 +23,7 @@ export default function DiagnosisLevelTabs({ value, disabled, onChange }: {
   }
   return <div className="clinical-diagnosis-levels" data-testid="clinical-diagnosis-levels"
     role="tablist" aria-label="Diagnosis level">
+    <strong className="clinical-diagnosis-level-label">Diagnosis:</strong>
     {levels.map((level, index) => <button key={level.id} type="button" role="tab"
       id={`diagnosis-level-${level.id}`} data-testid={`diagnosis-level-${level.id}`}
       aria-selected={value === level.id} aria-controls="clinical-diagnosis-panel"

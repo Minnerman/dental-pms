@@ -6,12 +6,8 @@ type Props = {
   onCancel: () => void; onBack: () => void;
 };
 
-export default function RootDiagnosisPalette({ enabled, saving, action, selected, onChoose, onApply, onCancel, onBack }: Props) {
+export default function RootDiagnosisPalette({ enabled, saving, action, selected, onChoose, onApply, onCancel }: Props) {
   return <section className="clinical-diagnosis-palette" data-testid="clinical-root-diagnosis-palette" aria-label="Whole root area diagnosis">
-    <div className="clinical-diagnosis-heading"><strong>Diagnosis · Root area</strong>
-      <button type="button" className="btn btn-secondary" data-testid="root-diagnosis-back" disabled={saving} onClick={onBack}>Tooth-level choices</button>
-    </div>
-    <p>Choose an observation, select the root areas of one or more teeth, then Apply. Each choice covers all roots of each selected tooth.</p>
     <div className="clinical-diagnosis-tiles">
       {rootDiagnosisActions.map((item) => <button key={item.id} type="button" className="btn btn-secondary"
         data-testid={`root-diagnosis-palette-${item.id}`} disabled={!enabled}

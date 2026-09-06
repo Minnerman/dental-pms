@@ -39,12 +39,8 @@ type Props = {
   onBridge: (role: BridgeRole) => void; bridges: BridgeGroup[]; onBridgeReset: (bridge: BridgeGroup) => void;
 };
 
-export default function CrownDiagnosisPalette({ enabled, saving, observation, selected, canNote, onChoose, onApply, onCancel, onBack, onNote, onBridge, bridges, onBridgeReset }: Props) {
+export default function CrownDiagnosisPalette({ enabled, saving, observation, selected, canNote, onChoose, onApply, onCancel, onNote, onBridge, bridges, onBridgeReset }: Props) {
   return <section className="clinical-diagnosis-palette" data-testid="clinical-crown-diagnosis-palette" aria-label="Crown diagnosis">
-    <div className="clinical-diagnosis-heading"><strong>Diagnosis · Crown</strong>
-      <button type="button" className="btn btn-secondary" data-testid="crown-diagnosis-back" disabled={saving} onClick={onBack}>Tooth-level choices</button>
-    </div>
-    <p>Choose a crown observation, select one or more crown areas, then Apply. Root findings are kept.</p>
     <div className="clinical-diagnosis-tiles clinical-crown-tiles">
       {[...crownKinds, { value: null, label: "Reset crown" }].map(({ value, label }) => <button key={value ?? "reset"} type="button" className="btn btn-secondary"
         data-testid={`crown-diagnosis-palette-${value ?? "reset"}`} disabled={!enabled}

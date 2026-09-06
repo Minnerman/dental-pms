@@ -33,7 +33,7 @@ async function render(page: Page, tooth: string, props: Partial<ToothProps> = {}
 
 test("surface catalogue defaults preserve unspecified stages and canonical tooth surface keys", () => {
   expect(newSurfaceObservation("carious")).toEqual({ kind: "carious", material: null, condition: null, defects: [] });
-  expect(newSurfaceObservation("restored")).toEqual({ kind: "restored", material: "unknown", condition: null, defects: [] });
+  expect(newSurfaceObservation("restored")).toEqual({ kind: "restored", material: "unknown", condition: "sound", defects: [] });
   expect(newSurfaceObservation("sealant")).toEqual({ kind: "sealant", material: null, condition: null, defects: [] });
   expect(newSurfaceObservation("defective")).toEqual({ kind: "defective", material: null, condition: "defective", defects: [] });
   expect(newSurfaceObservation(null)).toEqual({ kind: null, material: null, condition: null, defects: [] });

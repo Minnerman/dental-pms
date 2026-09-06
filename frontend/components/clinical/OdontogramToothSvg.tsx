@@ -630,10 +630,10 @@ function OdontogramToothSvgImpl({
               </g>}
               {observation?.apicectomy && <g pointerEvents="none"
                 data-testid={`clinical-root-apicectomy-${toothKey}-${rootNumber}`}>
-                <path d={`M${landmarks.apical.x - 7} ${landmarks.apical.y} H${landmarks.apical.x + 7}`}
-                  fill="none" stroke="#fff9eb" strokeWidth="4.5" />
-                <path d={`M${landmarks.apical.x - 7} ${landmarks.apical.y} H${landmarks.apical.x + 7}`}
-                  fill="none" stroke="#574329" strokeWidth="2.3" />
+                <path d={`M${landmarks.apical.x - 7.7} ${landmarks.apical.y} H${landmarks.apical.x + 7.7}`}
+                  fill="none" stroke="#fff9eb" strokeWidth="6.75" />
+                <path d={`M${landmarks.apical.x - 7.7} ${landmarks.apical.y} H${landmarks.apical.x + 7.7}`}
+                  fill="none" stroke="#574329" strokeWidth="3.45" />
               </g>}
             </g>
           </g>;

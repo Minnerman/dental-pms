@@ -298,7 +298,7 @@ test("Cancel back tooth-number and view changes clear pending roots while viewer
   await expect(page.locator('[data-root-selected="true"]')).toHaveCount(0);
   await expect(page.getByTestId("root-diagnosis-apply")).toBeDisabled();
   await selectRoots(page, "post_core_sound", ["UR6"]);
-  await page.getByTestId("root-diagnosis-back").click();
+  await page.getByTestId("diagnosis-level-tooth").click();
   await expect(page.getByTestId("clinical-diagnosis-palette")).toBeVisible();
   await expect(page.locator('[data-root-selected="true"]')).toHaveCount(0);
   await selectRoots(page, "filled_sound", ["UR6"]);
@@ -398,7 +398,7 @@ test("a pending or failed root batch cannot duplicate save or optimistically red
     await expect(page.getByTestId("clinical-baseline-status")).toContainText(/saving/i);
     await expect(page.getByTestId("root-diagnosis-palette-filled_sound")).toBeDisabled();
     await expect(page.getByTestId("root-diagnosis-apply")).toBeDisabled();
-    await expect(page.getByTestId("root-diagnosis-back")).toBeDisabled();
+    await expect(page.getByTestId("diagnosis-level-tooth")).toBeDisabled();
     await expect(page.getByTestId("root-diagnosis-cancel")).toBeDisabled();
     await page.getByTestId("clinical-root-UR6").click({ button: "right" });
     await expect(page.getByTestId("clinical-root-action-menu")).toHaveCount(0);
