@@ -214,7 +214,7 @@ def test_root_dentition_changes_clear_previous_maps_and_derive_new_counts(api_cl
     assert primary.status_code == 200
     assert primary.json()["teeth"]["UR4"]["root_observations"] == roots(3, "post_core_sound")
     permanent = api_client.post(_path(patient_id), headers=auth_headers,
-        json=_action_payload(["UR4"], {"UR4": 2}, condition="present"))
+        json=_action_payload(["UR4"], {"UR4": 2}, condition="present", dentition="permanent"))
     assert permanent.status_code == 200
     assert permanent.json()["teeth"]["UR4"]["root_observations"] == {}
     assert audits(patient_id)[-1][2]["teeth"]["UR4"]["root_observations"] == roots(3, "post_core_sound")

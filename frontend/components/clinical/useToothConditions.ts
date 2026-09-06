@@ -28,12 +28,11 @@ type ConditionChart = {
 };
 
 export function baselineGlyph(row?: DiagnosisPatch): OdontogramBaselineCondition | undefined {
-  if (!row || (!row.condition && !row.movement && !row.rotation)) return undefined;
-  const { condition, movement, rotation } = row;
+  if (!row || (!row.condition && !row.dentition && !row.movement && !row.rotation)) return undefined;
+  const { condition, dentition, movement, rotation } = row;
   return {
-    ...(condition ? condition === "deciduous"
-      ? { status: "present" as const, dentition: "deciduous" as const }
-      : { status: condition, dentition: "permanent" as const } : {}),
+    ...(condition ? { status: condition === "deciduous" ? "present" as const : condition } : {}),
+    dentition: dentition ?? (condition === "deciduous" ? "deciduous" : undefined),
     movement, rotation,
   };
 }
@@ -186,6 +185,6 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
     bridges: currentChart?.bridges ?? [],
     loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns, saveSurfaces, saveBridge, resetBridge,
-    save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded">) => saveAction(teeth, condition, teeth.length === 1),
+    save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded" | "present">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

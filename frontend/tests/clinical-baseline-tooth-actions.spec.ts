@@ -3,10 +3,12 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { createPatient } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
-type Condition = "present" | "missing" | "deciduous" | "implant" | "unerupted" | "impacted";
+type Condition = "present" | "missing" | "deciduous" | "implant" | "unerupted" | "impacted" | "unrecorded";
+type Action = "missing" | "deciduous" | "implant" | "unerupted" | "impacted" | "reset";
+type CurrentObservation = { condition: Condition | null; dentition: "permanent" | "deciduous" | null };
 type Snapshot = {
   patient_id: number;
-  teeth: Record<string, { condition: Condition | null; revision: number }>;
+  teeth: Record<string, CurrentObservation & { revision: number }>;
   note_teeth: string[];
 };
 
@@ -33,26 +35,34 @@ async function openChart(page: Page, patientId: string) {
 async function openToothMenu(page: Page, tooth: string) {
   await page.getByTestId(`tooth-label-${tooth}`).click({ button: "right" });
   await expect(page.getByTestId("clinical-tooth-action-menu")).toBeVisible();
-  await expect(page.getByTestId("clinical-tooth-action-menu")).toContainText(tooth);
+  await expect(page.getByTestId("clinical-tooth-action-menu")).toHaveAccessibleName(`Tooth actions for ${tooth}`);
 }
 
-async function selectCondition(page: Page, patientId: string, tooth: string, condition: Condition) {
+async function selectCondition(page: Page, patientId: string, tooth: string, action: Action, expected?: CurrentObservation) {
   await openToothMenu(page, tooth);
   const saved = page.waitForResponse((response) =>
     response.request().method() === "POST" &&
     new URL(response.url()).pathname === conditionsPath(patientId)
   );
-  await page.getByTestId(`clinical-baseline-condition-${condition}`).click();
+  await page.getByTestId(`clinical-baseline-condition-${action}`).click();
   const response = await saved;
   expect(response.ok()).toBeTruthy();
-  expect(response.request().postDataJSON()).toMatchObject({ teeth: [tooth], condition });
-  await expectConditionGlyph(page, tooth, condition);
+  const patch = action === "deciduous" ? { dentition: "deciduous" }
+    : action === "reset" ? { condition: "unrecorded", movement: null, rotation: null }
+      : { condition: action };
+  const { expected_revisions, ...body } = response.request().postDataJSON();
+  expect(body).toEqual({ teeth: [tooth], ...patch });
+  expect(Object.keys(expected_revisions)).toEqual([tooth]);
+  const observation = expected ?? { condition: action === "reset" ? "unrecorded" : action === "deciduous" ? null : action, dentition: action === "deciduous" ? "deciduous" : null };
+  await expectConditionGlyph(page, tooth, observation.condition, observation.dentition);
 }
 
-async function expectConditionGlyph(page: Page, tooth: string, condition: Condition) {
+async function expectConditionGlyph(page: Page, tooth: string, condition: Condition | null, dentition: CurrentObservation["dentition"] = null) {
   const svg = page.getByTestId(`tooth-svg-${tooth}`);
-  await expect(svg).toHaveAttribute("data-baseline-status", condition === "deciduous" ? "present" : condition);
-  await expect(svg).toHaveAttribute("data-dentition", condition === "deciduous" ? "deciduous" : "permanent");
+  if (condition) await expect(svg).toHaveAttribute("data-baseline-status", condition === "deciduous" ? "present" : condition);
+  else await expect(svg).not.toHaveAttribute("data-baseline-status");
+  if (dentition) await expect(svg).toHaveAttribute("data-dentition", dentition);
+  else await expect(svg).not.toHaveAttribute("data-dentition");
   await expect(page.getByTestId(`tooth-label-${tooth}`)).toBeVisible();
   if (condition === "missing") {
     await expect(page.getByTestId(`tooth-anatomy-${tooth}`)).toHaveCount(0);
@@ -88,15 +98,28 @@ test("tooth-label menu records each current condition, persists after reload and
   await expect(page.getByTestId("tooth-label-LL1")).toHaveCSS("font-size", "18.7px");
   await openToothMenu(page, "UR5");
   await expect(page.getByTestId("clinical-baseline-repeat")).toBeDisabled();
+  await expect(page.getByTestId("clinical-baseline-condition-present")).toHaveCount(0);
+  await expect(page.getByTestId("diagnosis-palette-present")).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  for (const condition of ["missing", "deciduous", "implant", "unerupted", "impacted", "present"] as const) {
-    await selectCondition(page, patientId, "UR5", condition);
+  const observations: Array<{ action: Action; expected: CurrentObservation }> = [
+    { action: "deciduous", expected: { condition: null, dentition: "deciduous" } },
+    { action: "unerupted", expected: { condition: "unerupted", dentition: "deciduous" } },
+    { action: "impacted", expected: { condition: "impacted", dentition: "deciduous" } },
+    { action: "missing", expected: { condition: "missing", dentition: "deciduous" } },
+    { action: "implant", expected: { condition: "implant", dentition: null } },
+    { action: "reset", expected: { condition: "unrecorded", dentition: null } },
+  ];
+  for (const [index, { action, expected }] of observations.entries()) {
+    await selectCondition(page, patientId, "UR5", action, expected);
     const stored = await snapshot(request, patientId, token);
-    expect(stored.teeth.UR5.condition).toBe(condition);
-    expect(stored.teeth.UR5.revision).toBeGreaterThan(0);
+    expect(stored.teeth.UR5).toMatchObject({ ...expected, revision: index + 1 });
+    await expect(page.getByTestId("tooth-label-UR5")).toHaveText(expected.dentition === "deciduous" ? "URE" : "UR5");
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expectConditionGlyph(page, "UR5", condition);
+    await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("clinical-baseline-status")).not.toContainText(/loading/i);
+    await expectConditionGlyph(page, "UR5", expected.condition, expected.dentition);
+    await expect(page.getByTestId("tooth-label-UR5")).toHaveText(expected.dentition === "deciduous" ? "URE" : "UR5");
   }
 
   const summaryResponse = await request.get(`${getBaseUrl()}/api/patients/${patientId}/clinical/summary`, { headers });
@@ -207,9 +230,10 @@ test("read-only viewers can inspect tooth details but cannot record baseline con
   await openChart(page, patientId);
   await expect(page.getByTestId("patient-clinical-section")).toHaveAttribute("data-clinical-mode", "read-only");
   await openToothMenu(page, "UR5");
-  for (const condition of ["present", "missing", "deciduous", "implant", "unerupted", "impacted"] as const) {
+  for (const condition of ["reset", "missing", "deciduous", "implant", "unerupted", "impacted"] as const) {
     await expect(page.getByTestId(`clinical-baseline-condition-${condition}`)).toBeDisabled();
   }
+  await expect(page.getByTestId("clinical-baseline-condition-present")).toHaveCount(0);
   await expect(page.getByTestId("clinical-baseline-repeat")).toBeDisabled();
   await expect(page.getByTestId("clinical-baseline-arch-missing")).toBeDisabled();
   await expect(page.getByTestId("clinical-chart-menu-view-timeline")).toBeEnabled();

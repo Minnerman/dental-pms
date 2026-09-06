@@ -272,7 +272,7 @@ def test_explicit_crown_reset_and_primary_to_permanent_transition_are_clearable(
     assert api_client.post(crown_path(patient_id), headers=auth_headers,
         json=payload(["UR4"], {"UR4": 1}, None)).status_code == 200
     changed = api_client.post(_path(patient_id), headers=auth_headers,
-        json=_action_payload(["UR4"], {"UR4": 2}, condition="present"))
+        json=_action_payload(["UR4"], {"UR4": 2}, condition="present", dentition="permanent"))
     assert changed.status_code == 200
     assert changed.json()["teeth"]["UR4"]["crown_observation"] is None
     assert changed.json()["teeth"]["UR4"]["revision"] == 3

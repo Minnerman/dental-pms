@@ -302,7 +302,7 @@ def test_primary_transition_and_other_layers_preserve_only_compatible_surface_st
     assert api_client.post(surface_path(patient), headers=auth_headers,
         json=payload([target("UR4", "B")], {"UR4": 7})).status_code == 200
     changed = api_client.post(_path(patient), headers=auth_headers,
-        json=_action_payload(["UR4"], {"UR4": 8}, condition="present"))
+        json=_action_payload(["UR4"], {"UR4": 8}, condition="present", dentition="permanent"))
     assert changed.status_code == 200 and changed.json()["teeth"]["UR4"]["surface_observations"] == {}
 
 

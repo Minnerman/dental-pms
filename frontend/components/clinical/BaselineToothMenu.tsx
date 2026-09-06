@@ -22,7 +22,8 @@ export default function BaselineToothMenu({ tooth, enabled, current, lastAction,
         Repeat last action{lastAction ? ` · ${diagnosisAction(lastAction).label}` : ""}
       </button>
       {diagnosisActions.map((item) => {
-        const checked = Object.entries(item.patch).every(([field, value]) => current?.[field as keyof DiagnosisPatch] === value);
+        const checked = item.id === "deciduous" ? current?.dentition === "deciduous" || current?.condition === "deciduous"
+          : Object.entries(item.patch).every(([field, value]) => current?.[field as keyof DiagnosisPatch] === value);
         return <button key={item.id} className="btn btn-secondary" type="button" role="menuitemradio"
           aria-checked={checked}
           disabled={!enabled || !actionSupportsTeeth(item.id, [tooth])}

@@ -73,6 +73,14 @@ class ToothCondition(Base, AuditMixin):
             name="ck_tooth_conditions_value",
         ),
         CheckConstraint(
+            "dentition IS NULL OR dentition IN ('permanent', 'deciduous')",
+            name="ck_tooth_conditions_dentition",
+        ),
+        CheckConstraint(
+            "dentition IS DISTINCT FROM 'deciduous' OR right(tooth, 1) IN ('1', '2', '3', '4', '5')",
+            name="ck_tooth_conditions_deciduous_position",
+        ),
+        CheckConstraint(
             "movement IS NULL OR movement IN ('forward', 'backward')",
             name="ck_tooth_conditions_movement",
         ),
@@ -110,6 +118,8 @@ class ToothCondition(Base, AuditMixin):
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)
     tooth: Mapped[str] = mapped_column(String(3), nullable=False)
     condition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Identity is independent of presence/eruption. NULL is unspecified.
+    dentition: Mapped[str | None] = mapped_column(String(9), nullable=True)
     movement: Mapped[str | None] = mapped_column(String(20), nullable=True)
     rotation: Mapped[str | None] = mapped_column(String(20), nullable=True)
     root_observations: Mapped[dict] = mapped_column(

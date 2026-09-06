@@ -86,6 +86,7 @@ class ToothConditionUpdate(BaseModel):
 
     teeth: list[str] = Field(min_length=1, max_length=32)
     condition: ToothConditionValue | None = None
+    dentition: Literal["permanent", "deciduous"] | None = None
     movement: Literal["forward", "backward"] | None = None
     rotation: Literal["clockwise", "anticlockwise"] | None = None
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
@@ -118,12 +119,17 @@ class ToothConditionUpdate(BaseModel):
     def check_scope(self):
         if set(self.expected_revisions) != set(self.teeth):
             raise ValueError("expected_revisions must contain exactly the selected teeth")
-        if not self.model_fields_set.intersection({"condition", "movement", "rotation"}):
-            raise ValueError("supply at least one condition, movement or rotation observation")
-        if self.condition == ToothConditionValue.deciduous and any(
+        if not self.model_fields_set.intersection({"condition", "dentition", "movement", "rotation"}):
+            raise ValueError("supply at least one condition, dentition, movement or rotation observation")
+        if (self.condition == ToothConditionValue.deciduous or self.dentition == "deciduous") and any(
             int(tooth[-1]) > 5 for tooth in self.teeth
         ):
             raise ValueError("deciduous teeth are supported only in positions 1-5")
+        if "dentition" in self.model_fields_set:
+            if self.condition == ToothConditionValue.deciduous and self.dentition != "deciduous":
+                raise ValueError("legacy deciduous condition requires deciduous dentition")
+            if self.condition in {ToothConditionValue.unrecorded, ToothConditionValue.implant} and self.dentition is not None:
+                raise ValueError("reset and implant conditions clear dentition to unspecified")
         return self
 
 
@@ -415,6 +421,7 @@ class ToothConditionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     condition: ToothConditionValue | None
+    dentition: Literal["permanent", "deciduous"] | None
     movement: Literal["forward", "backward"] | None
     rotation: Literal["clockwise", "anticlockwise"] | None
     root_observations: dict[Literal["1", "2", "3"], RootObservation]

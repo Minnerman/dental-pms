@@ -236,6 +236,7 @@ def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
 def _tooth_condition_snapshot(row: ToothCondition | None) -> dict:
     return {
         "condition": row.condition if row else None,
+        "dentition": row.dentition if row else None,
         "movement": row.movement if row else None,
         "rotation": row.rotation if row else None,
         "root_observations": row.root_observations if row else {},
@@ -247,14 +248,25 @@ def _tooth_condition_snapshot(row: ToothCondition | None) -> dict:
     }
 
 
+def _tooth_observation_patch(row: ToothCondition | None, request_values: dict) -> dict:
+    observations = {key: request_values[key] for key in ("condition", "dentition", "movement", "rotation")
+                    if key in request_values}
+    if observations.get("condition") == "deciduous":
+        # Compatibility with older clients: primary/present shorthand.
+        observations["dentition"] = "deciduous"
+    elif observations.get("condition") in {"unrecorded", "implant"}:
+        observations["dentition"] = None
+    elif "dentition" in observations and "condition" not in observations and row and row.condition == "deciduous":
+        # The legacy shorthand cannot coexist with a different identity.
+        if observations["dentition"] != "deciduous":
+            observations["condition"] = "present" if observations["dentition"] == "permanent" else None
+    return observations
+
+
 def _whole_tooth_clears_anatomy_observations(row: ToothCondition | None, observations: dict) -> bool:
-    if "condition" not in observations:
-        return False
-    condition = observations["condition"]
-    if condition in {"unrecorded", "missing", "implant", "unerupted"}:
+    if observations.get("condition") in {"unrecorded", "missing", "implant", "unerupted"}:
         return True
-    was_deciduous = row is not None and row.condition == "deciduous"
-    return was_deciduous != (condition == "deciduous")
+    return "dentition" in observations and observations["dentition"] != (row.dentition if row else None)
 
 
 @patient_router.get("/clinical/tooth-conditions", response_model=ToothConditionsOut)
@@ -315,27 +327,30 @@ def update_tooth_conditions(
         )
 
     before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in payload.teeth}
-    observations = {
-        key: request_values[key]
-        for key in ("condition", "movement", "rotation")
-        if key in request_values
-    }
-    for row in existing.values():
+    patches = {tooth: _tooth_observation_patch(existing.get(tooth), request_values) for tooth in payload.teeth}
+    for tooth, row in existing.items():
+        observations = patches[tooth]
+        if (observations.get("dentition") is not None
+                and observations.get("condition", row.condition) == "implant"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="An implant has no natural tooth dentition")
         if ((row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS
                 and "condition" in observations and observations["condition"] not in {None, "missing", "unrecorded"}
                 and not _whole_tooth_clears_anatomy_observations(row, observations)):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Reset the denture crown before recording an incompatible tooth condition")
-        if row.bridge_group_id is not None and "condition" in observations:
+        if row.bridge_group_id is not None and {"condition", "dentition"}.intersection(observations):
             clears_recorded_anatomy = (_whole_tooth_clears_anatomy_observations(row, observations)
                                       and _has_anatomy_observations(row))
-            if observations["condition"] != row.condition or clears_recorded_anatomy:
+            if (any(observations[key] != getattr(row, key) for key in ("condition", "dentition") if key in observations)
+                    or clears_recorded_anatomy):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="Reset the complete bridge before changing a member's tooth condition")
     now = datetime.now(timezone.utc)
     changed_teeth = []
     for tooth in payload.teeth:
         row = existing.get(tooth)
+        observations = patches[tooth]
         clear_anatomy = _whole_tooth_clears_anatomy_observations(row, observations)
         if (row is not None and all(getattr(row, key) == value for key, value in observations.items())
                 and not (clear_anatomy and _has_anatomy_observations(row))):
@@ -426,7 +441,7 @@ def update_root_conditions(
         if condition in {"missing", "implant", "unerupted"}:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Roots cannot be recorded for a missing, implant or unerupted tooth")
-        dentition = "deciduous" if condition == "deciduous" else "permanent"
+        dentition = row.dentition if row and row.dentition else "deciduous" if condition == "deciduous" else "permanent"
         root_counts[tooth] = schematic_root_count(tooth, dentition)
 
     before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in payload.teeth}

@@ -855,26 +855,47 @@
   padding-top: 12px;
 }
 
-.shell :global(.clinical-tooth-note-flag) {
-  position: absolute;
-  top: 2px;
-  left: 4px;
-  width: 16px;
-  height: 16px;
-  background: #ffe66b;
-  border: 1px solid #967b13;
-  border-radius: 1px;
-  box-shadow: 1px 2px 2px rgb(0 0 0 / 18%);
+.shell :global(.clinical-diagnosis-workspace) {
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 
-.shell :global(.clinical-tooth-note-flag::after) {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  right: -1px;
-  border-style: solid;
-  border-width: 5px 5px 0 0;
-  border-color: #ad8b23 var(--panel) transparent transparent;
+.shell :global(.clinical-diagnosis-levels) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.shell :global(.clinical-diagnosis-levels > button) {
+  flex: 1 1 145px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shell :global(.clinical-diagnosis-levels > button[aria-selected="true"]) {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border-color: var(--accent);
+}
+
+.shell :global(.clinical-diagnosis-levels > button:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell :global(.clinical-diagnosis-levels > button:disabled) {
+  opacity: .55;
+  cursor: wait;
 }
 
 .shell :global(.clinical-baseline-feedback) {

@@ -70,7 +70,7 @@ test("a clinical refresh during a pending baseline save cannot overwrite its sav
     const stored = await request.get(`${getBaseUrl()}${conditionsPath(patientId)}`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await stored.json()).teeth.UR5).toMatchObject({ condition: "missing", revision: 1 });
     await openMenu(page, "UR5");
-    await expect(page.getByTestId("clinical-baseline-condition-present")).toBeEnabled();
+    await expect(page.getByTestId("clinical-baseline-condition-reset")).toBeEnabled();
   } finally {
     releaseSave.release();
   }
@@ -148,7 +148,7 @@ test("a failed refresh preserves a known missing tooth and blocks edits until a 
   await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "missing");
   await expect(page.getByTestId("tooth-crown-UR5")).toHaveCount(0);
   await openMenu(page, "UR5");
-  await expect(page.getByTestId("clinical-baseline-condition-present")).toBeDisabled();
+  await expect(page.getByTestId("clinical-baseline-condition-reset")).toBeDisabled();
   await expect(page.getByTestId("clinical-baseline-arch-missing")).toBeDisabled();
   await page.keyboard.press("Escape");
 
@@ -158,7 +158,7 @@ test("a failed refresh preserves a known missing tooth and blocks edits until a 
   await expect(page.getByTestId("clinical-baseline-status")).not.toContainText(/loading/i);
   await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "missing");
   await openMenu(page, "UR5");
-  await expect(page.getByTestId("clinical-baseline-condition-present")).toBeEnabled();
+  await expect(page.getByTestId("clinical-baseline-condition-reset")).toBeEnabled();
 });
 
 test("a pending save remains locked across clinical tab re-entry and reconciles before another edit", async ({ page, request }) => {
@@ -186,7 +186,7 @@ test("a pending save remains locked across clinical tab re-entry and reconciles 
     await page.getByTestId("patient-tab-Medical").click();
     await expect(page.getByTestId("clinical-baseline-status")).toContainText(/saving/i);
     await openMenu(page, "UR5");
-    await expect(page.getByTestId("clinical-baseline-condition-present")).toBeDisabled();
+    await expect(page.getByTestId("clinical-baseline-condition-reset")).toBeDisabled();
     await expect(page.getByTestId("clinical-baseline-arch-missing")).toBeDisabled();
     await page.keyboard.press("Escape");
 
@@ -196,17 +196,17 @@ test("a pending save remains locked across clinical tab re-entry and reconciles 
     await expect(page.getByTestId("clinical-baseline-status")).toContainText(/saved/i);
     await expect(page.getByTestId("clinical-baseline-status")).not.toContainText(/loading|saving/i);
     await openMenu(page, "UR5");
-    await expect(page.getByTestId("clinical-baseline-condition-present")).toBeEnabled();
+    await expect(page.getByTestId("clinical-baseline-condition-reset")).toBeEnabled();
     const corrected = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === conditionsPath(patientId));
-    await page.getByTestId("clinical-baseline-condition-present").click();
+    await page.getByTestId("clinical-baseline-condition-reset").click();
     expect((await corrected).ok()).toBeTruthy();
     expect(postBodies).toEqual([
       { teeth: ["UR5"], condition: "missing", expected_revisions: { UR5: 0 } },
-      { teeth: ["UR5"], condition: "present", expected_revisions: { UR5: 1 } },
+      { teeth: ["UR5"], condition: "unrecorded", movement: null, rotation: null, expected_revisions: { UR5: 1 } },
     ]);
-    await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "present");
+    await expect(page.getByTestId("tooth-svg-UR5")).toHaveAttribute("data-baseline-status", "unrecorded");
     const stored = await request.get(`${getBaseUrl()}${conditionsPath(patientId)}`, { headers: { Authorization: `Bearer ${token}` } });
-    expect((await stored.json()).teeth.UR5).toMatchObject({ condition: "present", revision: 2 });
+    expect((await stored.json()).teeth.UR5).toMatchObject({ condition: "unrecorded", dentition: null, movement: null, rotation: null, revision: 2 });
   } finally {
     releaseSave.release();
   }

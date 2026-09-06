@@ -192,6 +192,8 @@ type Props = {
   missing?: boolean;
   extracted?: boolean;
   active?: boolean;
+  hasToothNote?: boolean;
+  onToothNoteClick?: (event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void;
   baselineCondition?: OdontogramBaselineCondition;
   rootConditions?: Record<string, RootObservation>;
   rootSelected?: boolean;
@@ -219,6 +221,8 @@ function OdontogramToothSvgImpl({
   missing = false,
   extracted = false,
   active = false,
+  hasToothNote = false,
+  onToothNoteClick,
   baselineCondition,
   rootConditions,
   rootSelected = false,
@@ -433,8 +437,11 @@ function OdontogramToothSvgImpl({
   const movement = baselineCondition?.movement;
   const rotation = baselineCondition?.rotation;
   const movementDirection = (toothKey[1] === "R" ? 1 : -1) * (movement === "backward" ? -1 : 1);
+  const missingMovement = Boolean(movement) && !artificialTooth && (baselineMissing || stateDominant);
+  const noteControls = hasToothNote && Boolean(onToothNoteClick);
   const baselineDescription = [
     baselineCondition?.status === "unrecorded" ? "current observations reset, unspecified" : isDeciduous ? "current condition deciduous" : baselineCondition?.status ? `current condition ${baselineCondition.status}` : "",
+    isDeciduous && baselineCondition?.status && !["present", "unrecorded"].includes(baselineCondition.status) ? `current condition ${baselineCondition.status}` : "",
     movement ? `movement ${movement} (${movement === "forward" ? "toward" : "away from"} the midline)` : "",
     rotation ? `rotation ${rotation}` : "",
   ].filter(Boolean).map((description) => `, ${description}`).join("");
@@ -459,7 +466,7 @@ function OdontogramToothSvgImpl({
       width="72"
       height="202"
       className="odontogram-tooth-svg"
-      role={rootControls || crownControls || surfaceControls ? "group" : "img"}
+      role={rootControls || crownControls || surfaceControls || noteControls ? "group" : "img"}
       aria-label={`${displayLabel} ${isDeciduous && Number(toothKey.slice(-1)) >= 4 ? "molar" : toothType}${baselineDescription}${showAnatomy ? artificialTooth ? ", artificial replacement tooth" : ", anatomical tooth" : ""}${showSurfaceMap ? " and surface map" : ""}${displayLabel !== toothKey ? `, chart position ${toothKey}` : ""}`}
       data-testid={`tooth-svg-${toothKey}`}
       data-baseline-status={baselineCondition?.status}
@@ -659,11 +666,10 @@ function OdontogramToothSvgImpl({
         )}
         {baselineUnerupted && (
           <path
-            d={isUpperArch
-              ? "M8 80 Q15 73 22 80 T36 80 T50 80 T64 80 T78 80 T92 80"
-              : "M8 177 Q15 184 22 177 T36 177 T50 177 T64 177 T78 177 T92 177"}
+            d="M8 177 Q15 184 22 177 T36 177 T50 177 T64 177 T78 177 T92 177"
             fill="none" stroke="#9e6674" strokeWidth={2.8} strokeLinecap="round"
             data-testid={`tooth-baseline-gum-${toothKey}`}
+            data-gum-side={isUpperArch ? "below-crown" : "above-crown"}
           />
         )}
         <g transform={crownTransform} data-testid={`tooth-crown-appearance-${toothKey}`}
@@ -826,18 +832,20 @@ function OdontogramToothSvgImpl({
         )}
       </g>}
 
-      {showAnatomy && (movement || rotation) && (
+      {(showAnatomy || missingMovement) && (movement || rotation) && (
         <g
-          transform={`translate(50 ${isUpperArch ? -14 : 294})`}
+          transform={`translate(50 ${missingMovement ? 140 : isUpperArch ? -14 : 294})`}
           pointerEvents="none"
           data-testid={`tooth-position-markers-${toothKey}`}
-          data-marker-side={isUpperArch ? "above" : "below"}
+          data-marker-side={missingMovement ? "missing-slot" : isUpperArch ? "above" : "below"}
         >
           {movement && (
             <g
-              transform={`translate(${rotation ? -21 : 0} 0) scale(${movementDirection} 1)`}
+              transform={missingMovement ? `scale(${movementDirection * 2.2} 2.2)`
+                : `translate(${rotation ? hasToothNote && isUpperArch ? -10 : -21 : 0} 0) scale(${movementDirection} 1)`}
               data-testid={`tooth-movement-${toothKey}`}
               data-direction={movement}
+              data-marker-size={missingMovement ? "large" : "standard"}
               stroke="var(--odontogram-movement, #b96708)"
               strokeWidth={2.6}
               strokeLinecap="round"
@@ -849,7 +857,7 @@ function OdontogramToothSvgImpl({
           )}
           {rotation && (
             <g
-              transform={`translate(${movement ? 21 : 0} 0) scale(${rotation === "anticlockwise" ? -1 : 1} 1)`}
+              transform={`translate(${missingMovement ? 0 : movement ? 21 : 0} ${missingMovement ? 34 : 0}) scale(${rotation === "anticlockwise" ? -1 : 1} 1)`}
               data-testid={`tooth-rotation-${toothKey}`}
               data-direction={rotation}
               stroke="var(--odontogram-rotation, #8057c8)"
@@ -863,6 +871,27 @@ function OdontogramToothSvgImpl({
           )}
         </g>
       )}
+
+      {hasToothNote && <g
+        data-testid={`tooth-note-flag-${toothKey}`}
+        role={noteControls ? "button" : "img"}
+        tabIndex={noteControls ? 0 : undefined}
+        aria-label={`${noteControls ? "Open notes" : "Notes"} for ${displayLabel}`}
+        style={{ cursor: noteControls ? "pointer" : "default" }}
+        onClick={noteControls ? (event) => {
+          event.preventDefault(); event.stopPropagation(); onToothNoteClick?.(event);
+        } : undefined}
+        onKeyDown={noteControls ? (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault(); event.stopPropagation(); onToothNoteClick?.(event);
+        } : undefined}
+      >
+        <title>{`Tooth notes for ${displayLabel}`}</title>
+        <rect x="0" y="-25" width="24" height="24" fill="transparent" />
+        <path d="M2 -23 H22 V-9 L16 -3 H2 Z" fill="#ffe66b" stroke="#967b13" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M16 -3 V-9 H22" fill="#e0bc36" stroke="#967b13" strokeWidth="1.1" strokeLinejoin="round" />
+        <path d="M6 -18 H18 M6 -14 H17 M6 -10 H12" fill="none" stroke="#8a711b" strokeWidth="1.1" strokeLinecap="round" />
+      </g>}
 
       {showSurfaceMap && <g
         transform={isUpperArch ? "translate(0 180)" : undefined}

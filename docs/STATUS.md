@@ -3,6 +3,45 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (manual diagnosis corrections): Four explicit Tooth level / Root
+  level / Crown level / Surface level tabs select the corresponding rectangular
+  palette without requiring an anatomy click. Switching levels clears staged
+  observations, not saved findings; tabs are locked during pending saves.
+  Unerupted upper crowns now have the gum wave below, lower crowns above.
+  Missing teeth show large mirrored mesial/distal arrows in the empty tooth slot.
+  Tooth present is removed from new authoring; neutral Reset remains, and old
+  explicit records are retained. Dentition is now independent of tooth status:
+  setting Deciduous preserves an existing unerupted/missing/impacted condition,
+  and subsequent status changes preserve British A-E labels. Implant/reset
+  clears identity to unspecified. Additive 0056_independent_dentition copies only
+  existing explicit native deciduous identity; no age/history inference or audit/
+  revision rewriting. Downgrade refuses independent identity the old schema
+  cannot represent. Identity changes retain shared locks/revisions/audit and
+  invalidate incompatible anatomy atomically, respecting bridge guards.
+  Saved notes immediately refresh a yellow folded note marker above each tooth;
+  click, Enter or Space opens/focuses that tooth's timeline. Unsaved note text is
+  keyed by patient/tooth; delayed history responses cannot populate another tooth.
+  Verification: 196 focused backend cases, 51 glyph cases plus targeted final
+  accessibility/identity assertions, and all 25 final browser cases passed.
+  Browser coverage includes six new correction cases, 11 baseline/race cases
+  and eight root/crown/bridge/surface preservation guards. Build, typecheck,
+  lint, compilation, diff checks, migration round-trip/backfill/refusal guards
+  and independent code review passed. Light/dark glyphs and the actual updated
+  local chart were visually inspected. Initial browser attempt was stopped for
+  missing synthetic credential environment; the corrected final run passed
+  without retries. Default-stack wrappers were not used; isolated equivalents
+  used synthetic data and R4 disabled.
+  The owner's local manual preview was upgraded by cloning into a separate
+  isolated stack; fingerprints verified preservation of existing fields across
+  all 56 application tables before startup. Only the clone received 0056. The
+  same loopback link now serves the corrected frozen build; original tmpfs DB
+  and containers remain running for rollback (do not stop/restart the original
+  DB or its data may be lost). Test-created records remain in a separate test
+  database, never in the owner's manual chart. Existing labels already lost to
+  the old bug require explicit reselection, not inferred restoration. No R4 or
+  production access/change, merge, or treatment/finance work. PR #714 remains
+  draft above open #713; master CI/review and separately authorised production
+  migrations 0049–0056/deployment remain gates.
 - 2026-09-06 (surface diagnosis): Current adds a fourth, independent surface
   level. Left-click or keyboard-select M/O/I/D/B/P/L surfaces across teeth;
   right-click opens the same Caries, Defective, Restored, Fissure sealant and

@@ -97,11 +97,11 @@ def test_tooth_conditions_are_native_persistent_and_never_create_treatment_or_fi
     audits = _audits(patient_id)
     assert len(audits) == 6
     assert audits[0].before_json["teeth"]["UR5"] == {
-        "condition": None, "movement": None, "rotation": None, "root_observations": {}, "crown_observation": None,
+        "condition": None, "dentition": None, "movement": None, "rotation": None, "root_observations": {}, "crown_observation": None,
         "surface_observations": {}, "bridge_group_id": None, "bridge_role": None, "revision": 0,
     }
     assert audits[-1].after_json["teeth"]["UR5"] == {
-        "condition": "present", "movement": None, "rotation": None, "root_observations": {}, "crown_observation": None,
+        "condition": "present", "dentition": None, "movement": None, "rotation": None, "root_observations": {}, "crown_observation": None,
         "surface_observations": {}, "bridge_group_id": None, "bridge_role": None, "revision": 6,
     }
 
@@ -480,11 +480,11 @@ def test_explicit_reset_is_atomic_retains_all_history_and_records_neutral_not_he
     for tooth in selected:
         assert audit.before_json["teeth"][tooth] == {
             field: before_chart["teeth"][tooth][field]
-            for field in ("condition", "movement", "rotation", "root_observations", "crown_observation", "surface_observations", "bridge_group_id", "bridge_role", "revision")
+            for field in ("condition", "dentition", "movement", "rotation", "root_observations", "crown_observation", "surface_observations", "bridge_group_id", "bridge_role", "revision")
         }
         assert audit.after_json["teeth"][tooth] == {
             field: after_chart["teeth"][tooth][field]
-            for field in ("condition", "movement", "rotation", "root_observations", "crown_observation", "surface_observations", "bridge_group_id", "bridge_role", "revision")
+            for field in ("condition", "dentition", "movement", "rotation", "root_observations", "crown_observation", "surface_observations", "bridge_group_id", "bridge_role", "revision")
         }
         history = api_client.get(f"/patients/{patient_id}/tooth-history", headers=auth_headers,
                                  params={"tooth": tooth})

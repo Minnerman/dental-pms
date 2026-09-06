@@ -12,7 +12,6 @@ export default function DiagnosisIcon({ action, className }: { action: Diagnosis
     {action === "implant" && <><path d="M8 3h8v3H8zM8 6l1.5 13.5Q12 23 14.5 19.5L16 6M7.5 8.5h9M8 11.5h8M8.5 14.5h7M9 17.5h6" /></>}
     {action === "unerupted" && <><path d="M2 7q2.5-3 5 0t5 0t5 0t5 0" /><path d="M5 20v-3c0-6 3.5-7 7-5 3.5-2 7-1 7 5v3Z" /></>}
     {action === "impacted" && <><path d={tooth} transform="translate(0 3) rotate(-34 10 12) scale(.78)" /><path d="M18 9c3-1 4 1 3.5 4L20 20m-2-10v5" /></>}
-    {action === "present" && <><path d={tooth} /><path d="m8.5 8 2.5 2.5 4.5-5" /></>}
     {action === "movement_forward" && <><path d="M12 3v18" strokeDasharray="2 3" opacity=".45" /><path d="M2 12h7m-3-3 3 3-3 3M22 12h-7m3-3-3 3 3 3" /></>}
     {action === "movement_backward" && <><path d="M12 3v18" strokeDasharray="2 3" opacity=".45" /><path d="M9 12H2m3-3-3 3 3 3M15 12h7m-3-3 3 3-3 3" /></>}
     {(action === "rotation_clockwise" || action === "rotation_anticlockwise") && <g transform={action === "rotation_anticlockwise" ? "translate(24 0) scale(-1 1)" : undefined}>

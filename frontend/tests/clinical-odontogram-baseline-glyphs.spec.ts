@@ -66,7 +66,7 @@ test("current missing removes anatomy and surfaces, preserving every quadrant's 
     const toothKey = `${quadrant}6`;
     const before = await (await renderTooth(page, toothKey)).boundingBox();
     const svg = await renderTooth(page, toothKey, {
-      baselineCondition: { ...current("missing"), movement: "forward", rotation: "clockwise" },
+      baselineCondition: current("missing"),
       restorations: historicalRestorations,
       missing: true,
       extracted: true,
@@ -85,9 +85,10 @@ test("current missing removes anatomy and surfaces, preserving every quadrant's 
   }
 });
 
-test("unerupted teeth show only the crown with a wavy gum line above it in every quadrant", async ({ page }) => {
+test("unerupted teeth show crown-only with gum below upper crowns and above lower crowns", async ({ page }) => {
   for (const quadrant of quadrants) {
-    const toothKey = `${quadrant}6`;
+    for (const position of [1, 3, 4, 5, 6, 8]) {
+    const toothKey = `${quadrant}${position}`;
     await renderTooth(page, toothKey, {
       baselineCondition: current("unerupted"),
       restorations: historicalRestorations,
@@ -100,10 +101,98 @@ test("unerupted teeth show only the crown with a wavy gum line above it in every
     await expect(historicalMarks(page, toothKey)).toHaveCount(0);
     const gum = page.getByTestId(`tooth-baseline-gum-${toothKey}`);
     await expect(gum).toHaveAttribute("d", /Q.*T/);
+    await expect(gum).toHaveAttribute("data-gum-side", quadrant[0] === "U" ? "below-crown" : "above-crown");
     const gumBox = await gum.boundingBox();
     const crownBox = await page.getByTestId(`tooth-crown-${toothKey}`).boundingBox();
-    expect(gumBox!.y + gumBox!.height).toBeLessThan(crownBox!.y);
+    if (quadrant[0] === "U") expect(gumBox!.y).toBeGreaterThan(crownBox!.y + crownBox!.height);
+    else expect(gumBox!.y + gumBox!.height).toBeLessThan(crownBox!.y);
+    }
   }
+});
+
+test("missing teeth retain a large mid-slot movement arrow without restoring anatomy or changing slot size", async ({ page }) => {
+  for (const quadrant of quadrants) {
+    const toothKey = `${quadrant}6`;
+    const before = await (await renderTooth(page, toothKey)).boundingBox();
+    for (const movement of ["forward", "backward"] as const) {
+      const svg = await renderTooth(page, toothKey, {
+        baselineCondition: { ...current("missing"), movement, rotation: "clockwise" },
+        restorations: historicalRestorations, missing: true, extracted: true,
+      });
+      await expect(page.getByTestId(`tooth-anatomy-${toothKey}`)).toHaveCount(0);
+      await expect(page.getByTestId(`tooth-surface-map-${toothKey}`)).toHaveCount(0);
+      await expect(historicalMarks(page, toothKey)).toHaveCount(0);
+      await expect(svg).toHaveAttribute("data-baseline-status", "missing");
+      expect(await svg.boundingBox()).toEqual(before);
+      const marker = page.getByTestId(`tooth-movement-${toothKey}`);
+      await expect(marker).toHaveAttribute("data-direction", movement);
+      await expect(marker).toHaveAttribute("data-marker-size", "large");
+      await expect(page.getByTestId(`tooth-position-markers-${toothKey}`)).toHaveAttribute("data-marker-side", "missing-slot");
+      const box = (await marker.boundingBox())!;
+      expect(box.width).toBeGreaterThan(55);
+      expect(box.x).toBeGreaterThan(before!.x);
+      expect(box.x + box.width).toBeLessThan(before!.x + before!.width);
+      expect(box.y + box.height / 2 - before!.y).toBeCloseTo(140, 1);
+      const direction = await marker.evaluate((element) => {
+        const matrix = (element as SVGGraphicsElement).getCTM()!;
+        return new DOMPoint(13, 0).matrixTransform(matrix).x - new DOMPoint(-13, 0).matrixTransform(matrix).x;
+      });
+      expect(Math.sign(direction)).toBe((quadrant[1] === "R" ? 1 : -1) * (movement === "forward" ? 1 : -1));
+      const rotation = (await page.getByTestId(`tooth-rotation-${toothKey}`).boundingBox())!;
+      expect(rotation.y).toBeGreaterThan(box.y + box.height);
+    }
+  }
+});
+
+test("yellow tooth-note controls stay above both arches including missing primary slots without covering movement", async ({ page }) => {
+  for (const quadrant of quadrants) {
+    const toothKey = `${quadrant}5`;
+    for (const status of ["present", "missing", "unerupted", "implant"] as const) {
+      const baselineCondition: OdontogramBaselineCondition = {
+        status, dentition: status === "implant" ? "permanent" : "deciduous", movement: "forward", rotation: "clockwise",
+      };
+      const before = await (await renderTooth(page, toothKey, { baselineCondition })).boundingBox();
+      const svg = await renderTooth(page, toothKey, { baselineCondition, hasToothNote: true, onToothNoteClick: () => {} });
+      const note = page.getByTestId(`tooth-note-flag-${toothKey}`);
+      await expect(note).toHaveAttribute("role", "button");
+      await expect(note).toHaveAttribute("tabindex", "0");
+      await expect(note).toHaveAttribute("aria-label", `Open notes for ${quadrant}${status === "implant" ? "5" : "E"}`);
+      await expect(note.locator('path[fill="#ffe66b"]')).toHaveCount(1);
+      await expect(svg).toHaveAttribute("role", "group");
+      if (status !== "present") await expect(svg).toHaveAttribute("aria-label", new RegExp(`current condition ${status}`));
+      expect(await svg.boundingBox()).toEqual(before);
+      const box = (await note.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(24);
+      expect(box.height).toBeGreaterThanOrEqual(24);
+      expect(box.y + box.height).toBeLessThan(before!.y);
+      for (const markerId of [`tooth-movement-${toothKey}`, `tooth-rotation-${toothKey}`]) {
+        const marker = (await page.getByTestId(markerId).boundingBox())!;
+        expect(box.x + box.width <= marker.x || marker.x + marker.width <= box.x || box.y + box.height <= marker.y || marker.y + marker.height <= box.y).toBe(true);
+      }
+    }
+    await renderTooth(page, toothKey, { hasToothNote: true });
+    await expect(page.getByTestId(`tooth-note-flag-${toothKey}`)).toHaveAttribute("role", "img");
+    await expect(page.getByTestId(`tooth-note-flag-${toothKey}`)).not.toHaveAttribute("tabindex");
+    await renderTooth(page, toothKey);
+    await expect(page.getByTestId(`tooth-note-flag-${toothKey}`)).toHaveCount(0);
+  }
+});
+
+test("synthetic corrected gum and missing-movement note gallery remains legible in both themes", async ({ page }, testInfo) => {
+  const examples = quadrants.flatMap((quadrant) => [
+    { toothKey: `${quadrant}5`, baselineCondition: current("unerupted"), label: `${quadrant}5 · Unerupted` },
+    { toothKey: `${quadrant}5`, baselineCondition: { ...current("missing", "deciduous"), movement: "forward" as const, rotation: "clockwise" as const }, label: `${quadrant}E · Missing · toward centre` },
+  ]);
+  const cards = examples.map(({ toothKey, baselineCondition, label }, index) =>
+    `<section><strong>${label}</strong>${renderToStaticMarkup(createElement(OdontogramToothSvg, {
+      toothKey, toothType: getOdontogramToothType(toothKey), baselineCondition, hasToothNote: true, onToothNoteClick: () => {},
+    }), { identifierPrefix: `corrected-${index}-` })}</section>`
+  ).join("");
+  await page.setViewportSize({ width: 1160, height: 850 });
+  await page.setContent(`<style>body{margin:20px;background:#f7f7f5;color:#242320;font:14px Arial}.gallery{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.gallery section{display:grid;justify-items:center;gap:30px;background:white;padding:16px;border:1px solid #ddd;border-radius:10px}.gallery svg{width:100px;height:280px}.gallery strong{font-size:12px}.dark{background:#171614;color:#f4f2ee}.dark section{background:#211f1c;border-color:#45403a}</style><div class="gallery">${cards}</div>`);
+  await page.screenshot({ path: testInfo.outputPath("corrected-gum-movement-notes-light.png"), fullPage: true });
+  await page.evaluate(() => document.body.classList.add("dark"));
+  await page.screenshot({ path: testInfo.outputPath("corrected-gum-movement-notes-dark.png"), fullPage: true });
 });
 
 test("current implants replace natural roots without inheriting historic root treatments or absence", async ({ page }) => {
@@ -194,6 +283,13 @@ test("deciduous positions four and five use primary molars in all quadrants with
       expect(primaryBox!.height).toBeLessThan(permanentBox!.height);
       await expect(historicalMarks(page, toothKey)).toHaveCount(0);
       await expect(page.getByTestId(`tooth-surface-map-${toothKey}`)).toBeAttached();
+      const identityOnly = await renderTooth(page, toothKey, { baselineCondition: { dentition: "deciduous", movement: "forward" } });
+      await expect(identityOnly).toHaveAttribute("data-dentition", "deciduous");
+      await expect(identityOnly).not.toHaveAttribute("data-baseline-status", /.+/);
+      await expect(identityOnly).not.toHaveAttribute("aria-label", /current condition present|healthy/);
+      await expect(identityOnly).toHaveAttribute("aria-label", new RegExp(`${quadrant}${position === 4 ? "D" : "E"} molar, current condition deciduous`));
+      await expect(page.getByTestId(`tooth-movement-${toothKey}`)).toHaveAttribute("data-direction", "forward");
+      expect(await page.getByTestId(`tooth-crown-${toothKey}`).boundingBox()).toEqual(primaryBox);
     }
   }
 });
