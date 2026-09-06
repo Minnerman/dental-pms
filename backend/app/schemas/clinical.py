@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.clinical import ProcedureStatus, ToothConditionValue, TreatmentPlanStatus
 from app.schemas.actor import ActorOut
+from app.schemas.clinical_note import MAX_NATIVE_NOTE_LENGTH, NoteMetadataCreate, NoteMetadataOut
 
 MAX_CLINICAL_TEXT_LENGTH = 2_000
 MAX_FEE_PENCE = 100_000_000
@@ -54,10 +55,10 @@ def validate_tooth_surface(tooth: str | None, surface: str | None) -> None:
         raise ValueError("occlusal surface is only valid for posterior teeth")
 
 
-class ToothNoteCreate(BaseModel):
+class ToothNoteCreate(NoteMetadataCreate):
     tooth: str
     surface: Optional[str] = None
-    note: str = Field(max_length=MAX_CLINICAL_TEXT_LENGTH)
+    note: str = Field(max_length=MAX_NATIVE_NOTE_LENGTH)
 
     _normalize_tooth = field_validator("tooth", mode="before")(_tooth)
     _normalize_surface = field_validator("surface", mode="before")(_surface)
@@ -69,7 +70,7 @@ class ToothNoteCreate(BaseModel):
         return self
 
 
-class ToothNoteOut(BaseModel):
+class ToothNoteOut(NoteMetadataOut):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

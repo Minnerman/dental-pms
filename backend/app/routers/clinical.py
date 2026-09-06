@@ -49,6 +49,8 @@ from app.schemas.clinical import (
     validate_tooth_surface,
 )
 from app.services.audit import log_event
+from app.schemas.clinical_note import ToothNoteAmendment, NativeNoteHistoryOut
+from app.services import native_notes
 
 patient_router = APIRouter(prefix="/patients/{patient_id}", tags=["clinical"])
 router = APIRouter(prefix="/treatment-plan", tags=["clinical"])
@@ -904,25 +906,23 @@ def create_tooth_note(
     request_id: str | None = Header(default=None, max_length=120),
 ):
     get_patient_or_404(db, patient_id, for_update=True)
-    duplicate = _duplicate_created_entity(
-        db,
-        patient_id=patient_id,
-        request_id=request_id,
-        action="clinical.tooth_note.created",
-        model=ToothNote,
-        id_key="tooth_note_id",
-    )
-    if duplicate:
-        return duplicate
+    fingerprint_payload = {"patient_id": patient_id, **payload.model_dump(mode="json")}
+    duplicate_id = native_notes.replay_target(db, user.id, request_id, "clinical.tooth_note.created", fingerprint_payload)
+    if duplicate_id is not None:
+        return _tooth_note_or_404(db, patient_id, duplicate_id)
+    metadata = native_notes.creation_metadata(db, payload, user)
     note = ToothNote(
         patient_id=patient_id,
         tooth=payload.tooth,
         surface=payload.surface,
         note=payload.note,
         created_by_user_id=user.id,
+        **metadata,
     )
     db.add(note)
     db.flush()
+    native_notes.save_snapshot(db, note, user.id)
+    native_notes.record_receipt(db, user.id, request_id, "clinical.tooth_note.created", fingerprint_payload, note.id)
     log_event(
         db,
         actor=user,
@@ -935,6 +935,57 @@ def create_tooth_note(
     db.commit()
     db.refresh(note)
     return note
+
+
+def _tooth_note_or_404(db: Session, patient_id: int, note_id: int, *, for_update=False):
+    get_patient_or_404(db, patient_id)
+    stmt = select(ToothNote).where(ToothNote.id == note_id, ToothNote.patient_id == patient_id)
+    if for_update:
+        stmt = stmt.with_for_update(of=ToothNote)
+    note = db.scalar(stmt)
+    if note is None:
+        raise HTTPException(404, "Tooth note not found")
+    return note
+
+
+@patient_router.patch("/tooth-notes/{note_id}", response_model=ToothNoteOut)
+def amend_tooth_note(
+    patient_id: int, note_id: int, payload: ToothNoteAmendment,
+    db: Session = Depends(get_db), user: User = Depends(CLINICAL_WRITE),
+    _viewer: User = Depends(CLINICAL_VIEW),
+    request_id: str | None = Header(default=None, max_length=120),
+):
+    get_patient_or_404(db, patient_id, for_update=True)
+    note = _tooth_note_or_404(db, patient_id, note_id, for_update=True)
+    fingerprint_payload = {"patient_id": patient_id, "note_id": note_id, **payload.model_dump(mode="json", exclude_unset=True)}
+    action = "clinical.tooth_note.updated"
+    if native_notes.replay_target(db, user.id, request_id, action, fingerprint_payload) is not None:
+        return note
+    native_notes.check_revision(note, payload.expected_revision)
+    updates = payload.model_dump(exclude_unset=True, exclude={"expected_revision", "reason"})
+    changed = {key for key, value in updates.items() if getattr(note, key) != value}
+    if changed:
+        native_notes.ensure_baseline(db, note)
+        before = {"tooth_note_id": note.id, "revision": note.revision}
+        for field in changed:
+            setattr(note, field, updates[field])
+        note.revision += 1
+        native_notes.save_snapshot(db, note, user.id, reason=payload.reason)
+        log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+                  before_data=before, after_data={"tooth_note_id": note.id, "tooth": note.tooth, "surface": note.surface,
+                                                  "revision": note.revision, "changed_fields": sorted(changed)})
+    native_notes.record_receipt(db, user.id, request_id, action, fingerprint_payload, note.id)
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@patient_router.get("/tooth-notes/{note_id}/revisions", response_model=NativeNoteHistoryOut)
+def tooth_note_revisions(
+    patient_id: int, note_id: int, db: Session = Depends(get_db), _user: User = Depends(CLINICAL_VIEW),
+    limit: int = Query(default=100, ge=1, le=200), before_revision: int | None = Query(default=None, ge=1),
+):
+    return native_notes.history(db, _tooth_note_or_404(db, patient_id, note_id), limit=limit, before_revision=before_revision)
 
 
 @patient_router.post("/procedures", response_model=ProcedureOut, status_code=status.HTTP_201_CREATED)

@@ -231,7 +231,7 @@ test("patient chart tooth note add shows in-flight state and guards repeat submi
   const token = await primePageAuth(page, request);
   const noteBody = `Chart tooth note ${unique}`;
 
-  await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
+  await page.goto(`${baseUrl}/patients/${patientId}/clinical?clinicalView=planned`, {
     waitUntil: "domcontentloaded",
   });
   await waitForPatientClinicalPage(page, patientId);

@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -20,6 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base
+from app.models.clinical_note import NativeNoteMetadata
 
 
 class ProcedureStatus(str, enum.Enum):
@@ -136,8 +138,9 @@ class ToothCondition(Base, AuditMixin):
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
-class ToothNote(Base):
+class ToothNote(Base, NativeNoteMetadata):
     __tablename__ = "tooth_notes"
+    __table_args__ = (Index("ix_tooth_notes_journal_patient", "patient_id", "created_at", "id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False)

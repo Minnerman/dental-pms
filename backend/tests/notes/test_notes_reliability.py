@@ -317,7 +317,9 @@ def test_note_validation_idempotency_noop_lifecycle_and_safe_audit(
     noop = api_client.patch(
         f"/appointments/{appointment_id}/notes/{note_id}",
         headers=auth_headers,
-        json={"body": "  Synthetic idempotent note  ", "note_type": "clinical"},
+        # Amendments now preserve supplied whitespace. A no-op therefore sends
+        # the exact stored body, not a differently formatted replacement.
+        json={"body": "Synthetic idempotent note", "note_type": "clinical"},
     )
     assert noop.status_code == 200
     assert noop.json()["updated_at"] == before_updated_at

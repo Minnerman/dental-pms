@@ -43,6 +43,8 @@ import Icon from "@/components/ui/Icon";
 import PatientDocuments from "./PatientDocuments";
 import PatientAttachments from "./PatientAttachments";
 import PatientPersonalDetails from "@/components/PatientPersonalDetails";
+import ClinicalNotesPanel from "@/components/clinical/ClinicalNotesPanel";
+import ClinicalNotesWorkspace from "@/components/clinical/ClinicalNotesWorkspace";
 
 type Actor = {
   id: number;
@@ -1160,6 +1162,8 @@ export default function PatientDetailClient({
   const [clinicalLoading, setClinicalLoading] = useState(false);
   const [clinicalError, setClinicalError] = useState<string | null>(null);
   const [clinicalLastUpdated, setClinicalLastUpdated] = useState<string | null>(null);
+  const [journalSaving, setJournalSaving] = useState(false);
+  const [journalFocusRequest, setJournalFocusRequest] = useState({ patient: patientId, tooth: "", nonce: 0 });
   const [selectedTooth, setSelectedTooth] = useState<string | null>(null);
   const [selectedToothSurfaces, setSelectedToothSurfaces] = useState<R4SurfaceKey[]>([]);
   const [chartActionMenu, setChartActionMenu] = useState<ChartActionMenu | null>(null);
@@ -1772,6 +1776,7 @@ export default function PatientDetailClient({
     event.preventDefault();
     event.stopPropagation();
     if (baseline.saving || savingToothNote) return;
+    setJournalFocusRequest((previous) => ({ patient: patientId, tooth, nonce: previous.nonce + 1 }));
     cancelDiagnosisSelection();
     cancelRootSelection();
     cancelCrownSelection();
@@ -3394,6 +3399,13 @@ export default function PatientDetailClient({
       router,
     ]
   );
+
+  const handleJournalSaved = useCallback(async () => {
+    await Promise.all([
+      refreshClinicalData(), loadNotes(), loadTimeline(),
+      ...(selectedTooth ? [loadToothHistory(selectedTooth)] : []),
+    ]);
+  }, [refreshClinicalData, loadNotes, loadTimeline, loadToothHistory, selectedTooth]);
 
   async function submitChartNote(button?: HTMLButtonElement | null) {
     if (!canWriteClinical || clinicalPatientUnavailable) {
@@ -9129,6 +9141,14 @@ export default function PatientDetailClient({
                       )}
                     </div>
                   )}
+                <ClinicalNotesWorkspace saving={journalSaving}
+                  revealKey={journalFocusRequest.patient === patientId ? journalFocusRequest.nonce : 0}
+                  sidebar={(close) => <ClinicalNotesPanel patientId={patientId}
+                    capabilities={capabilities ?? []} selectedTooth={selectedTooth}
+                    readOnly={clinicalPatientUnavailable}
+                    refreshKey={`${clinicalLastUpdated ?? ""}:${Object.entries(baseline.teeth).map(([tooth, finding]) => `${tooth}-${finding.revision}`).join(",")}`}
+                    focusRequest={journalFocusRequest.patient === patientId && journalFocusRequest.nonce > 0 ? journalFocusRequest : undefined}
+                    onSaved={handleJournalSaved} onSavingChange={setJournalSaving} onClose={close} />}>
                 <div
                     className="patient-route-clinical-grid"
                     data-testid="patient-clinical-grid"
@@ -10439,6 +10459,7 @@ export default function PatientDetailClient({
                         </Panel>
                         )}
                       </div>
+                </ClinicalNotesWorkspace>
                     </div>
                   ) : clinicalTab === "treatment" ? (
                     <div className="stack" data-testid="patient-treatment-plan-section">

@@ -1,4 +1,5 @@
-export const NOTE_BODY_MAX_LENGTH = 2_000;
+// Matches the native-note API; imported historical text is not capped here.
+export const NOTE_BODY_MAX_LENGTH = 100_000;
 
 export async function noteResponseError(response: Response, fallback: string) {
   if (response.status === 403) {

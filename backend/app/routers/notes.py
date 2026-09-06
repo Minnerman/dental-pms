@@ -12,7 +12,9 @@ from app.models.note import Note, NoteType
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.audit_log import AuditLogOut
-from app.schemas.note import AppointmentNoteCreate, NoteCreate, NoteOut, NoteUpdate
+from app.schemas.note import AppointmentNoteCreate, NoteCreate, NoteOut, NoteUpdate, NoteAmendment
+from app.schemas.clinical_note import NativeNoteHistoryOut
+from app.services import native_notes
 from app.services.audit import log_event
 
 patient_router = APIRouter(prefix="/patients/{patient_id}/notes", tags=["notes"])
@@ -90,6 +92,13 @@ def _require_note(
     include_deleted: bool = False,
     for_update: bool = False,
 ) -> Note:
+    if for_update:
+        owner_id = db.scalar(select(Note.patient_id).where(Note.id == note_id))
+        if owner_id is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+        # Match patient-first ordering used by creation/archive operations;
+        # an amendment cannot race a parent archive after its eligibility check.
+        _require_patient(db, owner_id, for_update=True)
     stmt = select(Note).where(Note.id == note_id)
     if for_update:
         stmt = stmt.with_for_update(of=Note)
@@ -118,43 +127,13 @@ def _safe_note_values(note: Note, *, changed_fields: set[str] | None = None) -> 
         "appointment_id": note.appointment_id,
         "note_type": note.note_type.value,
         "archived": note.deleted_at is not None,
+        "revision": note.revision,
     }
     if changed_fields is not None:
         values["changed_fields"] = sorted(fields)
         if "body" in fields:
             values["body_changed"] = True
     return values
-
-
-def _duplicate_created_note(
-    db: Session,
-    *,
-    user_id: int,
-    request_id: str | None,
-    patient_id: int,
-    appointment_id: int | None,
-) -> Note | None:
-    if not request_id:
-        return None
-    audit = db.scalar(
-        select(AuditLog)
-        .where(
-            AuditLog.action == "note.created",
-            AuditLog.entity_type == "note",
-            AuditLog.actor_user_id == user_id,
-            AuditLog.request_id == request_id,
-        )
-        .order_by(AuditLog.id.desc())
-    )
-    if audit is None:
-        return None
-    note_id = (audit.after_json or {}).get("note_id")
-    if not isinstance(note_id, int):
-        return None
-    note = db.get(Note, note_id)
-    if note is None or note.patient_id != patient_id or note.appointment_id != appointment_id:
-        return None
-    return note
 
 
 def _create_note_record(
@@ -167,16 +146,14 @@ def _create_note_record(
     db: Session,
     user: User,
     request_id: str | None,
+    metadata_payload,
 ) -> Note:
-    duplicate = _duplicate_created_note(
-        db,
-        user_id=user.id,
-        request_id=request_id,
-        patient_id=patient_id,
-        appointment_id=appointment_id,
-    )
-    if duplicate is not None:
-        return duplicate
+    _require_patient(db, patient_id, for_update=True)
+    fingerprint_payload = {**metadata_payload.model_dump(mode="json"), "patient_id": patient_id, "appointment_id": appointment_id}
+    duplicate_id = native_notes.replay_target(db, user.id, request_id, "note.created", fingerprint_payload)
+    if duplicate_id is not None:
+        return _require_note(db, duplicate_id, patient_id=patient_id)
+    metadata = native_notes.creation_metadata(db, metadata_payload, user)
     note = Note(
         patient_id=patient_id,
         appointment_id=appointment_id,
@@ -184,9 +161,12 @@ def _create_note_record(
         note_type=note_type,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
+        **metadata,
     )
     db.add(note)
     db.flush()
+    native_notes.save_snapshot(db, note, user.id)
+    native_notes.record_receipt(db, user.id, request_id, "note.created", fingerprint_payload, note.id)
     log_event(
         db,
         actor=user,
@@ -211,16 +191,26 @@ def _update_note_record(
     user: User,
     request_id: str | None,
 ) -> Note:
-    updates = payload.model_dump(exclude_unset=True)
+    fingerprint_payload = {"note_id": note.id, **payload.model_dump(mode="json", exclude_unset=True)}
+    if native_notes.replay_target(db, user.id, request_id, "note.updated", fingerprint_payload) is not None:
+        return note
+    native_notes.check_revision(note, payload.expected_revision)
+    updates = payload.model_dump(exclude_unset=True, exclude={"expected_revision", "reason"})
     changed_fields = {
         field for field, value in updates.items() if getattr(note, field) != value
     }
     if not changed_fields:
+        native_notes.record_receipt(db, user.id, request_id, "note.updated", fingerprint_payload, note.id)
+        db.commit()
         return note
+    native_notes.ensure_baseline(db, note)
     before_data = _safe_note_values(note, changed_fields=changed_fields)
     for field in changed_fields:
         setattr(note, field, updates[field])
     note.updated_by_user_id = user.id
+    note.revision += 1
+    native_notes.save_snapshot(db, note, user.id, reason=payload.reason)
+    native_notes.record_receipt(db, user.id, request_id, "note.updated", fingerprint_payload, note.id)
     db.add(note)
     log_event(
         db,
@@ -247,8 +237,15 @@ def _set_note_archived(
     user: User,
     request_id: str | None,
 ) -> Note:
-    if (note.deleted_at is not None) == archived:
+    action = "note.archived" if archived else "note.restored"
+    fingerprint_payload = {"note_id": note.id, "archived": archived}
+    if native_notes.replay_target(db, user.id, request_id, action, fingerprint_payload) is not None:
         return note
+    if (note.deleted_at is not None) == archived:
+        native_notes.record_receipt(db, user.id, request_id, action, fingerprint_payload, note.id)
+        db.commit()
+        return note
+    native_notes.ensure_baseline(db, note)
     before_data = _safe_note_values(note, changed_fields={"archived"})
     if archived:
         note.deleted_at = datetime.now(timezone.utc)
@@ -259,6 +256,9 @@ def _set_note_archived(
         note.deleted_by_user_id = None
         action = "note.restored"
     note.updated_by_user_id = user.id
+    note.revision += 1
+    native_notes.save_snapshot(db, note, user.id, reason="Archived" if archived else "Restored")
+    native_notes.record_receipt(db, user.id, request_id, action, fingerprint_payload, note.id)
     db.add(note)
     log_event(
         db,
@@ -324,6 +324,7 @@ def create_patient_note(
         appointment_id=payload.appointment_id,
         body=payload.body,
         note_type=payload.note_type,
+        metadata_payload=payload,
         request=request,
         db=db,
         user=user,
@@ -363,6 +364,7 @@ def create_appointment_note(
         appointment_id=appointment_id,
         body=payload.body,
         note_type=payload.note_type,
+        metadata_payload=payload,
         request=request,
         db=db,
         user=user,
@@ -539,6 +541,7 @@ def create_note_global(
         appointment_id=payload.appointment_id,
         body=payload.body,
         note_type=payload.note_type,
+        metadata_payload=payload,
         request=request,
         db=db,
         user=user,
@@ -564,6 +567,25 @@ def update_note(
         user=user,
         request_id=request_id,
     )
+
+
+@router.post("/{note_id}/amendments", response_model=NoteOut)
+def amend_note(
+    note_id: int, payload: NoteAmendment, request: Request,
+    db: Session = Depends(get_db), user: User = Depends(NOTES_MUTATE),
+    request_id: str | None = Header(default=None, max_length=120),
+):
+    note = _require_note(db, note_id, for_update=True)
+    return _update_note_record(note=note, payload=payload, request=request, db=db, user=user, request_id=request_id)
+
+
+@router.get("/{note_id}/revisions", response_model=NativeNoteHistoryOut)
+def note_revisions(
+    note_id: int, db: Session = Depends(get_db), _user: User = Depends(NOTES_VIEW),
+    limit: int = Query(default=100, ge=1, le=200),
+    before_revision: int | None = Query(default=None, ge=1),
+):
+    return native_notes.history(db, _require_note(db, note_id, include_deleted=True), limit=limit, before_revision=before_revision)
 
 
 @router.post("/{note_id}/archive", response_model=NoteOut)

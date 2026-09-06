@@ -3,6 +3,59 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (clinical notes beside the odontogram): Added a right-hand, resizable,
+  hideable clinical-notes panel with dated groups, search/category/tooth filters,
+  bounded older-record paging and editable patient/tooth notes. Yellow tooth-note
+  markers reveal and filter the panel. Layout preferences contain no patient
+  text; drafts stay in memory, with patient/request guards and pending-save locks.
+  Native edits retain explicit content/metadata revisions, original authorship
+  and creation dates. Amendments require the expected revision; older compatible
+  PATCH routes also retain revisions. Request fingerprints prevent duplicate or
+  cross-operation replays; ambiguous pre-feature replay IDs fail closed.
+  Pre-feature content is labelled a captured baseline, never a reconstructed
+  original. Native note capacity is 100,000 characters; imported text is not
+  shortened to that limit. Templates have explicit dropdown answers, categories,
+  revisioned definitions and optional code labels. Insertion prepares an editable
+  draft only; saving retains final text and template/version/code references.
+  No procedure, prescription, charge or delivery is inferred from a template.
+  The read-only journal projects existing native notes, diagnoses, procedures,
+  plans, BPE/medical-field updates, generated documents, recall contact logs and
+  locally stored imported notes, with per-source permission and lifecycle gates.
+  Imports retain raw text, source identity, dates and author codes. Unknown and
+  conflicting identities are not guessed; raw R4 tooth codes are not converted
+  by the native tooth filter. Questionnaire notes do not imply a medical subtype.
+  Generated documents and manual contact statuses are distinct from verified
+  delivery. Structured soft-tissue examination support and full R4 history
+  coverage are not claimed. See CLINICAL_NOTES_MIGRATION_CONTRACT.md for the
+  screenshot/public-R4-help review, source-preservation and future reconciliation
+  gates. No R4 system access was performed.
+  Additive 0058_clinical_note_revisions adds native revisions, template definitions
+  and replay receipts without rewriting existing content. Isolated verification:
+  43 native/adjacent backend tests and 12 journal tests passed. Migration upgrade,
+  empty downgrade/re-upgrade and populated downgrade refusal/preservation passed.
+  All 22 distinct browser checks passed (nine new panel cases and 13 adjacent
+  note/permission/tooth-note guards), including real create/amend/history,
+  template authoring, stale-response protection and pointer/keyboard resizing.
+  Test-only locator/geometry corrections and an explicit Planned route for the
+  legacy surface-note guard were required; the final application build was
+  unchanged. Build, typecheck, targeted lint, Python compilation and diff checks
+  passed; light/dark and narrow-screen previews were inspected.
+  Actual-preview review then prompted a presentation-only diagnosis correction:
+  action-specific readable snapshots replace duplicate JSON summaries; original
+  generated text/full details remain under Source details, with line breaks.
+  Native, tooth and imported note bodies are unchanged. An additional focused
+  browser guard passed (23 distinct browser cases overall), along with a fresh
+  build/typecheck/lint and independent review. Unknown actions fail closed to
+  source details; no clinical meaning is guessed. The final frontend-only switch
+  retained the same running backend and saved preview database.
+  The local synthetic preview was refreshed from a separate clone: comparison
+  of all original columns across 56 existing tables passed before switching.
+  The clone alone received 0058; original preview/database remain for rollback.
+  A missing local authentication environment setting was corrected before the
+  final successful authentication and read-only journal/template smoke checks.
+  Production migration/deployment and parent-PR/required-CI gates remain separate.
+  Ideal Postcodes is recorded in PRODUCT_DECISIONS.md as the later address-lookup
+  choice; no subscription, external integration or patient-data sharing enabled.
 - 2026-09-06 (compact diagnosis and Personal contacts): Diagnosis now uses one
   compact Tooth / Root / Crown / Surface row, retaining keyboard navigation,
   explicit Apply and pending-save locks. Repeated palette headings/instructions

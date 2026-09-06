@@ -14,6 +14,8 @@ from app.routers.me import router as me_router
 from app.routers.notes import router as notes_router, patient_router as patient_notes_router
 from app.routers.notes import appointment_router as appointment_notes_router
 from app.routers.clinical import router as clinical_router, patient_router as patient_clinical_router
+from app.routers.clinical_journal import router as clinical_journal_router
+from app.routers.clinical_note_templates import router as clinical_note_templates_router
 from app.routers.patients import router as patients_router
 from app.routers.reports import router as reports_router
 from app.routers.recalls import router as recalls_router
@@ -101,6 +103,8 @@ app.include_router(patient_notes_router)
 app.include_router(appointment_notes_router)
 app.include_router(patient_clinical_router)
 app.include_router(clinical_router)
+app.include_router(clinical_journal_router)
+app.include_router(clinical_note_templates_router)
 app.include_router(treatments_router)
 app.include_router(estimates_router)
 app.include_router(patient_estimates_router)
