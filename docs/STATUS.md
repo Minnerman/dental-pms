@@ -3,6 +3,33 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-06 (compact planning rows and audited Uncomplete): Outstanding and
+  completed work now uses two-line selectable rows with a single action toolbar
+  beside the totals. Full quote/fee/target details remain available in Details;
+  keyboard selection and pending/stale/uncertain-request protections are retained.
+  P/C markers are 50% larger with fixed planning-only clearance from anatomy,
+  notes and movement markers, without chart jumps. Uncomplete requires a reason,
+  clinical/billing permissions and finance confirmation, restores the exact prior
+  Proposed/Accepted status, retains the original voided procedure/charge and adds
+  a matching negative adjustment (none for zero fees). No payment deletion, refund
+  or automatic diagnosis changes. Re-completion creates a distinct audited cycle.
+  Safe pre-0060 recovery uses existing immutable revisions only; ambiguous or
+  invoice-linked records fail closed. Additive migration 0060 is required.
+  Verification: 107 targeted backend tests, 10 focused planning browser tests and
+  6 focused marker tests passed. Real API complete/uncomplete/re-complete verified
+  ledger totals, one active procedure, retained voided journal/reason and unchanged
+  diagnosis. Empty migration roundtrip and populated rollback refusal passed;
+  typecheck, targeted lint, Python compilation, build and diff checks passed.
+  Light/dark, 1280px/mobile and the refreshed manual preview were inspected.
+  The localhost preview now uses a verified v6 copy on a persistent volume;
+  all original columns across 63 tables matched before/after 0060 and app startup.
+  Original diagnosis/planning API responses matched, including the owner's three
+  proposed and one completed synthetic items. No test mutation of those items.
+  Original v5 remains untouched; durable private archive/hash and handover are
+  outside Git. Do not switch back after new v6 entries without reconciliation.
+  No R4 access, production migration/deployment or merge. Draft stacked PR and
+  protected-master review/CI/deployment gates remain separate; see
+  TREATMENT_PLANNING.md for correction and writable rollback boundaries.
 - 2026-09-06 (first treatment-planning workspace): Planned now explicitly captures
   the current native diagnosis and safe existing local imported projection once,
   preserving the baseline separately from proposed/completed drawings. No R4

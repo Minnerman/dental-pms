@@ -445,8 +445,9 @@ def test_populated_planning_migration_downgrade_refuses_without_data_loss(api_cl
     item = add(api_client, auth_headers, pid, quote)
     result = subprocess.run(["alembic", "downgrade", "0058_clinical_note_revisions"], capture_output=True, text=True)
     assert result.returncode != 0
-    assert "Cannot downgrade: native planning" in result.stderr
+    assert ("Cannot downgrade: native planning" in result.stderr
+            or "Cannot downgrade: treatment completion cycles" in result.stderr)
     with SessionLocal() as db:
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0059_frozen_treatment_planning"
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0060_treatment_completion_reversals"
         assert db.scalar(select(PatientTreatmentPlan).where(PatientTreatmentPlan.patient_id == pid)).snapshot == snapshot
         assert db.get(TreatmentPlanItem, item["id"]).revision == 1

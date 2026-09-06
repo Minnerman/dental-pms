@@ -65,7 +65,10 @@
   height: auto;
   max-width: none;
   aspect-ratio: 100 / 280;
-  margin: 16px 0 8px;
+  /* 55 SVG units clear the 24-unit planning badges plus their stroke.
+     Percentage margins scale with this tooth slot, not the whole chart.
+     Always reserve the row so adding/completing an item cannot shift teeth. */
+  margin: calc(55% + 2px) 0 8px;
 }
 
 .number {

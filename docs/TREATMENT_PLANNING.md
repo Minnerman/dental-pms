@@ -29,6 +29,10 @@ The existing diagnostic bridge geometry remains part of the captured chart.
   reasons. An intentional catalogue zero remains distinct from a waived fee.
 - Proposed work is a distinct overlay; it does not erase baseline anatomy.
   Completed items and outstanding items have separate lists and totals.
+- Both lists use compact, two-line selectable rows. One shared toolbar beside
+  the totals operates on the highlighted item; Details preserves the complete
+  quote, target, fee explanation and revision. Planned/completed P/C markers are
+  50% larger without changing tooth anatomy or shifting the chart on selection.
 - Earlier native items remain separate and manageable through the earlier-item
   view; they are not retrospectively adopted into a copied chart.
 
@@ -42,20 +46,48 @@ create an invoice or mark diagnosis as treated automatically.
 
 Version checks prevent stale edits. Request fingerprints distinguish safe
 retries from reuse with different content, and item revisions retain the saved
-quote/fee/status history. Completed, declined and cancelled items are final.
-Corrections to completed finance continue through the existing audited finance
-workflow, not by silently reopening a completed planning item.
+quote/fee/status history. Completed items cannot be edited through ordinary
+status/fee controls; declined and cancelled items remain final.
+
+### Correcting an accidental completion
+
+Uncomplete is an explicit, permission-checked correction, not deletion. It
+requires clinical and billing write permissions, the current item revision,
+a nonblank reason (maximum 500 characters), finance confirmation and a guarded
+request identifier. The item returns to its exact previous Proposed or Accepted
+status. Its original procedure is marked voided, retained with its original
+text, author and time, and excluded from active completed-treatment projections.
+The journal displays the voided completion and correction reason explicitly.
+
+The original charge is retained. A positive saved fee receives an equal negative
+adjustment; a zero fee creates no ledger entry. Payments and invoices are not
+changed and no refund is sent. If payment was already recorded, the correction
+may leave account credit that requires the normal finance workflow. Re-completing
+the item creates a separate procedure/charge cycle, not a duplicate first charge.
+Completion cycles, reversals, item revisions and audit entries retain the history.
+
+Items completed before migration 0060 can be corrected only when adjacent saved
+item revisions and a unique matching procedure/charge establish the original
+state unambiguously. No historical completion is backfilled during migration.
+Ambiguous or mismatched records, invoice-linked charges and duplicate references
+fail closed and require review instead of a guessed reversal. Earlier unlinked
+items remain outside this correction workflow.
 
 ## Release boundary
 
-Additive migration 0059 is required. Apply and verify only in disposable or
+Migrations 0059 and 0060 are required. Migration 0060 adds completion/reversal
+records and the voided procedure status without rewriting source records.
+Apply and verify only in disposable or
 explicitly authorised environments. A populated planning workspace must not be
-silently dropped by a downgrade. This feature does not authorise production
+silently dropped by a downgrade; 0060 also refuses downgrade when completion
+cycles, reversals or voided procedures exist. This feature does not authorise production
 deployment, a production migration, R4 access or alteration, or any AI service.
 Local preview examples and their fees are synthetic, not the practice price list.
 
 After linked planning items exist, do not offer an older application binary as a
 writable rollback: it lacks the revision-aware endpoint guard for those items.
+Likewise, an application predating 0060 does not understand voided completions
+and must not be used against a database containing these corrections.
 Preserve the database and obtain a compatible fix or a separately reviewed
 recovery path. Likewise, switching a local preview back to its earlier database
 after new entries have been saved would hide those entries and is not a safe

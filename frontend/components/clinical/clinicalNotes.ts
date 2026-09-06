@@ -101,6 +101,17 @@ export function journalDetailLines(item: JournalItem) {
   const lines: string[] = [];
   const text = (key: string, label: string) => { const value = details[key]; if (typeof value === "string" || typeof value === "number") lines.push(`${label}: ${String(value).replaceAll("_", " ")}`); };
   if (["procedure", "treatment_plan"].includes(item.source_kind)) { text("procedure_code", "Code"); text("status", "Status"); }
+  if (item.source_kind === "procedure" && details.status === "voided") {
+    lines.push("This completion was corrected; it is not a currently completed treatment.");
+    const correction = details.completion_correction;
+    if (correction && typeof correction === "object" && !Array.isArray(correction)) {
+      const value = correction as Record<string, unknown>;
+      const actor = value.recorded_by && typeof value.recorded_by === "object" && !Array.isArray(value.recorded_by) ? value.recorded_by as Record<string, unknown> : null;
+      const at = typeof value.recorded_at === "string" && Number.isFinite(Date.parse(value.recorded_at)) ? new Date(value.recorded_at).toLocaleString("en-GB", { timeZone: "Europe/London" }) : "time not recorded";
+      lines.push(`Completion corrected: ${typeof actor?.name === "string" ? actor.name : "author not recorded"} · ${at}`);
+      if (typeof value.reason === "string") lines.push(`Correction reason: ${value.reason}`);
+    }
+  }
   if (item.source_kind === "recall_communication") { lines.push("Manual contact log · delivery not verified"); for (const [key, label] of [["channel", "Channel"], ["direction", "Direction"], ["status", "Logged status"], ["outcome", "Outcome"], ["other_detail", "Detail"]]) text(key, label); }
   if (item.source_kind === "document") lines.push("Generated document · delivery not recorded");
   if (["note", "tooth_note"].includes(item.source_kind)) {

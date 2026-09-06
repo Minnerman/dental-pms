@@ -26,6 +26,7 @@ from app.models.clinical_note import NativeNoteMetadata
 
 class ProcedureStatus(str, enum.Enum):
     completed = "completed"
+    voided = "voided"
 
 
 class TreatmentPlanStatus(str, enum.Enum):

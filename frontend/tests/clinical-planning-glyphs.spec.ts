@@ -23,9 +23,11 @@ function markup(tooth: string, props: Partial<Props>) {
   return renderToStaticMarkup(createElement(Tooth, { toothKey: tooth, toothType: getOdontogramToothType(tooth), ...props }),
     { identifierPrefix: `planning-${sequence++}-` });
 }
-const css = `body{margin:24px;font:14px system-ui;background:#faf8f4;color:#282624}svg.odontogram-tooth-svg{width:100px;height:280px}.clinical-root-halo,.clinical-crown-halo,.clinical-surface-halo{opacity:0}`;
+const chartCss = readFileSync(resolve(__dirname, "../components/clinical/TreatmentPlanningChart.module.css"), "utf8");
+const toothSizing = chartCss.match(/\.tooth > :global\(\.odontogram-tooth-svg\) \{([^}]+)\}/)![1];
+const css = `body{margin:24px;font:14px system-ui;background:#faf8f4;color:#282624}.tooth{display:flow-root;width:100px}.tooth>.odontogram-tooth-svg{${toothSizing}}.clinical-root-halo,.clinical-crown-halo,.clinical-surface-halo{opacity:0}`;
 async function render(page: Page, tooth: string, props: Partial<Props>) {
-  await page.setContent(`<style>${css}</style>${markup(tooth, props)}`);
+  await page.setContent(`<style>${css}</style><div class="tooth">${markup(tooth, props)}</div>`);
   return page.getByTestId(`tooth-svg-${tooth}`);
 }
 const overlay = (kind: OdontogramPlannedOverlay["kind"], props: Partial<OdontogramPlannedOverlay> = {}): OdontogramPlannedOverlay => ({
@@ -109,20 +111,59 @@ test("planned and completed treatments stay distinguishable without completed la
   await expect(page.getByTestId("tooth-planning-overlay-UL6-other").locator("path,polygon,circle")).toHaveCount(0);
 });
 
+test("P and C badges are fifty percent larger, clear of each other and all anatomy markers at either arch", async ({ page }) => {
+  for (const width of [58, 100]) {
+    for (const quadrant of quadrants) {
+      const tooth = `${quadrant}6`;
+      const base: Partial<Props> = { baselineCondition: { movement: "forward", rotation: "clockwise" },
+        hasToothNote: true, rootConditions: {}, crownCondition: null, surfaceObservations: {} };
+      await render(page, tooth, base);
+      await page.addStyleTag({ content: `.tooth{width:${width}px}` });
+      const before = await page.getByTestId(`tooth-svg-${tooth}`).boundingBox();
+      await render(page, tooth, { ...base, plannedOverlays: [overlay("other"), overlay("other", { id: "done", status: "completed" })] });
+      await page.addStyleTag({ content: `.tooth{width:${width}px}` });
+      expect(await page.getByTestId(`tooth-svg-${tooth}`).boundingBox()).toEqual(before);
+      const planned = page.getByTestId(`tooth-planning-count-${tooth}-planned`);
+      const completed = page.getByTestId(`tooth-planning-count-${tooth}-completed`);
+      for (const badge of [planned, completed]) {
+        await expect(badge.locator("rect")).toHaveAttribute("width", "45");
+        await expect(badge.locator("rect")).toHaveAttribute("height", "24");
+        await expect(badge.locator("text")).toHaveAttribute("font-size", "18");
+        await expect(badge).toHaveAttribute("aria-label", /1 (planned|completed) treatment$/);
+      }
+      const p = (await planned.boundingBox())!;
+      const c = (await completed.boundingBox())!;
+      const scale = width / 100;
+      expect(p.x + p.width + 2.1 * scale).toBeLessThan(c.x);
+      const slot = (await page.locator(".tooth").boundingBox())!;
+      expect(p.y - 1.05 * scale).toBeGreaterThanOrEqual(slot.y);
+      expect(p.x - 1.05 * scale).toBeGreaterThanOrEqual(slot.x);
+      expect(c.x + c.width + 1.05 * scale).toBeLessThanOrEqual(slot.x + slot.width);
+      for (const marker of [`tooth-note-flag-${tooth}`, `tooth-position-markers-${tooth}`, `tooth-crown-${tooth}`, `tooth-surface-map-${tooth}`]) {
+        const target = (await page.getByTestId(marker).boundingBox())!;
+        expect(p.y + p.height + 1.05 * scale).toBeLessThan(target.y);
+        expect(c.y + c.height + 1.05 * scale).toBeLessThan(target.y);
+      }
+    }
+  }
+});
+
 test("planning glyph gallery preserves primary, upper and lower anatomy in light and dark themes", async ({ page }, testInfo) => {
   const kinds: OdontogramPlannedOverlay["kind"][] = ["extraction", "implant", "root_canal", "apicectomy", "post_core", "crown", "bridge", "denture", "filling", "inlay_onlay", "veneer", "sealant", "other"];
   const cards = kinds.map((kind, index) => {
     const tooth = `${quadrants[index % 4]}${index % 3 === 0 ? "4" : "6"}`;
-    return `<article><div>${kind.replaceAll("_", " ")}</div>${markup(tooth, {
+    return `<article><div>${kind.replaceAll("_", " ")}</div><div class="tooth">${markup(tooth, {
       baselineCondition: kind === "implant" ? { status: "missing" } : index % 3 === 0 ? { dentition: "deciduous" } : undefined,
       rootConditions: {}, crownCondition: null, surfaceObservations: {},
-      plannedOverlays: [overlay(kind, { surfaces: ["filling", "inlay_onlay", "sealant"].includes(kind) ? ["M", "O", "D"] : [] })],
-    })}</article>`;
+      hasToothNote: true,
+      plannedOverlays: [overlay(kind, { surfaces: ["filling", "inlay_onlay", "sealant"].includes(kind) ? ["M", "O", "D"] : [] }),
+        overlay("other", { id: "completed", status: "completed" })],
+    })}</div></article>`;
   }).join("");
   await page.setViewportSize({ width: 1480, height: 780 });
   for (const theme of ["light", "dark"]) {
-    await page.setContent(`<style>${css}body{--planning-ink:${theme === "dark" ? "#c0adff" : "#493896"};--planning-halo:${theme === "dark" ? "#27212f" : "#faf8ff"};background:${theme === "dark" ? "#171614" : "#faf8f4"};color:${theme === "dark" ? "#faf8f4" : "#282624"}}main{display:grid;grid-template-columns:repeat(7,1fr);gap:12px}article{display:flex;align-items:center;flex-direction:column;border:1px solid #8885;border-radius:8px;padding:12px;gap:12px}</style><main>${cards}</main>`);
+    await page.setContent(`<style>${css}body{--planning-ink:${theme === "dark" ? "#c0adff" : "#493896"};--planning-halo:${theme === "dark" ? "#27212f" : "#faf8ff"};--planning-complete:${theme === "dark" ? "#adb4be" : "#626a74"};background:${theme === "dark" ? "#171614" : "#faf8f4"};color:${theme === "dark" ? "#faf8f4" : "#282624"}}main{display:grid;grid-template-columns:repeat(7,1fr);gap:12px}article{display:flex;align-items:center;flex-direction:column;border:1px solid #8885;border-radius:8px;padding:12px;gap:12px}</style><main>${cards}</main>`);
     await page.screenshot({ path: testInfo.outputPath(`planning-glyphs-${theme}.png`), fullPage: true });
-    await expect(page.locator('[data-testid^="tooth-planning-overlay-"]')).toHaveCount(kinds.length);
+    await expect(page.locator('[data-testid^="tooth-planning-overlay-"]')).toHaveCount(kinds.length * 2);
   }
 });

@@ -9,20 +9,22 @@ from sqlalchemy.orm import lazyload
 
 from app.core.settings import settings
 from app.models.audit_log import AuditLog
-from app.models.clinical import TreatmentPlanItem, TreatmentPlanStatus
+from app.models.clinical import Procedure, ProcedureStatus, TreatmentPlanItem, TreatmentPlanStatus
+from app.models.ledger import LedgerEntryType, PatientLedgerEntry
 from app.models.patient import Patient
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import R4Treatment
 from app.models.treatment import Treatment, TreatmentFee, FeeType
-from app.models.treatment_planning import PatientTreatmentPlan, TreatmentPlanItemRevision, PlanningMutationReceipt
+from app.models.treatment_planning import (PatientTreatmentPlan, TreatmentPlanItemRevision, PlanningMutationReceipt,
+    TreatmentPlanCompletion, TreatmentPlanCompletionReversal)
 from app.models.user import Role
 from app.routers.clinical import PLAN_TRANSITIONS, _tooth_conditions_out, _user_has_capability
 from app.schemas.clinical import TreatmentPlanItemOut, schematic_root_count
 from app.schemas.treatment_planning import PlanningItemOut
 from app.schemas.r4_charting import R4ToothStateOut, R4ToothStateEntryOut, R4ToothStateRestorationOut
 from app.services.audit import log_event
-from app.services.clinical_completion import complete_plan_item
+from app.services.clinical_completion import complete_plan_item, completion_reference
 from app.services.native_notes import request_fingerprint
 from app.services.r4_charting.tooth_state_engine import build_tooth_state_engine_row, project_tooth_state_rows
 
@@ -225,10 +227,13 @@ def validate_snapshot_target(snapshot, target):
             raise HTTPException(422, "The frozen cached chart has no eligible natural tooth area at this target")
 
 
-def save_revision(db, item, user):
+def save_revision(db, item, user, *, correction=None):
     db.flush()
+    snapshot = item_out(item).model_dump(mode="json")
+    if correction is not None:
+        snapshot["completion_correction"] = correction
     db.add(TreatmentPlanItemRevision(item_id=item.id, revision=item.revision,
-        snapshot=item_out(item).model_dump(mode="json"), recorded_by_user_id=user.id))
+        snapshot=snapshot, recorded_by_user_id=user.id))
 
 
 def start(db, patient_id, user, request_id):
@@ -333,7 +338,7 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
     if next_status == TreatmentPlanStatus.completed:
         if amount is None:
             raise HTTPException(422, "Agree or waive the fee before completing treatment")
-        procedure, charge = complete_plan_item(db, item, user)
+        procedure, charge = complete_plan_item(db, item, user, previous_status=previous_status)
         item.completed_procedure_id = procedure.id
     save_revision(db, item, user)
     log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
@@ -345,6 +350,113 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
     if charge is not None:
         log_event(db, actor=user, action="ledger.charge_recorded", entity_type="patient", entity_id=str(patient_id), request_id=request_id,
             after_data={"ledger_entry_id": charge.id, "treatment_plan_item_id": item.id, "amount_pence": amount})
+    receipt(db, user, request_id, action, request, item.id)
+    db.commit()
+    db.refresh(item)
+    return item_out(item)
+
+
+def uncomplete_item(db, patient_id, item_id, payload, user, request_id):
+    """Correct a mistaken completion, never delete care or accounting history."""
+    patient(db, patient_id, lock=True)
+    item = db.scalar(select(TreatmentPlanItem).where(TreatmentPlanItem.id == item_id,
+        TreatmentPlanItem.patient_id == patient_id, TreatmentPlanItem.plan_id.is_not(None)).with_for_update(of=TreatmentPlanItem))
+    if item is None:
+        raise HTTPException(404, "Planning item not found")
+    if not _user_has_capability(db, user.id, "billing.payments.write"):
+        raise HTTPException(403, "Forbidden")
+    action = "clinical.planning.item.uncompleted"
+    request = {"patient_id": patient_id, "item_id": item_id, **payload.model_dump(mode="json")}
+    if replay(db, user, request_id, action, request) is not None:
+        return item_out(item)
+    if item.revision != payload.expected_revision:
+        raise HTTPException(409, "Planning item changed; reload and review before saving")
+    if item.status != TreatmentPlanStatus.completed or item.completed_procedure_id is None:
+        raise HTTPException(409, "Only a completed planning item can be uncompleted")
+
+    def unsafe():
+        raise HTTPException(422, "Completion or account links need review; no records were changed")
+
+    procedure = db.scalar(select(Procedure).where(Procedure.id == item.completed_procedure_id).with_for_update(of=Procedure))
+    if procedure is None or procedure.status != ProcedureStatus.completed or any(
+        getattr(procedure, field) != getattr(item, field)
+        for field in ("patient_id", "appointment_id", "tooth", "surface", "procedure_code", "description", "fee_pence")
+    ) or item.fee_pence is None or item.fee_pence < 0:
+        unsafe()
+    cycle = db.scalar(select(TreatmentPlanCompletion).where(TreatmentPlanCompletion.procedure_id == procedure.id))
+    legacy = cycle is None
+    if legacy:
+        # 0059 items already have immutable full revisions: recover only an exact
+        # adjacent transition, not a guessed status or a historical timestamp.
+        if db.scalar(select(TreatmentPlanCompletion.id).where(TreatmentPlanCompletion.item_id == item.id).limit(1)) is not None:
+            unsafe()
+        versions = {row.revision: row.snapshot for row in db.scalars(select(TreatmentPlanItemRevision).where(
+            TreatmentPlanItemRevision.item_id == item.id,
+            TreatmentPlanItemRevision.revision.in_((item.revision - 1, item.revision))))}
+        before, completed = versions.get(item.revision - 1, {}), versions.get(item.revision, {})
+        if (before.get("status") not in {"proposed", "accepted"} or completed.get("status") != "completed"
+            or completed.get("completed_procedure_id") != procedure.id):
+            unsafe()
+        current = item_out(item).model_dump(mode="json")
+        immutable = ("patient_id", "plan_id", "treatment_id", "tooth", "surface", "procedure_code", "description",
+                     "fee_pence", "target", "drawing_kind", "catalogue_snapshot", "fee_mode", "fee_reason")
+        if any(before.get(field) != current.get(field) or completed.get(field) != current.get(field) for field in immutable):
+            unsafe()
+        cycle = TreatmentPlanCompletion(item_id=item.id, cycle=1, previous_status=before["status"], procedure_id=procedure.id)
+    elif cycle.item_id != item.id or cycle.previous_status not in {"proposed", "accepted"}:
+        unsafe()
+    if not legacy and db.scalar(select(TreatmentPlanCompletionReversal.id).where(
+        TreatmentPlanCompletionReversal.completion_id == cycle.id)) is not None:
+        unsafe()
+    reference = completion_reference(item.id, cycle.cycle)
+    # Check globally, not just this patient: a duplicated/moved reference is
+    # ambiguous. Never guess an invoice/payment allocation from free text.
+    charges = list(db.scalars(select(PatientLedgerEntry).where(PatientLedgerEntry.reference == reference)
+        .with_for_update(of=PatientLedgerEntry)))
+    charge = charges[0] if len(charges) == 1 else None
+    if item.fee_pence:
+        if (charge is None or charge.patient_id != patient_id or charge.entry_type != LedgerEntryType.charge
+            or charge.amount_pence != item.fee_pence or charge.related_invoice_id is not None
+            or (not legacy and cycle.charge_id != charge.id)):
+            unsafe()
+    elif charges or cycle.charge_id is not None:
+        unsafe()
+    reversal_reference = f"TREATMENT-PLAN:{item.id}:C{cycle.cycle}:REVERSAL"
+    if db.scalar(select(PatientLedgerEntry.id).where(PatientLedgerEntry.reference == reversal_reference).limit(1)) is not None:
+        unsafe()
+    if legacy:
+        cycle.charge_id = charge.id if charge is not None else None
+        db.add(cycle)
+        db.flush()
+    adjustment = None
+    if charge is not None:
+        adjustment = PatientLedgerEntry(patient_id=patient_id, entry_type=LedgerEntryType.adjustment,
+            amount_pence=-charge.amount_pence, reference=reversal_reference,
+            note=f"Correction of mistaken completion for treatment plan item {item.id}, cycle {cycle.cycle}; payments unchanged",
+            created_by_user_id=user.id, updated_by_user_id=user.id)
+        db.add(adjustment)
+        db.flush()
+    reversal = TreatmentPlanCompletionReversal(completion_id=cycle.id, reason=payload.reason,
+        adjustment_id=adjustment.id if adjustment is not None else None, recorded_by_user_id=user.id)
+    db.add(reversal)
+    procedure.status = ProcedureStatus.voided
+    previous_revision = item.revision
+    item.status = TreatmentPlanStatus(cycle.previous_status)
+    item.completed_procedure_id = None
+    item.revision += 1
+    item.updated_by_user_id = user.id
+    correction = {"cycle": cycle.cycle, "voided_procedure_id": procedure.id, "reason": payload.reason,
+        "original_charge_id": cycle.charge_id, "adjustment_id": reversal.adjustment_id}
+    save_revision(db, item, user, correction=correction)
+    log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        before_data={"treatment_plan_item_id": item.id, "revision": previous_revision, "status": "completed"},
+        after_data={"treatment_plan_item_id": item.id, "revision": item.revision, "status": item.status.value,
+                    "completion_id": cycle.id, "voided_procedure_id": procedure.id, "reversal_id": reversal.id})
+    log_event(db, actor=user, action="clinical.procedure.voided", entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        after_data={"procedure_id": procedure.id, "treatment_plan_item_id": item.id, "reversal_id": reversal.id})
+    if adjustment is not None:
+        log_event(db, actor=user, action="ledger.adjustment_recorded", entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+            after_data={"ledger_entry_id": adjustment.id, "original_charge_id": charge.id, "amount_pence": adjustment.amount_pence})
     receipt(db, user, request_id, action, request, item.id)
     db.commit()
     db.refresh(item)

@@ -86,6 +86,28 @@ class PlanningItemUpdate(BaseModel):
         return self
 
 
+class PlanningItemUncomplete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: Revision
+    reason: str = Field(min_length=1, max_length=500)
+    confirm_finance: Annotated[bool, Field(strict=True)]
+
+    @field_validator("reason")
+    @classmethod
+    def reason_required(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("A reason is required to correct a completion")
+        return value
+
+    @field_validator("confirm_finance")
+    @classmethod
+    def explicitly_confirmed(cls, value):
+        if value is not True:
+            raise ValueError("Confirm the account adjustment; payments and refunds are unchanged")
+        return value
+
+
 class PlanningItemOut(TreatmentPlanItemOut):
     plan_id: int
     treatment_id: int

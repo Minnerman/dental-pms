@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import require_capabilities
 from app.models.user import User
-from app.schemas.treatment_planning import PlanningStart, PlanningOut, PlanningItemCreate, PlanningItemUpdate, PlanningItemOut
+from app.schemas.treatment_planning import PlanningStart, PlanningOut, PlanningItemCreate, PlanningItemUpdate, PlanningItemUncomplete, PlanningItemOut
 from app.services import treatment_planning as service
 
 router = APIRouter(prefix="/patients/{patient_id}/planning", tags=["clinical"])
@@ -45,3 +45,9 @@ def change_item(patient_id: int, item_id: int, payload: PlanningItemUpdate, db: 
 def history(patient_id: int, item_id: int, limit: int = Query(default=50, ge=1, le=100), before_revision: int | None = Query(default=None, ge=1),
             db: Session = Depends(get_db), _user: User = Depends(VIEW)):
     return service.item_history(db, patient_id, item_id, limit, before_revision)
+
+
+@router.post("/items/{item_id}/uncomplete", response_model=PlanningItemOut)
+def uncomplete(patient_id: int, item_id: int, payload: PlanningItemUncomplete, db: Session = Depends(get_db), user: User = Depends(WRITE),
+               request_id: str = Header(min_length=1, max_length=120)):
+    return service.uncomplete_item(db, patient_id, item_id, payload, user, request_id)

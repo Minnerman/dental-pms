@@ -19,7 +19,8 @@ from app.core.settings import settings
 from app.models.audit_log import AuditLog
 from app.models.appointment import Appointment
 from app.models.capability import Capability, UserCapability
-from app.models.clinical import Procedure, ToothNote, TreatmentPlanItem
+from app.models.clinical import Procedure, ProcedureStatus, ToothNote, TreatmentPlanItem
+from app.models.treatment_planning import TreatmentPlanCompletion, TreatmentPlanCompletionReversal
 from app.models.clinical_note import NativeNoteRevision
 from app.models.note import Note
 from app.models.patient import Patient
@@ -225,16 +226,32 @@ def clinical_journal(db: Session, *, patient_id: int, user: User, limit=50, befo
             (Procedure, "procedure", Procedure.performed_at, "Procedure"),
             (TreatmentPlanItem, "treatment_plan", TreatmentPlanItem.created_at, "Treatment plan item"),
         ):
-            for row, at, key in rows(model, kind, stamp, [model.patient_id == patient_id],
+            source_rows = list(rows(model, kind, stamp, [model.patient_id == patient_id],
                                     model.description, literal("treatment"), tooth_expr=model.tooth,
-                                    extra_search=(model.procedure_code,)):
-                add(row, at, key, kind, "treatment", title, body=row.description, occurred_at=at,
+                                    extra_search=(model.procedure_code,)))
+            corrections = {}
+            if model is Procedure:
+                ids = [row.id for row, _, _ in source_rows if row.status == ProcedureStatus.voided]
+                if ids:
+                    for completion, reversal in db.execute(select(TreatmentPlanCompletion, TreatmentPlanCompletionReversal)
+                        .join(TreatmentPlanCompletionReversal, TreatmentPlanCompletionReversal.completion_id == TreatmentPlanCompletion.id)
+                        .where(TreatmentPlanCompletion.procedure_id.in_(ids))):
+                        corrections[completion.procedure_id] = {"cycle": completion.cycle, "item_id": completion.item_id,
+                            "reason": reversal.reason, "recorded_at": reversal.recorded_at.isoformat(),
+                            "recorded_by": {"id": reversal.recorded_by_user_id, "name": reversal.recorded_by.full_name},
+                            **({"original_charge_id": completion.charge_id, "adjustment_id": reversal.adjustment_id}
+                               if "billing.view" in capabilities else {})}
+            for row, at, key in source_rows:
+                correction = corrections.get(row.id) if model is Procedure else None
+                entry_title = "Voided procedure" if model is Procedure and row.status == ProcedureStatus.voided else title
+                add(row, at, key, kind, "treatment", entry_title, body=row.description, occurred_at=at,
                     date_basis="source" if model is Procedure else "recorded",
                     author=JournalAuthor(user_id=row.created_by_user_id), tooth=row.tooth, surface=row.surface,
                     link=f"/patients/{patient_id}/charting",
                     details={"status": _value(row.status), "procedure_code": row.procedure_code,
                              **({"fee_pence": row.fee_pence} if "billing.view" in capabilities else {}),
-                             "appointment_id": row.appointment_id})
+                             "appointment_id": row.appointment_id,
+                             **({"completion_correction": correction} if correction else {})})
 
         after = cast(AuditLog.after_json, JSONB)
         before_data = cast(AuditLog.before_json, JSONB)

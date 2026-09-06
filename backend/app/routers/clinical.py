@@ -782,7 +782,7 @@ def get_clinical_summary(
     procedures = list(
         db.scalars(
             select(Procedure)
-            .where(Procedure.patient_id == patient_id)
+            .where(Procedure.patient_id == patient_id, Procedure.status == ProcedureStatus.completed)
             .order_by(Procedure.performed_at.desc())
             .limit(limit)
         )
@@ -891,7 +891,7 @@ def get_tooth_history(
     procedures = list(
         db.scalars(
             select(Procedure)
-            .where(Procedure.patient_id == patient_id, Procedure.tooth == tooth)
+            .where(Procedure.patient_id == patient_id, Procedure.tooth == tooth, Procedure.status == ProcedureStatus.completed)
             .order_by(Procedure.performed_at.desc())
         )
     )

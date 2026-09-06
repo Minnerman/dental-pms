@@ -1301,11 +1301,16 @@ function OdontogramToothSvgImpl({
             </g>}
           </g>;
         })}
-        {[{ status: "planned", count: plannedCount, x: 43, symbol: "P" }, { status: "completed", count: completedCount, x: 80, symbol: "C" }].filter((item) => item.count > 0).map((item) => <g key={item.status}
-          data-testid={`tooth-planning-count-${toothKey}-${item.status}`} transform={`translate(${item.x} ${isUpperArch ? 177 : 103})`}>
-          <rect x="-15" y="-8" width="30" height="16" rx="5" fill="var(--planning-halo, #faf8ff)"
-            stroke={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"} strokeWidth="1.4" />
-          <text x="0" y="4" textAnchor="middle" fontSize="12" fontWeight="700"
+        {/* Planning-only space is reserved by TreatmentPlanningChart even when
+            there are no items. Keep enlarged badges clear of notes and anatomy. */}
+        {[{ status: "planned", count: plannedCount, x: 25, symbol: "P" }, { status: "completed", count: completedCount, x: 75, symbol: "C" }].filter((item) => item.count > 0).map((item) => <g key={item.status}
+          data-testid={`tooth-planning-count-${toothKey}-${item.status}`} transform={`translate(${item.x} -41)`}
+          aria-label={`${item.count} ${item.status} treatment${item.count === 1 ? "" : "s"}`}>
+          <title>{`${item.count} ${item.status} treatment${item.count === 1 ? "" : "s"}`}</title>
+          <rect x="-22.5" y="-12" width="45" height="24" rx="7.5" fill="var(--planning-halo, #faf8ff)"
+            stroke={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"} strokeWidth="2.1" />
+          <text x="0" y="6" textAnchor="middle" fontSize="18" fontWeight="700"
+            textLength={item.count > 99 ? 36 : undefined} lengthAdjust={item.count > 99 ? "spacingAndGlyphs" : undefined}
             fill={item.status === "planned" ? "var(--planning-ink, #493896)" : "var(--planning-complete, #626a74)"}>{item.symbol}{item.count > 1 ? item.count : ""}</text>
         </g>)}
       </g>}
