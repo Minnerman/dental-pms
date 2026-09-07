@@ -51,7 +51,7 @@ async function mock(page: Page, request: APIRequestContext, started = true): Pro
     const item = state.plan!.items.find((value) => value.id === Number(url.pathname.split("/").pop()))!;
     if (write.body.expected_revision !== item.revision) { await route.fulfill({ status: 409, json: { detail: "Synthetic revision conflict" } }); return; }
     if (write.body.status) item.status = write.body.status as PlanningItem["status"];
-    if (write.body.fee_mode) { item.fee_mode = write.body.fee_mode as PlanningItem["fee_mode"]; item.fee_pence = item.fee_mode === "catalogue" ? item.catalogue_snapshot.fee.amount_pence : Number(write.body.fee_pence); item.fee_reason = write.body.fee_reason as string | null; }
+    if (write.body.fee_mode) { item.fee_mode = write.body.fee_mode as PlanningItem["fee_mode"]; item.fee_pence = item.fee_mode === "catalogue" && item.catalogue_snapshot.source !== "custom" ? item.catalogue_snapshot.fee.amount_pence : Number(write.body.fee_pence); item.fee_reason = write.body.fee_reason as string | null; }
     item.revision += 1; await route.fulfill({ json: item });
   });
   return result;
@@ -76,7 +76,7 @@ async function editFee(page: Page, id: number) { await selectItem(page, id); awa
 async function showDetails(page: Page, id: number) { await selectItem(page, id); await page.getByTestId("planning-action-details").click(); await expect(page.getByTestId("planning-item-details")).toBeVisible(); return page.getByTestId("planning-item-details"); }
 async function noPageOverflow(page: Page) { await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1); }
 
-test("planning starts once with a frozen baseline and four independently selectable levels", async ({ page, request }) => {
+test("planning starts once with a frozen baseline and five independently selectable categories", async ({ page, request }) => {
   const harness = await mock(page, request, false); await open(page, harness.id);
   await expect(page.getByTestId("planning-not-started")).toBeVisible(); expect(harness.writes).toHaveLength(0);
   await page.getByTestId("planning-start").click(); await expect(page.getByTestId("treatment-planning-chart")).toBeVisible();
@@ -84,8 +84,12 @@ test("planning starts once with a frozen baseline and four independently selecta
   const chart = page.getByTestId("treatment-planning-chart");
   await expect(chart).toHaveAttribute("data-snapshot-captured-at", "2026-09-01T09:30:00Z");
   await expect(chart.getByTestId("tooth-svg-UR4")).toHaveAttribute("data-baseline-status", "missing");
-  for (const level of ["tooth", "root", "crown", "surface"]) { await page.getByTestId(`planning-level-${level}`).click(); await expect(page.getByTestId(`planning-level-${level}`)).toHaveAttribute("aria-selected", "true"); }
+  await expect(page.getByRole("tablist", { name: "Planning level", exact: true }).getByRole("tab")).toHaveCount(5);
+  await expect(page.getByTestId("treatment-planning-panel").getByText("Planning:", { exact: true })).toHaveCount(0);
+  for (const level of ["tooth", "root", "crown", "surface", "general"]) { await page.getByTestId(`planning-level-${level}`).click(); await expect(page.getByTestId(`planning-level-${level}`)).toHaveAttribute("aria-selected", "true"); }
   await page.getByTestId("planning-level-surface").focus(); await page.keyboard.press("Home"); await expect(page.getByTestId("planning-level-tooth")).toBeFocused();
+  await page.keyboard.press("End"); await expect(page.getByTestId("planning-level-general")).toBeFocused(); await expect(page.getByTestId("planning-miscellaneous")).toBeVisible();
+  await page.keyboard.press("Home"); await expect(page.getByTestId("planning-level-tooth")).toBeFocused();
   await page.reload({ waitUntil: "domcontentloaded" }); await expect(chart).toBeVisible({ timeout: 30_000 }); expect(harness.writes).toHaveLength(1);
   await expect(page.getByTestId("clinical-diagnosis-palette")).toHaveCount(0);
   await expect(page.getByTestId("planning-start")).toHaveCount(0);
@@ -121,7 +125,9 @@ test("range agreed fee override waiver and genuine catalogue zero remain explici
   await page.getByTestId("planning-fee-amount").fill("150"); await save(page, 100);
   await editFee(page, 100); await page.getByTestId("planning-fee-mode").selectOption("override"); await page.getByTestId("planning-fee-amount").fill("220");
   await expect(page.getByTestId("planning-save")).toBeDisabled(); await page.getByTestId("planning-fee-reason").fill("Synthetic additional complexity agreed"); await save(page, 100);
-  expect(harness.state.plan!.items[0].catalogue_snapshot.fee).toEqual(harness.catalogue.items[1].fee); expect(harness.state.plan!.items[0].fee_pence).toBe(22000);
+  const savedQuote = harness.state.plan!.items[0].catalogue_snapshot;
+  if (savedQuote.source === "custom") throw new Error("Catalogue item unexpectedly lost its saved quote");
+  expect(savedQuote.fee).toEqual(harness.catalogue.items[1].fee); expect(harness.state.plan!.items[0].fee_pence).toBe(22000);
   await editFee(page, 100); await page.getByTestId("planning-fee-mode").selectOption("waived"); await page.getByTestId("planning-fee-reason").fill(""); await expect(page.getByTestId("planning-save")).toBeDisabled();
   await page.getByTestId("planning-fee-reason").fill("Synthetic waiver authorised"); await save(page, 100); await expect(await showDetails(page, 100)).toContainText("Waived fee"); await page.getByRole("button", { name: "Close treatment details", exact: true }).click();
   await choose(page, 3); await page.getByTestId("planning-fee-amount").fill("10"); await expect(page.getByTestId("planning-save")).toBeDisabled(); await page.getByTestId("planning-fee-reason").fill("Synthetic agreed fee with no price list entry"); await save(page, 101);

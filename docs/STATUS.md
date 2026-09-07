@@ -3,6 +3,25 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (Miscellaneous treatment planning): Removed the visible Planning:
+  prefix and added a fifth, keyboard-accessible Miscellaneous tab with a compact
+  patient-specific description/fee form. Explicit custom provenance, nullable
+  catalogue linkage and general/other targeting preserve the catalogue and chart;
+  no description-to-anatomy inference or fabricated catalogue fee. Positive agreed
+  fees and explicit reasoned waivers use the existing audited revisions,
+  completion/Uncomplete/ledger path. Descriptions stay preserved after creation.
+  Native progress/retry dialogs prevent accidental navigation while saving;
+  unknown requests retain their token even after a rejected retry, and failed
+  review permits a warned exit with cleared draft and readiness lock retained.
+  Verification: 132 targeted backend tests and 10 distinct browser cases passed
+  (one test-only wording assertion corrected/rerun), plus typecheck, scoped lint,
+  compilation, production build, diff checks and independent review. Real custom
+  lifecycle verified no proposal/edit charge, exact completion/reversal amounts,
+  preserved history/diagnosis; light/dark/mobile layout inspected. Local preview
+  API/frontend refreshed against the unchanged persistent v6 database; old/new
+  planning/clinical-summary/diagnosis reads matched. No migration, manual clinical
+  writes, R4 access, production deployment or merge. Once custom items exist, use
+  this compatible API/frontend pair, not an older binary lacking custom support.
 - 2026-09-07 (single clinical navigation row): Removed the duplicate clinical
   Chart / Treatment plan / Notes subtab row. Current · Diagnosis, Planned and
   History now share one compact row with Refresh, retaining URL/view persistence,

@@ -164,8 +164,20 @@ def catalogue(db, patient_id, q, limit, offset):
 
 
 def resolved_fee(quote, mode, amount, reason):
-    fee = quote["fee"]
     reason = (reason or "").strip() or None
+    if quote.get("source") == "custom":
+        # There is no catalogue/range/standard price to override. The stored
+        # snapshot explicitly identifies a dentist-entered general treatment.
+        if mode == "waived":
+            if amount not in (None, 0) or not reason:
+                raise HTTPException(422, "A waived fee must be zero and have a reason")
+            return 0, reason
+        if mode != "agreed":
+            raise HTTPException(422, "Miscellaneous treatment needs an agreed fee or explicit waiver")
+        if amount is None or not 0 < amount <= 100_000_000:
+            raise HTTPException(422, "Enter a positive agreed fee, or explicitly waive it with a reason")
+        return amount, reason
+    fee = quote["fee"]
     if mode == "catalogue":
         if fee["type"] != "FIXED" or fee["amount_pence"] is None:
             raise HTTPException(422, "This catalogue fee needs an explicitly agreed amount or waiver")
@@ -291,6 +303,35 @@ def create_item(db, patient_id, payload, user, request_id):
     save_revision(db, item, user)
     log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
         after_data={"plan_id": plan.id, "treatment_plan_item_id": item.id, "revision": 1, "treatment_id": treatment.id, "fee_pence": amount, "fee_mode": payload.fee_mode})
+    receipt(db, user, request_id, action, request, item.id)
+    db.commit()
+    db.refresh(item)
+    return item_out(item)
+
+
+def create_custom_item(db, patient_id, payload, user, request_id):
+    patient(db, patient_id, lock=True)
+    action, request = "clinical.planning.custom_item.created", {"patient_id": patient_id, **payload.model_dump(mode="json")}
+    repeated = replay(db, user, request_id, action, request)
+    if repeated is not None:
+        return item_out(db.get(TreatmentPlanItem, repeated))
+    plan = db.scalar(select(PatientTreatmentPlan).where(PatientTreatmentPlan.patient_id == patient_id))
+    if plan is None:
+        raise HTTPException(409, "Start the planning workspace first")
+    provenance = {"source": "custom"}
+    amount, reason = resolved_fee(provenance, payload.fee_mode, payload.fee_pence, payload.fee_reason)
+    item = TreatmentPlanItem(patient_id=patient_id, plan_id=plan.id, treatment_id=None,
+        tooth=None, surface=None, procedure_code="MISCELLANEOUS", description=payload.description,
+        fee_pence=amount, status=TreatmentPlanStatus.proposed, revision=1,
+        planning_details={"target": {"level": "general", "tooth": None, "surfaces": []},
+            "drawing_kind": "other", "catalogue_snapshot": provenance,
+            "fee_mode": payload.fee_mode, "fee_reason": reason},
+        created_by_user_id=user.id, updated_by_user_id=user.id)
+    db.add(item)
+    save_revision(db, item, user)
+    log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
+        after_data={"plan_id": plan.id, "treatment_plan_item_id": item.id, "revision": 1,
+            "source": "custom", "fee_pence": amount, "fee_mode": payload.fee_mode})
     receipt(db, user, request_id, action, request, item.id)
     db.commit()
     db.refresh(item)

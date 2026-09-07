@@ -22,7 +22,7 @@ export type PlanningSnapshot = {
   coverage: { native: "captured"; legacy: "captured" | "unavailable" | "partial"; legacy_reason: string | null };
 };
 export type EarlierPlanningItem = { id: number; patient_id: number; tooth: string | null; surface: string | null; procedure_code: string; description: string; fee_pence: number | null; status: PlanningStatus; created_at: string; updated_at: string };
-export type PlanningItem = EarlierPlanningItem & { plan_id: number; treatment_id: number; revision: number; target: PlanningTarget; drawing_kind: PlanningDrawingKind; catalogue_snapshot: { fee: PlanningFee; name?: string; code?: string | null; patient_category?: string }; fee_mode: PlanningFeeMode; fee_reason: string | null; completed_procedure_id: number | null };
+export type PlanningItem = EarlierPlanningItem & { plan_id: number; treatment_id: number | null; revision: number; target: PlanningTarget; drawing_kind: PlanningDrawingKind; catalogue_snapshot: { source?: "catalogue"; fee: PlanningFee; name?: string; code?: string | null; patient_category?: string } | { source: "custom" }; fee_mode: PlanningFeeMode; fee_reason: string | null; completed_procedure_id: number | null };
 export type PlanningPlan = { id: number; created_at: string; created_by: unknown; snapshot: PlanningSnapshot; items: PlanningItem[] };
 export type PlanningResponse = { patient_id: number; plan: PlanningPlan | null; earlier_items: EarlierPlanningItem[]; earlier_items_total: number };
 export const planningDrawingChoices: { value: PlanningDrawingKind; label: string; levels: PlanningTarget["level"][] }[] = [
@@ -75,4 +75,12 @@ export function planningFeeError(fee: PlanningFee, mode: PlanningFeeMode, amount
   if (fee.type === "RANGE" && (fee.min_amount_pence == null || fee.max_amount_pence == null || pence < fee.min_amount_pence || pence > fee.max_amount_pence)) return "This amount is outside the quoted range. Choose Override fee and record a reason.";
   if (fee.type !== "RANGE" && !reason.trim()) return "Enter a reason for the agreed fee where no catalogue price is available.";
   return null;
+}
+
+export function planningCustomFeeError(mode: PlanningFeeMode, amount: string, reason: string) {
+  if (mode === "waived") return reason.trim() ? null : "Enter the reason for waiving this fee.";
+  if (mode !== "agreed") return "Enter an agreed fee or explicitly waive it.";
+  const pence = planningPence(amount);
+  if (pence === null) return "Enter a valid fee in pounds with no more than two decimal places.";
+  return pence === 0 ? "Select Waive fee and record a reason for a zero charge." : null;
 }

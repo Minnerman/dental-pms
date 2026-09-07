@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import require_capabilities
 from app.models.user import User
-from app.schemas.treatment_planning import PlanningStart, PlanningOut, PlanningItemCreate, PlanningItemUpdate, PlanningItemUncomplete, PlanningItemOut
+from app.schemas.treatment_planning import PlanningStart, PlanningOut, PlanningItemCreate, PlanningCustomItemCreate, PlanningItemUpdate, PlanningItemUncomplete, PlanningItemOut
 from app.services import treatment_planning as service
 
 router = APIRouter(prefix="/patients/{patient_id}/planning", tags=["clinical"])
@@ -39,6 +39,12 @@ def add_item(patient_id: int, payload: PlanningItemCreate, db: Session = Depends
 def change_item(patient_id: int, item_id: int, payload: PlanningItemUpdate, db: Session = Depends(get_db), user: User = Depends(WRITE),
                 request_id: str = Header(min_length=1, max_length=120)):
     return service.update_item(db, patient_id, item_id, payload, user, request_id)
+
+
+@router.post("/custom-items", response_model=PlanningItemOut, status_code=201)
+def add_custom_item(patient_id: int, payload: PlanningCustomItemCreate, db: Session = Depends(get_db), user: User = Depends(WRITE),
+                    request_id: str = Header(min_length=1, max_length=120)):
+    return service.create_custom_item(db, patient_id, payload, user, request_id)
 
 
 @router.get("/items/{item_id}/history")

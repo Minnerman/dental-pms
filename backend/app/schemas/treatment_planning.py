@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.clinical import TreatmentPlanStatus
 from app.schemas.actor import ActorOut
-from app.schemas.clinical import MAX_FEE_PENCE, SurfaceKey, SurfaceTarget, TreatmentPlanItemOut, _tooth
+from app.schemas.clinical import MAX_CLINICAL_TEXT_LENGTH, MAX_FEE_PENCE, SurfaceKey, SurfaceTarget, TreatmentPlanItemOut, _required_text, _tooth
 
 Level = Literal["tooth", "root", "crown", "surface", "general"]
 DrawingKind = Literal["extraction", "implant", "root_canal", "apicectomy", "post_core", "crown", "bridge", "denture", "filling", "inlay_onlay", "veneer", "sealant", "other"]
@@ -63,6 +63,16 @@ class PlanningItemCreate(BaseModel):
         return self
 
 
+class PlanningCustomItemCreate(BaseModel):
+    """A native general treatment, not a fabricated catalogue selection."""
+    model_config = ConfigDict(extra="forbid")
+    description: str = Field(min_length=1, max_length=MAX_CLINICAL_TEXT_LENGTH)
+    fee_pence: Pence
+    fee_mode: Literal["agreed", "waived"]
+    fee_reason: str | None = Field(default=None, max_length=500)
+    _normalize_description = field_validator("description")(_required_text)
+
+
 class PlanningItemUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: Revision
@@ -110,7 +120,7 @@ class PlanningItemUncomplete(BaseModel):
 
 class PlanningItemOut(TreatmentPlanItemOut):
     plan_id: int
-    treatment_id: int
+    treatment_id: int | None
     revision: int
     target: PlanningTarget
     drawing_kind: DrawingKind

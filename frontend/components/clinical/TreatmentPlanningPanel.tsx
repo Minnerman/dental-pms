@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import TreatmentPlanningChart from "./TreatmentPlanningChart";
 import { surfaceKeysForTooth, surfaceName, type SurfaceKey } from "./surfaceDiagnosis";
-import { planningDrawingChoices, planningFeeError, planningFeeLabel, planningLevels, planningMoney, planningPence, planningRequestId, planningTargetLabel, planningToothLabel, type EarlierPlanningItem, type PlanningCatalogue, type PlanningCatalogueItem, type PlanningDrawingKind, type PlanningFee, type PlanningFeeMode, type PlanningItem, type PlanningLevel, type PlanningResponse, type PlanningSelection, type PlanningStatus, type PlanningTarget } from "./treatmentPlanning";
+import { planningCustomFeeError, planningDrawingChoices, planningFeeError, planningFeeLabel, planningLevels, planningMoney, planningPence, planningRequestId, planningTargetLabel, planningToothLabel, type EarlierPlanningItem, type PlanningCatalogue, type PlanningCatalogueItem, type PlanningDrawingKind, type PlanningFee, type PlanningFeeMode, type PlanningItem, type PlanningResponse, type PlanningSelection, type PlanningStatus, type PlanningTarget } from "./treatmentPlanning";
 import styles from "./TreatmentPlanningPanel.module.css";
 
 type Props = { patientId: string; canWriteClinical: boolean; canWriteBilling: boolean; onChanged: () => void | Promise<void>; onOpenEarlierItems?: () => void; onOpenToothNotes?: (tooth: string, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void };
@@ -14,6 +14,7 @@ const teeth = ["UR", "UL", "LR", "LL"].flatMap((quadrant) => Array.from({ length
 const blankDraft = (): Draft => ({ target: { level: "general", tooth: null, surfaces: [] }, treatment: null, drawing: "other", mode: "catalogue", amount: "", reason: "", editing: null });
 const statusNames: Record<PlanningStatus, string> = { proposed: "Proposed", accepted: "Accepted", declined: "Declined", completed: "Completed", cancelled: "Cancelled" };
 const feeModes: Record<PlanningFeeMode, string> = { catalogue: "Catalogue fee", agreed: "Agreed fee", override: "Override fee", waived: "Waived fee" };
+const planningTabs: { value: PlanningTarget["level"]; label: string }[] = [...planningLevels, { value: "general", label: "Miscellaneous" }];
 
 export default function TreatmentPlanningPanel({ patientId, canWriteClinical, canWriteBilling, onChanged, onOpenEarlierItems, onOpenToothNotes }: Props) {
   const router = useRouter();
@@ -24,7 +25,11 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uncertain, setUncertain] = useState(false);
-  const [level, setLevel] = useState<PlanningLevel>("tooth");
+  const [level, setLevel] = useState<PlanningTarget["level"]>("tooth");
+  const [customDescription, setCustomDescription] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
+  const [customWaived, setCustomWaived] = useState(false);
+  const [customReason, setCustomReason] = useState("");
   const [selection, setSelection] = useState<PlanningSelection | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -38,6 +43,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
+  const customProgressDialog = useRef<HTMLDialogElement>(null);
   const detailsDialog = useRef<HTMLDialogElement>(null);
   const uncompleteDialog = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
@@ -76,6 +82,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     return false;
   }, [base, patientId, unauthorised]);
   useEffect(() => { setData(null); void load(); }, [load]);
+  useEffect(() => { setCustomDescription(""); setCustomAmount(""); setCustomWaived(false); setCustomReason(""); }, [patientId]);
 
   const pickerOpen = Boolean(draft && !draft.editing);
   const loadCatalogue = useCallback(async () => {
@@ -105,7 +112,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     if (uncompleteItem && uncompleteDialog.current && !uncompleteDialog.current.open) { uncompleteDialog.current.showModal(); uncompleteDialog.current.querySelector<HTMLTextAreaElement>("textarea")?.focus(); }
     if (!uncompleteItem && uncompleteDialog.current?.open) uncompleteDialog.current.close();
   }, [uncompleteItem]);
-  useEffect(() => { if (saving) { if (dialog.current?.open) dialog.current.focus(); if (uncompleteDialog.current?.open) uncompleteDialog.current.focus(); } }, [saving]);
+  useEffect(() => { if (saving) { if (dialog.current?.open) dialog.current.focus(); if (uncompleteDialog.current?.open) uncompleteDialog.current.focus(); if (customProgressDialog.current?.open) customProgressDialog.current.focus(); } }, [saving]);
 
   const close = () => {
     if (busy.current) return;
@@ -134,7 +141,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
       const response = await apiFetch(path, { method, headers: { "Request-Id": request.id }, body: JSON.stringify(payload) });
       if (response.status === 401) { unauthorised(); return false; }
       if (!response.ok) {
-        request.uncertain = response.status >= 500; setUncertain(request.uncertain);
+        request.uncertain = request.uncertain || response.status >= 500; setUncertain(request.uncertain);
         if (!request.uncertain) attempt.current = null;
         const message = response.status === 409 ? path.endsWith("/uncomplete") ? "This completion could not be reversed safely. Close this dialog, refresh the plan and review its clinical and financial record before trying again." : "This plan or catalogue quote changed. Close this draft, refresh, and review the latest saved details before trying again."
           : response.status === 403 ? "You do not have permission to make this change."
@@ -157,11 +164,37 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     } finally { busy.current = false; if (alive.current && owner.current === patientId) setSaving(false); }
   };
 
-  const draftFee: PlanningFee | null = draft?.editing?.catalogue_snapshot.fee ?? draft?.treatment?.fee ?? null;
-  const feeError = draft && draftFee ? planningFeeError(draftFee, draft.mode, draft.amount, draft.reason) : null;
+  const customEditing = draft?.editing?.catalogue_snapshot.source === "custom";
+  const draftFee: PlanningFee | null = draft?.editing ? draft.editing.catalogue_snapshot.source === "custom" ? null : draft.editing.catalogue_snapshot.fee : draft?.treatment?.fee ?? null;
+  const feeError = draft ? customEditing ? planningCustomFeeError(draft.mode, draft.amount, draft.reason) : draftFee ? planningFeeError(draftFee, draft.mode, draft.amount, draft.reason) : null : null;
+  const customFeeError = planningCustomFeeError(customWaived ? "waived" : "agreed", customAmount, customReason);
+  const customError = !customDescription.trim() ? "Enter a treatment description." : customDescription.trim().length > 2000 ? "Keep the description to 2,000 characters." : customFeeError;
+  const clearCustom = () => { setCustomDescription(""); setCustomAmount(""); setCustomWaived(false); setCustomReason(""); };
+  const closeCustomProgress = () => {
+    customProgressDialog.current?.close();
+    requestAnimationFrame(() => { if (opener.current?.isConnected) (opener.current as HTMLElement).focus?.({ preventScroll: true }); });
+  };
+  const saveCustom = async () => {
+    if (customError || !plan || busy.current || !ready || !canWriteClinical) return;
+    if (!customProgressDialog.current?.open) { opener.current = document.activeElement; customProgressDialog.current?.showModal(); customProgressDialog.current?.focus(); }
+    const saved = await mutate(`${base}/custom-items`, "POST", { description: customDescription.trim(), fee_pence: customWaived ? 0 : planningPence(customAmount), fee_mode: customWaived ? "waived" : "agreed", fee_reason: customWaived ? customReason.trim() : null }, "Miscellaneous treatment added to the plan. No charge has been created.");
+    if (!alive.current || owner.current !== patientId) return;
+    if (saved) clearCustom();
+    if (!attempt.current?.uncertain) closeCustomProgress();
+  };
+  const reviewCustomResult = async () => {
+    if (busy.current || loading || !window.confirm("This treatment may already have been added. Refresh the saved plan and discard this unsent draft? Check the outstanding list before adding it again.")) return;
+    if (await load()) { attempt.current = null; setUncertain(false); setError(null); clearCustom(); setNotice("Plan refreshed. Check the outstanding list before adding this treatment again."); closeCustomProgress(); }
+  };
+  const abandonCustomAfterLoadFailure = () => {
+    if (!loadError || loading || busy.current || !window.confirm("The save result is still unknown and the plan could not be refreshed. Close and discard this draft without retrying? You must reload and check the saved plan before adding this treatment again.")) return;
+    attempt.current = null; setUncertain(false); clearCustom();
+    setError("The previous save result remains unconfirmed. Reload and check the saved plan before adding that treatment again.");
+    closeCustomProgress();
+  };
   const targetError = draft && draft.target.level !== "general" && !draft.target.tooth ? "Select a tooth." : draft?.target.level === "surface" && !draft.target.surfaces.length ? "Select at least one surface." : null;
   const saveDraft = () => {
-    if (!draft || !draftFee || feeError || targetError || !draft.drawing || (!draft.editing && !draft.treatment)) return;
+    if (!draft || (!draftFee && !customEditing) || feeError || targetError || !draft.drawing || (!draft.editing && !draft.treatment)) return;
     const fee = { fee_mode: draft.mode, ...(draft.mode === "catalogue" ? {} : { fee_pence: draft.mode === "waived" ? 0 : planningPence(draft.amount) }), fee_reason: draft.mode === "catalogue" ? null : draft.reason.trim() || null };
     if (draft.editing) void mutate(`${base}/items/${draft.editing.id}`, "PATCH", { expected_revision: draft.editing.revision, ...fee }, "Treatment fee updated. No charge has been created.");
     else void mutate(`${base}/items`, "POST", { treatment_id: draft.treatment!.id, quote_token: draft.treatment!.quote_token, target: draft.target, drawing_kind: draft.drawing, ...fee }, "Treatment added to the plan. No charge has been created.");
@@ -212,9 +245,22 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     {ready && !canWriteClinical && <p className={styles.muted} data-testid="planning-read-only">Read-only treatment plan. Clinical write permission is required to make changes.</p>}
     {ready && !plan && <div className={styles.empty} data-testid="planning-not-started"><p>Start a treatment plan to capture the current chart once. Later diagnosis changes will not replace this saved baseline. Planning does not create a charge.</p><button type="button" className="btn" data-testid="planning-start" disabled={!writable} onClick={() => void mutate(`${base}/start`, "POST", {}, "Treatment plan started. The current chart baseline has been captured.")}>{saving ? "Starting…" : "Start treatment plan"}</button></div>}
     {plan && <>
-      <div className={styles.tabs} role="tablist" aria-label="Planning level"><strong>Planning:</strong>{planningLevels.map((entry, index) => <button key={entry.value} type="button" role="tab" id={`planning-tab-${entry.value}`} aria-controls="planning-chart-panel" aria-selected={level === entry.value} tabIndex={level === entry.value ? 0 : -1} data-testid={`planning-level-${entry.value}`} disabled={saving || uncertain} onClick={() => { setLevel(entry.value); setSelection(null); }} onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? 3 : (index + (event.key === "ArrowRight" ? 1 : 3)) % 4; setLevel(planningLevels[next].value); setSelection(null); document.getElementById(`planning-tab-${planningLevels[next].value}`)?.focus(); }}>{entry.label}</button>)}</div>
-      <div id="planning-chart-panel" className={styles.chartPanel} role="tabpanel" aria-labelledby={`planning-tab-${level}`}><TreatmentPlanningChart snapshot={plan.snapshot} items={items} level={level} selection={selection} disabled={!writable} onSelect={onSelect} onOpenToothNotes={onOpenToothNotes} /></div>
-      {plan.snapshot.coverage.legacy !== "captured" && <details className={styles.muted} data-testid="planning-coverage"><summary>Baseline source coverage</summary>Native current observations captured. Imported chart coverage: {plan.snapshot.coverage.legacy}.{plan.snapshot.coverage.legacy_reason ? ` ${plan.snapshot.coverage.legacy_reason}` : " No missing findings have been inferred."}</details>}
+      <div className={styles.tabs} role="tablist" aria-label="Planning level">{planningTabs.map((entry, index) => <button key={entry.value} type="button" role="tab" id={`planning-tab-${entry.value}`} aria-controls="planning-chart-panel" aria-selected={level === entry.value} tabIndex={level === entry.value ? 0 : -1} data-testid={`planning-level-${entry.value}`} disabled={saving || uncertain} onClick={() => { setLevel(entry.value); setSelection(null); }} onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? planningTabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : planningTabs.length - 1)) % planningTabs.length; setLevel(planningTabs[next].value); setSelection(null); document.getElementById(`planning-tab-${planningTabs[next].value}`)?.focus(); }}>{entry.label}</button>)}</div>
+      <div id="planning-chart-panel" className={styles.chartPanel} role="tabpanel" aria-labelledby={`planning-tab-${level}`}>
+        {level === "general" ? <form className={styles.miscellaneous} data-testid="planning-miscellaneous" onSubmit={(event) => { event.preventDefault(); void saveCustom(); }}>
+          <div className={styles.header}><h3>Miscellaneous treatment</h3><small>Patient-specific · not added to the practice price list</small></div>
+          <fieldset disabled={!ready || !canWriteClinical || saving || uncertain}>
+            <div className={styles.customGrid}>
+              <label>Treatment description<textarea data-testid="planning-custom-description" maxLength={2000} rows={2} value={customDescription} onChange={(event) => setCustomDescription(event.target.value)} placeholder="e.g. bite splint, removable or fixed retainer, sedation, examination and cleaning" /></label>
+              <label>Fee (£)<input data-testid="planning-custom-fee-amount" inputMode="decimal" value={customWaived ? "0.00" : customAmount} disabled={customWaived} onChange={(event) => setCustomAmount(event.target.value)} placeholder="Enter the agreed fee" /></label>
+            </div>
+            <label className={styles.waiver}><input type="checkbox" data-testid="planning-custom-waived" checked={customWaived} onChange={(event) => setCustomWaived(event.target.checked)} />Waive fee · £0.00</label>
+            {customWaived && <label>Reason for waiving the fee<textarea data-testid="planning-custom-fee-reason" maxLength={500} rows={2} value={customReason} onChange={(event) => setCustomReason(event.target.value)} /></label>}
+          </fieldset>
+          <div className={styles.header}><small className={styles.muted} data-testid="planning-custom-validation">{customError || "Adding to the plan does not charge the patient."}</small><button type="submit" className="btn" data-testid="planning-custom-save" disabled={!ready || !canWriteClinical || saving || Boolean(customError)}>{saving ? "Saving…" : uncertain ? "Retry unchanged save" : "Add to plan"}</button></div>
+        </form> : <TreatmentPlanningChart snapshot={plan.snapshot} items={items} level={level} selection={selection} disabled={!writable} onSelect={onSelect} onOpenToothNotes={onOpenToothNotes} />}
+      </div>
+      {level !== "general" && plan.snapshot.coverage.legacy !== "captured" && <details className={styles.muted} data-testid="planning-coverage"><summary>Baseline source coverage</summary>Native current observations captured. Imported chart coverage: {plan.snapshot.coverage.legacy}.{plan.snapshot.coverage.legacy_reason ? ` ${plan.snapshot.coverage.legacy_reason}` : " No missing findings have been inferred."}</details>}
       <div className={styles.summary} data-testid="planning-summary">
         <div className={styles.totals}><div><small>Outstanding · {outstanding.length} items</small><strong data-testid="planning-total-outstanding">{total(outstanding)}</strong>{outstanding.some((item) => item.fee_pence == null) && <small>Plus {outstanding.filter((item) => item.fee_pence == null).length} unpriced items</small>}</div><div><small>Completed · {completed.length} items</small><strong data-testid="planning-total-completed">{total(completed)}</strong></div></div>
         <div className={styles.actionBar}>
@@ -235,6 +281,12 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     </>}
     {ready && Boolean(data?.earlier_items_total) && <details data-testid="planning-earlier-items"><summary>Earlier treatment plan items · {data!.earlier_items_total}</summary><p className={styles.muted}>These items pre-date this planning workspace. They are kept separately and have not been given an inferred baseline or drawing.</p>{data!.earlier_items.map((item) => <div className={styles.earlierItem} key={item.id}><span>{item.tooth ?? "General"} · {item.description} · {statusNames[item.status]}</span><span>{planningMoney(item.fee_pence)}</span></div>)}{data!.earlier_items_total > data!.earlier_items.length && <p>Showing the latest {data!.earlier_items.length} items. Open earlier plan items for the full list.</p>}{onOpenEarlierItems && <button type="button" className="btn btn-secondary" disabled={saving} onClick={onOpenEarlierItems}>Open earlier plan items</button>}</details>}
 
+    <dialog ref={customProgressDialog} className={styles.dialog} data-testid="planning-custom-progress" aria-label="Saving miscellaneous treatment" tabIndex={-1} onCancel={(event) => { event.preventDefault(); if (!busy.current && uncertain) void reviewCustomResult(); }} onKeyDown={(event) => { if (saving && event.key === "Tab") { event.preventDefault(); customProgressDialog.current?.focus(); } }}>
+      <div className={styles.detailBody}>
+        <h3>{uncertain && !saving ? "Check the save result" : "Saving miscellaneous treatment…"}</h3>
+        {saving ? <p role="status">Please wait while the treatment is saved.</p> : uncertain ? <><p role="alert">{error}</p>{loadError && <p className={styles.error}>{loadError}</p>}<p>The description and fee are kept unchanged. Retry safely, or refresh and review the saved plan before adding anything again.</p><div className={styles.actions}>{loadError && <button type="button" className="btn btn-secondary" data-testid="planning-custom-abandon" disabled={loading} onClick={abandonCustomAfterLoadFailure}>Close without retrying</button>}<button type="button" className="btn btn-secondary" data-testid="planning-custom-review" disabled={loading} onClick={() => void reviewCustomResult()}>Refresh and review plan</button><button type="button" className="btn" data-testid="planning-custom-retry" disabled={!ready || !canWriteClinical} onClick={() => void saveCustom()}>Retry unchanged save</button></div></> : <p role="status">Checking the saved plan…</p>}
+      </div>
+    </dialog>
     <dialog ref={dialog} className={styles.dialog} data-testid="planning-treatment-dialog" aria-label={draft?.editing ? "Edit treatment fee" : "Add treatment to plan"} onCancel={(event) => { event.preventDefault(); close(); }} onKeyDown={(event) => { if (saving && event.key === "Tab") { event.preventDefault(); dialog.current?.focus(); } }} tabIndex={-1}>
       {draft && <form onSubmit={(event) => { event.preventDefault(); saveDraft(); }}><header className={styles.header}><h3>{draft.editing ? "Edit treatment fee" : "Add treatment"}</h3><button type="button" className="btn btn-secondary" aria-label="Close treatment editor" disabled={saving} onClick={close}>Close</button></header>
         {error && <p role="alert" className={styles.error} data-testid="planning-error">{error}</p>}
@@ -250,6 +302,14 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
             <label>Chart drawing<select data-testid="planning-drawing-kind" value={draft.drawing} onChange={(event) => setDraft({ ...draft, drawing: event.target.value as PlanningDrawingKind })}><option value="">Choose the treatment drawing explicitly</option>{planningDrawingChoices.filter((choice) => choice.levels.includes(draft.target.level)).map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select><small className={styles.muted}>The drawing is selected by you, not inferred from the treatment name.</small></label>
           </>}
           {draft.editing && <p>{draft.editing.description} · {planningTargetLabel(draft.target, plan?.snapshot)}</p>}
+          {customEditing && <>
+            <p className={styles.muted}>Patient-specific treatment. There is no catalogue quote or practice price-list change.</p>
+            <div className={styles.formGrid}><label>Fee choice<select data-testid="planning-fee-mode" value={draft.mode} onChange={(event) => setDraft({ ...draft, mode: event.target.value as PlanningFeeMode })}><option value="agreed">Agreed fee</option><option value="waived">Waive fee · £0.00</option></select></label>
+              {draft.mode === "agreed" && <label>Fee (£)<input data-testid="planning-fee-amount" inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} /></label>}
+            </div>
+            <label>Fee reason {draft.mode === "waived" ? "(required)" : "(optional)"}<textarea data-testid="planning-fee-reason" maxLength={500} value={draft.reason} onChange={(event) => setDraft({ ...draft, reason: event.target.value })} /></label>
+            {feeError && <p className={styles.muted} data-testid="planning-validation">{feeError}</p>}
+          </>}
           {draftFee && <><div className={styles.quote} data-testid="planning-fee-quote">Saved catalogue quote: <strong>{planningFeeLabel(draftFee)}</strong>{draftFee.notes && <><br />{draftFee.notes}</>}</div>
             <div className={styles.formGrid}><label>Fee choice<select data-testid="planning-fee-mode" value={draft.mode} onChange={(event) => setDraft({ ...draft, mode: event.target.value as PlanningFeeMode })}><option value="catalogue" disabled={draftFee.type !== "FIXED"}>Use catalogue fee</option><option value="agreed" disabled={draftFee.type === "FIXED"}>Agreed fee</option><option value="override">Override fee</option><option value="waived">Waive fee · £0.00</option></select></label>
               {(draft.mode === "agreed" || draft.mode === "override") && <label>Fee (£)<input data-testid="planning-fee-amount" inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="Explicit agreed amount" /></label>}
@@ -260,11 +320,11 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
           </>}
         </fieldset>
         <p className={styles.muted}>Adding or changing a plan item does not charge the patient. Complete the saved treatment to record the procedure and its saved fee in finance.</p>
-        <div className={styles.actions}><button type="button" className="btn btn-secondary" data-testid="planning-cancel" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="btn" data-testid="planning-save" disabled={saving || !canWriteClinical || !ready || Boolean(feeError || targetError) || !draftFee || !draft.drawing || (!draft.editing && (!draft.treatment || catalogueLoading || Boolean(catalogueError)))}>{saving ? "Saving…" : uncertain ? "Retry unchanged save" : draft.editing ? "Save fee" : "Add to plan"}</button></div>
+        <div className={styles.actions}><button type="button" className="btn btn-secondary" data-testid="planning-cancel" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="btn" data-testid="planning-save" disabled={saving || !canWriteClinical || !ready || Boolean(feeError || targetError) || (!draftFee && !customEditing) || !draft.drawing || (!draft.editing && (!draft.treatment || catalogueLoading || Boolean(catalogueError)))}>{saving ? "Saving…" : uncertain ? "Retry unchanged save" : draft.editing ? "Save fee" : "Add to plan"}</button></div>
       </form>}
     </dialog>
     <dialog ref={detailsDialog} className={styles.dialog} data-testid="planning-item-details" aria-label="Treatment details" onCancel={(event) => { event.preventDefault(); closeDetails(); }}>
-      {detailsItem && <div className={styles.detailBody}><header className={styles.header}><h3>Treatment details</h3><button type="button" className="btn btn-secondary" onClick={closeDetails}>Close treatment details</button></header><h4>{detailsItem.description}</h4><p>{planningTargetLabel(detailsItem.target, plan?.snapshot)} · {detailsItem.procedure_code} · {statusNames[detailsItem.status]}</p><p><strong>{planningMoney(detailsItem.fee_pence)}</strong> · {feeModes[detailsItem.fee_mode]}</p>{detailsItem.fee_reason && <p className={styles.fullText}>{detailsItem.fee_reason}</p>}<p>Saved catalogue quote: {planningFeeLabel(detailsItem.catalogue_snapshot.fee)} · {detailsItem.catalogue_snapshot.patient_category ?? "Category not recorded"}</p>{detailsItem.catalogue_snapshot.fee.notes && <p className={styles.fullText}>{detailsItem.catalogue_snapshot.fee.notes}</p>}<p>Drawing: {planningDrawingChoices.find((choice) => choice.value === detailsItem.drawing_kind)?.label ?? "Not recorded"}. Revision {detailsItem.revision}.</p></div>}
+      {detailsItem && <div className={styles.detailBody}><header className={styles.header}><h3>Treatment details</h3><button type="button" className="btn btn-secondary" onClick={closeDetails}>Close treatment details</button></header><h4>{detailsItem.description}</h4><p>{planningTargetLabel(detailsItem.target, plan?.snapshot)} · {detailsItem.procedure_code} · {statusNames[detailsItem.status]}</p><p><strong>{planningMoney(detailsItem.fee_pence)}</strong> · {feeModes[detailsItem.fee_mode]}</p>{detailsItem.fee_reason && <p className={styles.fullText}>{detailsItem.fee_reason}</p>}{detailsItem.catalogue_snapshot.source === "custom" ? <p>Miscellaneous treatment entered for this patient. No catalogue quote.</p> : <><p>Saved catalogue quote: {planningFeeLabel(detailsItem.catalogue_snapshot.fee)} · {detailsItem.catalogue_snapshot.patient_category ?? "Category not recorded"}</p>{detailsItem.catalogue_snapshot.fee.notes && <p className={styles.fullText}>{detailsItem.catalogue_snapshot.fee.notes}</p>}</>}<p>Drawing: {planningDrawingChoices.find((choice) => choice.value === detailsItem.drawing_kind)?.label ?? "Not recorded"}. Revision {detailsItem.revision}.</p></div>}
     </dialog>
     <dialog ref={uncompleteDialog} className={styles.dialog} data-testid="planning-uncomplete-dialog" aria-label="Uncomplete treatment" tabIndex={-1} onCancel={(event) => { event.preventDefault(); close(); }} onKeyDown={(event) => { if (saving && event.key === "Tab") { event.preventDefault(); uncompleteDialog.current?.focus(); } }}>
       {uncompleteItem && <form onSubmit={(event) => { event.preventDefault(); saveUncomplete(); }}><h3>Uncomplete treatment</h3><p><strong>{uncompleteItem.description}</strong> · {planningTargetLabel(uncompleteItem.target, plan?.snapshot)}</p><p>This returns the treatment to outstanding and marks the original completion as voided, keeping its history.</p><p>{uncompleteItem.fee_pence ? `A ${planningMoney(uncompleteItem.fee_pence)} credit adjustment will reverse this completion's charge.` : "The saved fee is zero, so there is no charge to reverse."} Payments remain unchanged. No refund is issued.</p>{error && <p role="alert" className={styles.error} data-testid="planning-error">{error}</p>}<label>Reason for correction<textarea data-testid="planning-uncomplete-reason" maxLength={500} value={uncompleteReason} disabled={saving || uncertain} onChange={(event) => setUncompleteReason(event.target.value)} /></label><div className={styles.actions}><button type="button" className="btn btn-secondary" data-testid="planning-uncomplete-cancel" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="btn" data-testid="planning-uncomplete-confirm" disabled={saving || !ready || !canWriteClinical || !canWriteBilling || !uncompleteReason.trim()}>{saving ? "Reversing…" : uncertain ? "Retry unchanged reversal" : "Confirm uncomplete"}</button></div></form>}

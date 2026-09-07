@@ -20,11 +20,18 @@ The existing diagnostic bridge geometry remains part of the captured chart.
   with Refresh alongside. Notes remain in the resizable sidebar and main patient
   Notes tab; no duplicate clinical Notes or Treatment plan subtabs are needed.
 - Four compact levels target a tooth, its whole root area, its crown or selected
-  surfaces. General examination, hygiene and visit items use Add treatment.
+  surfaces. A fifth Miscellaneous tab records a patient-specific description
+  (up to 2,000 characters) and explicit agreed fee, for example splints, retainers,
+  examinations or visits. Zero requires an explicit waiver with a reason.
+  Catalogue-based general treatments remain available through Add treatment.
+- Miscellaneous items retain custom provenance and have no catalogue ID/quote.
+  They do not create practice price-list entries, infer tooth targets or change
+  the captured chart. They share the same lists, fee edits and audited lifecycle.
+  Saved descriptions are preserved, not retrospectively rewritten.
 - A clinical read-only picker uses the same active treatment/fee catalogue as
   Practice Treatments. Catalogue administration remains restricted as before.
-- The selected catalogue identity, name/code, patient category and price basis
-  are saved with each item. Price-list changes do not reprice existing items.
+- For catalogue items, the selected identity, name/code, patient category and
+  price basis are saved. Price-list changes do not reprice existing items.
 - The drawing kind is selected explicitly. Free-text names and codes are not
   interpreted as clinical anatomy.
 - Fixed fees can use the catalogue amount. Ranges require an agreed amount;
@@ -86,6 +93,13 @@ silently dropped by a downgrade; 0060 also refuses downgrade when completion
 cycles, reversals or voided procedures exist. This feature does not authorise production
 deployment, a production migration, R4 access or alteration, or any AI service.
 Local preview examples and their fees are synthetic, not the practice price list.
+
+Miscellaneous uses the existing schema (no additional migration). Once custom
+items exist, retain a compatible API/frontend that understands nullable catalogue
+linkage and custom provenance; older planning binaries cannot safely read or edit
+those records. Unknown save results must be retried with the same request token or
+explicitly reviewed before entering the treatment again. In-page progress dialogs
+protect the current request, not forced browser reload or closing the browser.
 
 After linked planning items exist, do not offer an older application binary as a
 writable rollback: it lacks the revision-aware endpoint guard for those items.
