@@ -2,7 +2,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from uuid import uuid4
-import subprocess
 
 import pytest
 from sqlalchemy import func, select, text
@@ -243,13 +242,19 @@ def test_legacy_missing_adjacent_history_is_not_guessed(api_client, auth_headers
         assert db.get(Procedure, item["completed_procedure_id"]).status == ProcedureStatus.completed
 
 
-def test_populated_correction_migration_refuses_downgrade(api_client, auth_headers):
+def test_populated_correction_migration_refuses_downgrade(api_client, auth_headers, monkeypatch):
     pid, item, _ = completed_case(api_client, auth_headers)
     assert undo(api_client, auth_headers, pid, item).status_code == 200
-    result = subprocess.run(["alembic", "downgrade", "0059_frozen_treatment_planning"], capture_output=True, text=True)
-    assert result.returncode != 0 and any(message in result.stderr for message in (
-        "Cannot downgrade: treatment completion cycles", "Cannot downgrade: effective treatment fee history",
-        "Cannot downgrade: explicit treatment index metadata"))
+    # Directly test the correction guard, without attempting to remove newer schemas.
+    from importlib.util import module_from_spec, spec_from_file_location
+    from pathlib import Path
+    spec = spec_from_file_location("completion_correction_migration", Path(__file__).resolve().parents[2] / "alembic/versions/0060_treatment_completion_reversals.py")
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
     with SessionLocal() as db:
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0061_treatment_index_effective_fees"
+        original_revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        monkeypatch.setattr(migration.op, "get_bind", lambda: db.connection())
+        with pytest.raises(RuntimeError, match="Cannot downgrade: treatment completion cycles"):
+            migration.downgrade()
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == original_revision
         assert db.get(Procedure, item["completed_procedure_id"]).status == ProcedureStatus.voided

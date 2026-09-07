@@ -12,9 +12,9 @@ from pydantic import ValidationError
 from sqlalchemy import func, select, text
 
 from app.models.audit_log import AuditLog
-from app.models.clinical import Procedure, ProcedureStatus, TreatmentPlanItem, TreatmentPlanStatus
+from app.models.clinical import Procedure, ProcedureStatus, ToothCondition, TreatmentPlanItem, TreatmentPlanStatus
 from app.schemas.clinical import NATIVE_SURFACE_ORDER, schematic_root_count
-from app.schemas.treatment_planning import DrawingKind, LEVEL_KINDS, PlanningTarget, allowed_planning_materials
+from app.schemas.treatment_planning import DrawingKind, LEVEL_KINDS, PlanningTarget, PlanningAppliance, allowed_planning_materials, validate_appliance_target
 
 OBSERVATION_ACTIONS = (
     "clinical.tooth_conditions.recorded", "clinical.root_conditions.recorded", "clinical.crown_conditions.recorded",
@@ -46,6 +46,9 @@ def observation_events(db, patient_id, earliest_event):
         OR coalesce(before->'crown_observation','null'::jsonb) IS DISTINCT FROM coalesce(after->'crown_observation','null'::jsonb)
         OR coalesce(before->'bridge_group_id','null'::jsonb) IS DISTINCT FROM coalesce(after->'bridge_group_id','null'::jsonb)
         OR coalesce(before->'bridge_role','null'::jsonb) IS DISTINCT FROM coalesce(after->'bridge_role','null'::jsonb)),0) AS crown""")
+    fields.append("""coalesce(max(id) FILTER (WHERE action IN ('clinical.bridge.created','clinical.bridge.reset')
+        OR coalesce(before->'bridge_group_id','null'::jsonb) IS DISTINCT FROM coalesce(after->'bridge_group_id','null'::jsonb)
+        OR coalesce(before->'bridge_role','null'::jsonb) IS DISTINCT FROM coalesce(after->'bridge_role','null'::jsonb)),0) AS appliance""")
     for output, key in (("root_condition", "condition"), ("apicectomy", "apicectomy")):
         fields.append(f"""coalesce(max(id) FILTER (WHERE {dentition_clear} OR (action='clinical.root_conditions.recorded' AND request ? '{key}') OR
             (action<>'clinical.root_conditions.recorded' AND
@@ -101,6 +104,8 @@ def projection_context(db, patient_id):
         try:
             target = PlanningTarget.model_validate(details.get("target"))
             kind, material = details.get("drawing_kind"), details.get("material")
+            appliance = PlanningAppliance.model_validate(details["appliance"]) if details.get("appliance") else None
+            validate_appliance_target(target, kind, appliance)
             if (kind not in get_args(DrawingKind) or kind not in LEVEL_KINDS[target.level]
                     or material is not None and material not in allowed_planning_materials(kind, target.level)):
                 raise ValueError("Unknown effect metadata")
@@ -116,6 +121,8 @@ def projection_context(db, patient_id):
         result["completed_effects"].append({"item_id": item.id, "procedure_id": procedure.id,
             "completed_at": procedure.performed_at, "event_id": audits[procedure.id][0][0],
             "target": target.model_dump(), "drawing_kind": kind, "material": material})
+        if appliance:
+            result["completed_effects"][-1]["appliance"] = appliance.model_dump(mode="json")
     result["completed_effects"].sort(key=lambda effect: effect["event_id"])
     if result["completed_effects"]:
         result["observation_events"] = observation_events(db, patient_id, result["completed_effects"][0]["event_id"])
@@ -141,9 +148,19 @@ def effective_tooth(row, tooth, context):
         bridge_group_id=getattr(row, "bridge_group_id", None), bridge_role=getattr(row, "bridge_role", None))
     events = context["observation_events"].get(tooth, {})
     for effect in context["completed_effects"]:
-        if effect["target"]["tooth"] != tooth or events.get("anatomy", 0) > effect["event_id"]:
+        appliance = effect.get("appliance")
+        member = next((member for member in appliance["members"] if member["tooth"] == tooth), None) if appliance else None
+        if (member is None and effect["target"]["tooth"] != tooth) or events.get("anatomy", 0) > effect["event_id"]:
             continue
         eid, kind = effect["event_id"], effect["drawing_kind"]
+        if member is not None:
+            if events.get("appliance", 0) <= eid:
+                # A planning appliance is not a persisted native bridge group.
+                # Its role is only an effective clinical eligibility overlay.
+                state.bridge_role = member["role"] if kind == "bridge" else None
+                if member["role"] != "wing" and events.get("crown", 0) <= eid:
+                    state.crown_observation = {"kind": effect["material"] or ("denture_unknown" if kind == "denture" else "crown_unknown"), "issues": []}
+            continue
         if kind in {"extraction", "implant"}:
             state.condition = "missing" if kind == "extraction" else "implant"
             for field in (("dentition", "movement", "rotation") if kind == "implant" else ("movement", "rotation")):
@@ -173,3 +190,33 @@ def effective_tooth(row, tooth, context):
                     state.surface_observations[key] = {"kind": "sealant" if kind == "sealant" else "restored",
                         "material": effect["material"], "condition": "sound", "defects": []}
     return state
+
+
+def validate_appliance_completion(db, patient_id, value, snapshot):
+    appliance = PlanningAppliance.model_validate(value)
+    context = check_projection(db, patient_id, None)
+    teeth = [member.tooth for member in appliance.members]
+    rows = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
+        ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(teeth)))}
+    for member in appliance.members:
+        row = effective_tooth(rows.get(member.tooth), member.tooth, context)
+        meaningful_roots = any(root.get("condition") is not None or root.get("apicectomy") for root in row.root_observations.values())
+        meaningful_surfaces = any(surface.get("kind") is not None for surface in row.surface_observations.values())
+        if member.role in {"pontic", "denture"}:
+            if row.condition != "missing" or meaningful_roots or meaningful_surfaces:
+                raise HTTPException(422, f"{member.tooth}: confirm the extraction or record its missing status and review root/surface findings before completing this replacement")
+        elif (row.condition in {"missing", "unerupted", "impacted"} or row.bridge_role == "pontic"
+                or (row.crown_observation or {}).get("kind") in {"denture_acrylic", "denture_cocr", "denture_unknown", "fractured"}
+                or member.role == "wing" and row.condition == "implant"):
+            raise HTTPException(422, f"{member.tooth}: a bridge support must be available; an implant cannot be a wing")
+        elif row.condition is None:
+            quadrant = {"UR": 1, "UL": 2, "LL": 3, "LR": 4}[member.tooth[:2]]
+            legacy = (snapshot.get("legacy") or {}).get("teeth", {}).get(f"{quadrant}{member.tooth[-1]}", {})
+            types = {restoration.get("type") for restoration in legacy.get("restorations", [])}
+            raw = rows.get(member.tooth)
+            root_evidence = bool(raw and raw.root_observations)
+            crown_evidence = bool(raw and raw.crown_observation is not None)
+            known_absent = legacy.get("missing") or legacy.get("extracted") or "extraction" in types or "denture" in types
+            unresolved_implant = "implant" in types and not root_evidence and row.dentition != "deciduous"
+            if (known_absent and not root_evidence and not crown_evidence) or (member.role == "wing" and unresolved_implant):
+                raise HTTPException(422, f"{member.tooth}: review and explicitly record the current support status before completing; the captured chart contains conflicting absence or implant information")

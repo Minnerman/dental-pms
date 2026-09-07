@@ -3,7 +3,6 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from uuid import uuid4
-import subprocess
 from threading import Event
 
 import pytest
@@ -439,17 +438,21 @@ def test_final_non_completed_states_cannot_be_completed_or_repriced(api_client, 
     assert counts(pid) == (0, 0, 0, 0)
 
 
-def test_populated_planning_migration_downgrade_refuses_without_data_loss(api_client, auth_headers):
+def test_populated_planning_migration_downgrade_refuses_without_data_loss(api_client, auth_headers, monkeypatch):
     pid, quote = setup_case(api_client, auth_headers)
     snapshot = start(api_client, auth_headers, pid)["plan"]["snapshot"]
     item = add(api_client, auth_headers, pid, quote)
-    result = subprocess.run(["alembic", "downgrade", "0058_clinical_note_revisions"], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert ("Cannot downgrade: native planning" in result.stderr
-            or "Cannot downgrade: treatment completion cycles" in result.stderr
-            or "Cannot downgrade: effective treatment fee history" in result.stderr
-            or "Cannot downgrade: explicit treatment index metadata" in result.stderr)
+    # Exercise this migration's guard without removing later additive schemas.
+    from importlib.util import module_from_spec, spec_from_file_location
+    from pathlib import Path
+    spec = spec_from_file_location("planning_snapshot_migration", Path(__file__).resolve().parents[2] / "alembic/versions/0059_frozen_treatment_planning.py")
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
     with SessionLocal() as db:
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0061_treatment_index_effective_fees"
+        original_revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        monkeypatch.setattr(migration.op, "get_bind", lambda: db.connection())
+        with pytest.raises(RuntimeError, match="Cannot downgrade: native planning"):
+            migration.downgrade()
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == original_revision
         assert db.scalar(select(PatientTreatmentPlan).where(PatientTreatmentPlan.patient_id == pid)).snapshot == snapshot
         assert db.get(TreatmentPlanItem, item["id"]).revision == 1

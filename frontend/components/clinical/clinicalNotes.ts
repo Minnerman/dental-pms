@@ -100,7 +100,20 @@ export function journalDetailLines(item: JournalItem) {
   const details = item.details ?? {};
   const lines: string[] = [];
   const text = (key: string, label: string) => { const value = details[key]; if (typeof value === "string" || typeof value === "number") lines.push(`${label}: ${String(value).replaceAll("_", " ")}`); };
-  if (["procedure", "treatment_plan"].includes(item.source_kind)) { text("procedure_code", "Code"); text("status", "Status"); }
+  if (["procedure", "treatment_plan"].includes(item.source_kind)) {
+    text("procedure_code", "Code"); text("status", "Status");
+    const raw = details.appliance;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const appliance = raw as Record<string, unknown>;
+      if ((appliance.kind === "bridge" || appliance.kind === "denture") && Array.isArray(appliance.members)) {
+        const members = appliance.members.filter((member): member is { tooth: string; role: string } =>
+          Boolean(member && typeof member === "object" && typeof member.tooth === "string" && /^(UR|UL|LR|LL)[1-8]$/.test(member.tooth) && ["abutment", "pontic", "wing", "denture"].includes(member.role)));
+        lines.push(members.length === appliance.members.length && members.length > 0
+          ? `${appliance.kind === "bridge" ? "Bridge" : "Denture"}: ${members.map((member) => `${member.tooth} (${member.role})`).join(" · ")}`
+          : "Appliance member details unavailable — review the original treatment record.");
+      }
+    }
+  }
   if (item.source_kind === "procedure" && details.status === "voided") {
     lines.push("This completion was corrected; it is not a currently completed treatment.");
     const correction = details.completion_correction;

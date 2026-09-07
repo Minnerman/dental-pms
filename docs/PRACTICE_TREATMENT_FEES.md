@@ -12,10 +12,10 @@ It searches all five levels by default; **Selected level only** is an optional
 filter. Uncategorised demo/legacy entries are not offered for new selection, but
 existing saved items retain their captured identity, fee and editing/history path.
 Unpriced practice treatments are still offered and require an agreed fee or
-explicit waiver. Choosing another category does not silently move the clinical
-target: **Use Tooth level** (or its equivalent) explicitly changes the level,
-retains the selected tooth where applicable and clears incompatible surfaces and
-drawing selection. The dentist still chooses the drawing and any missing target.
+explicit waiver. Choosing a classified treatment fills its level and explicit
+practice drawing/material defaults, retains the selected tooth where applicable
+and clears incompatible surfaces. The compact review remains editable before
+Add. Missing settings stay a manual choice; names are never parsed into anatomy.
 
 ## Routine list and day-to-day use
 
@@ -53,7 +53,14 @@ not converted to zero. An explicit fixed zero is retained as £0.00.
   effective date remains an undated baseline; the application does not invent
   historical dates.
 - Treatment Details edits name, level, practice code, description, ordering,
-  duration, active state and the existing Denplan inclusion default.
+  duration, active state and the existing Denplan inclusion default. Its Quick
+  planning settings save an explicit default drawing and optional usual material.
+  Changing those settings requires the current defaults revision, rejects stale
+  writes and never alters saved patient items. Ordinary name/fee edits do not
+  overwrite defaults. Changing category clears incompatible drawing/material in
+  the form; the server independently validates the combination. Stable owned
+  routine identities provide suggestions for review when no default is saved,
+  without writing/backfilling catalogue or historical records.
 
 Every level also offers **Other treatment** during patient planning, with an
 explicit target, description and agreed fee or reasoned waiver. These one-off
@@ -82,6 +89,13 @@ fee rows are retained as the original baseline and new fee versions are appended
 with provenance. The legacy fee-list API remains compatible, resolving today's
 prices; its replacement write appends today's differences rather than deleting
 history or future schedules. The new dated editor is the preferred writer.
+
+Migration `0062_treatment_planning_defaults` adds nullable explicit planning
+settings and a revision counter. The bridge-unit fee is multiplied by the
+confirmed number of units in a linked bridge; a denture fee covers the entire
+appliance once. See [Treatment planning](TREATMENT_PLANNING.md) for member-aware
+completion, undo and price snapshots. Nonempty defaults/history or grouped
+appliance data prevent an unsafe downgrade to older application behavior.
 
 Do not use older application writers after date-effective data is entered.
 Restoring an older database would discard newer clinical and fee records. A

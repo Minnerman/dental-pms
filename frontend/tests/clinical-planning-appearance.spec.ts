@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JsxEmit, ModuleKind, ScriptTarget, transpileModule } from "typescript";
-import { projectCompletedPlanningTooth, projectCurrentCompletedTooth, type CompletedPlanningEffect } from "../components/clinical/planningAppearance";
-import type { PlanningItem, PlanningNativeRow } from "../components/clinical/treatmentPlanning";
+import { planningApplianceConnections, projectCompletedPlanningTooth, projectCurrentCompletedTooth, type CompletedPlanningEffect } from "../components/clinical/planningAppearance";
+import { planningApplianceError, planningItemTargetLabel, planningTargetTeeth, type PlanningAppliance, type PlanningItem, type PlanningNativeRow } from "../components/clinical/treatmentPlanning";
 import { getToothAnatomy } from "../components/clinical/toothAnatomy";
 import { surfaceMaterials } from "../components/clinical/surfaceDiagnosis";
 
@@ -25,7 +25,92 @@ const item = (id: number, kind: PlanningItem["drawing_kind"], patch: Partial<Pla
 });
 const effect = (entry: PlanningItem, eventId = entry.completed_procedure_id!): CompletedPlanningEffect => ({
   item_id: entry.id, procedure_id: entry.completed_procedure_id!, completed_at: "2026-02-01T12:00:00Z",
-  event_id: eventId, target: entry.target, drawing_kind: entry.drawing_kind, material: entry.material,
+  event_id: eventId, target: entry.target, drawing_kind: entry.drawing_kind, material: entry.material, appliance: entry.appliance,
+});
+
+const appliance: PlanningAppliance = { kind: "bridge", arch: "upper", members: [
+  { tooth: "UL6", role: "abutment" }, { tooth: "UL7", role: "pontic" }, { tooth: "UL8", role: "wing" },
+] };
+const group = (patch: Partial<PlanningItem> = {}) => item(41, "bridge", { target: { level: "crown", tooth: null, surfaces: [] },
+  appliance, material: "porcelain_bonded", ...patch });
+
+test("one appliance projects only explicit members, keeps support roots and never invents a native bridge identity", () => {
+  const entry = group();
+  const originals = { UL6: source(), UL7: { revision: 9, condition: "missing" as const }, UL8: source() };
+  const frozen = JSON.stringify({ originals, entry });
+  const appearances = Object.fromEntries(Object.entries(originals).map(([tooth, base]) =>
+    [tooth, projectCompletedPlanningTooth(tooth, 901, base, undefined, [entry])]));
+  for (const member of appliance.members) {
+    expect(appearances[member.tooth].completionIds).toEqual([410]);
+    expect(appearances[member.tooth].applianceItemId).toBe(41);
+    expect(appearances[member.tooth].row.bridge_role).toBe(member.role);
+    expect(appearances[member.tooth].row.bridge_group_id ?? null).toBeNull();
+  }
+  expect(appearances.UL6.row.root_observations).toEqual(originals.UL6.root_observations);
+  expect(appearances.UL8.row.crown_observation).toEqual(originals.UL8.crown_observation);
+  expect(appearances.UL7.row.condition).toBe("missing");
+  expect(appearances.UL7.row.root_observations).toEqual({});
+  expect(appearances.UL7.row.crown_observation?.kind).toBe("porcelain_bonded");
+  expect(planningApplianceConnections([entry], appearances)).toEqual([expect.objectContaining({ id: "planning-41", planningStatus: "completed", span_start: "UL6", span_end: "UL8" })]);
+  expect(projectCompletedPlanningTooth("UR6", 901, source(), undefined, [entry]).completionIds).toEqual([]);
+  expect(projectCompletedPlanningTooth("UL7", 902, originals.UL7, undefined, [entry]).completionIds).toEqual([]);
+  expect(projectCompletedPlanningTooth("UL7", 901, originals.UL7, undefined, [{ ...entry, status: "accepted", completed_procedure_id: null }]).row.crown_observation).toBeNull();
+  expect(JSON.stringify({ originals, entry })).toBe(frozen);
+});
+
+test("noncontiguous denture members share one completion without filling gaps or changing underlying absence", () => {
+  const entry = group({ drawing_kind: "denture", material: "denture_acrylic", appliance: { kind: "denture", arch: "lower", members: [
+    { tooth: "LR1", role: "denture" }, { tooth: "LL6", role: "denture" },
+  ] } });
+  expect(planningTargetTeeth(entry)).toEqual(["LR1", "LL6"]);
+  for (const tooth of ["LR1", "LL6"]) {
+    const view = projectCurrentCompletedTooth(tooth, 901, { revision: 7, condition: "missing" }, undefined, [effect(entry)]);
+    expect(view.row.condition).toBe("missing");
+    expect(view.row.crown_observation?.kind).toBe("denture_acrylic");
+    expect(view.row.root_observations).toEqual({});
+    expect(view.completionIds).toEqual([410]);
+  }
+  expect(projectCurrentCompletedTooth("LL1", 901, source(), undefined, [effect(entry)]).completionIds).toEqual([]);
+});
+
+test("later member materials remain authoritative without erasing appliance identity, while explicit identity/reset masks connectors", () => {
+  const entry = group();
+  const raw = { ...source(), crown_observation: { kind: "composite" as const, issues: [] } };
+  const views = Object.fromEntries(appliance.members.map(({ tooth }) => [tooth, projectCurrentCompletedTooth(tooth, 901,
+    tooth === "UL7" ? { revision: 5, condition: "missing" } : raw, undefined, [effect(entry, 50)], tooth === "UL6" ? { crown: 60 } : {})]));
+  expect(views.UL6.row.crown_observation).toEqual(raw.crown_observation);
+  expect(views.UL6.applianceItemId).toBe(41);
+  expect(views.UL7.applianceItemId).toBe(41);
+  expect(planningApplianceConnections([entry], views)).toHaveLength(1);
+  const changedPontic = projectCurrentCompletedTooth("UL7", 901, { revision: 8, condition: "missing", crown_observation: raw.crown_observation }, undefined, [effect(entry, 50)], { crown: 60 });
+  expect(changedPontic.row.bridge_role).toBe("pontic");
+  expect(changedPontic.row.crown_observation).toEqual(raw.crown_observation);
+  const nativeIdentity = projectCurrentCompletedTooth("UL6", 901, raw, undefined, [effect(entry, 50)], { appliance: 70 });
+  expect(nativeIdentity.applianceItemId).toBeNull();
+  expect(planningApplianceConnections([entry], { ...views, UL6: nativeIdentity })).toEqual([]);
+  expect(projectCurrentCompletedTooth("UL6", 901, raw, undefined, [], { crown: 60 }).row.crown_observation).toEqual(raw.crown_observation);
+  expect(projectCurrentCompletedTooth("UL7", 901, { revision: 6, condition: "unrecorded" }, undefined, [effect(entry, 50)], { anatomy: 70 }).completionIds).toEqual([]);
+});
+
+test("appliance validation and labels use explicit role and arch, while pending connectors are planning-only", () => {
+  expect(planningApplianceError(appliance)).toBeNull();
+  expect(planningApplianceError({ ...appliance, members: [appliance.members[0], appliance.members[2]] })).toContain("neighbouring");
+  expect(planningApplianceError({ ...appliance, members: [{ tooth: "UL6", role: "abutment" }, { tooth: "LL7", role: "pontic" }] })).toContain("one arch");
+  expect(planningItemTargetLabel(group())).toContain("UL7 (pontic)");
+  const proposed = group({ status: "proposed", completed_procedure_id: null });
+  expect(planningApplianceConnections([proposed], {})).toEqual([expect.objectContaining({ id: "planning-41", planningStatus: "planned" })]);
+  expect(planningApplianceConnections([proposed], {}, false)).toEqual([]);
+});
+
+test("reviewed native support evidence overrides stale dentures, but impacted and unresolved implant wings cannot project", () => {
+  const entry = group();
+  const legacy = { restorations: [{ type: "denture" as const }] };
+  expect(projectCompletedPlanningTooth("UL6", 901, { revision: 0 }, legacy, [entry]).applianceItemId).toBeNull();
+  expect(projectCompletedPlanningTooth("UL6", 901, { revision: 2, condition: "unrecorded" }, legacy, [entry]).applianceItemId).toBe(41);
+  expect(projectCompletedPlanningTooth("UL6", 901, { revision: 2, root_observations: { "1": { condition: null, apicectomy: false } } }, legacy, [entry]).applianceItemId).toBe(41);
+  expect(projectCompletedPlanningTooth("UL6", 901, { revision: 2, condition: "impacted" }, undefined, [entry]).applianceItemId).toBeNull();
+  expect(projectCompletedPlanningTooth("UL8", 901, { revision: 0 }, { restorations: [{ type: "implant" }] }, [entry]).applianceItemId).toBeNull();
+  expect(projectCompletedPlanningTooth("UL6", 901, { revision: 2, condition: "implant" }, undefined, [entry]).applianceItemId).toBe(41);
 });
 
 test("completed appearance folds actual completion order and Uncomplete restores the preceding appearance without changing source", () => {
@@ -167,5 +252,35 @@ test("planned material fills reuse diagnosis colours and extraction cross is blu
     const stroke = await page.getByTestId("tooth-planning-extraction-LL6-3").evaluate((element) => getComputedStyle(element).stroke);
     expect(stroke).toBe(theme === "dark" ? "rgb(85, 220, 194)" : "rgb(0, 141, 145)");
     await page.screenshot({ path: testInfo.outputPath(`completed-material-${theme}.png`), fullPage: true });
+  }
+});
+
+test("grouped appliance glyphs show explicit roles, rootless completed replacements and non-destructive pending artwork", async ({ page }, testInfo) => {
+  for (const upper of [true, false]) {
+    const teeth = [6, 7, 8].map((position) => `${upper ? "UL" : "LL"}${position}`);
+    const entry = group({ appliance: { ...appliance, arch: upper ? "upper" : "lower", members: appliance.members.map((member, index) => ({ ...member, tooth: teeth[index] })) } });
+    const groupMarkup = (completed: boolean) => teeth.map((tooth, index) => {
+      const base: PlanningNativeRow = index === 1 ? { revision: 1, condition: "missing" } : source();
+      const view = projectCompletedPlanningTooth(tooth, 901, base, undefined, completed ? [entry] : []);
+      return `<div class="tooth">${markup(tooth, {
+        baselineCondition: { status: view.row.condition as "present" | "missing" },
+        rootConditions: view.row.root_observations, crownCondition: view.row.crown_observation,
+        surfaceObservations: view.row.surface_observations, bridgeRole: view.row.bridge_role,
+        plannedOverlays: [{ id: 41, kind: "bridge", material: "porcelain_bonded", applianceRole: entry.appliance!.members[index].role,
+          label: "One synthetic appliance", status: completed ? "completed" : "planned", badgeOnly: completed }],
+      })}</div>`;
+    }).join("");
+    for (const theme of ["light", "dark"]) {
+      await page.setContent(`<style>${css}body{background:${theme === "dark" ? "#171614" : "#faf8f4"};color:${theme === "dark" ? "#faf8f4" : "#282624"}}section{display:flex;gap:20px}.clinical-crown-selection{opacity:0}</style><h2>Planned: one appliance</h2><section id="pending">${groupMarkup(false)}</section><h2>Completed: same appliance</h2><section id="completed">${groupMarkup(true)}</section>`);
+      const pending = page.locator("#pending"), completed = page.locator("#completed");
+      await expect(pending.getByTestId(`tooth-planning-overlay-${teeth[1]}-41`)).toHaveAttribute("data-appliance-role", "pontic");
+      await expect(completed.locator(`[data-testid^="tooth-root-${teeth[1]}-"]`)).toHaveCount(0);
+      expect(await completed.locator(`[data-testid^="tooth-root-${teeth[0]}-"]`).count()).toBeGreaterThan(0);
+      await expect(completed.getByTestId(`clinical-bridge-wing-${teeth[2]}`)).toBeAttached();
+      await expect(completed.getByTestId(`tooth-crown-${teeth[1]}`)).toHaveAttribute("fill", "#70483b");
+      await expect(pending.getByTestId(`tooth-planning-wing-${teeth[2]}-41`)).toBeAttached();
+      await expect(completed.getByTestId(`tooth-planning-overlay-${teeth[1]}-41`).locator("path")).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath(`appliance-${upper ? "upper" : "lower"}-${theme}.png`), fullPage: true });
+    }
   }
 });

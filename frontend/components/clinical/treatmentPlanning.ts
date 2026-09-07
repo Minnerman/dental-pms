@@ -2,7 +2,7 @@ import type { SurfaceKey } from "./surfaceDiagnosis";
 import type { DiagnosisPatch } from "./toothDiagnosis";
 import { britishToothLabel } from "./toothDiagnosis";
 import type { RootObservation } from "./rootDiagnosis";
-import { crownKinds, dentureKinds, isMaterialCrown, type CrownKind, type CrownObservation, type BridgeGroup, type BridgeRole } from "./crownDiagnosis";
+import { bridgeArchTeeth, crownKinds, dentureKinds, isMaterialCrown, type CrownKind, type CrownObservation, type BridgeGroup, type BridgeRole } from "./crownDiagnosis";
 import { surfaceMaterials, type SurfaceMaterial, type SurfaceObservation } from "./surfaceDiagnosis";
 
 export type PlanningLevel = "tooth" | "root" | "crown" | "surface";
@@ -10,10 +10,14 @@ export type PlanningSelection = { level: PlanningLevel; tooth: string; surfaces:
 export type PlanningTarget = { level: PlanningLevel | "general"; tooth: string | null; surfaces: SurfaceKey[] };
 export type PlanningDrawingKind = "extraction" | "implant" | "root_canal" | "apicectomy" | "post_core" | "crown" | "bridge" | "denture" | "filling" | "inlay_onlay" | "veneer" | "sealant" | "other";
 export type PlanningMaterial = Exclude<CrownKind, "missing" | "fractured"> | SurfaceMaterial;
+export type PlanningApplianceMember = { tooth: string; role: BridgeRole | "denture" };
+export type PlanningAppliance = { kind: "bridge" | "denture"; arch: "upper" | "lower"; members: PlanningApplianceMember[] };
+export type PlanningPricing = { basis: "per_unit" | "appliance"; quantity: number; unit_fee_pence: number | null; total_fee_pence: number | null };
+export type PlanningDefaults = { drawing_kind: PlanningDrawingKind; material: PlanningMaterial | null };
 export type PlanningStatus = "proposed" | "accepted" | "declined" | "completed" | "cancelled";
 export type PlanningFeeMode = "catalogue" | "agreed" | "override" | "waived";
 export type PlanningFee = { type: "FIXED" | "RANGE" | "N_A" | "UNAVAILABLE"; amount_pence: number | null; min_amount_pence: number | null; max_amount_pence: number | null; notes: string | null; version_id?: number | null; effective_from?: string | null };
-export type PlanningCatalogueItem = { id: number; code: string | null; name: string; description: string | null; default_duration_minutes: number | null; patient_category: string; level?: PlanningTarget["level"] | null; display_order?: number; fee: PlanningFee; quote_token: string };
+export type PlanningCatalogueItem = { id: number; code: string | null; name: string; description: string | null; default_duration_minutes: number | null; patient_category: string; level?: PlanningTarget["level"] | null; display_order?: number; fee: PlanningFee; quote_token: string; planning_defaults?: PlanningDefaults | null; planning_defaults_revision?: number; suggested_planning_defaults?: PlanningDefaults | null; routine_key?: string | null };
 export type PlanningCatalogue = { patient_id: number; patient_category: string; currency: "GBP"; practice_today?: string; items: PlanningCatalogueItem[]; total: number };
 export type PlanningNativeRow = DiagnosisPatch & { revision: number; root_observations?: Record<string, RootObservation>; crown_observation?: CrownObservation | null; surface_observations?: Partial<Record<SurfaceKey, SurfaceObservation>>; bridge_group_id?: number | null; bridge_role?: BridgeRole | null };
 export type PlanningSnapshot = {
@@ -23,7 +27,7 @@ export type PlanningSnapshot = {
   coverage: { native: "captured"; legacy: "captured" | "unavailable" | "partial"; legacy_reason: string | null };
 };
 export type EarlierPlanningItem = { id: number; patient_id: number; tooth: string | null; surface: string | null; procedure_code: string; description: string; fee_pence: number | null; status: PlanningStatus; created_at: string; updated_at: string };
-export type PlanningItem = EarlierPlanningItem & { plan_id: number; treatment_id: number | null; revision: number; target: PlanningTarget; drawing_kind: PlanningDrawingKind; material?: PlanningMaterial | null; catalogue_snapshot: { source?: "catalogue"; fee: PlanningFee; name?: string; code?: string | null; patient_category?: string } | { source: "custom" }; fee_mode: PlanningFeeMode; fee_reason: string | null; completed_procedure_id: number | null };
+export type PlanningItem = EarlierPlanningItem & { plan_id: number; treatment_id: number | null; revision: number; target: PlanningTarget; drawing_kind: PlanningDrawingKind; material?: PlanningMaterial | null; appliance?: PlanningAppliance | null; pricing?: PlanningPricing | null; catalogue_snapshot: { source?: "catalogue"; fee: PlanningFee; name?: string; code?: string | null; patient_category?: string } | { source: "custom" }; fee_mode: PlanningFeeMode; fee_reason: string | null; completed_procedure_id: number | null };
 export type PlanningPlan = { id: number; created_at: string; created_by: unknown; snapshot: PlanningSnapshot; items: PlanningItem[] };
 export type PlanningResponse = { patient_id: number; plan: PlanningPlan | null; earlier_items: EarlierPlanningItem[]; earlier_items_total: number };
 export const planningDrawingChoices: { value: PlanningDrawingKind; label: string; levels: PlanningTarget["level"][] }[] = [
@@ -80,6 +84,28 @@ export function planningToothLabel(tooth: string, snapshot?: PlanningSnapshot) {
 }
 export function planningTargetLabel(target: PlanningTarget, snapshot?: PlanningSnapshot) {
   return target.level === "general" ? "General treatment" : `${target.tooth ? planningToothLabel(target.tooth, snapshot) : "Select tooth"} · ${target.level}${target.surfaces.length ? ` · ${target.surfaces.join("")}` : ""}`;
+}
+
+/** Explicit member identity only: never expand a span into unrecorded teeth. */
+export function planningTargetTeeth(item: { target: PlanningTarget; appliance?: PlanningAppliance | null }): string[] {
+  return item.appliance ? item.appliance.members.map((member) => member.tooth) : item.target.tooth ? [item.target.tooth] : [];
+}
+
+export function planningApplianceLabel(appliance: PlanningAppliance, snapshot?: PlanningSnapshot) {
+  return `${appliance.kind === "bridge" ? "Bridge" : "Denture"} · ${appliance.members.map((member) => `${planningToothLabel(member.tooth, snapshot)} (${member.role})`).join(", ")}`;
+}
+export function planningItemTargetLabel(item: Pick<PlanningItem, "target" | "appliance">, snapshot?: PlanningSnapshot) {
+  return item.appliance ? planningApplianceLabel(item.appliance, snapshot) : planningTargetLabel(item.target, snapshot);
+}
+
+export function planningApplianceError(appliance: PlanningAppliance): string | null {
+  const arch = bridgeArchTeeth(appliance.arch === "upper");
+  const positions = appliance.members.map((member) => arch.indexOf(member.tooth)).sort((a, b) => a - b);
+  if (!positions.length || positions.some((position) => position < 0) || new Set(positions).size !== positions.length) return "Select distinct teeth from one arch.";
+  if (appliance.kind === "denture") return appliance.members.every((member) => member.role === "denture") ? null : "Every denture member must be a denture tooth.";
+  if (positions.length < 2 || positions.some((position, index) => index > 0 && position !== positions[index - 1] + 1)) return "A bridge needs at least two neighbouring teeth, including every position in its span.";
+  if (appliance.members.some((member) => member.role === "denture") || !appliance.members.some((member) => member.role === "pontic") || !appliance.members.some((member) => member.role === "abutment" || member.role === "wing")) return "A bridge needs a pontic and an abutment or wing support, with an explicit role for each tooth.";
+  return null;
 }
 export function planningFeeError(fee: PlanningFee, mode: PlanningFeeMode, amount: string, reason: string) {
   if (mode === "catalogue") return fee.type === "FIXED" && fee.amount_pence != null ? null : "Choose an agreed fee or an explicit waiver.";

@@ -9,8 +9,8 @@ import OdontogramToothSvg, { getOdontogramToothType, type OdontogramPlannedOverl
 import { surfaceOrder, type SurfaceKey } from "./surfaceDiagnosis";
 import { britishToothLabel } from "./toothDiagnosis";
 import { baselineGlyph } from "./useToothConditions";
-import { projectCompletedPlanningTooth } from "./planningAppearance";
-import type { PlanningItem, PlanningLevel, PlanningSelection, PlanningSnapshot } from "./treatmentPlanning";
+import { planningApplianceConnections, projectCompletedPlanningTooth } from "./planningAppearance";
+import { planningTargetTeeth, type PlanningItem, type PlanningLevel, type PlanningSelection, type PlanningSnapshot } from "./treatmentPlanning";
 import styles from "./TreatmentPlanningChart.module.css";
 
 export type PlanningChartEvent = MouseEvent<SVGElement | HTMLButtonElement> | KeyboardEvent<SVGElement | HTMLButtonElement>;
@@ -30,9 +30,10 @@ const legacySurfaces = new Set<R4SurfaceKey>(["M", "O", "D", "B", "L", "I"]);
 /** Only explicit item metadata controls artwork. Names, prices and codes are
  * deliberately not interpreted as clinical findings or drawing instructions. */
 export function planningToothOverlays(items: PlanningItem[], tooth: string, patientId: number): OdontogramPlannedOverlay[] {
-  return items.filter((item) => item.patient_id === patientId && item.target.tooth === tooth
+  return items.filter((item) => item.patient_id === patientId && planningTargetTeeth(item).includes(tooth)
     && item.target.level !== "general" && ["proposed", "accepted", "completed"].includes(item.status))
     .map((item) => ({ id: item.id, kind: item.drawing_kind, label: item.description, material: item.material,
+      applianceRole: item.appliance?.members.find((member) => member.tooth === tooth)?.role,
       badgeOnly: item.status === "completed", surfaces: [...item.target.surfaces],
       status: item.status === "completed" ? "completed" : "planned" }));
 }
@@ -58,7 +59,9 @@ export default function TreatmentPlanningChart({ snapshot, items, level, selecti
     [tooth, projectCompletedPlanningTooth(tooth, snapshot.native.patient_id, snapshot.native.teeth[tooth], legacy.get(tooth), items)])),
   [snapshot, legacy, items]);
   const bridges = useMemo(() => (snapshot.native.bridges ?? []).filter((bridge) => bridge.members.every((member) =>
-    appearances.get(member.tooth)?.replacementCompletionId == null)), [snapshot.native.bridges, appearances]);
+    appearances.get(member.tooth)?.replacementCompletionId == null && appearances.get(member.tooth)?.applianceItemId == null)), [snapshot.native.bridges, appearances]);
+  const applianceBridges = useMemo(() => planningApplianceConnections(items.filter((item) => item.patient_id === snapshot.native.patient_id),
+    Object.fromEntries(appearances)), [items, snapshot.native.patient_id, appearances]);
   const captured = new Date(snapshot.captured_at);
   const capturedLabel = Number.isNaN(captured.getTime()) ? "Capture date not recorded"
     : captured.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/London" });
@@ -104,6 +107,7 @@ export default function TreatmentPlanningChart({ snapshot, items, level, selecti
           </div>
           <div className={styles.arch} data-testid={`planning-${upper ? "upper" : "lower"}-arch`}>
             <BridgeConnections bridges={bridges} upper={upper} />
+            <BridgeConnections bridges={applianceBridges} upper={upper} layer="planning" />
             {bridgeArchTeeth(upper).map((tooth, index) => {
               const appearance = appearances.get(tooth)!;
               const row = appearance.row;
@@ -116,6 +120,7 @@ export default function TreatmentPlanningChart({ snapshot, items, level, selecti
               return <div key={tooth} className={styles.tooth} style={{ gridColumn: index < 8 ? index + 1 : index + 2 }}
                 role="group" aria-label={`Planning for ${label}`} data-testid={`planning-tooth-${tooth}`}
                 data-projected-completion-ids={appearance.completionIds.join(",")}
+                data-projected-appliance-item={appearance.applianceItemId ?? undefined}
                 data-projected-state={row.condition ?? "unspecified"}>
                 <OdontogramToothSvg toothKey={tooth} toothType={getOdontogramToothType(tooth)}
                   baselineCondition={baseline} rootConditions={row?.root_observations ?? {}}

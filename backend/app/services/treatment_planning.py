@@ -21,13 +21,15 @@ from app.models.treatment_planning import (PatientTreatmentPlan, TreatmentPlanIt
 from app.models.user import Role
 from app.routers.clinical import PLAN_TRANSITIONS, _tooth_conditions_out, _user_has_capability
 from app.schemas.clinical import TreatmentPlanItemOut, schematic_root_count
-from app.schemas.treatment_planning import PlanningItemOut, allowed_planning_materials
+from app.schemas.treatment_planning import PlanningAppliance, PlanningItemOut, allowed_planning_materials
+from app.schemas.treatment import APPLIANCE_ROUTINE_KEYS, suggested_planning_defaults
 from app.schemas.r4_charting import R4ToothStateOut, R4ToothStateEntryOut, R4ToothStateRestorationOut
 from app.services.audit import log_event
 from app.services.clinical_completion import complete_plan_item, completion_reference
 from app.services.native_notes import request_fingerprint
 from app.services.r4_charting.tooth_state_engine import build_tooth_state_engine_row, project_tooth_state_rows
 from app.services import treatment_fees as fee_service
+from app.services.completed_chart import validate_appliance_completion
 
 
 def patient(db, patient_id, *, lock=False):
@@ -113,9 +115,15 @@ def capture(db, row, user):
 
 
 def item_out(item):
+    quote = item.planning_details.get("catalogue_snapshot", {})
+    pricing = None
+    if item.planning_details.get("appliance"):
+        pricing = {"basis": quote["pricing_basis"], "quantity": quote["quantity"],
+            "unit_fee_pence": quote["unit_fee"].get("amount_pence") if quote["unit_fee"].get("type") == "FIXED" else None,
+            "total_fee_pence": item.fee_pence}
     return PlanningItemOut(**TreatmentPlanItemOut.model_validate(item).model_dump(),
         treatment_id=item.treatment_id, revision=item.revision,
-        completed_procedure_id=item.completed_procedure_id, **item.planning_details)
+        completed_procedure_id=item.completed_procedure_id, pricing=pricing, **item.planning_details)
 
 
 def get_workspace(db, patient_id, user):
@@ -141,6 +149,9 @@ def catalogue_row(treatment, category, fee):
     values = {"id": treatment.id, "code": treatment.code, "name": treatment.name,
         "description": treatment.description, "default_duration_minutes": treatment.default_duration_minutes,
         "level": treatment.level, "display_order": treatment.display_order,
+        "routine_key": treatment.routine_key, "planning_defaults": treatment.planning_defaults,
+        "planning_defaults_revision": treatment.planning_defaults_revision,
+        "suggested_planning_defaults": suggested_planning_defaults(treatment.routine_key, treatment.level),
         "patient_category": category.value,
         "fee": {"type": fee.fee_type.value if fee and fee.fee_type is not None else "UNAVAILABLE",
                 "amount_pence": fee.amount_pence if fee else None,
@@ -153,10 +164,14 @@ def catalogue_row(treatment, category, fee):
     return {**values, "quote_token": request_fingerprint(values)}
 
 
-def catalogue(db, patient_id, q, limit, offset, level=None, include_unassigned=False, classified_only=False):
+def catalogue(db, patient_id, q, limit, offset, level=None, include_unassigned=False, classified_only=False, appliance_kind=None):
     row = patient(db, patient_id)
     today = fee_service.practice_today()
     query = select(Treatment).options(lazyload(Treatment.fees)).where(Treatment.is_active.is_(True))
+    if appliance_kind is not None:
+        level, include_unassigned = "crown", False
+        query = query.where(or_(Treatment.planning_defaults["drawing_kind"].as_string() == appliance_kind,
+            and_(Treatment.planning_defaults.is_(None), Treatment.routine_key.in_(APPLIANCE_ROUTINE_KEYS[appliance_kind]))))
     if classified_only:
         # Opt-in practice index scope. Apply before count/paging so old demo
         # or unclassified entries cannot hide a classified treatment page.
@@ -278,12 +293,23 @@ def start(db, patient_id, user, request_id):
     return get_workspace(db, patient_id, user)
 
 
+def validate_routine_appliance(routine, appliance, material):
+    if appliance.kind == "denture" and routine in APPLIANCE_ROUTINE_KEYS["denture"]:
+        count = len(appliance.members)
+        expected_material = "denture_cocr" if routine == "routine-v1:crown:5" else "denture_acrylic"
+        if (material != expected_material or routine == "routine-v1:crown:3" and count > 3
+                or routine == "routine-v1:crown:4" and count <= 3):
+            raise HTTPException(422, "Choose the matching denture fee for this material and replacement-tooth count")
+
+
 def create_item(db, patient_id, payload, user, request_id):
     row = patient(db, patient_id, lock=True)
     action, request = "clinical.planning.item.created", {"patient_id": patient_id, **payload.model_dump(mode="json")}
     if "material" not in payload.model_fields_set:
         # Old clients/receipts predate this optional appearance field.
         request.pop("material", None)
+    if "appliance" not in payload.model_fields_set:
+        request.pop("appliance", None)
     repeated = replay(db, user, request_id, action, request)
     if repeated is not None:
         return item_out(db.get(TreatmentPlanItem, repeated))
@@ -305,6 +331,22 @@ def create_item(db, patient_id, payload, user, request_id):
     quote = catalogue_row(treatment, row.patient_category, fee)
     if quote["quote_token"] != payload.quote_token:
         raise HTTPException(409, "Catalogue or patient category changed; review the current quote")
+    if payload.appliance:
+        profile = treatment.planning_defaults or suggested_planning_defaults(treatment.routine_key, treatment.level)
+        if profile is None or profile["drawing_kind"] != payload.appliance.kind:
+            raise HTTPException(422, "Configure this treatment's matching bridge or denture planning defaults before using it for an appliance")
+        validate_routine_appliance(treatment.routine_key, payload.appliance, payload.material)
+        # One price-bearing item per appliance. Bridge units multiply the frozen
+        # quote, while dentures are one appliance regardless of replacement count.
+        quantity = len(payload.appliance.members) if payload.appliance.kind == "bridge" else 1
+        quote = deepcopy(quote)
+        quote.update(unit_fee=deepcopy(quote["fee"]), quantity=quantity,
+            pricing_basis="per_unit" if payload.appliance.kind == "bridge" else "appliance")
+        for field in ("amount_pence", "min_amount_pence", "max_amount_pence"):
+            if quote["fee"].get(field) is not None:
+                quote["fee"][field] *= quantity
+                if quote["fee"][field] > 100_000_000:
+                    raise HTTPException(422, "The appliance total exceeds the supported fee limit")
     amount, reason = resolved_fee(quote, payload.fee_mode, payload.fee_pence, payload.fee_reason)
     # Keep legacy string surface semantics unchanged. Native P is retained in
     # the explicit target and mapped only for the legacy procedure field.
@@ -316,10 +358,13 @@ def create_item(db, patient_id, payload, user, request_id):
         planning_details={"target": payload.target.model_dump(), "drawing_kind": payload.drawing_kind, "material": payload.material,
                           "catalogue_snapshot": quote, "fee_mode": payload.fee_mode, "fee_reason": reason},
         created_by_user_id=user.id, updated_by_user_id=user.id)
+    if payload.appliance:
+        item.planning_details["appliance"] = payload.appliance.model_dump(mode="json")
     db.add(item)
     save_revision(db, item, user)
     log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
-        after_data={"plan_id": plan.id, "treatment_plan_item_id": item.id, "revision": 1, "treatment_id": treatment.id, "fee_pence": amount, "fee_mode": payload.fee_mode, "material": payload.material})
+        after_data={"plan_id": plan.id, "treatment_plan_item_id": item.id, "revision": 1, "treatment_id": treatment.id, "fee_pence": amount, "fee_mode": payload.fee_mode, "material": payload.material,
+            **({"appliance": item.planning_details["appliance"]} if payload.appliance else {})})
     receipt(db, user, request_id, action, request, item.id)
     db.commit()
     db.refresh(item)
@@ -388,6 +433,11 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
         # material. Clearing that unspecified value is a no-op, not a rewrite.
         if details.get("material") != payload.material:
             details["material"] = payload.material
+    if details.get("appliance") and ("material" in payload.model_fields_set or next_status == TreatmentPlanStatus.completed):
+        appliance = PlanningAppliance.model_validate(details["appliance"])
+        if details.get("material") not in allowed_planning_materials(appliance.kind, "crown"):
+            raise HTTPException(422, "Choose an explicit matching material for the whole appliance")
+        validate_routine_appliance(details["catalogue_snapshot"].get("routine_key"), appliance, details["material"])
     changed = amount != item.fee_pence or details != item.planning_details or next_status != item.status
     if not changed:
         receipt(db, user, request_id, action, request, item.id)
@@ -397,6 +447,9 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
         raise HTTPException(409, "Final treatment plan items cannot be edited")
     if next_status != item.status and next_status not in PLAN_TRANSITIONS[item.status]:
         raise HTTPException(409, "Treatment plan status transition is not permitted")
+    if next_status == TreatmentPlanStatus.completed and details.get("appliance"):
+        plan = db.get(PatientTreatmentPlan, item.plan_id)
+        validate_appliance_completion(db, patient_id, details["appliance"], plan.snapshot)
     previous_status = item.status
     item.fee_pence, item.planning_details, item.status = amount, details, next_status
     item.revision += 1
@@ -413,7 +466,8 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
         after_data={"treatment_plan_item_id": item.id, "revision": item.revision, "status": item.status.value, "fee_pence": amount, "fee_mode": details["fee_mode"], "material": details.get("material")})
     if procedure is not None:
         log_event(db, actor=user, action="clinical.procedure.completed", entity_type="patient", entity_id=str(patient_id), request_id=request_id,
-            after_data={"procedure_id": procedure.id, "treatment_plan_item_id": item.id, "tooth": item.tooth, "surface": item.surface, "procedure_code": item.procedure_code, "fee_pence": amount})
+            after_data={"procedure_id": procedure.id, "treatment_plan_item_id": item.id, "tooth": item.tooth, "surface": item.surface, "procedure_code": item.procedure_code, "fee_pence": amount,
+                **({"appliance": details["appliance"]} if details.get("appliance") else {})})
     if charge is not None:
         log_event(db, actor=user, action="ledger.charge_recorded", entity_type="patient", entity_id=str(patient_id), request_id=request_id,
             after_data={"ledger_entry_id": charge.id, "treatment_plan_item_id": item.id, "amount_pence": amount})
@@ -466,7 +520,7 @@ def uncomplete_item(db, patient_id, item_id, payload, user, request_id):
             unsafe()
         current = item_out(item).model_dump(mode="json")
         immutable = ("patient_id", "plan_id", "treatment_id", "tooth", "surface", "procedure_code", "description",
-                     "fee_pence", "target", "drawing_kind", "material", "catalogue_snapshot", "fee_mode", "fee_reason")
+                     "fee_pence", "target", "drawing_kind", "material", "appliance", "catalogue_snapshot", "fee_mode", "fee_reason")
         if any(before.get(field) != current.get(field) or completed.get(field) != current.get(field) for field in immutable):
             unsafe()
         cycle = TreatmentPlanCompletion(item_id=item.id, cycle=1, previous_status=before["status"], procedure_id=procedure.id)

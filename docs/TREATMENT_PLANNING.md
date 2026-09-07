@@ -9,8 +9,8 @@ The copy is retained rather than recaptured on refresh or when diagnosis changes
 Unspecified findings remain unspecified. Missing or partial imported coverage is
 labelled; it is never silently filled from a later live chart.
 
-This first version has one planning workspace per patient. Multiple courses,
-replacement snapshots and connected planned bridge groups are deferred.
+This version has one planning workspace per patient. Multiple courses and
+replacement snapshots are deferred. Bridges and dentures are linked appliances.
 The existing diagnostic bridge geometry remains part of the captured chart.
 
 ## Planning and fees
@@ -34,24 +34,30 @@ The existing diagnostic bridge geometry remains part of the captured chart.
   Practice Treatments. Catalogue administration remains restricted as before.
   It initially searches all five practice levels, excluding unassigned demo/legacy
   entries from new selection. Selected-level filtering remains optional. A
-  categorised treatment requires a matching target; an explicit Use level action
-  retains the tooth where applicable and resets surfaces/drawing, without guessing
-  clinical anatomy. Existing unassigned saved items keep their editing/history
+  categorised treatment supplies its level, retaining the selected tooth where
+  applicable and clearing incompatible surfaces. A compact review shows the
+  target/drawing before Add; More options exposes manual settings and fee changes.
+  Existing unassigned saved items keep their editing/history
   path. The opt-in `classified_only` API filter runs before count/paging and leaves
   older API queries compatible. The current UK-date price is resolved consistently during
   catalogue display and save; versions and effective dates are retained in new
   quotes. See [Practice treatment fees](PRACTICE_TREATMENT_FEES.md).
 - For catalogue items, the selected identity, name/code, patient category and
   price basis are saved. Price-list changes do not reprice existing items.
-- The drawing kind is selected explicitly. Free-text names and codes are not
-  interpreted as clinical anatomy. Crown/bridge/veneer, denture and filling/inlay
-  materials are also selected explicitly and use the diagnosis palette. Material
+- Drawing/material defaults can be saved explicitly in Practice Treatments.
+  Owned routine-v1 identities supply reviewable suggestions when no default is
+  saved; these do not backfill historical items or persist a practice setting.
+  Free-text names and codes are never interpreted as clinical anatomy. Missing
+  settings remain a manual choice. Crown/bridge/veneer, denture and filling/inlay
+  materials use the diagnosis palette. Material
   can be corrected separately on an outstanding item, with its revision history;
   the fee, target and status remain unchanged. Old unspecified materials stay
   unspecified. Completed items must be uncompleted before material correction.
 - Fixed fees can use the catalogue amount. Ranges require an agreed amount;
   unavailable prices are not treated as free. Overrides and waivers require
-  reasons. An intentional catalogue zero remains distinct from a waived fee.
+  explicit reasons. Entering an agreed amount for an unpriced routine records
+  the factual default reason that no practice price was set; it remains editable
+  under More options. An intentional catalogue zero remains distinct from a waiver.
 - Proposed work is a distinct overlay; it does not erase baseline anatomy.
   Completed items and outstanding items have separate lists and totals.
 - Both lists use compact, two-line selectable rows. One shared toolbar beside
@@ -60,6 +66,43 @@ The existing diagnostic bridge geometry remains part of the captured chart.
   50% larger without changing tooth anatomy or shifting the chart on selection.
 - Earlier native items remain separate and manageable through the earlier-item
   view; they are not retrospectively adopted into a copied chart.
+
+### Linked bridges and dentures
+
+Add bridge opens a small arch selector: click the first and last teeth, then
+review/edit the suggested abutment/pontic/abutment roles. Wings and cantilevers
+are represented by explicit member roles; no support suitability is inferred.
+Every intervening position belongs to the contiguous span. Add denture selects
+one arch and explicit replacement teeth, including non-contiguous sites or Full
+denture. An explicit material is required for a new appliance; one material and
+one save cover the whole appliance. An unambiguous
+matching fee template may be preselected for review; otherwise select it once.
+Appliance pickers filter matching explicit/default routine profiles before
+paging, not by treatment-name guesses.
+
+One item stores an explicit appliance member list in existing planning JSON,
+with a null legacy tooth target rather than falsely assigning the group to its
+first tooth. Bridge quotes retain the original unit fee and multiply by member
+count; denture quotes retain one appliance fee regardless of replacement count.
+The scaled total quote stays frozen, including for later Edit fee/catalogue
+restoration. Total overrides need not divide evenly between units. Owned small/
+large acrylic and cobalt-chrome routines check replacement count/material;
+custom configured profiles remain flexible. Existing individual bridge/denture
+items are not silently regrouped or repriced.
+
+Each appliance has one compact row, revision, completion, charge and audited
+Uncomplete action. There is no partial appliance completion or reversal. Proposal
+may precede extraction, but completion checks effective Current anatomy: replacement
+sites must be explicitly missing, supports available, and implant fixtures cannot
+be wings. A rejected group saves no partial procedures or charges. Completion
+shows rootless pontics/denture teeth and role-specific connected bridge artwork;
+ordinary native anatomy is never fabricated. Proposed artwork is only in Planned;
+completed artwork appears in both views. Later material edits retain appliance
+identity; explicit anatomy/native bridge changes supersede it. Patient and tooth
+journals retain every member/role, including voided completion history.
+If later Current findings establish support that the frozen planning baseline
+does not contain, Planned retains its unapplied-effect warning instead of
+inventing historical support anatomy; Current uses the reviewed current findings.
 
 ## Completion and history
 
@@ -126,11 +169,15 @@ items remain outside this correction workflow.
 
 ## Release boundary
 
-Migrations 0059, 0060 and 0061 are required. Migration 0060 adds completion/reversal
+Migrations 0059, 0060, 0061 and 0062 are required. Migration 0060 adds completion/reversal
 records and the voided procedure status without rewriting source records.
 Migration 0061 adds the explicit practice treatment index and immutable dated
 fee history, preserving the original undated fees. Populated index/history
 metadata blocks its destructive downgrade.
+Migration 0062 adds nullable practice planning defaults and their revision;
+no existing treatment defaults, prices or clinical records are backfilled.
+Populated defaults/revision history or grouped items block downgrade to a binary
+that does not understand them.
 Apply and verify only in disposable or
 explicitly authorised environments. A populated planning workspace must not be
 silently dropped by a downgrade; 0060 also refuses downgrade when completion

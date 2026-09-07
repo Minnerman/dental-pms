@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.models.base import AuditMixin, Base
 from app.models.patient import PatientCategory
@@ -22,6 +23,8 @@ class Treatment(Base, AuditMixin):
         CheckConstraint("level IS NULL OR level IN ('tooth','root','crown','surface','general')", name="ck_treatment_level"),
         CheckConstraint("display_order >= 0", name="ck_treatment_display_order"),
         UniqueConstraint("routine_key", name="uq_treatments_routine_key"),
+        CheckConstraint("planning_defaults IS NULL OR jsonb_typeof(planning_defaults) = 'object'", name="ck_treatment_planning_defaults"),
+        CheckConstraint("planning_defaults_revision >= 0", name="ck_treatment_planning_defaults_revision"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -34,6 +37,8 @@ class Treatment(Base, AuditMixin):
     level: Mapped[str | None] = mapped_column(String(12), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     routine_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    planning_defaults: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    planning_defaults_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     fees = relationship(
         "TreatmentFee",

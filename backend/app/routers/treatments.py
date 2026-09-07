@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.schemas.treatment import (
     TreatmentOut,
     TreatmentUpdate,
     RoutineDefaultsRequest,
+    validate_planning_defaults,
 )
 from app.services import treatment_fees as service
 from app.services.audit import log_event
@@ -62,13 +63,16 @@ def create_treatment(
         is_denplan_included_default=payload.is_denplan_included_default,
         level=payload.level,
         display_order=payload.display_order,
+        planning_defaults=payload.planning_defaults.model_dump() if payload.planning_defaults else None,
+        planning_defaults_revision=1 if payload.planning_defaults else 0,
         created_by_user_id=user.id,
         updated_by_user_id=user.id,
     )
     db.add(treatment)
     db.flush()
     log_event(db, actor=user, action="treatment.created", entity_type="treatment", entity_id=str(treatment.id),
-        after_data={"name": treatment.name, "level": treatment.level, "display_order": treatment.display_order})
+        after_data={"name": treatment.name, "level": treatment.level, "display_order": treatment.display_order,
+            "planning_defaults": treatment.planning_defaults, "planning_defaults_revision": treatment.planning_defaults_revision})
     db.commit()
     db.refresh(treatment)
     return treatment
@@ -92,6 +96,15 @@ def update_treatment(
 ):
     treatment = service.get_treatment(db, treatment_id, lock=True)
     values = payload.model_dump(exclude_unset=True)
+    expected = values.pop("expected_planning_defaults_revision", None)
+    if "planning_defaults" in values and expected != treatment.planning_defaults_revision:
+        raise HTTPException(409, "Planning defaults changed; refresh before saving")
+    try:
+        validate_planning_defaults(values.get("level", treatment.level), values.get("planning_defaults", treatment.planning_defaults))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if "planning_defaults" in values and values["planning_defaults"] != treatment.planning_defaults:
+        values["planning_defaults_revision"] = treatment.planning_defaults_revision + 1
     before = {field: getattr(treatment, field) for field in values}
     for field, value in values.items():
         setattr(treatment, field, value)

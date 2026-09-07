@@ -7,7 +7,8 @@ import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothC
 import { rootConditionLabel, type RootObservation, type RootPatch } from "./rootDiagnosis";
 import { crownDiagnosisLabel, type CrownObservation, type BridgeRole, type BridgeGroup, type BridgeDraft } from "./crownDiagnosis";
 import { surfaceDiagnosisLabel, surfaceSelectionLabel, type SurfaceKey, type SurfaceObservation, type SurfaceTarget } from "./surfaceDiagnosis";
-import { projectCurrentCompletedTooth, type CompletedPlanningEffect, type PlanningLegacyTooth, type ToothObservationEvents } from "./planningAppearance";
+import { planningApplianceConnections, projectCurrentCompletedTooth, type CompletedPlanningEffect, type PlanningLegacyTooth, type ToothObservationEvents } from "./planningAppearance";
+import { planningTargetTeeth } from "./treatmentPlanning";
 export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
 type ConditionRow = DiagnosisPatch & {
@@ -115,7 +116,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   );
   const visibleAppearances = useMemo(() => {
     if (!currentChart) return {};
-    const teeth = new Set([...Object.keys(currentChart.teeth), ...(currentChart.completed_effects ?? []).flatMap((effect) => effect.target.tooth ? [effect.target.tooth] : [])]);
+    const teeth = new Set([...Object.keys(currentChart.teeth), ...(currentChart.completed_effects ?? []).flatMap(planningTargetTeeth)]);
     return Object.fromEntries([...teeth].map((tooth) => [tooth, projectCurrentCompletedTooth(
       tooth, Number(patientId), currentChart.teeth[tooth], undefined, currentChart.completed_effects ?? [], currentChart.observation_events?.[tooth],
     )]));
@@ -124,6 +125,9 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   // A removed bridge member must not leave a line through an absent tooth.
   // Keep raw group identity for the explicit whole-bridge correction workflow.
   const visibleBridges = (currentChart?.bridges ?? []).filter((bridge) => bridge.members.every((member) => visibleTeeth[member.tooth]?.bridge_group_id === bridge.id));
+  const applianceBridges = planningApplianceConnections((currentChart?.completed_effects ?? []).map((effect) => ({
+    id: effect.item_id, appliance: effect.appliance, status: "completed",
+  })), visibleAppearances, false);
 
   const saveObservation = async (
     path: string, payload: Record<string, unknown>, message: string, rememberAction?: DiagnosisAction
@@ -208,6 +212,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
     appearanceForTooth,
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
     bridges: visibleBridges,
+    applianceBridges,
     recordedBridges: currentChart?.bridges ?? [],
     completedEffectsCount: currentChart?.completed_effects?.length ?? 0,
     hasUnappliedCompletions: Object.values(visibleAppearances).some((appearance) => appearance.unappliedCompletionIds.length > 0),

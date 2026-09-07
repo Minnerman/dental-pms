@@ -9180,6 +9180,7 @@ export default function PatientDetailClient({
                                   data-testid="clinical-upper-arch"
                                 >
                                 {clinicalViewMode === "current" && <BridgeConnections bridges={baseline.bridges} upper />}
+                                {clinicalViewMode === "current" && <BridgeConnections bridges={baseline.applianceBridges} upper layer="planning" />}
                                   {upperTeeth.map((tooth, index) => {
                                     const isActive = diagnosisAction ? diagnosisTeeth.includes(tooth) : selectedTooth === tooth;
                                     const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
@@ -9201,6 +9202,7 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="clinical-tooth-cell"
                                         data-completed-item-ids={completedAppearance?.projectedItemIds.join(",")}
+                                        data-projected-appliance-item={completedAppearance?.applianceItemId ?? undefined}
                                         role="group"
                                         aria-label={`Tooth ${currentToothLabel(tooth)}`}
                                         onClick={(event) => {
@@ -9458,6 +9460,7 @@ export default function PatientDetailClient({
                                   data-testid="clinical-lower-arch"
                                 >
                                 {clinicalViewMode === "current" && <BridgeConnections bridges={baseline.bridges} upper={false} />}
+                                {clinicalViewMode === "current" && <BridgeConnections bridges={baseline.applianceBridges} upper={false} layer="planning" />}
                                   {lowerTeeth.map((tooth, index) => {
                                     const isActive = diagnosisAction ? diagnosisTeeth.includes(tooth) : selectedTooth === tooth;
                                     const currentCondition = clinicalViewMode === "current" ? baseline.teeth[tooth]?.condition : undefined;
@@ -9479,6 +9482,7 @@ export default function PatientDetailClient({
                                         key={tooth}
                                         className="clinical-tooth-cell"
                                         data-completed-item-ids={completedAppearance?.projectedItemIds.join(",")}
+                                        data-projected-appliance-item={completedAppearance?.applianceItemId ?? undefined}
                                         role="group"
                                         aria-label={`Tooth ${currentToothLabel(tooth)}`}
                                         onClick={(event) => {

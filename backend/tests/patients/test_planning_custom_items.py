@@ -36,6 +36,7 @@ def test_custom_proposal_has_explicit_non_catalogue_source_and_no_collateral_wri
     snapshot = api_client.get(f"/patients/{pid}/planning", headers=auth_headers).json()["plan"]["snapshot"]
     with SessionLocal() as db:
         catalogue_before = tuple(db.scalar(select(func.count(model.id))) for model in (Treatment, TreatmentFee))
+        schema_before = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
     response = custom(api_client, auth_headers, pid, description="  Synthetic review — α\nSecond line  ")
     assert response.status_code == 201, response.text
     item = response.json()
@@ -60,7 +61,7 @@ def test_custom_proposal_has_explicit_non_catalogue_source_and_no_collateral_wri
         audit = db.scalar(select(AuditLog).where(AuditLog.entity_id == str(pid), AuditLog.action == "clinical.planning.custom_item.created"))
         assert audit.after_json["source"] == "custom" and audit.after_json["fee_pence"] == 1250
         assert "description" not in audit.after_json  # Full text belongs to immutable item history.
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0061_treatment_index_effective_fees"
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == schema_before
 
 
 @pytest.mark.parametrize("patch", [

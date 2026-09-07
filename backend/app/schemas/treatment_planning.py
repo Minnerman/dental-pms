@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.clinical import TreatmentPlanStatus
 from app.schemas.actor import ActorOut
-from app.schemas.clinical import MAX_CLINICAL_TEXT_LENGTH, MAX_FEE_PENCE, SurfaceKey, SurfaceTarget, SurfaceMaterial, MATERIAL_CROWN_KINDS, DENTURE_CROWN_KINDS, TreatmentPlanItemOut, _required_text, _tooth
+from app.schemas.clinical import ARCH_TEETH, MAX_CLINICAL_TEXT_LENGTH, MAX_FEE_PENCE, SurfaceKey, SurfaceTarget, SurfaceMaterial, MATERIAL_CROWN_KINDS, DENTURE_CROWN_KINDS, TreatmentPlanItemOut, _required_text, _tooth
 
 Level = Literal["tooth", "root", "crown", "surface", "general"]
 DrawingKind = Literal["extraction", "implant", "root_canal", "apicectomy", "post_core", "crown", "bridge", "denture", "filling", "inlay_onlay", "veneer", "sealant", "other"]
@@ -44,13 +44,52 @@ class PlanningTarget(BaseModel):
         if self.level == "general":
             if self.tooth is not None or self.surfaces:
                 raise ValueError("General treatment has no tooth or surfaces")
-        elif self.tooth is None:
+        elif self.tooth is None and self.level != "crown":
             raise ValueError("A tooth is required for this target")
         if self.level == "surface":
             self.surfaces = SurfaceTarget(tooth=self.tooth, surfaces=self.surfaces).surfaces
         elif self.surfaces:
             raise ValueError("Only surface-level treatment accepts selected surfaces")
         return self
+
+
+class PlanningApplianceMember(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tooth: str
+    role: Literal["abutment", "pontic", "wing", "denture"]
+    _normalize_tooth = field_validator("tooth", mode="before")(_tooth)
+
+
+class PlanningAppliance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["bridge", "denture"]
+    arch: Literal["upper", "lower"]
+    members: list[PlanningApplianceMember] = Field(min_length=1, max_length=16)
+
+    @model_validator(mode="after")
+    def member_scope(self):
+        teeth = [member.tooth for member in self.members]
+        arch = ARCH_TEETH[self.arch]
+        if len(set(teeth)) != len(teeth) or any(tooth not in arch for tooth in teeth):
+            raise ValueError("Appliance members must be unique teeth in the selected arch")
+        self.members = sorted(self.members, key=lambda member: arch.index(member.tooth))
+        roles = {member.role for member in self.members}
+        if self.kind == "bridge":
+            indexes = [arch.index(member.tooth) for member in self.members]
+            if (len(teeth) < 2 or indexes[-1] - indexes[0] + 1 != len(teeth)
+                    or "denture" in roles or "pontic" not in roles or not roles.intersection({"abutment", "wing"})):
+                raise ValueError("A bridge requires a contiguous span with at least one support and one pontic")
+        elif roles != {"denture"}:
+            raise ValueError("Every denture member must be a replacement tooth")
+        return self
+
+
+def validate_appliance_target(target, kind, appliance):
+    if appliance is not None:
+        if target.level != "crown" or target.tooth is not None or target.surfaces or kind != appliance.kind:
+            raise ValueError("An appliance uses a crown-level whole-appliance target and its matching drawing kind")
+    elif target.level != "general" and target.tooth is None:
+        raise ValueError("An individual treatment requires a tooth")
 
 
 class PlanningStart(BaseModel):
@@ -64,12 +103,16 @@ class PlanningItemCreate(BaseModel):
     target: PlanningTarget
     drawing_kind: DrawingKind
     material: PlanningMaterial | None = None
+    appliance: PlanningAppliance | None = None
     fee_mode: FeeMode
     fee_pence: Pence | None = None
     fee_reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def valid_kind(self):
+        validate_appliance_target(self.target, self.drawing_kind, self.appliance)
+        if self.appliance is not None and self.material is None:
+            raise ValueError("Choose an explicit material for the whole appliance")
         if self.drawing_kind not in LEVEL_KINDS[self.target.level]:
             raise ValueError("Drawing kind does not match the selected target level")
         if self.material is not None and self.material not in allowed_planning_materials(self.drawing_kind, self.target.level):
@@ -86,6 +129,11 @@ class PlanningCustomItemCreate(BaseModel):
     fee_reason: str | None = Field(default=None, max_length=500)
     target: PlanningTarget = Field(default_factory=lambda: PlanningTarget(level="general"))
     _normalize_description = field_validator("description")(_required_text)
+
+    @model_validator(mode="after")
+    def individual_target(self):
+        validate_appliance_target(self.target, "other", None)
+        return self
 
 
 class PlanningItemUpdate(BaseModel):
@@ -144,6 +192,8 @@ class PlanningItemOut(TreatmentPlanItemOut):
     target: PlanningTarget
     drawing_kind: DrawingKind
     material: PlanningMaterial | None = None
+    appliance: PlanningAppliance | None = None
+    pricing: dict | None = None
     catalogue_snapshot: dict
     fee_mode: FeeMode
     fee_reason: str | None

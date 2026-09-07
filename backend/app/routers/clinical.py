@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Iterable, TypeVar
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -51,6 +51,7 @@ from app.schemas.clinical import (
 from app.services.audit import log_event
 from app.services.clinical_completion import complete_plan_item
 from app.services.completed_chart import check_projection, effective_tooth, projection_context
+from app.services.planning_members import attach_procedure_appliances, procedure_has_member
 from app.schemas.clinical_note import ToothNoteAmendment, NativeNoteHistoryOut
 from app.services import native_notes
 
@@ -819,7 +820,7 @@ def get_clinical_summary(
     )
     return ClinicalSummaryOut(
         recent_tooth_notes=notes,
-        recent_procedures=procedures,
+        recent_procedures=attach_procedure_appliances(db, patient_id, procedures),
         treatment_plan_items=plan_items,
         bpe_scores=split_bpe_scores(patient.bpe_scores),
         bpe_recorded_at=patient.bpe_recorded_at,
@@ -914,11 +915,11 @@ def get_tooth_history(
     procedures = list(
         db.scalars(
             select(Procedure)
-            .where(Procedure.patient_id == patient_id, Procedure.tooth == tooth, Procedure.status == ProcedureStatus.completed)
+            .where(Procedure.patient_id == patient_id, or_(Procedure.tooth == tooth, procedure_has_member(tooth)), Procedure.status == ProcedureStatus.completed)
             .order_by(Procedure.performed_at.desc())
         )
     )
-    return ToothHistoryOut(notes=notes, procedures=procedures)
+    return ToothHistoryOut(notes=notes, procedures=attach_procedure_appliances(db, patient_id, procedures))
 
 
 @patient_router.post("/tooth-notes", response_model=ToothNoteOut, status_code=status.HTTP_201_CREATED)

@@ -449,6 +449,7 @@ class CompletedTreatmentEffectOut(BaseModel):
     target: dict
     drawing_kind: str
     material: str | None = None
+    appliance: dict | None = None
 
 
 class ObservationEventsOut(BaseModel):
@@ -457,6 +458,7 @@ class ObservationEventsOut(BaseModel):
     movement: int = 0
     rotation: int = 0
     crown: int = 0
+    appliance: int = 0
     root_condition: int = 0
     apicectomy: int = 0
     surfaces: dict[SurfaceKey, int] = Field(default_factory=dict)
@@ -512,6 +514,7 @@ class ProcedureOut(BaseModel):
     status: ProcedureStatus
     performed_at: datetime
     created_by: ActorOut
+    appliance: dict | None = None
 
 
 class TreatmentPlanItemCreate(BaseModel):

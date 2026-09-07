@@ -235,7 +235,7 @@ def test_projection_read_permissions_and_no_financial_details(api_client, auth_h
     complete(api_client, auth_headers, pid, add(api_client, auth_headers, pid, quote, material="gold"))
     viewer = _user_with_capabilities(["clinical.view"])
     response = current(api_client, viewer, pid)
-    assert set(response["completed_effects"][0]) == {"item_id", "procedure_id", "completed_at", "event_id", "target", "drawing_kind", "material"}
+    assert set(response["completed_effects"][0]) == {"item_id", "procedure_id", "completed_at", "event_id", "target", "drawing_kind", "material", "appliance"}
     assert record(api_client, viewer, pid, response, teeth=["UR4"], movement="forward").status_code == 403
     forbidden = _user_with_capabilities(["clinical.write"])
     assert api_client.get(f"/patients/{pid}/clinical/tooth-conditions", headers=forbidden).status_code == 403

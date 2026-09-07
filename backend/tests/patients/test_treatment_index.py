@@ -272,7 +272,7 @@ def test_other_root_and_surface_respect_frozen_missing_tooth(api_client, auth_he
     assert counts(pid) == (0, 0, 0, 0)
 
 
-def test_index_bulk_fee_queries_and_populated_downgrade_refusal(api_client, auth_headers):
+def test_index_bulk_fee_queries_and_populated_downgrade_refusal(api_client, auth_headers, monkeypatch):
     _, quote = setup_case(api_client, auth_headers)
     assert fee_change(api_client, auth_headers, quote["id"]).status_code == 200
     statements = []
@@ -285,8 +285,17 @@ def test_index_bulk_fee_queries_and_populated_downgrade_refusal(api_client, auth
     finally:
         event.remove(engine, "before_cursor_execute", capture)
     assert len(statements) == 2
-    result = subprocess.run(["alembic", "downgrade", "0060_treatment_completion_reversals"], capture_output=True, text=True)
-    assert result.returncode != 0 and "Cannot downgrade: effective treatment fee history" in result.stderr
+    # Test this migration's populated guard directly: later additive migrations
+    # may correctly refuse first, and must never be removed by this regression.
+    from importlib.util import module_from_spec, spec_from_file_location
+    from pathlib import Path
+    spec = spec_from_file_location("effective_fee_migration", Path(__file__).resolve().parents[2] / "alembic/versions/0061_treatment_index_effective_fees.py")
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
     with SessionLocal() as db:
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0061_treatment_index_effective_fees"
+        original_revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        monkeypatch.setattr(migration.op, "get_bind", lambda: db.connection())
+        with pytest.raises(RuntimeError, match="Cannot downgrade: effective treatment fee history"):
+            migration.downgrade()
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == original_revision
         assert db.scalar(select(func.count(TreatmentFeeVersion.id)).where(TreatmentFeeVersion.treatment_id == quote["id"])) == 1

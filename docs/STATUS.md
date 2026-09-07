@@ -3,6 +3,29 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (quick entry and linked treatment appliances): Routine treatments
+  use explicit saved practice drawing/material defaults, or reviewable suggestions
+  from owned routine identities. Selected tooth/surface context is retained where
+  compatible; optional fields and fee changes are under More options. Add bridge
+  selects a contiguous span and explicit abutment/pontic/wing roles; Add denture
+  selects one arch and replacement teeth, including non-contiguous/full dentures.
+  Each appliance has one item, material, frozen total quote, completion/charge and
+  audited Uncomplete. Bridge pricing multiplies the saved unit quote; dentures
+  use one appliance fee. Existing single-unit items/fees are never regrouped.
+  Completion checks Current eligibility and projects member-aware artwork in
+  both views without rewriting diagnosis or snapshots; journals retain all roles.
+  Migration 0062 adds nullable revisioned practice defaults, with no backfill.
+  Verification: 314 distinct targeted backend checks, 20 helper/glyph checks and
+  12 browser cases passed, plus typecheck, scoped lint, production build,
+  compilation and diff checks. Light/dark/mobile previews inspected. Older
+  migration tests now exercise their own populated guards rather than assuming
+  a fixed latest schema; no application workaround. Empty 0062 roundtrip and
+  populated downgrade refusal passed in the isolated stack. Default stack ops
+  were avoided; scoped isolated equivalents used. The local preview update is
+  pending explicit owner approval: safety review rejected the fresh database-copy
+  command before execution. No copy/archive/new database/migration/proxy change
+  occurred; the existing v7 preview and saved records remain authoritative.
+  Code and isolated build are ready. No production/R4 access, deployment or merge.
 - 2026-09-07 (completed treatment appearance in both charts): Planned extraction
   retains its blue-green cross; active completions project missing teeth, implant
   fixtures, explicit crown/filling materials and supported root findings into

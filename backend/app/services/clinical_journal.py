@@ -20,6 +20,7 @@ from app.models.audit_log import AuditLog
 from app.models.appointment import Appointment
 from app.models.capability import Capability, UserCapability
 from app.models.clinical import Procedure, ProcedureStatus, ToothNote, TreatmentPlanItem
+from app.services.planning_members import procedure_appliances, procedure_has_member
 from app.models.treatment_planning import TreatmentPlanCompletion, TreatmentPlanCompletionReversal
 from app.models.clinical_note import NativeNoteRevision
 from app.models.note import Note
@@ -226,10 +227,15 @@ def clinical_journal(db: Session, *, patient_id: int, user: User, limit=50, befo
             (Procedure, "procedure", Procedure.performed_at, "Procedure"),
             (TreatmentPlanItem, "treatment_plan", TreatmentPlanItem.created_at, "Treatment plan item"),
         ):
-            source_rows = list(rows(model, kind, stamp, [model.patient_id == patient_id],
-                                    model.description, literal("treatment"), tooth_expr=model.tooth,
+            member_predicates = [model.patient_id == patient_id]
+            if tooth:
+                member_predicates.append(or_(model.tooth == tooth, procedure_has_member(tooth) if model is Procedure
+                    else model.planning_details["appliance"]["members"].contains([{"tooth": tooth}])))
+            source_rows = list(rows(model, kind, stamp, member_predicates,
+                                    model.description, literal("treatment"), tooth_expr=literal(tooth) if tooth else model.tooth,
                                     extra_search=(model.procedure_code,)))
             corrections = {}
+            appliances = procedure_appliances(db, patient_id, [row.id for row, _, _ in source_rows]) if model is Procedure else {}
             if model is Procedure:
                 ids = [row.id for row, _, _ in source_rows if row.status == ProcedureStatus.voided]
                 if ids:
@@ -243,6 +249,7 @@ def clinical_journal(db: Session, *, patient_id: int, user: User, limit=50, befo
                                if "billing.view" in capabilities else {})}
             for row, at, key in source_rows:
                 correction = corrections.get(row.id) if model is Procedure else None
+                appliance = appliances.get(row.id) if model is Procedure else (row.planning_details or {}).get("appliance")
                 entry_title = "Voided procedure" if model is Procedure and row.status == ProcedureStatus.voided else title
                 add(row, at, key, kind, "treatment", entry_title, body=row.description, occurred_at=at,
                     date_basis="source" if model is Procedure else "recorded",
@@ -251,6 +258,7 @@ def clinical_journal(db: Session, *, patient_id: int, user: User, limit=50, befo
                     details={"status": _value(row.status), "procedure_code": row.procedure_code,
                              **({"fee_pence": row.fee_pence} if "billing.view" in capabilities else {}),
                              "appointment_id": row.appointment_id,
+                             **({"appliance": appliance} if appliance else {}),
                              **({"completion_correction": correction} if correction else {})})
 
         after = cast(AuditLog.after_json, JSONB)

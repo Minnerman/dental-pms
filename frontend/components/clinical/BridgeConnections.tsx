@@ -4,12 +4,17 @@ import { useEffect, useRef, useState } from "react";
 
 import { bridgeArchTeeth, type BridgeGroup } from "./crownDiagnosis";
 
-type Props = { bridges: BridgeGroup[]; upper: boolean };
-type MeasuredBridge = { id: number; members: string; start: string; end: string; points: string };
+export type BridgeConnection = Omit<BridgeGroup, "id"> & {
+  id: number | string;
+  planningStatus?: "planned" | "completed";
+  planningItemId?: number;
+};
+type Props = { bridges: BridgeConnection[]; upper: boolean; layer?: "native" | "planning" };
+type MeasuredBridge = { id: number | string; members: string; start: string; end: string; points: string };
 
 /** Connections are relationships from explicitly recorded groups, never guesses
  * based on adjacent crowns. An incomplete/hidden group draws no phantom line. */
-export default function BridgeConnections({ bridges, upper }: Props) {
+export default function BridgeConnections({ bridges, upper, layer = "native" }: Props) {
   const overlayRef = useRef<SVGSVGElement>(null);
   const [measured, setMeasured] = useState<MeasuredBridge[]>([]);
 
@@ -48,7 +53,9 @@ export default function BridgeConnections({ bridges, upper }: Props) {
           for (const tooth of teeth) {
             // Tooth IDs were validated against the fixed arch above, so this
             // selector cannot contain user text or reach outside this arch.
-            const crown = grid.querySelector<SVGPathElement>(`[data-testid="tooth-crown-${tooth}"]`);
+            const crownId = bridge.planningStatus === "planned" && bridge.planningItemId
+              ? `tooth-planning-crown-${tooth}-${bridge.planningItemId}` : `tooth-crown-${tooth}`;
+            const crown = grid.querySelector<SVGPathElement>(`[data-testid="${crownId}"]`);
             if (!crown) break;
             targets.add(crown);
             if (crown.ownerSVGElement) targets.add(crown.ownerSVGElement);
@@ -113,16 +120,18 @@ export default function BridgeConnections({ bridges, upper }: Props) {
   }, [bridges, upper]);
 
   return <svg ref={overlayRef} aria-hidden="true" focusable="false"
-    data-testid={`clinical-bridge-connections-${upper ? "upper" : "lower"}`}
+    data-testid={`clinical-bridge-connections-${layer === "planning" ? "planning-" : ""}${upper ? "upper" : "lower"}`}
     width="100%" height="100%"
     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none", zIndex: 2 }}>
     {measured.filter((value) => bridges.some((bridge) => bridge.id === value.id
       && bridge.arch === (upper ? "upper" : "lower") && bridge.span_start === value.start
       && bridge.span_end === value.end)).map((bridge) => <g key={bridge.id} data-testid={`clinical-bridge-${bridge.id}`}
-      data-members={bridge.members} data-span-start={bridge.start} data-span-end={bridge.end}>
+      data-members={bridge.members} data-span-start={bridge.start} data-span-end={bridge.end}
+      data-plan-status={bridges.find((entry) => entry.id === bridge.id)?.planningStatus}>
       <polyline points={bridge.points} fill="none" stroke="#fff6e8" strokeWidth="8"
         strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points={bridge.points} fill="none" stroke="#171717" strokeWidth="5"
+      <polyline points={bridge.points} fill="none" stroke={bridges.find((entry) => entry.id === bridge.id)?.planningStatus === "planned" ? "var(--planning-ink, #006f88)" : "#171717"} strokeWidth="5"
+        strokeDasharray={bridges.find((entry) => entry.id === bridge.id)?.planningStatus === "planned" ? "6 4" : undefined}
         strokeLinecap="round" strokeLinejoin="round" />
     </g>)}
   </svg>;

@@ -46,6 +46,7 @@ export type OdontogramPlannedOverlay = {
   surfaces?: SurfaceKey[];
   status: "planned" | "completed";
   material?: string | null;
+  applianceRole?: "abutment" | "pontic" | "wing" | "denture";
   /** The caller already projected this completed effect into the tooth view. */
   badgeOnly?: boolean;
 };
@@ -1263,10 +1264,12 @@ function OdontogramToothSvgImpl({
           const isSurfaceWork = (item.surfaces?.length ?? 0) > 0;
           const targets = surfaces.filter((surface) => item.surfaces?.includes(nativeSurfaceKey(surface.key)));
           const materialFill = isSurfaceWork ? surfaceMaterials.find((material) => material.value === item.material)?.colour
+            : item.applianceRole === "wing" ? undefined : item.kind === "denture" && item.material ? "#fff5ce"
             : item.material ? crownMaterialColors[item.material] : undefined;
-          const title = `${item.status === "planned" ? "Planned" : "Completed"}: ${item.label}${item.surfaces?.length ? ` · ${item.surfaces.join("")}` : ""}. Captured diagnosis unchanged.`;
+          const title = `${item.status === "planned" ? "Planned" : "Completed"}: ${item.label}${item.applianceRole ? ` · ${item.applianceRole}` : ""}${item.surfaces?.length ? ` · ${item.surfaces.join("")}` : ""}. Captured diagnosis unchanged.`;
           return <g key={item.id} data-testid={`tooth-planning-overlay-${toothKey}-${item.id}`}
             data-drawing-kind={item.kind} data-plan-status={item.status} data-material={item.material ?? undefined}
+            data-appliance-role={item.applianceRole}
             data-badge-only={item.badgeOnly ? "true" : "false"} aria-label={title}>
             <title>{title}</title>
             {!item.badgeOnly && <>
@@ -1294,8 +1297,12 @@ function OdontogramToothSvgImpl({
               {(["crown", "bridge", "denture", "veneer"].includes(item.kind) || item.kind === "inlay_onlay" && !isSurfaceWork) && <g transform={crownTransform}>
                 <path d={anatomy.crown} stroke="var(--planning-halo, #faf8ff)" strokeWidth="6.5" />
                 <path d={anatomy.crown} fill={materialFill ?? "none"} data-testid={`tooth-planning-crown-${toothKey}-${item.id}`} />
-                {item.kind === "bridge" && <path d="M20 125 H80" strokeWidth="5" />}
-                {item.kind === "denture" && <path d="M17 103 Q50 89 83 103" strokeWidth="6" />}
+                {item.kind === "bridge" && !item.applianceRole && <path d="M20 125 H80" strokeWidth="5" />}
+                {item.applianceRole === "wing" && <g data-testid={`tooth-planning-wing-${toothKey}-${item.id}`} strokeDasharray="none">
+                  <path d="M87 106 Q104 130 87 153" stroke="#52616e" strokeWidth="7" />
+                  <path d="M87 106 Q104 130 87 153" stroke="#c9d2da" strokeWidth="4.5" />
+                </g>}
+                {item.kind === "denture" && <path d="M17 103 Q50 89 83 103" stroke={item.material === "denture_cocr" ? "#a5b9c5" : item.material === "denture_acrylic" ? "#d990a6" : ink} strokeWidth="6" />}
                 {(item.kind === "inlay_onlay" || item.kind === "veneer") && <path d="M32 120 Q50 111 68 120 L65 145 Q50 155 35 145 Z" strokeWidth="2.5" />}
               </g>}
             </g>
