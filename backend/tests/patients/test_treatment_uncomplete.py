@@ -124,7 +124,11 @@ def test_complete_correct_recomplete_preserves_every_source(api_client, auth_hea
         if price:
             assert db.scalar(select(PatientLedgerEntry.amount_pence).where(PatientLedgerEntry.reference == f"TREATMENT-PLAN:{item['id']}:C2")) == price
     assert api_client.get(f"/patients/{pid}/planning", headers=auth_headers).json()["plan"]["snapshot"] == snapshot
-    assert api_client.get(f"/patients/{pid}/clinical/tooth-conditions", headers=auth_headers).json() == baseline
+    current = api_client.get(f"/patients/{pid}/clinical/tooth-conditions", headers=auth_headers).json()
+    # Completion corrections change read-only projection metadata, never the
+    # original diagnosis rows, bridge identities or native note references.
+    assert {key: current[key] for key in ("teeth", "bridges", "note_teeth")} == {
+        key: baseline[key] for key in ("teeth", "bridges", "note_teeth")}
 
 
 def test_replay_collision_stale_and_concurrent_corrections(api_client, auth_headers):

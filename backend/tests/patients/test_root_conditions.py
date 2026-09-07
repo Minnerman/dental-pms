@@ -269,7 +269,8 @@ def test_root_batch_replay_noop_mixed_changes_and_cross_endpoint_collisions(api_
     noop = api_client.post(root_path(patient_id), headers=auth_headers,
         json=payload(["UR6", "LL1"], {"UR6": 1, "LL1": 1}, condition="filled_sound"))
     assert noop.status_code == 200
-    assert noop.json() == first.json()
+    assert noop.json()["projection_revision"] > first.json()["projection_revision"]
+    assert noop.json() == {**first.json(), "projection_revision": noop.json()["projection_revision"]}
     assert audits(patient_id)[-1][3]["changed_teeth"] == []
     assert audits(patient_id)[-1][3]["changed_roots"] == {}
     assert api_client.post(root_path(patient_id), headers=auth_headers,
@@ -324,7 +325,8 @@ def test_root_batch_reset_retains_explicit_neutral_entries_and_unselected_teeth(
     noop = api_client.post(root_path(patient_id), headers=auth_headers,
         json=payload(["UR6", "LL6"], {"UR6": 2, "LL6": 2}, condition=None, apicectomy=False))
     assert noop.status_code == 200
-    assert noop.json() == reset.json()
+    assert noop.json()["projection_revision"] > reset.json()["projection_revision"]
+    assert noop.json() == {**reset.json(), "projection_revision": noop.json()["projection_revision"]}
 
 
 def test_root_batch_and_whole_tooth_reset_race_has_one_atomic_winner(api_client, auth_headers):

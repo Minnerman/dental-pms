@@ -49,7 +49,9 @@ def test_custom_proposal_has_explicit_non_catalogue_source_and_no_collateral_wri
     assert counts(pid) == before
     workspace = api_client.get(f"/patients/{pid}/planning", headers=auth_headers).json()
     assert workspace["plan"]["items"] == [item] and workspace["plan"]["snapshot"] == snapshot
-    assert api_client.get(f"/patients/{pid}/clinical/tooth-conditions", headers=auth_headers).json() == baseline
+    current = api_client.get(f"/patients/{pid}/clinical/tooth-conditions", headers=auth_headers).json()
+    assert {key: current[key] for key in ("teeth", "bridges", "note_teeth")} == {
+        key: baseline[key] for key in ("teeth", "bridges", "note_teeth")}
     with SessionLocal() as db:
         assert tuple(db.scalar(select(func.count(model.id))) for model in (Treatment, TreatmentFee)) == catalogue_before
         revision = db.scalar(select(TreatmentPlanItemRevision).where(TreatmentPlanItemRevision.item_id == item["id"]))

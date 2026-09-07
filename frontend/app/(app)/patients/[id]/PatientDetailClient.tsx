@@ -1375,6 +1375,21 @@ export default function PatientDetailClient({
     }
   }, [patientId, tab, clinicalViewMode]);
 
+  const previousProjectionRevision = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const previous = previousProjectionRevision.current;
+    previousProjectionRevision.current = baseline.projectionRevision;
+    if (clinicalViewMode !== "current" || previous === undefined || baseline.projectionRevision === undefined || previous === baseline.projectionRevision) return;
+    // Do not attach a fresh revision token to an editor prefilled from older
+    // completed care. The clinician must reopen/review the latest observation.
+    setDiagnosisSelection({ patient: patientId, action: null, teeth: [] });
+    setRootSelection({ patient: patientId, action: null, teeth: [] });
+    setCrownSelection({ patient: patientId, observation: null, teeth: [] });
+    setSurfaceSelection({ patient: patientId, observation: null, targets: [] });
+    setBridgeDialog(null);
+    setChartActionMenu(null);
+  }, [baseline.projectionRevision, clinicalViewMode, patientId]);
+
   function cancelDiagnosisSelection() {
     setDiagnosisSelection({ patient: patientId, action: null, teeth: [] });
   }
@@ -8982,6 +8997,8 @@ export default function PatientDetailClient({
                           </button>
                         </div>
                       )}
+                      {baseline.completedEffectsCount > 0 && <small data-testid="clinical-completed-appearance-note">Completed treatment is included in this chart. Original observations remain in the history.</small>}
+                      {baseline.hasUnappliedCompletions && <small role="note" data-testid="clinical-completed-appearance-limited">Some completed treatments need chart review because their recorded anatomy or material does not support a drawing. Their treatment history is retained.</small>}
                     </div>
                   )}
                 <ClinicalNotesWorkspace saving={journalSaving}
@@ -8996,7 +9013,7 @@ export default function PatientDetailClient({
                   canWriteClinical={canWriteClinical && !clinicalPatientUnavailable} canWriteBilling={canWriteBilling}
                   onOpenEarlierItems={() => setClinicalTab("treatment")}
                   onOpenToothNotes={openSavedToothNotes}
-                  onChanged={() => { void refreshClinicalData(); void loadLedger(); void loadLedgerBalance(); void loadFinanceSummary(); }} /> : <div
+                  onChanged={() => { void refreshClinicalData(); void loadBaselineConditions(); void loadLedger(); void loadLedgerBalance(); void loadFinanceSummary(); }} /> : <div
                     className="patient-route-clinical-grid"
                     data-testid="patient-clinical-grid"
                     data-has-tooth-selection={selectedTooth ? "true" : "false"}
@@ -9062,7 +9079,7 @@ export default function PatientDetailClient({
                               <CrownConditionMenu key={`${chartActionMenu.tooth}:${baseline.teeth[chartActionMenu.tooth]?.revision ?? 0}`}
                                 enabled={baseline.canSave} current={baseline.teeth[chartActionMenu.tooth]?.crown_observation}
                                 onBridge={(role) => openBridgeEditor(role, chartActionMenu.tooth)}
-                                bridge={baseline.bridges.find((bridge) => bridge.id === baseline.teeth[chartActionMenu.tooth]?.bridge_group_id)}
+                                bridge={baseline.recordedBridges.find((bridge) => bridge.id === baseline.recordedTeeth[chartActionMenu.tooth]?.bridge_group_id)}
                                 onBridgeReset={(bridge) => void resetWholeBridge(bridge)}
                                 onApply={(observation) => void applyCrownCondition(chartActionMenu.tooth, observation)} />
                             )}
@@ -9170,6 +9187,8 @@ export default function PatientDetailClient({
                                     const overlaySummary = currentCondition && currentCondition !== "present" ? null : getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     const toothStateSummary = getToothStateSummary(tooth);
+                                    const completedAppearance = clinicalViewMode === "current" ? baseline.appearanceForTooth(tooth, toothStateSummary) : null;
+                                    const displayTooth = completedAppearance?.row ?? baseline.teeth[tooth];
                                     const toothType = getOdontogramToothType(tooth);
                                     const plannedMarkerTitle = overlaySummary
                                       ? overlayMarkerTitle(overlaySummary.items, "planned")
@@ -9181,6 +9200,7 @@ export default function PatientDetailClient({
                                       <div
                                         key={tooth}
                                         className="clinical-tooth-cell"
+                                        data-completed-item-ids={completedAppearance?.projectedItemIds.join(",")}
                                         role="group"
                                         aria-label={`Tooth ${currentToothLabel(tooth)}`}
                                         onClick={(event) => {
@@ -9240,27 +9260,27 @@ export default function PatientDetailClient({
                                           toothKey={tooth}
                                           toothType={toothType}
                                           active={clinicalViewMode !== "current" && isActive}
-                                          baselineCondition={clinicalViewMode === "current" ? baselineGlyph(baseline.teeth[tooth]) : undefined}
+                                          baselineCondition={clinicalViewMode === "current" ? baselineGlyph(displayTooth) : undefined}
                                           hasToothNote={baseline.noteTeeth.has(tooth)}
                                           onToothNoteClick={(event) => openSavedToothNotes(tooth, event)}
-                                          rootConditions={clinicalViewMode === "current" ? baseline.teeth[tooth]?.root_observations ?? {} : undefined}
+                                          rootConditions={clinicalViewMode === "current" ? displayTooth?.root_observations ?? {} : undefined}
                                           rootSelected={rootTeeth.includes(tooth)}
                                           onRootClick={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event) : undefined}
                                           onRootContextMenu={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event, true) : undefined}
-                                          crownCondition={clinicalViewMode === "current" ? baseline.teeth[tooth]?.crown_observation ?? null : undefined}
-                                          bridgeRole={clinicalViewMode === "current" ? baseline.teeth[tooth]?.bridge_role : undefined}
+                                          crownCondition={clinicalViewMode === "current" ? displayTooth?.crown_observation ?? null : undefined}
+                                          bridgeRole={clinicalViewMode === "current" ? displayTooth?.bridge_role : undefined}
                                           allowMissingCrownSelection={clinicalViewMode === "current" && isDentureCrown(crownObservation?.kind)}
                                           crownSelected={crownTeeth.includes(tooth)}
                                           onCrownClick={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event) : undefined}
                                           onCrownContextMenu={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event, true) : undefined}
-                                          surfaceObservations={clinicalViewMode === "current" ? baseline.teeth[tooth]?.surface_observations ?? {} : undefined}
+                                          surfaceObservations={clinicalViewMode === "current" ? displayTooth?.surface_observations ?? {} : undefined}
                                           selectedDiagnosticSurfaces={surfaceTargets.find((target) => target.tooth === tooth)?.surfaces ?? []}
                                           onDiagnosticSurfaceClick={clinicalViewMode === "current" ? (surface, event) => selectDiagnosticSurface(tooth, surface, event) : undefined}
                                           onDiagnosticSurfaceContextMenu={clinicalViewMode === "current" ? (surface, event) => selectDiagnosticSurface(tooth, surface, event, true) : undefined}
                                           selectedSurfaces={clinicalViewMode !== "current" && isActive ? selectedToothSurfaces : []}
-                                          restorations={toothStateSummary.restorations}
-                                          missing={toothStateSummary.missing}
-                                          extracted={toothStateSummary.extracted}
+                                          restorations={completedAppearance?.legacy.restorations ?? toothStateSummary.restorations}
+                                          missing={completedAppearance?.legacy.missing ?? toothStateSummary.missing}
+                                          extracted={completedAppearance?.legacy.extracted ?? toothStateSummary.extracted}
                                           onSurfaceClick={(surface) => {
                                             if (clinicalViewMode === "current") {
                                               showToothDiagnosis();
@@ -9445,6 +9465,8 @@ export default function PatientDetailClient({
                                     const overlaySummary = currentCondition && currentCondition !== "present" ? null : getToothOverlaySummary(tooth);
                                     const surfaceOverlays = getToothSurfaceOverlaySummary(tooth);
                                     const toothStateSummary = getToothStateSummary(tooth);
+                                    const completedAppearance = clinicalViewMode === "current" ? baseline.appearanceForTooth(tooth, toothStateSummary) : null;
+                                    const displayTooth = completedAppearance?.row ?? baseline.teeth[tooth];
                                     const toothType = getOdontogramToothType(tooth);
                                     const plannedMarkerTitle = overlaySummary
                                       ? overlayMarkerTitle(overlaySummary.items, "planned")
@@ -9456,6 +9478,7 @@ export default function PatientDetailClient({
                                       <div
                                         key={tooth}
                                         className="clinical-tooth-cell"
+                                        data-completed-item-ids={completedAppearance?.projectedItemIds.join(",")}
                                         role="group"
                                         aria-label={`Tooth ${currentToothLabel(tooth)}`}
                                         onClick={(event) => {
@@ -9515,27 +9538,27 @@ export default function PatientDetailClient({
                                           toothKey={tooth}
                                           toothType={toothType}
                                           active={clinicalViewMode !== "current" && isActive}
-                                          baselineCondition={clinicalViewMode === "current" ? baselineGlyph(baseline.teeth[tooth]) : undefined}
+                                          baselineCondition={clinicalViewMode === "current" ? baselineGlyph(displayTooth) : undefined}
                                           hasToothNote={baseline.noteTeeth.has(tooth)}
                                           onToothNoteClick={(event) => openSavedToothNotes(tooth, event)}
-                                          rootConditions={clinicalViewMode === "current" ? baseline.teeth[tooth]?.root_observations ?? {} : undefined}
+                                          rootConditions={clinicalViewMode === "current" ? displayTooth?.root_observations ?? {} : undefined}
                                           rootSelected={rootTeeth.includes(tooth)}
                                           onRootClick={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event) : undefined}
                                           onRootContextMenu={clinicalViewMode === "current" ? (event) => selectRootArea(tooth, event, true) : undefined}
-                                          crownCondition={clinicalViewMode === "current" ? baseline.teeth[tooth]?.crown_observation ?? null : undefined}
-                                          bridgeRole={clinicalViewMode === "current" ? baseline.teeth[tooth]?.bridge_role : undefined}
+                                          crownCondition={clinicalViewMode === "current" ? displayTooth?.crown_observation ?? null : undefined}
+                                          bridgeRole={clinicalViewMode === "current" ? displayTooth?.bridge_role : undefined}
                                           allowMissingCrownSelection={clinicalViewMode === "current" && isDentureCrown(crownObservation?.kind)}
                                           crownSelected={crownTeeth.includes(tooth)}
                                           onCrownClick={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event) : undefined}
                                           onCrownContextMenu={clinicalViewMode === "current" ? (event) => selectCrownArea(tooth, event, true) : undefined}
-                                          surfaceObservations={clinicalViewMode === "current" ? baseline.teeth[tooth]?.surface_observations ?? {} : undefined}
+                                          surfaceObservations={clinicalViewMode === "current" ? displayTooth?.surface_observations ?? {} : undefined}
                                           selectedDiagnosticSurfaces={surfaceTargets.find((target) => target.tooth === tooth)?.surfaces ?? []}
                                           onDiagnosticSurfaceClick={clinicalViewMode === "current" ? (surface, event) => selectDiagnosticSurface(tooth, surface, event) : undefined}
                                           onDiagnosticSurfaceContextMenu={clinicalViewMode === "current" ? (surface, event) => selectDiagnosticSurface(tooth, surface, event, true) : undefined}
                                           selectedSurfaces={clinicalViewMode !== "current" && isActive ? selectedToothSurfaces : []}
-                                          restorations={toothStateSummary.restorations}
-                                          missing={toothStateSummary.missing}
-                                          extracted={toothStateSummary.extracted}
+                                          restorations={completedAppearance?.legacy.restorations ?? toothStateSummary.restorations}
+                                          missing={completedAppearance?.legacy.missing ?? toothStateSummary.missing}
+                                          extracted={completedAppearance?.legacy.extracted ?? toothStateSummary.extracted}
                                           onSurfaceClick={(surface) => {
                                             if (clinicalViewMode === "current") {
                                               showToothDiagnosis();
@@ -9722,7 +9745,7 @@ export default function PatientDetailClient({
                             : diagnosisLayer === "crown" ? <CrownDiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
                               observation={crownObservation} selected={crownTeeth} onChoose={chooseCrownObservation}
                               canNote={canWriteClinical && !clinicalPatientUnavailable} onNote={addCrownToothNote}
-                              onBridge={(role) => openBridgeEditor(role)} bridges={baseline.bridges} onBridgeReset={(bridge) => void resetWholeBridge(bridge)}
+                              onBridge={(role) => openBridgeEditor(role)} bridges={baseline.recordedBridges} onBridgeReset={(bridge) => void resetWholeBridge(bridge)}
                               onApply={() => void applyCrownSelection()} onCancel={cancelCrownSelection} onBack={showToothDiagnosis} />
                             : diagnosisLayer === "root" ? <RootDiagnosisPalette enabled={baseline.canSave} saving={baseline.saving}
                               action={rootAction} selected={rootTeeth} onChoose={chooseRootAction}
@@ -9735,7 +9758,7 @@ export default function PatientDetailClient({
                             </div>
                             </div>
                             {bridgeDialog?.patient === patientId && <BridgeEditor key={`${bridgeDialog.patient}:${bridgeDialog.tooth}:${bridgeDialog.role}`}
-                              tooth={bridgeDialog.tooth} role={bridgeDialog.role} bridges={baseline.bridges}
+                              tooth={bridgeDialog.tooth} role={bridgeDialog.role} bridges={baseline.recordedBridges}
                               enabled={baseline.canSave} saving={baseline.saving} error={baseline.error}
                               onSave={(draft) => void saveBridgeDraft(draft)} onCancel={() => { if (!baseline.saving) setBridgeDialog(null); }} />}
                             {!baseline.loading && !baseline.error && <DentitionGuide dateOfBirth={patient?.date_of_birth}

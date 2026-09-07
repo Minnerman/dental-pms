@@ -208,7 +208,9 @@ def test_surface_noop_replay_and_mixed_batch_changes_preserve_revisions(api_clie
     assert api_client.post(surface_path(patient), headers=headers, json=canonical).json() == first.json()
     assert len(audit_values(patient)) == 1
     noop_data = {**data, "expected_revisions": {"UR6": 1, "LL1": 1}}
-    assert api_client.post(surface_path(patient), headers=auth_headers, json=noop_data).json() == first.json()
+    noop = api_client.post(surface_path(patient), headers=auth_headers, json=noop_data).json()
+    assert noop["projection_revision"] > first.json()["projection_revision"]
+    assert noop == {**first.json(), "projection_revision": noop["projection_revision"]}
     assert audit_values(patient)[-1][3]["changed_surfaces"] == {}
     assert api_client.post(surface_path(patient), headers=headers, json=noop_data).status_code == 409
     mixed_data = payload([target("UR6", "M", "D", "O"), target("LL1", "I")], {"UR6": 1, "LL1": 1})

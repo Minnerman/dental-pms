@@ -45,6 +45,9 @@ export type OdontogramPlannedOverlay = {
   label: string;
   surfaces?: SurfaceKey[];
   status: "planned" | "completed";
+  material?: string | null;
+  /** The caller already projected this completed effect into the tooth view. */
+  badgeOnly?: boolean;
 };
 
 type SurfaceShape = {
@@ -1254,14 +1257,19 @@ function OdontogramToothSvgImpl({
       </g></g>}
       {plannedOverlays.length > 0 && <g pointerEvents="none" data-testid={`tooth-planning-layer-${toothKey}`}>
         {plannedOverlays.map((item) => {
-          const ink = item.status === "completed" ? "var(--planning-complete, #626a74)" : "var(--planning-ink, #493896)";
+          const ink = item.status === "completed" ? "var(--planning-complete, #626a74)"
+            : item.kind === "extraction" ? "var(--planning-extraction, #008d91)" : "var(--planning-ink, #006f88)";
           const dash = item.status === "planned" ? "6 4" : undefined;
           const isSurfaceWork = (item.surfaces?.length ?? 0) > 0;
           const targets = surfaces.filter((surface) => item.surfaces?.includes(nativeSurfaceKey(surface.key)));
+          const materialFill = isSurfaceWork ? surfaceMaterials.find((material) => material.value === item.material)?.colour
+            : item.material ? crownMaterialColors[item.material] : undefined;
           const title = `${item.status === "planned" ? "Planned" : "Completed"}: ${item.label}${item.surfaces?.length ? ` · ${item.surfaces.join("")}` : ""}. Captured diagnosis unchanged.`;
           return <g key={item.id} data-testid={`tooth-planning-overlay-${toothKey}-${item.id}`}
-            data-drawing-kind={item.kind} data-plan-status={item.status} aria-label={title}>
+            data-drawing-kind={item.kind} data-plan-status={item.status} data-material={item.material ?? undefined}
+            data-badge-only={item.badgeOnly ? "true" : "false"} aria-label={title}>
             <title>{title}</title>
+            {!item.badgeOnly && <>
             <g transform={anatomyTransform} fill="none" stroke={ink} strokeWidth="3.5" strokeDasharray={dash}
               strokeLinecap="round" strokeLinejoin="round">
               {item.kind === "extraction" && <path data-testid={`tooth-planning-extraction-${toothKey}-${item.id}`}
@@ -1285,7 +1293,7 @@ function OdontogramToothSvgImpl({
               })}
               {(["crown", "bridge", "denture", "veneer"].includes(item.kind) || item.kind === "inlay_onlay" && !isSurfaceWork) && <g transform={crownTransform}>
                 <path d={anatomy.crown} stroke="var(--planning-halo, #faf8ff)" strokeWidth="6.5" />
-                <path d={anatomy.crown} data-testid={`tooth-planning-crown-${toothKey}-${item.id}`} />
+                <path d={anatomy.crown} fill={materialFill ?? "none"} data-testid={`tooth-planning-crown-${toothKey}-${item.id}`} />
                 {item.kind === "bridge" && <path d="M20 125 H80" strokeWidth="5" />}
                 {item.kind === "denture" && <path d="M17 103 Q50 89 83 103" strokeWidth="6" />}
                 {(item.kind === "inlay_onlay" || item.kind === "veneer") && <path d="M32 120 Q50 111 68 120 L65 145 Q50 155 35 145 Z" strokeWidth="2.5" />}
@@ -1295,10 +1303,11 @@ function OdontogramToothSvgImpl({
               <g transform={toothKey[1] === "R" ? "translate(100 0) scale(-1 1)" : undefined}>
                 {targets.map((surface) => <g key={surface.key} data-testid={`tooth-planning-surface-${toothKey}-${item.id}-${nativeSurfaceKey(surface.key)}`}>
                   <polygon points={surface.points} fill="none" stroke="var(--planning-halo, #faf8ff)" strokeWidth="7" strokeLinejoin="round" />
-                  <polygon points={surface.points} fill="none" stroke={ink} strokeWidth="3.5" strokeDasharray={dash} strokeLinejoin="round" />
+                  <polygon points={surface.points} fill={materialFill ?? "none"} stroke={ink} strokeWidth="3.5" strokeDasharray={dash} strokeLinejoin="round" />
                 </g>)}
               </g>
             </g>}
+            </>}
           </g>;
         })}
         {/* Planning-only space is reserved by TreatmentPlanningChart even when

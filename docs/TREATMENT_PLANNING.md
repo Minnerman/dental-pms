@@ -10,8 +10,7 @@ Unspecified findings remain unspecified. Missing or partial imported coverage is
 labelled; it is never silently filled from a later live chart.
 
 This first version has one planning workspace per patient. Multiple courses,
-replacement snapshots, connected planned bridge groups, planned crown-material
-colours and automatic updates of diagnosis after completion are deferred.
+replacement snapshots and connected planned bridge groups are deferred.
 The existing diagnostic bridge geometry remains part of the captured chart.
 
 ## Planning and fees
@@ -45,7 +44,11 @@ The existing diagnostic bridge geometry remains part of the captured chart.
 - For catalogue items, the selected identity, name/code, patient category and
   price basis are saved. Price-list changes do not reprice existing items.
 - The drawing kind is selected explicitly. Free-text names and codes are not
-  interpreted as clinical anatomy.
+  interpreted as clinical anatomy. Crown/bridge/veneer, denture and filling/inlay
+  materials are also selected explicitly and use the diagnosis palette. Material
+  can be corrected separately on an outstanding item, with its revision history;
+  the fee, target and status remain unchanged. Old unspecified materials stay
+  unspecified. Completed items must be uncompleted before material correction.
 - Fixed fees can use the catalogue amount. Ranges require an agreed amount;
   unavailable prices are not treated as free. Overrides and waivers require
   reasons. An intentional catalogue zero remains distinct from a waived fee.
@@ -64,7 +67,33 @@ Adding or editing a proposal creates neither a clinical procedure nor a charge.
 Completion requires clinical and billing permissions and explicit confirmation
 of the saved fee. It uses the existing atomic procedure/ledger completion path;
 positive fees create one charge and a zero fee creates no charge. It does not
-create an invoice or mark diagnosis as treated automatically.
+create an invoice or rewrite the original diagnosis observations.
+
+### Completed appearance in both charts
+
+The Planned chart folds active native completions over the immutable captured
+baseline in completion order. Planned extraction is a blue/teal cross; completed
+extraction removes the tooth anatomy. An implant completion displays the implant
+fixture. Crowns and selected filling surfaces use the explicit saved material,
+with root filling/post/core and apicectomy using the existing diagnosis artwork.
+Uncomplete recomputes from the baseline and remaining active completions, not a
+destructive whole-tooth restore. Missing support is not invented: for example a
+crown at a missing site does not manufacture natural roots.
+
+Current · Diagnosis presents the same completion effects over native observations
+without rewriting them. A patient-scoped read-only audit projection supplies
+active completion identity/order and latest explicitly observed field order.
+Later tooth conditions/reset supersede older effects; later crown, root or
+individual surface observations supersede only their fields. Movement, rotation
+and deciduous identity remain independent and do not resurrect an extracted tooth.
+Thus Uncomplete preserves later diagnostic edits as well as original history.
+
+Current authoring uses the effective anatomy for eligibility and a projection
+revision token under the patient lock, in addition to native row revisions.
+Ambiguous completion metadata is reported as unavailable and blocks edits rather
+than guessing. Native tooth rows/revisions and the captured baseline remain raw;
+no historical clinical information is backfilled. These additions use existing
+JSON/audit storage and require no new migration.
 
 Version checks prevent stale edits. Request fingerprints distinguish safe
 retries from reuse with different content, and item revisions retain the saved

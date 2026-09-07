@@ -2,13 +2,14 @@ import type { SurfaceKey } from "./surfaceDiagnosis";
 import type { DiagnosisPatch } from "./toothDiagnosis";
 import { britishToothLabel } from "./toothDiagnosis";
 import type { RootObservation } from "./rootDiagnosis";
-import type { CrownObservation, BridgeGroup, BridgeRole } from "./crownDiagnosis";
-import type { SurfaceObservation } from "./surfaceDiagnosis";
+import { crownKinds, dentureKinds, isMaterialCrown, type CrownKind, type CrownObservation, type BridgeGroup, type BridgeRole } from "./crownDiagnosis";
+import { surfaceMaterials, type SurfaceMaterial, type SurfaceObservation } from "./surfaceDiagnosis";
 
 export type PlanningLevel = "tooth" | "root" | "crown" | "surface";
 export type PlanningSelection = { level: PlanningLevel; tooth: string; surfaces: SurfaceKey[] };
 export type PlanningTarget = { level: PlanningLevel | "general"; tooth: string | null; surfaces: SurfaceKey[] };
 export type PlanningDrawingKind = "extraction" | "implant" | "root_canal" | "apicectomy" | "post_core" | "crown" | "bridge" | "denture" | "filling" | "inlay_onlay" | "veneer" | "sealant" | "other";
+export type PlanningMaterial = Exclude<CrownKind, "missing" | "fractured"> | SurfaceMaterial;
 export type PlanningStatus = "proposed" | "accepted" | "declined" | "completed" | "cancelled";
 export type PlanningFeeMode = "catalogue" | "agreed" | "override" | "waived";
 export type PlanningFee = { type: "FIXED" | "RANGE" | "N_A" | "UNAVAILABLE"; amount_pence: number | null; min_amount_pence: number | null; max_amount_pence: number | null; notes: string | null; version_id?: number | null; effective_from?: string | null };
@@ -22,7 +23,7 @@ export type PlanningSnapshot = {
   coverage: { native: "captured"; legacy: "captured" | "unavailable" | "partial"; legacy_reason: string | null };
 };
 export type EarlierPlanningItem = { id: number; patient_id: number; tooth: string | null; surface: string | null; procedure_code: string; description: string; fee_pence: number | null; status: PlanningStatus; created_at: string; updated_at: string };
-export type PlanningItem = EarlierPlanningItem & { plan_id: number; treatment_id: number | null; revision: number; target: PlanningTarget; drawing_kind: PlanningDrawingKind; catalogue_snapshot: { source?: "catalogue"; fee: PlanningFee; name?: string; code?: string | null; patient_category?: string } | { source: "custom" }; fee_mode: PlanningFeeMode; fee_reason: string | null; completed_procedure_id: number | null };
+export type PlanningItem = EarlierPlanningItem & { plan_id: number; treatment_id: number | null; revision: number; target: PlanningTarget; drawing_kind: PlanningDrawingKind; material?: PlanningMaterial | null; catalogue_snapshot: { source?: "catalogue"; fee: PlanningFee; name?: string; code?: string | null; patient_category?: string } | { source: "custom" }; fee_mode: PlanningFeeMode; fee_reason: string | null; completed_procedure_id: number | null };
 export type PlanningPlan = { id: number; created_at: string; created_by: unknown; snapshot: PlanningSnapshot; items: PlanningItem[] };
 export type PlanningResponse = { patient_id: number; plan: PlanningPlan | null; earlier_items: EarlierPlanningItem[]; earlier_items_total: number };
 export const planningDrawingChoices: { value: PlanningDrawingKind; label: string; levels: PlanningTarget["level"][] }[] = [
@@ -36,6 +37,17 @@ export const planningLevels: { value: PlanningLevel; label: string }[] = [
   { value: "tooth", label: "Tooth level" }, { value: "root", label: "Root level" },
   { value: "crown", label: "Crown level" }, { value: "surface", label: "Surface level" },
 ];
+
+export function planningMaterialChoices(kind: PlanningDrawingKind | "", level: PlanningTarget["level"]): { value: PlanningMaterial; label: string }[] {
+  if (kind === "denture") return [...dentureKinds];
+  if (["crown", "bridge", "veneer"].includes(kind) || kind === "inlay_onlay" && level === "crown") return crownKinds.filter((entry) => isMaterialCrown(entry.value)).map((entry) => ({ value: entry.value as PlanningMaterial, label: entry.label }));
+  if (kind === "filling" || kind === "inlay_onlay" && level === "surface") return [...surfaceMaterials];
+  return [];
+}
+
+export function planningMaterialLabel(item: Pick<PlanningItem, "drawing_kind" | "material" | "target">) {
+  return planningMaterialChoices(item.drawing_kind, item.target.level).find((choice) => choice.value === item.material)?.label ?? "Material not specified";
+}
 
 export function planningMoney(pence: number | null | undefined) {
   return pence == null ? "Not priced" : new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);

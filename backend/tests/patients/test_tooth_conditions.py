@@ -73,7 +73,9 @@ def test_tooth_conditions_are_native_persistent_and_never_create_treatment_or_fi
     patient_id = _patient(api_client, auth_headers)
     initial = api_client.get(_path(patient_id), headers=auth_headers)
     assert initial.status_code == 200, initial.text
-    assert initial.json() == {"patient_id": patient_id, "teeth": {}, "note_teeth": [], "bridges": []}
+    assert initial.json() == {"patient_id": patient_id, "teeth": {}, "note_teeth": [], "bridges": [],
+        "completed_effects": [], "observation_events": {}, "projection_revision": 0,
+        "projection_coverage": {"status": "available", "reason": None}}
     before = _counts(patient_id)
 
     for revision, condition in enumerate(("missing", "deciduous", "implant", "unerupted", "impacted", "present")):

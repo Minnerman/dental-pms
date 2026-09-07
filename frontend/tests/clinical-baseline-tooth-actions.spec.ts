@@ -50,7 +50,8 @@ async function selectCondition(page: Page, patientId: string, tooth: string, act
   const patch = action === "deciduous" ? { dentition: "deciduous" }
     : action === "reset" ? { condition: "unrecorded", movement: null, rotation: null }
       : { condition: action };
-  const { expected_revisions, ...body } = response.request().postDataJSON();
+  const { expected_revisions, expected_projection_revision, ...body } = response.request().postDataJSON();
+  expect(expected_projection_revision).toEqual(expect.any(Number));
   expect(body).toEqual({ teeth: [tooth], ...patch });
   expect(Object.keys(expected_revisions)).toEqual([tooth]);
   const observation = expected ?? { condition: action === "reset" ? "unrecorded" : action === "deciduous" ? null : action, dentition: action === "deciduous" ? "deciduous" : null };

@@ -3,6 +3,27 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (completed treatment appearance in both charts): Planned extraction
+  retains its blue-green cross; active completions project missing teeth, implant
+  fixtures, explicit crown/filling materials and supported root findings into
+  both Planned and Current Diagnosis. Original native observations, captured
+  snapshots and treatment history remain unchanged. Uncomplete removes only that
+  completion effect; later explicit diagnoses take precedence per field. Saved
+  restoration material is optional and never inferred from names or fees; an
+  outstanding-item Edit material action supports correction. Unsupported effects
+  remain explicitly reported. Patient-locked projection tokens protect concurrent
+  native writes and stale prefills; legacy request replays retain compatibility.
+  Verification: 322 distinct targeted backend tests, 14 helper/glyph checks and
+  10 browser cases passed, plus typecheck, scoped no-cache lint, production build,
+  compilation and diff checks. Two synthetic caries fixture literals were corrected
+  and rerun; no application workaround. Current/Planned light and dark previews
+  inspected. Compatible local API/frontend refreshed against the unchanged v7 DB;
+  dynamic old/new reads matched raw diagnosis, snapshots, plans, fees and catalogue.
+  Live browser confirmed the owner's already-completed synthetic extraction is
+  missing in both views without re-entering or changing the saved treatment.
+  Default stack ops were avoided because they start/migrate the default stack;
+  isolated equivalents used. No manual-preview patient writes, migration,
+  production deployment, R4 access or merge.
 - 2026-09-07 (planning practice catalogue correction): New plan-item searches use
   the same active, classified five-level practice list as the fee index, across
   all levels by default. Optional selected-level filtering remains available.

@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/auth";
 import type { OdontogramBaselineCondition } from "./OdontogramToothSvg";
 import { diagnosisAction, type DiagnosisAction, type DiagnosisPatch, type ToothCondition } from "./toothDiagnosis";
 import { rootConditionLabel, type RootObservation, type RootPatch } from "./rootDiagnosis";
 import { crownDiagnosisLabel, type CrownObservation, type BridgeRole, type BridgeGroup, type BridgeDraft } from "./crownDiagnosis";
 import { surfaceDiagnosisLabel, surfaceSelectionLabel, type SurfaceKey, type SurfaceObservation, type SurfaceTarget } from "./surfaceDiagnosis";
+import { projectCurrentCompletedTooth, type CompletedPlanningEffect, type PlanningLegacyTooth, type ToothObservationEvents } from "./planningAppearance";
 export { toothConditionLabels, type ToothCondition } from "./toothDiagnosis";
 
 type ConditionRow = DiagnosisPatch & {
@@ -25,6 +26,10 @@ type ConditionChart = {
   teeth: Record<string, ConditionRow>;
   note_teeth: string[];
   bridges?: BridgeGroup[];
+  completed_effects?: CompletedPlanningEffect[];
+  observation_events?: Record<string, ToothObservationEvents>;
+  projection_revision?: number;
+  projection_coverage?: { status: "available" | "unavailable"; reason: string | null };
 };
 
 export function baselineGlyph(row?: DiagnosisPatch): OdontogramBaselineCondition | undefined {
@@ -101,7 +106,24 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   }, [enabled, load]);
 
   const currentChart = enabled && chart?.patient_id === Number(patientId) ? chart : null;
-  const canSave = enabled && writable && Boolean(currentChart) && !loading && !saving && !error;
+  const projectionError = currentChart?.projection_coverage?.status === "unavailable"
+    ? "Completed treatment appearances could not be verified. Current chart editing is paused; refresh and review the treatment history." : null;
+  const canSave = enabled && writable && Boolean(currentChart) && !loading && !saving && !error && !projectionError;
+  const appearanceForTooth = (tooth: string, legacy?: PlanningLegacyTooth) => projectCurrentCompletedTooth(
+    tooth, Number(patientId), currentChart?.teeth[tooth], legacy,
+    currentChart?.completed_effects ?? [], currentChart?.observation_events?.[tooth],
+  );
+  const visibleAppearances = useMemo(() => {
+    if (!currentChart) return {};
+    const teeth = new Set([...Object.keys(currentChart.teeth), ...(currentChart.completed_effects ?? []).flatMap((effect) => effect.target.tooth ? [effect.target.tooth] : [])]);
+    return Object.fromEntries([...teeth].map((tooth) => [tooth, projectCurrentCompletedTooth(
+      tooth, Number(patientId), currentChart.teeth[tooth], undefined, currentChart.completed_effects ?? [], currentChart.observation_events?.[tooth],
+    )]));
+  }, [currentChart, patientId]);
+  const visibleTeeth = Object.fromEntries(Object.entries(visibleAppearances).map(([tooth, appearance]) => [tooth, appearance.row]));
+  // A removed bridge member must not leave a line through an absent tooth.
+  // Keep raw group identity for the explicit whole-bridge correction workflow.
+  const visibleBridges = (currentChart?.bridges ?? []).filter((bridge) => bridge.members.every((member) => visibleTeeth[member.tooth]?.bridge_group_id === bridge.id));
 
   const saveObservation = async (
     path: string, payload: Record<string, unknown>, message: string, rememberAction?: DiagnosisAction
@@ -117,7 +139,7 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
       const response = await apiFetch(path, {
         method: "POST",
         headers: { "Request-Id": requestId() },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...(currentChart.projection_revision == null ? {} : { expected_projection_revision: currentChart.projection_revision }) }),
       });
       if (!response.ok) {
         if (response.status === 409) throw new Error("The tooth chart changed elsewhere. Refresh and review it before trying again.");
@@ -181,10 +203,16 @@ export function useToothConditions(patientId: string, enabled: boolean, writable
   }, "Whole bridge reset");
 
   return {
-    teeth: currentChart?.teeth ?? {},
+    teeth: visibleTeeth,
+    recordedTeeth: currentChart?.teeth ?? {},
+    appearanceForTooth,
     noteTeeth: new Set(currentChart?.note_teeth ?? []),
-    bridges: currentChart?.bridges ?? [],
-    loading, saving, error, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns, saveSurfaces, saveBridge, resetBridge,
+    bridges: visibleBridges,
+    recordedBridges: currentChart?.bridges ?? [],
+    completedEffectsCount: currentChart?.completed_effects?.length ?? 0,
+    hasUnappliedCompletions: Object.values(visibleAppearances).some((appearance) => appearance.unappliedCompletionIds.length > 0),
+    projectionRevision: currentChart?.projection_revision,
+    loading, saving, error: error || projectionError, notice, lastAction, canSave, load, saveAction, saveRoots, saveCrowns, saveSurfaces, saveBridge, resetBridge,
     save: (teeth: string[], condition: Exclude<ToothCondition, "unrecorded" | "present">) => saveAction(teeth, condition, teeth.length === 1),
   };
 }

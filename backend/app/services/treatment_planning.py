@@ -21,7 +21,7 @@ from app.models.treatment_planning import (PatientTreatmentPlan, TreatmentPlanIt
 from app.models.user import Role
 from app.routers.clinical import PLAN_TRANSITIONS, _tooth_conditions_out, _user_has_capability
 from app.schemas.clinical import TreatmentPlanItemOut, schematic_root_count
-from app.schemas.treatment_planning import PlanningItemOut
+from app.schemas.treatment_planning import PlanningItemOut, allowed_planning_materials
 from app.schemas.r4_charting import R4ToothStateOut, R4ToothStateEntryOut, R4ToothStateRestorationOut
 from app.services.audit import log_event
 from app.services.clinical_completion import complete_plan_item, completion_reference
@@ -108,7 +108,7 @@ def legacy_snapshot(db, row, user):
 def capture(db, row, user):
     legacy, coverage, reason = legacy_snapshot(db, row, user)
     return {"version": 1, "captured_at": datetime.now(timezone.utc).isoformat(),
-            "native": _tooth_conditions_out(db, row.id).model_dump(mode="json"), "legacy": legacy,
+            "native": _tooth_conditions_out(db, row.id, include_projection=False).model_dump(mode="json"), "legacy": legacy,
             "coverage": {"native": "captured", "legacy": coverage, "legacy_reason": reason}}
 
 
@@ -281,6 +281,9 @@ def start(db, patient_id, user, request_id):
 def create_item(db, patient_id, payload, user, request_id):
     row = patient(db, patient_id, lock=True)
     action, request = "clinical.planning.item.created", {"patient_id": patient_id, **payload.model_dump(mode="json")}
+    if "material" not in payload.model_fields_set:
+        # Old clients/receipts predate this optional appearance field.
+        request.pop("material", None)
     repeated = replay(db, user, request_id, action, request)
     if repeated is not None:
         return item_out(db.get(TreatmentPlanItem, repeated))
@@ -310,13 +313,13 @@ def create_item(db, patient_id, payload, user, request_id):
         tooth=payload.target.tooth, surface=legacy_surfaces,
         procedure_code=treatment.code or f"CATALOGUE:{treatment.id}", description=treatment.name,
         fee_pence=amount, status=TreatmentPlanStatus.proposed, revision=1,
-        planning_details={"target": payload.target.model_dump(), "drawing_kind": payload.drawing_kind,
+        planning_details={"target": payload.target.model_dump(), "drawing_kind": payload.drawing_kind, "material": payload.material,
                           "catalogue_snapshot": quote, "fee_mode": payload.fee_mode, "fee_reason": reason},
         created_by_user_id=user.id, updated_by_user_id=user.id)
     db.add(item)
     save_revision(db, item, user)
     log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
-        after_data={"plan_id": plan.id, "treatment_plan_item_id": item.id, "revision": 1, "treatment_id": treatment.id, "fee_pence": amount, "fee_mode": payload.fee_mode})
+        after_data={"plan_id": plan.id, "treatment_plan_item_id": item.id, "revision": 1, "treatment_id": treatment.id, "fee_pence": amount, "fee_mode": payload.fee_mode, "material": payload.material})
     receipt(db, user, request_id, action, request, item.id)
     db.commit()
     db.refresh(item)
@@ -378,6 +381,13 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
     if payload.fee_mode is not None:
         amount, reason = resolved_fee(details["catalogue_snapshot"], payload.fee_mode, payload.fee_pence, payload.fee_reason)
         details.update(fee_mode=payload.fee_mode, fee_reason=reason)
+    if "material" in payload.model_fields_set:
+        if payload.material is not None and payload.material not in allowed_planning_materials(details["drawing_kind"], details["target"]["level"]):
+            raise HTTPException(422, "Material does not match this treatment's drawing kind and target level")
+        # An old row without this key is genuinely unspecified, not an inferred
+        # material. Clearing that unspecified value is a no-op, not a rewrite.
+        if details.get("material") != payload.material:
+            details["material"] = payload.material
     changed = amount != item.fee_pence or details != item.planning_details or next_status != item.status
     if not changed:
         receipt(db, user, request_id, action, request, item.id)
@@ -399,8 +409,8 @@ def update_item(db, patient_id, item_id, payload, user, request_id):
         item.completed_procedure_id = procedure.id
     save_revision(db, item, user)
     log_event(db, actor=user, action=action, entity_type="patient", entity_id=str(patient_id), request_id=request_id,
-        before_data={"treatment_plan_item_id": item.id, "revision": before["revision"], "status": previous_status.value, "fee_pence": before["fee_pence"], "fee_mode": before["fee_mode"]},
-        after_data={"treatment_plan_item_id": item.id, "revision": item.revision, "status": item.status.value, "fee_pence": amount, "fee_mode": details["fee_mode"]})
+        before_data={"treatment_plan_item_id": item.id, "revision": before["revision"], "status": previous_status.value, "fee_pence": before["fee_pence"], "fee_mode": before["fee_mode"], "material": before["material"]},
+        after_data={"treatment_plan_item_id": item.id, "revision": item.revision, "status": item.status.value, "fee_pence": amount, "fee_mode": details["fee_mode"], "material": details.get("material")})
     if procedure is not None:
         log_event(db, actor=user, action="clinical.procedure.completed", entity_type="patient", entity_id=str(patient_id), request_id=request_id,
             after_data={"procedure_id": procedure.id, "treatment_plan_item_id": item.id, "tooth": item.tooth, "surface": item.surface, "procedure_code": item.procedure_code, "fee_pence": amount})
@@ -456,7 +466,7 @@ def uncomplete_item(db, patient_id, item_id, payload, user, request_id):
             unsafe()
         current = item_out(item).model_dump(mode="json")
         immutable = ("patient_id", "plan_id", "treatment_id", "tooth", "surface", "procedure_code", "description",
-                     "fee_pence", "target", "drawing_kind", "catalogue_snapshot", "fee_mode", "fee_reason")
+                     "fee_pence", "target", "drawing_kind", "material", "catalogue_snapshot", "fee_mode", "fee_reason")
         if any(before.get(field) != current.get(field) or completed.get(field) != current.get(field) for field in immutable):
             unsafe()
         cycle = TreatmentPlanCompletion(item_id=item.id, cycle=1, previous_status=before["status"], procedure_id=procedure.id)

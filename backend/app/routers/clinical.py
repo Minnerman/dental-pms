@@ -50,6 +50,7 @@ from app.schemas.clinical import (
 )
 from app.services.audit import log_event
 from app.services.clinical_completion import complete_plan_item
+from app.services.completed_chart import check_projection, effective_tooth, projection_context
 from app.schemas.clinical_note import ToothNoteAmendment, NativeNoteHistoryOut
 from app.services import native_notes
 
@@ -86,10 +87,12 @@ PLAN_TRANSITIONS = {
 T = TypeVar("T", ToothNote, Procedure, TreatmentPlanItem)
 
 
-def get_patient_or_404(db: Session, patient_id: int, *, for_update: bool = False) -> Patient:
+def get_patient_or_404(db: Session, patient_id: int, *, for_update: bool = False, for_share: bool = False) -> Patient:
     stmt = select(Patient).where(Patient.id == patient_id, Patient.deleted_at.is_(None))
     if for_update:
         stmt = stmt.with_for_update(of=Patient)
+    elif for_share:
+        stmt = stmt.with_for_update(read=True, of=Patient)
     patient = db.scalar(stmt)
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
@@ -210,7 +213,11 @@ def _has_anatomy_observations(row: ToothCondition) -> bool:
     return bool(row.root_observations or row.crown_observation is not None or row.surface_observations)
 
 
-def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
+def _tooth_conditions_out(db: Session, patient_id: int, *, include_projection: bool = True) -> ToothConditionsOut:
+    if include_projection:
+        # Also reacquire after a POST commit: raw rows and the projection token
+        # must belong to one patient-locked view, not straddle a completion.
+        get_patient_or_404(db, patient_id, for_share=True)
     conditions = db.scalars(
         select(ToothCondition)
         .where(ToothCondition.patient_id == patient_id)
@@ -233,6 +240,7 @@ def _tooth_conditions_out(db: Session, patient_id: int) -> ToothConditionsOut:
         teeth={condition.tooth: condition for condition in conditions},
         note_teeth=note_teeth,
         bridges=[_bridge_snapshot(group_id, members) for group_id, members in sorted(bridge_members.items())],
+        **(projection_context(db, patient_id) if include_projection else {}),
     )
 
 
@@ -278,7 +286,7 @@ def get_tooth_conditions(
     db: Session = Depends(get_db),
     _user: User = Depends(CLINICAL_VIEW),
 ):
-    get_patient_or_404(db, patient_id)
+    get_patient_or_404(db, patient_id, for_share=True)
     return _tooth_conditions_out(db, patient_id)
 
 
@@ -310,6 +318,7 @@ def update_tooth_conditions(
         # Return the latest state, without replaying old values over newer edits.
         return _tooth_conditions_out(db, patient_id)
 
+    projection = check_projection(db, patient_id, payload.expected_projection_revision)
     existing = {
         row.tooth: row
         for row in db.scalars(
@@ -331,21 +340,23 @@ def update_tooth_conditions(
 
     before = {tooth: _tooth_condition_snapshot(existing.get(tooth)) for tooth in payload.teeth}
     patches = {tooth: _tooth_observation_patch(existing.get(tooth), request_values) for tooth in payload.teeth}
-    for tooth, row in existing.items():
+    for tooth in payload.teeth:
+        raw_row = existing.get(tooth)
+        row = effective_tooth(raw_row, tooth, projection)
         observations = patches[tooth]
         if (observations.get("dentition") is not None
                 and observations.get("condition", row.condition) == "implant"):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="An implant has no natural tooth dentition")
-        if ((row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS
+        if ((row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS | {"denture_unknown"}
                 and "condition" in observations and observations["condition"] not in {None, "missing", "unrecorded"}
-                and not _whole_tooth_clears_anatomy_observations(row, observations)):
+                and not _whole_tooth_clears_anatomy_observations(raw_row, observations)):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Reset the denture crown before recording an incompatible tooth condition")
         if row.bridge_group_id is not None and {"condition", "dentition"}.intersection(observations):
-            clears_recorded_anatomy = (_whole_tooth_clears_anatomy_observations(row, observations)
-                                      and _has_anatomy_observations(row))
-            if (any(observations[key] != getattr(row, key) for key in ("condition", "dentition") if key in observations)
+            clears_recorded_anatomy = (_whole_tooth_clears_anatomy_observations(raw_row, observations)
+                                      and _has_anatomy_observations(raw_row))
+            if (any(observations[key] != getattr(raw_row, key) for key in ("condition", "dentition") if key in observations)
                     or clears_recorded_anatomy):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="Reset the complete bridge before changing a member's tooth condition")
@@ -427,6 +438,7 @@ def update_root_conditions(
                 detail="Request-Id was already used for a different tooth or root observation")
         return _tooth_conditions_out(db, patient_id)
 
+    projection = check_projection(db, patient_id, payload.expected_projection_revision)
     existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
         ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(payload.teeth),
     ))}
@@ -436,9 +448,9 @@ def update_root_conditions(
             detail="Tooth conditions changed. Refresh the chart before trying again")
     root_counts = {}
     for tooth in payload.teeth:
-        row = existing.get(tooth)
+        row = effective_tooth(existing.get(tooth), tooth, projection)
         condition = row.condition if row else None
-        if row and (row.bridge_role == "pontic" or (row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS):
+        if row and (row.bridge_role == "pontic" or (row.crown_observation or {}).get("kind") in DENTURE_CROWN_KINDS | {"denture_unknown"}):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Natural root observations cannot be recorded for a pontic or denture tooth")
         if condition in {"missing", "implant", "unerupted"}:
@@ -498,11 +510,13 @@ def update_crown_conditions(
     _viewer: User = Depends(CLINICAL_VIEW),
     request_id: str | None = Header(default=None, min_length=1, max_length=120),
 ):
-    # Crown/root/tooth changes are one revision domain. Nothing is inferred from
-    # treatment history, and every selected tooth validates before any write.
+    # Crown/root/tooth changes share revisions. Explicit completed effects only
+    # affect eligibility; raw diagnosis/history is never rewritten by projection.
     get_patient_or_404(db, patient_id, for_update=True)
     action = "clinical.crown_conditions.recorded"
     request_values = payload.model_dump(mode="json")
+    if "expected_projection_revision" not in payload.model_fields_set:
+        request_values.pop("expected_projection_revision", None)
     duplicate = _duplicate_audit(
         db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS,
     )
@@ -512,6 +526,7 @@ def update_crown_conditions(
                 detail="Request-Id was already used for a different tooth observation")
         return _tooth_conditions_out(db, patient_id)
 
+    projection = check_projection(db, patient_id, payload.expected_projection_revision)
     existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
         ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(payload.teeth),
     ))}
@@ -520,7 +535,7 @@ def update_crown_conditions(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
             detail="Tooth conditions changed. Refresh the chart before trying again")
     for tooth in payload.teeth:
-        row = existing.get(tooth)
+        row = effective_tooth(existing.get(tooth), tooth, projection)
         condition = row.condition if row else None
         old_crown = row.crown_observation if row else None
         if row and row.bridge_group_id is not None and payload.kind not in MATERIAL_CROWN_KINDS:
@@ -532,7 +547,7 @@ def update_crown_conditions(
                     detail="A denture tooth requires a missing or unspecified tooth without current root or surface findings; reset incompatible findings first")
         elif condition == "unerupted" or (condition == "missing" and not (
                 row and row.bridge_role == "pontic" and payload.kind in MATERIAL_CROWN_KINDS
-                or payload.kind is None and old_crown is not None and old_crown.get("kind") in DENTURE_CROWN_KINDS | {None})):
+                or payload.kind is None and old_crown is not None and old_crown.get("kind") in DENTURE_CROWN_KINDS | {None, "denture_unknown"})):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="A missing tooth requires an explicit pontic or denture observation")
 
@@ -584,6 +599,8 @@ def update_surface_conditions(
     get_patient_or_404(db, patient_id, for_update=True)
     action = "clinical.surface_conditions.recorded"
     request_values = payload.model_dump(mode="json")
+    if "expected_projection_revision" not in payload.model_fields_set:
+        request_values.pop("expected_projection_revision", None)
     duplicate = _duplicate_audit(db, patient_id=patient_id, request_id=request_id,
         actions=OBSERVATION_AUDIT_ACTIONS)
     if duplicate:
@@ -592,6 +609,7 @@ def update_surface_conditions(
                 detail="Request-Id was already used for a different tooth observation")
         return _tooth_conditions_out(db, patient_id)
 
+    projection = check_projection(db, patient_id, payload.expected_projection_revision)
     teeth = [target.tooth for target in payload.targets]
     existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
         ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(teeth),
@@ -600,10 +618,11 @@ def update_surface_conditions(
            for tooth in teeth):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
             detail="Tooth conditions changed. Refresh the chart before trying again")
-    for row in existing.values():
+    for tooth in teeth:
+        row = effective_tooth(existing.get(tooth), tooth, projection)
         crown_kind = (row.crown_observation or {}).get("kind")
         if (row.condition in {"missing", "unerupted", "implant"} or row.bridge_role == "pontic"
-                or crown_kind in DENTURE_CROWN_KINDS | {"fractured"}):
+                or crown_kind in DENTURE_CROWN_KINDS | {"fractured", "denture_unknown"}):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Surface findings require a natural tooth or a crowned natural support, not a missing, unerupted, implant, pontic, denture or absent crown")
 
@@ -664,13 +683,14 @@ def create_bridge(
         if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request-Id was already used for a different observation")
         return _tooth_conditions_out(db, patient_id)
+    projection = check_projection(db, patient_id, payload.expected_projection_revision)
     teeth = [member.tooth for member in payload.members]
     existing = {row.tooth: row for row in db.scalars(select(ToothCondition).where(
         ToothCondition.patient_id == patient_id, ToothCondition.tooth.in_(teeth)))}
     if any(payload.expected_revisions[tooth] != (existing[tooth].revision if tooth in existing else 0) for tooth in teeth):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tooth conditions changed. Refresh before creating the bridge")
     for member in payload.members:
-        row = existing.get(member.tooth)
+        row = effective_tooth(existing.get(member.tooth), member.tooth, projection)
         if row and row.bridge_group_id is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A selected tooth already belongs to a bridge")
         crown_kind = payload.crown.kind if payload.crown else (row.crown_observation or {}).get("kind") if row else None
@@ -728,11 +748,14 @@ def reset_bridge(
     get_patient_or_404(db, patient_id, for_update=True)
     action = "clinical.bridge.reset"
     request_values = {"bridge_id": bridge_id, **payload.model_dump(mode="json")}
+    if "expected_projection_revision" not in payload.model_fields_set:
+        request_values.pop("expected_projection_revision", None)
     duplicate = _duplicate_audit(db, patient_id=patient_id, request_id=request_id, actions=OBSERVATION_AUDIT_ACTIONS)
     if duplicate:
         if duplicate.action != action or (duplicate.after_json or {}).get("request") != request_values:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Request-Id was already used for a different observation")
         return _tooth_conditions_out(db, patient_id)
+    check_projection(db, patient_id, payload.expected_projection_revision)
     group = db.scalar(select(ToothBridgeGroup).where(ToothBridgeGroup.id == bridge_id, ToothBridgeGroup.patient_id == patient_id))
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bridge not found")

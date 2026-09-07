@@ -1,5 +1,6 @@
 .chart {
-  --planning-ink: #493896;
+  --planning-ink: #006f88;
+  --planning-extraction: #008d91;
   --planning-halo: #faf8ff;
   --planning-complete: #626a74;
   min-width: 0;
@@ -9,7 +10,8 @@
 }
 
 :global([data-theme="dark"]) .chart {
-  --planning-ink: #c0adff;
+  --planning-ink: #55d4ee;
+  --planning-extraction: #55dcc2;
   --planning-halo: #27212f;
   --planning-complete: #adb4be;
 }

@@ -9,6 +9,7 @@ import OdontogramToothSvg, { getOdontogramToothType, type OdontogramPlannedOverl
 import { surfaceOrder, type SurfaceKey } from "./surfaceDiagnosis";
 import { britishToothLabel } from "./toothDiagnosis";
 import { baselineGlyph } from "./useToothConditions";
+import { projectCompletedPlanningTooth } from "./planningAppearance";
 import type { PlanningItem, PlanningLevel, PlanningSelection, PlanningSnapshot } from "./treatmentPlanning";
 import styles from "./TreatmentPlanningChart.module.css";
 
@@ -31,8 +32,9 @@ const legacySurfaces = new Set<R4SurfaceKey>(["M", "O", "D", "B", "L", "I"]);
 export function planningToothOverlays(items: PlanningItem[], tooth: string, patientId: number): OdontogramPlannedOverlay[] {
   return items.filter((item) => item.patient_id === patientId && item.target.tooth === tooth
     && item.target.level !== "general" && ["proposed", "accepted", "completed"].includes(item.status))
-    .map((item) => ({ id: item.id, kind: item.drawing_kind, label: item.description,
-      surfaces: [...item.target.surfaces], status: item.status === "completed" ? "completed" : "planned" }));
+    .map((item) => ({ id: item.id, kind: item.drawing_kind, label: item.description, material: item.material,
+      badgeOnly: item.status === "completed", surfaces: [...item.target.surfaces],
+      status: item.status === "completed" ? "completed" : "planned" }));
 }
 
 /** Present a saved plan snapshot only: no fetches, live fallbacks or diagnosis
@@ -52,6 +54,11 @@ export default function TreatmentPlanningChart({ snapshot, items, level, selecti
     }
     return result;
   }, [snapshot]);
+  const appearances = useMemo(() => new Map([...bridgeArchTeeth(true), ...bridgeArchTeeth(false)].map((tooth) =>
+    [tooth, projectCompletedPlanningTooth(tooth, snapshot.native.patient_id, snapshot.native.teeth[tooth], legacy.get(tooth), items)])),
+  [snapshot, legacy, items]);
+  const bridges = useMemo(() => (snapshot.native.bridges ?? []).filter((bridge) => bridge.members.every((member) =>
+    appearances.get(member.tooth)?.replacementCompletionId == null)), [snapshot.native.bridges, appearances]);
   const captured = new Date(snapshot.captured_at);
   const capturedLabel = Number.isNaN(captured.getTime()) ? "Capture date not recorded"
     : captured.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/London" });
@@ -74,16 +81,19 @@ export default function TreatmentPlanningChart({ snapshot, items, level, selecti
   return <section className={styles.chart} data-testid="treatment-planning-chart" aria-label="Treatment planning odontogram"
     data-snapshot-captured-at={snapshot.captured_at} data-planning-level={level}>
     <div className={styles.heading}>
-      <div><h3>Captured diagnosis</h3><span>{capturedLabel}</span></div>
+      <div><h3>Diagnosis &amp; completed treatment</h3><span>Baseline captured {capturedLabel}</span></div>
       <div className={styles.legend} aria-label="Treatment chart legend">
-        <span>Tooth colours: captured findings</span><span className={styles.plannedKey}>P · Planned (dashed)</span>
-        <span className={styles.completedKey}>C · Completed (solid)</span>
+        <span>Captured findings + active completions</span><span className={styles.plannedKey}>P · Planned (blue-green outline)</span>
+        <span className={styles.completedKey}>C · Completed appearance</span>
       </div>
     </div>
     {snapshot.coverage.legacy !== "captured" && <p className={styles.coverage} role="note">
       {snapshot.coverage.legacy === "partial" ? "Imported chart coverage is partial in this snapshot." : "Imported chart findings were not available when this snapshot was captured."}
       {" "}No live imported findings are added to this plan.
       {snapshot.coverage.legacy_reason ? ` ${snapshot.coverage.legacy_reason}` : ""}
+    </p>}
+    {[...appearances.values()].some((appearance) => appearance.unappliedCompletionIds.length) && <p className={styles.coverage} role="note" data-testid="planning-appearance-limited">
+      Some completed treatments cannot be drawn from the recorded anatomy or unspecified material. Their C markers and treatment records remain visible; no replacement anatomy is guessed.
     </p>}
     <div className={styles.scroll} tabIndex={0} role="region" aria-label="Planning chart, scroll horizontally to see all teeth">
       <div className={styles.canvas}>
@@ -93,17 +103,20 @@ export default function TreatmentPlanningChart({ snapshot, items, level, selecti
             <span>{upper ? "Upper right" : "Lower right"}</span><span>{upper ? "Upper left" : "Lower left"}</span>
           </div>
           <div className={styles.arch} data-testid={`planning-${upper ? "upper" : "lower"}-arch`}>
-            <BridgeConnections bridges={snapshot.native.bridges ?? []} upper={upper} />
+            <BridgeConnections bridges={bridges} upper={upper} />
             {bridgeArchTeeth(upper).map((tooth, index) => {
-              const row = snapshot.native.teeth[tooth];
+              const appearance = appearances.get(tooth)!;
+              const row = appearance.row;
               const baseline = baselineGlyph(row);
               const label = britishToothLabel(tooth, baseline?.dentition === "deciduous" ? "deciduous" : undefined);
-              const saved = legacy.get(tooth);
+              const saved = appearance.legacy;
               const selected = selection?.tooth === tooth ? selection : null;
               const numberLevel = level === "crown" ? "crown" : "tooth";
               const numberTitle = `${label} ${numberLevel === "crown" ? "crown area" : "whole tooth"} treatment`;
               return <div key={tooth} className={styles.tooth} style={{ gridColumn: index < 8 ? index + 1 : index + 2 }}
-                role="group" aria-label={`Planning for ${label}`} data-testid={`planning-tooth-${tooth}`}>
+                role="group" aria-label={`Planning for ${label}`} data-testid={`planning-tooth-${tooth}`}
+                data-projected-completion-ids={appearance.completionIds.join(",")}
+                data-projected-state={row.condition ?? "unspecified"}>
                 <OdontogramToothSvg toothKey={tooth} toothType={getOdontogramToothType(tooth)}
                   baselineCondition={baseline} rootConditions={row?.root_observations ?? {}}
                   crownCondition={row?.crown_observation ?? null} surfaceObservations={row?.surface_observations ?? {}}

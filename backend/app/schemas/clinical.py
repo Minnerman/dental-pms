@@ -91,6 +91,7 @@ class ToothConditionUpdate(BaseModel):
     movement: Literal["forward", "backward"] | None = None
     rotation: Literal["clockwise", "anticlockwise"] | None = None
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+    expected_projection_revision: Annotated[int | None, Field(strict=True, ge=0)] = None
 
     @field_validator("teeth", mode="before")
     @classmethod
@@ -164,6 +165,7 @@ class RootConditionUpdate(BaseModel):
     condition: RootConditionValue | None = None
     apicectomy: bool = Field(default=False, strict=True)
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+    expected_projection_revision: Annotated[int | None, Field(strict=True, ge=0)] = None
 
     @field_validator("teeth", mode="before")
     @classmethod
@@ -218,6 +220,7 @@ class CrownConditionUpdate(CrownObservation):
     kind: CrownWriteKind | None
     teeth: list[str] = Field(min_length=1, max_length=32)
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+    expected_projection_revision: Annotated[int | None, Field(strict=True, ge=0)] = None
 
     @field_validator("teeth", mode="before")
     @classmethod
@@ -327,6 +330,7 @@ class SurfaceConditionUpdate(BaseModel):
     targets: list[SurfaceTarget] = Field(min_length=1, max_length=32)
     observation: SurfaceObservation
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+    expected_projection_revision: Annotated[int | None, Field(strict=True, ge=0)] = None
 
     @field_validator("expected_revisions", mode="before")
     @classmethod
@@ -367,6 +371,7 @@ class BridgeCreate(BaseModel):
     members: list[BridgeMember] = Field(min_length=2, max_length=16)
     crown: BridgeCrown | None = None
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]]
+    expected_projection_revision: Annotated[int | None, Field(strict=True, ge=0)] = None
 
     @field_validator("crown", mode="before")
     @classmethod
@@ -403,6 +408,7 @@ class BridgeCreate(BaseModel):
 class BridgeReset(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revisions: dict[str, Annotated[int, Field(strict=True, ge=0)]] = Field(min_length=2, max_length=16)
+    expected_projection_revision: Annotated[int | None, Field(strict=True, ge=0)] = None
 
     @field_validator("expected_revisions", mode="before")
     @classmethod
@@ -435,11 +441,41 @@ class ToothConditionOut(BaseModel):
     updated_by: ActorOut
 
 
+class CompletedTreatmentEffectOut(BaseModel):
+    item_id: int
+    procedure_id: int
+    completed_at: datetime | None
+    event_id: int
+    target: dict
+    drawing_kind: str
+    material: str | None = None
+
+
+class ObservationEventsOut(BaseModel):
+    anatomy: int = 0
+    dentition: int = 0
+    movement: int = 0
+    rotation: int = 0
+    crown: int = 0
+    root_condition: int = 0
+    apicectomy: int = 0
+    surfaces: dict[SurfaceKey, int] = Field(default_factory=dict)
+
+
+class ProjectionCoverageOut(BaseModel):
+    status: Literal["available", "unavailable"] = "available"
+    reason: str | None = None
+
+
 class ToothConditionsOut(BaseModel):
     patient_id: int
     teeth: dict[str, ToothConditionOut]
     note_teeth: list[str]
     bridges: list[BridgeOut]
+    completed_effects: list[CompletedTreatmentEffectOut] = Field(default_factory=list)
+    observation_events: dict[str, ObservationEventsOut] = Field(default_factory=dict)
+    projection_revision: int = 0
+    projection_coverage: ProjectionCoverageOut = Field(default_factory=ProjectionCoverageOut)
 
 
 class ProcedureCreate(BaseModel):
