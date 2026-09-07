@@ -2,8 +2,10 @@
 
 The administrator's **More → Treatments** page is the practice's routine price
 index. It groups treatments in this order: tooth, root, crown, surface and
-miscellaneous. Existing uncategorised treatments remain visible in a separate
-section. Ordinary reads never infer or assign their level.
+miscellaneous. The former **Other existing treatments** section is omitted from
+this page. Its uncategorised records are retained in storage for existing patient
+plans and history; this display change does not delete or deactivate treatments.
+Ordinary reads never infer or assign their level.
 
 ## Routine list and day-to-day use
 

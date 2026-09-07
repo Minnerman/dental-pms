@@ -205,7 +205,8 @@ export default function TreatmentsPage() {
     <nav className={styles.jumps} aria-label="Treatment fee levels">{groups.slice(0, 5).map((group) => <a key={group.level} href={`#fees-${group.level}`}>{group.title.replace(" fees", "")}</a>)}</nav>
     {loading && <p role="status" data-testid="treatments-loading">Loading treatments…</p>}
     {data && <p className={styles.help}>Current fees on {dateLabel(data.practice_today)} · UK practice date · {categories[category]}. “Not set” does not mean free.</p>}
-    {!loading && !error && groups.map((group) => {
+    {/* Keep uncategorised legacy records intact, but omit them from this routine fee index. */}
+    {!loading && !error && groups.slice(0, 5).map((group) => {
       const items = rows.filter((item) => (item.level ?? "unassigned") === group.level).sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name) || a.id - b.id);
       if (group.level === "unassigned" && !items.length) return null;
       return <section className={styles.group} id={`fees-${group.level}`} data-testid={`treatments-group-${group.level}`} key={group.level}>

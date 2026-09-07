@@ -87,8 +87,19 @@ async function closeFees(page: Page) { await page.getByTestId("fee-editor").getB
 
 test("treatments are grouped in clinical order and editing does not refetch or overwrite the draft", async ({ page, request }) => {
   const harness = await mock(page, request); await open(page, true);
-  await expect(page.locator('[data-testid^="treatments-group-"]')).toHaveCount(6);
-  expect(await page.locator('[data-testid^="treatments-group-"]').evaluateAll((groups) => groups.map((group) => group.getAttribute("data-testid")))).toEqual(["tooth", "root", "crown", "surface", "general", "unassigned"].map((level) => `treatments-group-${level}`));
+  const originalUnassigned = structuredClone(harness.entries.find((entry) => entry.id === 6)!);
+  await expect(page.locator('[data-testid^="treatments-group-"]')).toHaveCount(5);
+  expect(await page.locator('[data-testid^="treatments-group-"]').evaluateAll((groups) => groups.map((group) => group.getAttribute("data-testid")))).toEqual(["tooth", "root", "crown", "surface", "general"].map((level) => `treatments-group-${level}`));
+  await expect(page.getByTestId("treatments-group-unassigned")).toHaveCount(0); await expect(page.getByTestId("treatment-row-6")).toHaveCount(0);
+  await expect(page.getByText(/Other existing treatments/)).toHaveCount(0);
+  const search = page.getByRole("searchbox", { name: "Find a treatment", exact: true }); await search.fill("Sample unassigned");
+  await expect(page.locator('[data-testid^="treatment-row-"]')).toHaveCount(0);
+  const showInactiveResponse = page.waitForResponse((response) => response.url().includes("/api/treatments/index?") && new URL(response.url()).searchParams.get("include_inactive") === "true");
+  await page.getByRole("checkbox", { name: "Show inactive", exact: true }).check(); await showInactiveResponse; await expect(page.getByTestId("treatments-loading")).toHaveCount(0);
+  await expect(page.getByTestId("treatments-group-unassigned")).toHaveCount(0); await expect(page.getByTestId("treatment-row-6")).toHaveCount(0); expect(harness.writes).toEqual([]);
+  expect(harness.entries.find((entry) => entry.id === 6)).toEqual(originalUnassigned);
+  await search.clear(); const hideInactiveResponse = page.waitForResponse((response) => response.url().includes("/api/treatments/index?") && new URL(response.url()).searchParams.get("include_inactive") === "false");
+  await page.getByRole("checkbox", { name: "Show inactive", exact: true }).uncheck(); await hideInactiveResponse; await expect(page.getByTestId("treatments-loading")).toHaveCount(0);
   expect(await page.getByTestId("treatments-group-tooth").locator('[data-testid^="treatment-row-"]').evaluateAll((rows) => rows.map((row) => row.getAttribute("data-testid")))).toEqual(["treatment-row-7", "treatment-row-1"]);
   const reads = harness.reads.length;
   await page.getByTestId("treatment-edit-1").click(); await expect(page.getByTestId("treatment-editor")).toBeVisible();
@@ -98,6 +109,7 @@ test("treatments are grouped in clinical order and editing does not refetch or o
   await page.getByTestId("treatment-save").click(); await expect(page.getByTestId("treatment-editor")).toBeHidden();
   expect(harness.writes).toHaveLength(1); expect(harness.writes[0]).toMatchObject({ path: "/api/treatments/1", method: "PATCH", body: { name: "Unsaved synthetic name", level: "root" } });
   await expect(page.getByTestId("treatments-group-root").getByTestId("treatment-row-1")).toContainText("Unsaved synthetic name");
+  expect(harness.entries.find((entry) => entry.id === 6)).toEqual(originalUnassigned);
 });
 
 test("real current and future practice fees survive reload and same-date corrections retain history", async ({ page, request }) => {

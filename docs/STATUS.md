@@ -3,6 +3,15 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (routine fee index cleanup): Omitted the Other existing treatments
+  section from the fees page, including search and inactive views. All underlying
+  catalogue records, saved quotes and historical fees remain intact; no deletion
+  or deactivation. Four focused browser checks, typecheck, scoped lint, build and
+  diff checks passed; five-group light/dark/mobile presentation inspected. Local
+  frontend/proxy refreshed and the live browser verified only the five requested
+  categories. Existing API/database unchanged. Default stack ops/migrations and
+  backend suite not run for this display-only change; isolated frontend checks
+  and local health used. No production deployment, migration or R4 access.
 - 2026-09-07 (routine-list button correction): Reproduced an inaccessible browser
   JavaScript confirmation in the local in-app preview. Replaced this initializer's
   prompt with a visible modal and persistent created/already-present result.
