@@ -28,8 +28,16 @@ The existing diagnostic bridge geometry remains part of the captured chart.
   They do not create practice price-list entries, infer tooth targets or change
   the captured chart. They share the same lists, fee edits and audited lifecycle.
   Saved descriptions are preserved, not retrospectively rewritten.
+- The Add treatment dialog also offers **Other treatment** for an explicitly
+  selected tooth, whole-root, crown or surface target. It uses the same custom
+  provenance and agreed fee/reasoned waiver; no procedure drawing is inferred.
 - A clinical read-only picker uses the same active treatment/fee catalogue as
   Practice Treatments. Catalogue administration remains restricted as before.
+  It initially shows the selected level plus unassigned legacy entries. All
+  levels can be browsed, but an explicitly categorised treatment requires a
+  matching target. The current UK-date price is resolved consistently during
+  catalogue display and save; versions and effective dates are retained in new
+  quotes. See [Practice treatment fees](PRACTICE_TREATMENT_FEES.md).
 - For catalogue items, the selected identity, name/code, patient category and
   price basis are saved. Price-list changes do not reprice existing items.
 - The drawing kind is selected explicitly. Free-text names and codes are not
@@ -85,8 +93,11 @@ items remain outside this correction workflow.
 
 ## Release boundary
 
-Migrations 0059 and 0060 are required. Migration 0060 adds completion/reversal
+Migrations 0059, 0060 and 0061 are required. Migration 0060 adds completion/reversal
 records and the voided procedure status without rewriting source records.
+Migration 0061 adds the explicit practice treatment index and immutable dated
+fee history, preserving the original undated fees. Populated index/history
+metadata blocks its destructive downgrade.
 Apply and verify only in disposable or
 explicitly authorised environments. A populated planning workspace must not be
 silently dropped by a downgrade; 0060 also refuses downgrade when completion

@@ -11,9 +11,9 @@ export type PlanningTarget = { level: PlanningLevel | "general"; tooth: string |
 export type PlanningDrawingKind = "extraction" | "implant" | "root_canal" | "apicectomy" | "post_core" | "crown" | "bridge" | "denture" | "filling" | "inlay_onlay" | "veneer" | "sealant" | "other";
 export type PlanningStatus = "proposed" | "accepted" | "declined" | "completed" | "cancelled";
 export type PlanningFeeMode = "catalogue" | "agreed" | "override" | "waived";
-export type PlanningFee = { type: "FIXED" | "RANGE" | "N_A" | "UNAVAILABLE"; amount_pence: number | null; min_amount_pence: number | null; max_amount_pence: number | null; notes: string | null };
-export type PlanningCatalogueItem = { id: number; code: string | null; name: string; description: string | null; default_duration_minutes: number | null; patient_category: string; fee: PlanningFee; quote_token: string };
-export type PlanningCatalogue = { patient_id: number; patient_category: string; currency: "GBP"; items: PlanningCatalogueItem[]; total: number };
+export type PlanningFee = { type: "FIXED" | "RANGE" | "N_A" | "UNAVAILABLE"; amount_pence: number | null; min_amount_pence: number | null; max_amount_pence: number | null; notes: string | null; version_id?: number | null; effective_from?: string | null };
+export type PlanningCatalogueItem = { id: number; code: string | null; name: string; description: string | null; default_duration_minutes: number | null; patient_category: string; level?: PlanningTarget["level"] | null; display_order?: number; fee: PlanningFee; quote_token: string };
+export type PlanningCatalogue = { patient_id: number; patient_category: string; currency: "GBP"; practice_today?: string; items: PlanningCatalogueItem[]; total: number };
 export type PlanningNativeRow = DiagnosisPatch & { revision: number; root_observations?: Record<string, RootObservation>; crown_observation?: CrownObservation | null; surface_observations?: Partial<Record<SurfaceKey, SurfaceObservation>>; bridge_group_id?: number | null; bridge_role?: BridgeRole | null };
 export type PlanningSnapshot = {
   version: 1; captured_at: string;
@@ -55,6 +55,11 @@ export function planningFeeLabel(fee: PlanningFee) {
   if (fee.type === "FIXED") return planningMoney(fee.amount_pence);
   if (fee.type === "RANGE") return `${planningMoney(fee.min_amount_pence)}–${planningMoney(fee.max_amount_pence)}`;
   return fee.type === "N_A" ? "No applicable catalogue fee" : "No catalogue fee recorded";
+}
+export function planningFeeDateLabel(date: string | null | undefined) {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T12:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date ? null : parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 export function planningToothLabel(tooth: string, snapshot?: PlanningSnapshot) {
   const row = snapshot?.native.teeth[tooth];

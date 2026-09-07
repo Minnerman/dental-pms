@@ -3,6 +3,35 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (practice treatment index and effective-dated fees): Replaced the
+  Treatments editor's selected-object/refetch loop with stable grouped rows and
+  separate drafts. Five ordered levels support the owner's 20 routine names,
+  explicit unpriced initialization, editable details and per-scheme current/next
+  fees. Exact unambiguous existing names are retained/classified; ambiguous
+  matches fail before mutation. New prices start today or on a future UK date;
+  corrections append versions rather than overwrite history. Additive migration
+  0061 preserves original undated fees. Shared resolution and treatment locks
+  protect both catalogue display and plan creation; saved quotes/charges never
+  reprice. Request replay and schedule revisions protect concurrent fee edits.
+  Every planning level now supports custom Other treatment with explicit anatomy,
+  description and agreed fee/reasoned waiver. No fabricated catalogue prices or
+  inferred drawings. Catalogue filtering retains unassigned legacy compatibility.
+  Verification: 175 targeted backend checks (43 new and 132 adjacent), 18 focused
+  browser checks, empty migration roundtrip, populated rollback refusal, build,
+  typecheck, scoped lint, compilation and diff checks passed. Light/dark/mobile
+  inspected. A real HTTP-origin request-ID failure was fixed with a cryptographic
+  fallback and the final browser guard passed. Test-only fixtures were corrected
+  for existing enums/capabilities; no product workaround. The default ops wrappers
+  were not run because they start/migrate the default stack; isolated equivalents
+  were used. The local preview now uses a preserved-data v7 copy: all original
+  columns across 65 tables and all 61 original sequences reconciled after restore,
+  migration and startup; planning/clinical-summary/diagnosis reads matched. Explicit
+  initialization added 20 unpriced routines while preserving existing records and
+  quotes. The original v6 remains intact; the loopback preview was switched only
+  after verification. More → Treatments was checked in the live local browser.
+  Durable private restart handover retained. See PRACTICE_TREATMENT_FEES.md.
+  No production migration/deployment, R4 access or merge; draft stacked PR gates
+  remain separate.
 - 2026-09-07 (Miscellaneous treatment planning): Removed the visible Planning:
   prefix and added a fifth, keyboard-accessible Miscellaneous tab with a compact
   patient-specific description/fee form. Explicit custom provenance, nullable

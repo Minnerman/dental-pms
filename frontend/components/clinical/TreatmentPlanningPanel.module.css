@@ -53,6 +53,8 @@
 .customGrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(150px, 1fr); gap: 12px; }
 .miscellaneous .waiver { display: flex; align-items: center; gap: 7px; }
 .formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sourceChoice { display: flex; flex-wrap: wrap; gap: 8px; }
+.sourceChoice button[aria-pressed="true"] { border-color: var(--accent-text, #006e89); box-shadow: inset 0 -2px 0 var(--accent-text, #006e89); }
 .catalogue { display: grid; gap: 4px; max-height: 210px; overflow-y: auto; border: 1px solid var(--border, #ccd4de); border-radius: 7px; padding: 5px; }
 .catalogue button { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 9px; }
 .catalogue button[aria-pressed="true"] { border-color: var(--accent, #0b6980); background: color-mix(in srgb, var(--accent, #0b6980) 12%, var(--panel, #fff)); }

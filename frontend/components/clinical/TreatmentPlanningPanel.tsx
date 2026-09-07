@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import TreatmentPlanningChart from "./TreatmentPlanningChart";
 import { surfaceKeysForTooth, surfaceName, type SurfaceKey } from "./surfaceDiagnosis";
-import { planningCustomFeeError, planningDrawingChoices, planningFeeError, planningFeeLabel, planningLevels, planningMoney, planningPence, planningRequestId, planningTargetLabel, planningToothLabel, type EarlierPlanningItem, type PlanningCatalogue, type PlanningCatalogueItem, type PlanningDrawingKind, type PlanningFee, type PlanningFeeMode, type PlanningItem, type PlanningResponse, type PlanningSelection, type PlanningStatus, type PlanningTarget } from "./treatmentPlanning";
+import { planningCustomFeeError, planningDrawingChoices, planningFeeDateLabel, planningFeeError, planningFeeLabel, planningLevels, planningMoney, planningPence, planningRequestId, planningTargetLabel, planningToothLabel, type EarlierPlanningItem, type PlanningCatalogue, type PlanningCatalogueItem, type PlanningDrawingKind, type PlanningFee, type PlanningFeeMode, type PlanningItem, type PlanningResponse, type PlanningSelection, type PlanningStatus, type PlanningTarget } from "./treatmentPlanning";
 import styles from "./TreatmentPlanningPanel.module.css";
 
 type Props = { patientId: string; canWriteClinical: boolean; canWriteBilling: boolean; onChanged: () => void | Promise<void>; onOpenEarlierItems?: () => void; onOpenToothNotes?: (tooth: string, event: MouseEvent<SVGElement> | KeyboardEvent<SVGElement>) => void };
-type Draft = { target: PlanningTarget; treatment: PlanningCatalogueItem | null; drawing: PlanningDrawingKind | ""; mode: PlanningFeeMode; amount: string; reason: string; editing: PlanningItem | null };
+type Draft = { target: PlanningTarget; treatment: PlanningCatalogueItem | null; drawing: PlanningDrawingKind | ""; mode: PlanningFeeMode; amount: string; reason: string; editing: PlanningItem | null; custom: boolean; description: string };
 const teeth = ["UR", "UL", "LR", "LL"].flatMap((quadrant) => Array.from({ length: 8 }, (_, index) => `${quadrant}${index + 1}`));
-const blankDraft = (): Draft => ({ target: { level: "general", tooth: null, surfaces: [] }, treatment: null, drawing: "other", mode: "catalogue", amount: "", reason: "", editing: null });
+const blankDraft = (): Draft => ({ target: { level: "general", tooth: null, surfaces: [] }, treatment: null, drawing: "other", mode: "catalogue", amount: "", reason: "", editing: null, custom: false, description: "" });
 const statusNames: Record<PlanningStatus, string> = { proposed: "Proposed", accepted: "Accepted", declined: "Declined", completed: "Completed", cancelled: "Cancelled" };
 const feeModes: Record<PlanningFeeMode, string> = { catalogue: "Catalogue fee", agreed: "Agreed fee", override: "Override fee", waived: "Waived fee" };
 const planningTabs: { value: PlanningTarget["level"]; label: string }[] = [...planningLevels, { value: "general", label: "Miscellaneous" }];
@@ -42,6 +42,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  const [catalogueScope, setCatalogueScope] = useState<"target" | "all">("target");
   const dialog = useRef<HTMLDialogElement>(null);
   const customProgressDialog = useRef<HTMLDialogElement>(null);
   const detailsDialog = useRef<HTMLDialogElement>(null);
@@ -84,20 +85,23 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   useEffect(() => { setData(null); void load(); }, [load]);
   useEffect(() => { setCustomDescription(""); setCustomAmount(""); setCustomWaived(false); setCustomReason(""); }, [patientId]);
 
-  const pickerOpen = Boolean(draft && !draft.editing);
+  const pickerOpen = Boolean(draft && !draft.editing && !draft.custom);
+  const catalogueLevel = draft?.target.level ?? "general";
   const loadCatalogue = useCallback(async () => {
     if (!pickerOpen) return;
     const ticket = ++catalogueSequence.current;
     setCatalogueLoading(true); setCatalogueError(null); setCatalogue(null);
     try {
-      const response = await apiFetch(`${base}/catalogue?${new URLSearchParams({ q: search, limit: "50", offset: String(offset) })}`);
+      const parameters = new URLSearchParams({ q: search, limit: "50", offset: String(offset) });
+      if (catalogueScope === "target") { parameters.set("level", catalogueLevel); parameters.set("include_unassigned", "true"); }
+      const response = await apiFetch(`${base}/catalogue?${parameters}`);
       if (response.status === 401) { unauthorised(); return; }
       if (!response.ok) throw new Error(response.status === 403 ? "You do not have permission to view the treatment catalogue." : "The treatment catalogue could not be loaded. Retry before adding treatment.");
       const next = await response.json() as PlanningCatalogue;
       if (alive.current && ticket === catalogueSequence.current && owner.current === patientId) setCatalogue(next);
     } catch (cause) { if (alive.current && ticket === catalogueSequence.current) setCatalogueError(cause instanceof Error ? cause.message : "The catalogue is unavailable."); }
     finally { if (alive.current && ticket === catalogueSequence.current) setCatalogueLoading(false); }
-  }, [base, offset, patientId, pickerOpen, search, unauthorised]);
+  }, [base, catalogueLevel, catalogueScope, offset, patientId, pickerOpen, search, unauthorised]);
   useEffect(() => { void loadCatalogue(); return () => { catalogueSequence.current += 1; }; }, [loadCatalogue]);
 
   useEffect(() => {
@@ -123,7 +127,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   };
   const openDraft = (target: PlanningTarget) => {
     if (!writable || !plan) return;
-    opener.current = document.activeElement; setQuery(""); setSearch(""); setOffset(0); setError(null); setNotice(null);
+    opener.current = document.activeElement; setQuery(""); setSearch(""); setOffset(0); setCatalogueScope("target"); setError(null); setNotice(null);
     setDraft({ ...blankDraft(), target, drawing: target.level === "general" ? "other" : "" });
   };
   const onSelect = (next: PlanningSelection, event: MouseEvent<SVGElement | HTMLButtonElement> | KeyboardEvent<SVGElement | HTMLButtonElement>) => {
@@ -165,8 +169,10 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   };
 
   const customEditing = draft?.editing?.catalogue_snapshot.source === "custom";
-  const draftFee: PlanningFee | null = draft?.editing ? draft.editing.catalogue_snapshot.source === "custom" ? null : draft.editing.catalogue_snapshot.fee : draft?.treatment?.fee ?? null;
-  const feeError = draft ? customEditing ? planningCustomFeeError(draft.mode, draft.amount, draft.reason) : draftFee ? planningFeeError(draftFee, draft.mode, draft.amount, draft.reason) : null : null;
+  const customDraft = Boolean(customEditing || draft?.custom);
+  const draftFee: PlanningFee | null = customDraft ? null : draft?.editing ? draft.editing.catalogue_snapshot.source === "custom" ? null : draft.editing.catalogue_snapshot.fee : draft?.treatment?.fee ?? null;
+  const feeError = draft ? customDraft ? planningCustomFeeError(draft.mode, draft.amount, draft.reason) : draftFee ? planningFeeError(draftFee, draft.mode, draft.amount, draft.reason) : null : null;
+  const descriptionError = draft?.custom && !draft.editing ? !draft.description.trim() ? "Enter a treatment description." : draft.description.trim().length > 2000 ? "Keep the description to 2,000 characters." : null : null;
   const customFeeError = planningCustomFeeError(customWaived ? "waived" : "agreed", customAmount, customReason);
   const customError = !customDescription.trim() ? "Enter a treatment description." : customDescription.trim().length > 2000 ? "Keep the description to 2,000 characters." : customFeeError;
   const clearCustom = () => { setCustomDescription(""); setCustomAmount(""); setCustomWaived(false); setCustomReason(""); };
@@ -192,11 +198,14 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     setError("The previous save result remains unconfirmed. Reload and check the saved plan before adding that treatment again.");
     closeCustomProgress();
   };
-  const targetError = draft && draft.target.level !== "general" && !draft.target.tooth ? "Select a tooth." : draft?.target.level === "surface" && !draft.target.surfaces.length ? "Select at least one surface." : null;
+  const categoryError = draft && !draft.editing && !draft.custom && draft.treatment?.level && draft.treatment.level !== draft.target.level
+    ? `This catalogue treatment belongs to ${draft.treatment.level === "general" ? "general treatment" : `the ${draft.treatment.level} level`}. Select that target level or choose a different treatment.` : null;
+  const targetError = draft && draft.target.level !== "general" && !draft.target.tooth ? "Select a tooth." : draft?.target.level === "surface" && !draft.target.surfaces.length ? "Select at least one surface." : categoryError;
   const saveDraft = () => {
-    if (!draft || (!draftFee && !customEditing) || feeError || targetError || !draft.drawing || (!draft.editing && !draft.treatment)) return;
+    if (!draft || (!draftFee && !customDraft) || feeError || targetError || descriptionError || !draft.drawing || (!draft.editing && !draft.custom && !draft.treatment)) return;
     const fee = { fee_mode: draft.mode, ...(draft.mode === "catalogue" ? {} : { fee_pence: draft.mode === "waived" ? 0 : planningPence(draft.amount) }), fee_reason: draft.mode === "catalogue" ? null : draft.reason.trim() || null };
     if (draft.editing) void mutate(`${base}/items/${draft.editing.id}`, "PATCH", { expected_revision: draft.editing.revision, ...fee }, "Treatment fee updated. No charge has been created.");
+    else if (draft.custom) void mutate(`${base}/custom-items`, "POST", { target: draft.target, description: draft.description.trim(), ...fee }, "Other treatment added to the plan. No charge has been created.");
     else void mutate(`${base}/items`, "POST", { treatment_id: draft.treatment!.id, quote_token: draft.treatment!.quote_token, target: draft.target, drawing_kind: draft.drawing, ...fee }, "Treatment added to the plan. No charge has been created.");
   };
   const changeStatus = (item: PlanningItem, status: PlanningStatus) => {
@@ -212,8 +221,13 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     opener.current = document.activeElement; setError(null);
     setDraft({ ...blankDraft(), editing: item, target: item.target, drawing: item.drawing_kind, mode: item.fee_mode, amount: item.fee_pence == null ? "" : (item.fee_pence / 100).toFixed(2), reason: item.fee_reason ?? "" });
   };
-  const changeTarget = (target: PlanningTarget) => setDraft((previous) => previous ? { ...previous, target, drawing: target.level === "general" ? "other" : "" } : null);
-  const chooseTreatment = (treatment: PlanningCatalogueItem) => setDraft((previous) => previous ? { ...previous, treatment, mode: treatment.fee.type === "FIXED" ? "catalogue" : "agreed", amount: "", reason: "" } : null);
+  const changeTarget = (target: PlanningTarget) => {
+    setOffset(0);
+    setDraft((previous) => previous ? { ...previous, target, drawing: previous.custom || target.level === "general" ? "other" : "" } : null);
+  };
+  const chooseTreatment = (treatment: PlanningCatalogueItem) => setDraft((previous) => previous ? { ...previous, custom: false, treatment, mode: treatment.fee.type === "FIXED" ? "catalogue" : "agreed", amount: "", reason: "" } : null);
+  const chooseOtherTreatment = () => setDraft((previous) => previous && !previous.custom ? { ...previous, custom: true, treatment: null, drawing: "other", mode: "agreed", amount: "", reason: "" } : previous);
+  const chooseCatalogue = () => setDraft((previous) => previous?.custom ? { ...previous, custom: false, treatment: null, drawing: previous.target.level === "general" ? "other" : "", mode: "catalogue", amount: "", reason: "" } : previous);
   const openDetails = () => { if (selectedItem) { opener.current = document.activeElement; setDetailsItem(selectedItem); } };
   const closeDetails = () => { setDetailsItem(null); requestAnimationFrame(() => { if (opener.current?.isConnected) (opener.current as HTMLElement).focus?.({ preventScroll: true }); }); };
   const openUncomplete = () => { if (!writable || !canWriteBilling || selectedItem?.status !== "completed") return; opener.current = document.activeElement; setError(null); setUncompleteReason(""); setUncompleteItem(selectedItem); };
@@ -291,26 +305,38 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
       {draft && <form onSubmit={(event) => { event.preventDefault(); saveDraft(); }}><header className={styles.header}><h3>{draft.editing ? "Edit treatment fee" : "Add treatment"}</h3><button type="button" className="btn btn-secondary" aria-label="Close treatment editor" disabled={saving} onClick={close}>Close</button></header>
         {error && <p role="alert" className={styles.error} data-testid="planning-error">{error}</p>}
         <fieldset disabled={saving || uncertain}>
-          {!draft.editing && <><label>Search treatment catalogue<input data-testid="planning-catalogue-search" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Treatment name or code" /></label>
+          {!draft.editing && <>
+            <div className={styles.sourceChoice} role="group" aria-label="Treatment source">
+              <button type="button" className="btn btn-secondary" data-testid="planning-use-catalogue" aria-pressed={!draft.custom} onClick={chooseCatalogue}>Treatment catalogue</button>
+              <button type="button" className="btn btn-secondary" data-testid="planning-other-treatment" aria-pressed={draft.custom} onClick={chooseOtherTreatment}>Other treatment</button>
+            </div>
+            {!draft.custom && <>
+              <div className={styles.formGrid}>
+                <label>Search treatment catalogue<input data-testid="planning-catalogue-search" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Treatment name or code" /></label>
+                <label>Show treatments<select data-testid="planning-catalogue-scope" value={catalogueScope} onChange={(event) => { setOffset(0); setCatalogueScope(event.target.value as "target" | "all"); }}><option value="target">Selected level + unassigned</option><option value="all">All levels</option></select></label>
+              </div>
+              <small className={styles.muted}>Unassigned catalogue entries remain available without guessing their anatomical category.{catalogue?.practice_today && ` Prices shown for ${planningFeeDateLabel(catalogue.practice_today) ?? catalogue.practice_today}.`}</small>
             {catalogueLoading && <p role="status">Loading catalogue…</p>}{catalogueError && <p role="alert" className={styles.error}>{catalogueError} <button type="button" onClick={() => void loadCatalogue()}>Retry catalogue</button></p>}
-            {catalogue && <><div className={styles.catalogue} aria-label="Treatment catalogue" data-testid="planning-catalogue">{catalogue.items.map((treatment) => <button type="button" key={treatment.id} data-testid={`planning-catalogue-item-${treatment.id}`} aria-pressed={draft.treatment?.id === treatment.id} onClick={() => chooseTreatment(treatment)}><span><strong>{treatment.name}</strong><small>{treatment.code ?? "No catalogue code"} · {treatment.patient_category.replaceAll("_", " ")}</small></span><span>{planningFeeLabel(treatment.fee)}</span></button>)}{!catalogue.items.length && <p>No matching active treatment. Try another name or code.</p>}</div>{catalogue.total > 50 && <div className={styles.actions}><button type="button" className="btn btn-secondary" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 50))}>Previous treatments</button><span>{offset + 1}–{Math.min(offset + 50, catalogue.total)} of {catalogue.total}</span><button type="button" className="btn btn-secondary" disabled={offset + 50 >= catalogue.total} onClick={() => setOffset((value) => value + 50)}>Next treatments</button></div>}</>}
+            {catalogue && <><div className={styles.catalogue} aria-label="Treatment catalogue" data-testid="planning-catalogue">{catalogue.items.map((treatment) => <button type="button" key={treatment.id} data-testid={`planning-catalogue-item-${treatment.id}`} aria-pressed={draft.treatment?.id === treatment.id} onClick={() => chooseTreatment(treatment)}><span><strong>{treatment.name}</strong><small>{treatment.code ?? "No catalogue code"} · {treatment.patient_category.replaceAll("_", " ")} · {treatment.level === "general" ? "General" : treatment.level ? `${treatment.level} level` : "Unassigned level"}</small></span><span>{planningFeeLabel(treatment.fee)}{treatment.fee.effective_from && <small>From {planningFeeDateLabel(treatment.fee.effective_from) ?? treatment.fee.effective_from}</small>}</span></button>)}{!catalogue.items.length && <p>No matching active treatment. Try another name or code, show all levels, or choose Other treatment.</p>}</div>{catalogue.total > 50 && <div className={styles.actions}><button type="button" className="btn btn-secondary" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 50))}>Previous treatments</button><span>{offset + 1}–{Math.min(offset + 50, catalogue.total)} of {catalogue.total}</span><button type="button" className="btn btn-secondary" disabled={offset + 50 >= catalogue.total} onClick={() => setOffset((value) => value + 50)}>Next treatments</button></div>}</>}
             {draft.treatment && <p className={styles.quote}>Selected: <strong>{draft.treatment.name}</strong>{draft.treatment.description && <><br />{draft.treatment.description}</>}</p>}
+            </>}
+            {draft.custom && <label>Treatment description<textarea data-testid="planning-other-description" rows={3} maxLength={2000} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Describe the treatment for this selected target" /></label>}
             <div className={styles.formGrid}><label>Treatment level<select data-testid="planning-target-level" value={draft.target.level} onChange={(event) => changeTarget({ level: event.target.value as PlanningTarget["level"], tooth: event.target.value === "general" ? null : draft.target.tooth, surfaces: [] })}><option value="general">General treatment</option>{planningLevels.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label>
               {draft.target.level !== "general" && <label>Tooth<select data-testid="planning-target-tooth" value={draft.target.tooth ?? ""} onChange={(event) => changeTarget({ ...draft.target, tooth: event.target.value || null, surfaces: [] })}><option value="">Select tooth</option>{teeth.map((tooth) => <option key={tooth} value={tooth}>{planningToothLabel(tooth, plan?.snapshot)}</option>)}</select></label>}
             </div>
             {draft.target.level === "surface" && draft.target.tooth && <div className={styles.surfaces} role="group" aria-label="Treatment surfaces">{surfaceKeysForTooth(draft.target.tooth).map((surface) => <label key={surface}><input type="checkbox" data-testid={`planning-target-surface-${surface}`} checked={draft.target.surfaces.includes(surface)} onChange={() => setDraft({ ...draft, target: { ...draft.target, surfaces: surfaceKeysForTooth(draft.target.tooth!).filter((key) => key === surface ? !draft.target.surfaces.includes(key) : draft.target.surfaces.includes(key)) as SurfaceKey[] } })} />{surface} · {surfaceName(surface)}</label>)}</div>}
-            <label>Chart drawing<select data-testid="planning-drawing-kind" value={draft.drawing} onChange={(event) => setDraft({ ...draft, drawing: event.target.value as PlanningDrawingKind })}><option value="">Choose the treatment drawing explicitly</option>{planningDrawingChoices.filter((choice) => choice.levels.includes(draft.target.level)).map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select><small className={styles.muted}>The drawing is selected by you, not inferred from the treatment name.</small></label>
+            {draft.custom ? <p className={styles.muted}>Other treatment is recorded against this selected target, without an inferred treatment drawing.</p> : <label>Chart drawing<select data-testid="planning-drawing-kind" value={draft.drawing} onChange={(event) => setDraft({ ...draft, drawing: event.target.value as PlanningDrawingKind })}><option value="">Choose the treatment drawing explicitly</option>{planningDrawingChoices.filter((choice) => choice.levels.includes(draft.target.level)).map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select><small className={styles.muted}>The drawing is selected by you, not inferred from the treatment name.</small></label>}
           </>}
           {draft.editing && <p>{draft.editing.description} · {planningTargetLabel(draft.target, plan?.snapshot)}</p>}
-          {customEditing && <>
+          {customDraft && <>
             <p className={styles.muted}>Patient-specific treatment. There is no catalogue quote or practice price-list change.</p>
             <div className={styles.formGrid}><label>Fee choice<select data-testid="planning-fee-mode" value={draft.mode} onChange={(event) => setDraft({ ...draft, mode: event.target.value as PlanningFeeMode })}><option value="agreed">Agreed fee</option><option value="waived">Waive fee · £0.00</option></select></label>
               {draft.mode === "agreed" && <label>Fee (£)<input data-testid="planning-fee-amount" inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} /></label>}
             </div>
             <label>Fee reason {draft.mode === "waived" ? "(required)" : "(optional)"}<textarea data-testid="planning-fee-reason" maxLength={500} value={draft.reason} onChange={(event) => setDraft({ ...draft, reason: event.target.value })} /></label>
-            {feeError && <p className={styles.muted} data-testid="planning-validation">{feeError}</p>}
+            {(descriptionError || targetError || feeError) && <p className={styles.muted} data-testid="planning-validation">{descriptionError || targetError || feeError}</p>}
           </>}
-          {draftFee && <><div className={styles.quote} data-testid="planning-fee-quote">Saved catalogue quote: <strong>{planningFeeLabel(draftFee)}</strong>{draftFee.notes && <><br />{draftFee.notes}</>}</div>
+          {draftFee && <><div className={styles.quote} data-testid="planning-fee-quote">Saved catalogue quote: <strong>{planningFeeLabel(draftFee)}</strong>{draftFee.effective_from && <><br /><span data-testid="planning-fee-effective-from">Effective from {planningFeeDateLabel(draftFee.effective_from) ?? draftFee.effective_from}</span></>}{draftFee.notes && <><br />{draftFee.notes}</>}</div>
             <div className={styles.formGrid}><label>Fee choice<select data-testid="planning-fee-mode" value={draft.mode} onChange={(event) => setDraft({ ...draft, mode: event.target.value as PlanningFeeMode })}><option value="catalogue" disabled={draftFee.type !== "FIXED"}>Use catalogue fee</option><option value="agreed" disabled={draftFee.type === "FIXED"}>Agreed fee</option><option value="override">Override fee</option><option value="waived">Waive fee · £0.00</option></select></label>
               {(draft.mode === "agreed" || draft.mode === "override") && <label>Fee (£)<input data-testid="planning-fee-amount" inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="Explicit agreed amount" /></label>}
             </div>
@@ -320,11 +346,21 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
           </>}
         </fieldset>
         <p className={styles.muted}>Adding or changing a plan item does not charge the patient. Complete the saved treatment to record the procedure and its saved fee in finance.</p>
-        <div className={styles.actions}><button type="button" className="btn btn-secondary" data-testid="planning-cancel" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="btn" data-testid="planning-save" disabled={saving || !canWriteClinical || !ready || Boolean(feeError || targetError) || (!draftFee && !customEditing) || !draft.drawing || (!draft.editing && (!draft.treatment || catalogueLoading || Boolean(catalogueError)))}>{saving ? "Saving…" : uncertain ? "Retry unchanged save" : draft.editing ? "Save fee" : "Add to plan"}</button></div>
+        <div className={styles.actions}><button type="button" className="btn btn-secondary" data-testid="planning-cancel" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="btn" data-testid="planning-save" disabled={saving || !canWriteClinical || !ready || Boolean(feeError || targetError || descriptionError) || (!draftFee && !customDraft) || !draft.drawing || (!draft.editing && !draft.custom && (!draft.treatment || catalogueLoading || Boolean(catalogueError)))}>{saving ? "Saving…" : uncertain ? "Retry unchanged save" : draft.editing ? "Save fee" : "Add to plan"}</button></div>
       </form>}
     </dialog>
     <dialog ref={detailsDialog} className={styles.dialog} data-testid="planning-item-details" aria-label="Treatment details" onCancel={(event) => { event.preventDefault(); closeDetails(); }}>
-      {detailsItem && <div className={styles.detailBody}><header className={styles.header}><h3>Treatment details</h3><button type="button" className="btn btn-secondary" onClick={closeDetails}>Close treatment details</button></header><h4>{detailsItem.description}</h4><p>{planningTargetLabel(detailsItem.target, plan?.snapshot)} · {detailsItem.procedure_code} · {statusNames[detailsItem.status]}</p><p><strong>{planningMoney(detailsItem.fee_pence)}</strong> · {feeModes[detailsItem.fee_mode]}</p>{detailsItem.fee_reason && <p className={styles.fullText}>{detailsItem.fee_reason}</p>}{detailsItem.catalogue_snapshot.source === "custom" ? <p>Miscellaneous treatment entered for this patient. No catalogue quote.</p> : <><p>Saved catalogue quote: {planningFeeLabel(detailsItem.catalogue_snapshot.fee)} · {detailsItem.catalogue_snapshot.patient_category ?? "Category not recorded"}</p>{detailsItem.catalogue_snapshot.fee.notes && <p className={styles.fullText}>{detailsItem.catalogue_snapshot.fee.notes}</p>}</>}<p>Drawing: {planningDrawingChoices.find((choice) => choice.value === detailsItem.drawing_kind)?.label ?? "Not recorded"}. Revision {detailsItem.revision}.</p></div>}
+      {detailsItem && <div className={styles.detailBody}>
+        <header className={styles.header}><h3>Treatment details</h3><button type="button" className="btn btn-secondary" onClick={closeDetails}>Close treatment details</button></header>
+        <h4>{detailsItem.description}</h4><p>{planningTargetLabel(detailsItem.target, plan?.snapshot)} · {detailsItem.procedure_code} · {statusNames[detailsItem.status]}</p>
+        <p><strong>{planningMoney(detailsItem.fee_pence)}</strong> · {feeModes[detailsItem.fee_mode]}</p>{detailsItem.fee_reason && <p className={styles.fullText}>{detailsItem.fee_reason}</p>}
+        {detailsItem.catalogue_snapshot.source === "custom" ? <p>Patient-specific treatment. No catalogue quote or practice price-list change.</p> : <>
+          <p>Saved catalogue quote: {planningFeeLabel(detailsItem.catalogue_snapshot.fee)} · {detailsItem.catalogue_snapshot.patient_category ?? "Category not recorded"}</p>
+          {detailsItem.catalogue_snapshot.fee.effective_from && <p>Effective from {planningFeeDateLabel(detailsItem.catalogue_snapshot.fee.effective_from) ?? detailsItem.catalogue_snapshot.fee.effective_from}</p>}
+          {detailsItem.catalogue_snapshot.fee.notes && <p className={styles.fullText}>{detailsItem.catalogue_snapshot.fee.notes}</p>}
+        </>}
+        <p>Drawing: {planningDrawingChoices.find((choice) => choice.value === detailsItem.drawing_kind)?.label ?? "Not recorded"}. Revision {detailsItem.revision}.</p>
+      </div>}
     </dialog>
     <dialog ref={uncompleteDialog} className={styles.dialog} data-testid="planning-uncomplete-dialog" aria-label="Uncomplete treatment" tabIndex={-1} onCancel={(event) => { event.preventDefault(); close(); }} onKeyDown={(event) => { if (saving && event.key === "Tab") { event.preventDefault(); uncompleteDialog.current?.focus(); } }}>
       {uncompleteItem && <form onSubmit={(event) => { event.preventDefault(); saveUncomplete(); }}><h3>Uncomplete treatment</h3><p><strong>{uncompleteItem.description}</strong> · {planningTargetLabel(uncompleteItem.target, plan?.snapshot)}</p><p>This returns the treatment to outstanding and marks the original completion as voided, keeping its history.</p><p>{uncompleteItem.fee_pence ? `A ${planningMoney(uncompleteItem.fee_pence)} credit adjustment will reverse this completion's charge.` : "The saved fee is zero, so there is no charge to reverse."} Payments remain unchanged. No refund is issued.</p>{error && <p role="alert" className={styles.error} data-testid="planning-error">{error}</p>}<label>Reason for correction<textarea data-testid="planning-uncomplete-reason" maxLength={500} value={uncompleteReason} disabled={saving || uncertain} onChange={(event) => setUncompleteReason(event.target.value)} /></label><div className={styles.actions}><button type="button" className="btn btn-secondary" data-testid="planning-uncomplete-cancel" disabled={saving} onClick={close}>Cancel</button><button type="submit" className="btn" data-testid="planning-uncomplete-confirm" disabled={saving || !ready || !canWriteClinical || !canWriteBilling || !uncompleteReason.trim()}>{saving ? "Reversing…" : uncertain ? "Retry unchanged reversal" : "Confirm uncomplete"}</button></div></form>}

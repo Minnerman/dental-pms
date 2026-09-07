@@ -15,7 +15,7 @@ from app.models.patient import Patient
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
 from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_treatment_plan import R4Treatment
-from app.models.treatment import Treatment, TreatmentFee, FeeType
+from app.models.treatment import Treatment
 from app.models.treatment_planning import (PatientTreatmentPlan, TreatmentPlanItemRevision, PlanningMutationReceipt,
     TreatmentPlanCompletion, TreatmentPlanCompletionReversal)
 from app.models.user import Role
@@ -27,6 +27,7 @@ from app.services.audit import log_event
 from app.services.clinical_completion import complete_plan_item, completion_reference
 from app.services.native_notes import request_fingerprint
 from app.services.r4_charting.tooth_state_engine import build_tooth_state_engine_row, project_tooth_state_rows
+from app.services import treatment_fees as fee_service
 
 
 def patient(db, patient_id, *, lock=False):
@@ -139,28 +140,35 @@ def get_workspace(db, patient_id, user):
 def catalogue_row(treatment, category, fee):
     values = {"id": treatment.id, "code": treatment.code, "name": treatment.name,
         "description": treatment.description, "default_duration_minutes": treatment.default_duration_minutes,
+        "level": treatment.level, "display_order": treatment.display_order,
         "patient_category": category.value,
-        "fee": {"type": fee.fee_type.value if fee else "UNAVAILABLE",
+        "fee": {"type": fee.fee_type.value if fee and fee.fee_type is not None else "UNAVAILABLE",
                 "amount_pence": fee.amount_pence if fee else None,
                 "min_amount_pence": fee.min_amount_pence if fee else None,
                 "max_amount_pence": fee.max_amount_pence if fee else None,
-                "notes": fee.notes if fee else None}}
+                "notes": fee.notes if fee else None,
+                "version_id": fee.version_id if fee else None,
+                "effective_from": fee.effective_from.isoformat() if fee and fee.effective_from else None}}
     # Include all fields used by the quote, not unrelated patient contact data.
     return {**values, "quote_token": request_fingerprint(values)}
 
 
-def catalogue(db, patient_id, q, limit, offset):
+def catalogue(db, patient_id, q, limit, offset, level=None, include_unassigned=False):
     row = patient(db, patient_id)
+    today = fee_service.practice_today()
     query = select(Treatment).options(lazyload(Treatment.fees)).where(Treatment.is_active.is_(True))
+    if level is not None:
+        query = query.where(or_(Treatment.level == level, Treatment.level.is_(None)) if include_unassigned else Treatment.level == level)
     if q.strip():
         term = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.where(or_(Treatment.name.ilike(f"%{term}%", escape="\\"), Treatment.code.ilike(f"%{term}%", escape="\\")))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    treatments = list(db.scalars(query.order_by(Treatment.name, Treatment.id).offset(offset).limit(limit)))
-    fees = {fee.treatment_id: fee for fee in db.scalars(select(TreatmentFee).where(
-        TreatmentFee.treatment_id.in_([item.id for item in treatments]), TreatmentFee.patient_category == row.patient_category))}
+    treatments = list(db.scalars(query.order_by(*fee_service.treatment_order()).offset(offset).limit(limit)))
+    states = fee_service.fee_states(db, [item.id for item in treatments], row.patient_category, today=today)
     return {"patient_id": patient_id, "patient_category": row.patient_category.value, "currency": "GBP",
-            "total": total, "items": [catalogue_row(item, row.patient_category, fees.get(item.id)) for item in treatments]}
+            "practice_today": today, "total": total,
+            "items": [catalogue_row(item, row.patient_category, states.get((item.id, row.patient_category), fee_service.FeeState()).current)
+                      for item in treatments]}
 
 
 def resolved_fee(quote, mode, amount, reason):
@@ -276,15 +284,17 @@ def create_item(db, patient_id, payload, user, request_id):
     if plan is None:
         raise HTTPException(409, "Start the planning workspace first")
     validate_snapshot_target(plan.snapshot, payload.target)
-    # SHARE freezes the quoted treatment while remaining compatible with FK
-    # checks by the existing fee-replacement endpoint (delete then insert).
+    # SHARE freezes classification and the selected quote while both fee
+    # maintenance paths hold UPDATE on the same treatment before appending.
     treatment = db.scalar(select(Treatment).options(lazyload(Treatment.fees)).where(Treatment.id == payload.treatment_id, Treatment.is_active.is_(True)).with_for_update(read=True, of=Treatment))
     if treatment is None:
         raise HTTPException(409, "Treatment is no longer active; refresh the catalogue")
     if not treatment.name.strip():
         raise HTTPException(409, "The catalogue treatment needs a name before it can be planned")
-    fee = db.scalar(select(TreatmentFee).where(TreatmentFee.treatment_id == treatment.id, TreatmentFee.patient_category == row.patient_category)
-        .with_for_update(read=True, of=TreatmentFee).execution_options(populate_existing=True))
+    if treatment.level is not None and treatment.level != payload.target.level:
+        raise HTTPException(422, "This treatment belongs to a different planning level; choose a matching target")
+    fee = fee_service.fee_states(db, [treatment.id], row.patient_category, lock_baseline=True).get(
+        (treatment.id, row.patient_category), fee_service.FeeState()).current
     quote = catalogue_row(treatment, row.patient_category, fee)
     if quote["quote_token"] != payload.quote_token:
         raise HTTPException(409, "Catalogue or patient category changed; review the current quote")
@@ -318,12 +328,14 @@ def create_custom_item(db, patient_id, payload, user, request_id):
     plan = db.scalar(select(PatientTreatmentPlan).where(PatientTreatmentPlan.patient_id == patient_id))
     if plan is None:
         raise HTTPException(409, "Start the planning workspace first")
+    validate_snapshot_target(plan.snapshot, payload.target)
     provenance = {"source": "custom"}
     amount, reason = resolved_fee(provenance, payload.fee_mode, payload.fee_pence, payload.fee_reason)
     item = TreatmentPlanItem(patient_id=patient_id, plan_id=plan.id, treatment_id=None,
-        tooth=None, surface=None, procedure_code="MISCELLANEOUS", description=payload.description,
+        tooth=payload.target.tooth, surface="".join("L" if value == "P" else value for value in payload.target.surfaces) or None,
+        procedure_code="MISCELLANEOUS", description=payload.description,
         fee_pence=amount, status=TreatmentPlanStatus.proposed, revision=1,
-        planning_details={"target": {"level": "general", "tooth": None, "surfaces": []},
+        planning_details={"target": payload.target.model_dump(),
             "drawing_kind": "other", "catalogue_snapshot": provenance,
             "fee_mode": payload.fee_mode, "fee_reason": reason},
         created_by_user_id=user.id, updated_by_user_id=user.id)

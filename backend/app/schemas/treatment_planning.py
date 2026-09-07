@@ -64,12 +64,13 @@ class PlanningItemCreate(BaseModel):
 
 
 class PlanningCustomItemCreate(BaseModel):
-    """A native general treatment, not a fabricated catalogue selection."""
+    """A native explicitly targeted treatment, not a fabricated catalogue entry."""
     model_config = ConfigDict(extra="forbid")
     description: str = Field(min_length=1, max_length=MAX_CLINICAL_TEXT_LENGTH)
     fee_pence: Pence
     fee_mode: Literal["agreed", "waived"]
     fee_reason: str | None = Field(default=None, max_length=500)
+    target: PlanningTarget = Field(default_factory=lambda: PlanningTarget(level="general"))
     _normalize_description = field_validator("description")(_required_text)
 
 

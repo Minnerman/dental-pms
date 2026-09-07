@@ -19,7 +19,7 @@ from app.models.note import Note, NoteType
 from app.models.clinical_note import ClinicalNoteTemplate, ClinicalNoteTemplateRevision, NativeNoteRevision, NoteMutationReceipt
 from app.models.invoice import Invoice, InvoiceLine, InvoiceStatus, Payment, PaymentMethod
 from app.models.ledger import LedgerEntryType, PatientLedgerEntry
-from app.models.treatment import Treatment, TreatmentFee, FeeType
+from app.models.treatment import Treatment, TreatmentFee, TreatmentFeeVersion, FeeType
 from app.models.treatment_planning import PatientTreatmentPlan, TreatmentPlanItemRevision, PlanningMutationReceipt, TreatmentPlanCompletion, TreatmentPlanCompletionReversal
 from app.models.estimate import Estimate, EstimateItem, EstimateStatus, EstimateFeeType
 from app.models.practice_schedule import PracticeHour, PracticeClosure, PracticeOverride
@@ -101,6 +101,7 @@ __all__ = [
     "LedgerEntryType",
     "Treatment",
     "TreatmentFee",
+    "TreatmentFeeVersion",
     "FeeType",
     "Estimate",
     "EstimateItem",

@@ -58,7 +58,7 @@ def test_custom_proposal_has_explicit_non_catalogue_source_and_no_collateral_wri
         audit = db.scalar(select(AuditLog).where(AuditLog.entity_id == str(pid), AuditLog.action == "clinical.planning.custom_item.created"))
         assert audit.after_json["source"] == "custom" and audit.after_json["fee_pence"] == 1250
         assert "description" not in audit.after_json  # Full text belongs to immutable item history.
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0060_treatment_completion_reversals"
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0061_treatment_index_effective_fees"
 
 
 @pytest.mark.parametrize("patch", [
@@ -68,7 +68,7 @@ def test_custom_proposal_has_explicit_non_catalogue_source_and_no_collateral_wri
     {"fee_mode": "waived", "fee_pence": 10, "fee_reason": "Synthetic waiver"},
     {"fee_mode": "waived", "fee_pence": 0},
     {"fee_mode": "waived", "fee_pence": 0, "fee_reason": "  "},
-    {"fee_reason": "x" * 501}, {"target": {"level": "tooth", "tooth": "UR4"}},
+    {"fee_reason": "x" * 501}, {"target": {"level": "surface", "tooth": "UR4", "surfaces": ["I"]}},
     {"treatment_id": 1}, {"catalogue_snapshot": {"fee": {"type": "FIXED", "amount_pence": 1}}},
     {"description": None},
 ])

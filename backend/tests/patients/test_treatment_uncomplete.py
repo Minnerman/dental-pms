@@ -243,7 +243,9 @@ def test_populated_correction_migration_refuses_downgrade(api_client, auth_heade
     pid, item, _ = completed_case(api_client, auth_headers)
     assert undo(api_client, auth_headers, pid, item).status_code == 200
     result = subprocess.run(["alembic", "downgrade", "0059_frozen_treatment_planning"], capture_output=True, text=True)
-    assert result.returncode != 0 and "Cannot downgrade: treatment completion cycles" in result.stderr
+    assert result.returncode != 0 and any(message in result.stderr for message in (
+        "Cannot downgrade: treatment completion cycles", "Cannot downgrade: effective treatment fee history",
+        "Cannot downgrade: explicit treatment index metadata"))
     with SessionLocal() as db:
-        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0060_treatment_completion_reversals"
+        assert db.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0061_treatment_index_effective_fees"
         assert db.get(Procedure, item["completed_procedure_id"]).status == ProcedureStatus.voided
