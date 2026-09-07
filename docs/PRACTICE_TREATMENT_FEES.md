@@ -15,6 +15,14 @@ while retaining its identity, content, prices and active/inactive state. Multipl
 matches or a conflicting level reject the whole action for manual review before
 any changes are made. A fee marked **Not set** is not a free treatment.
 
+The button opens an in-page confirmation (not a browser confirmation prompt).
+Nothing is submitted until **Add missing treatments** is chosen. The result stays
+visible and reports either how many were added or that the full routine list was
+already present. Use **+ Add treatment** within a category for a different entry
+of your own. Pending requests cannot be submitted twice or dismissed; an
+unconfirmed result can be safely retried because routine initialization is
+idempotent. Existing prices are never replaced by this action.
+
 Use the fee-scheme selector for clinic private, domiciliary private or Denplan.
 Each row shows the current fee and its next scheduled change. **Edit fee** opens
 the current price, new price and effective date, all upcoming changes and paged

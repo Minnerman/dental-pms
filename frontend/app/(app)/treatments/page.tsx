@@ -40,6 +40,8 @@ export default function TreatmentsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [treatmentDraft, setTreatmentDraft] = useState<TreatmentDraft | null>(null);
   const [feeDraft, setFeeDraft] = useState<FeeDraft | null>(null);
+  const [routineOpen, setRoutineOpen] = useState(false);
+  const [routineResult, setRoutineResult] = useState<string | null>(null);
   const [history, setHistory] = useState<History | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -53,7 +55,8 @@ export default function TreatmentsPage() {
   const sequence = useRef(0);
   const historySequence = useRef(0);
   const attempt = useRef<{ key: string; id: string; uncertain: boolean } | null>(null);
-  const open = Boolean(treatmentDraft || feeDraft);
+  const routineRequestId = useRef<string | null>(null);
+  const open = Boolean(treatmentDraft || feeDraft || routineOpen);
 
   const check = useCallback(async (response: Response) => {
     if (response.status === 401) { clearToken(); router.replace("/login"); throw new Error("Please sign in again."); }
@@ -89,11 +92,33 @@ export default function TreatmentsPage() {
   function close() {
     if (busy.current) return;
     if (attempt.current?.uncertain && !window.confirm("The save result is unknown. Close this draft and check the saved treatment list before making another change?")) return;
-    historySequence.current += 1; setTreatmentDraft(null); setFeeDraft(null); setHistory(null); setHistoryError(null); setDialogError(null); setUncertain(false); setStale(false); attempt.current = null;
-    void load();
-    requestAnimationFrame(() => { if (opener.current?.isConnected) (opener.current as HTMLElement).focus?.(); });
+    historySequence.current += 1; setTreatmentDraft(null); setFeeDraft(null); setRoutineOpen(false); setRoutineResult(null); routineRequestId.current = null; setHistory(null); setHistoryError(null); setDialogError(null); setUncertain(false); setStale(false); attempt.current = null;
+    // Refresh temporarily disables the opener; restore focus after it is ready.
+    void load().then(() => requestAnimationFrame(() => { if (opener.current?.isConnected) (opener.current as HTMLElement).focus?.(); }));
   }
   function prepare() { opener.current = document.activeElement; setDialogError(null); setNotice(null); setUncertain(false); setStale(false); attempt.current = null; }
+  function openRoutine() {
+    prepare(); setRoutineResult(null); routineRequestId.current = null; setRoutineOpen(true);
+  }
+  async function addRoutineTreatments() {
+    if (busy.current || routineResult) return;
+    busy.current = true; setSaving(true); setDialogError(null);
+    try {
+      routineRequestId.current ??= requestId();
+      const response = await apiFetch("/api/treatments/routine-defaults", { method: "POST", headers: { "Request-Id": routineRequestId.current }, body: "{}" });
+      await check(response);
+      const result = await response.json() as { created: number; existing: number; total: number };
+      if (![result.created, result.existing, result.total].every((value) => Number.isSafeInteger(value) && value >= 0) || result.created + result.existing !== result.total) throw new Error("The result could not be confirmed. Retry safely to check the routine list.");
+      const message = result.created > 0
+        ? `Added ${result.created} missing routine treatment${result.created === 1 ? "" : "s"}. Existing treatments and fees were kept. Choose Edit fee to set the new prices.`
+        : `All ${result.total} routine treatments are already in your index. Nothing needed adding. Use + Add treatment in a category to enter a different treatment.`;
+      setRoutineResult(message); setNotice(message);
+      if (!await load()) setDialogError("The routine list was checked, but the page could not refresh. Close this dialog and use Refresh to reload the list.");
+    } catch (cause) {
+      // This initializer is idempotent: an unchanged retry never duplicates routines.
+      setDialogError(cause instanceof Error ? cause.message : "The result could not be confirmed. Retry safely to check the routine list.");
+    } finally { busy.current = false; setSaving(false); }
+  }
   function editTreatment(treatment: Treatment | null, level: Level | "" = "") {
     prepare(); setFeeDraft(null);
     setTreatmentDraft(treatment ? { id: treatment.id, name: treatment.name, code: treatment.code ?? "", description: treatment.description ?? "", level: treatment.level ?? "", order: String(treatment.display_order), duration: treatment.default_duration_minutes?.toString() ?? "", active: treatment.is_active, denplan: treatment.is_denplan_included_default } : { id: null, name: "", code: "", description: "", level, order: "100", duration: "", active: true, denplan: false });
@@ -175,7 +200,7 @@ export default function TreatmentsPage() {
       <label className={styles.field}>Fee scheme<select className="input" data-testid="treatment-fee-category" value={category} disabled={saving || open} onChange={(event) => { setNotice(null); setCategory(event.target.value as Category); }}>{Object.entries(categories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label className={`${styles.field} ${styles.search}`}>Find a treatment<input className="input" type="search" placeholder="Search by treatment or code…" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <label className={styles.check}><input type="checkbox" checked={inactive} disabled={saving || open} onChange={(event) => setInactive(event.target.checked)} />Show inactive</label>
-      <button className="btn btn-secondary" data-testid="treatments-add-routine" disabled={!ready || saving || open} onClick={() => { if (window.confirm("Add any missing routine treatments in the five levels? Existing treatments and prices will be kept. No prices will be invented.")) void save("/api/treatments/routine-defaults", "POST", {}, "Routine treatment list is ready. Enter the fees for your practice."); }}>Add missing routine treatments</button>
+      <button className="btn btn-secondary" data-testid="treatments-add-routine" disabled={!ready || saving || open} onClick={openRoutine}>Add missing routine treatments</button>
     </div>
     <nav className={styles.jumps} aria-label="Treatment fee levels">{groups.slice(0, 5).map((group) => <a key={group.level} href={`#fees-${group.level}`}>{group.title.replace(" fees", "")}</a>)}</nav>
     {loading && <p role="status" data-testid="treatments-loading">Loading treatments…</p>}
@@ -194,9 +219,16 @@ export default function TreatmentsPage() {
         {group.level !== "unassigned" && <div className={styles.other}><strong>Other treatment</strong><span>Enter a description and patient-specific fee when planning at this level. Use “Add treatment” for a repeatable practice fee.</span></div>}
       </section>;
     })}
-    <dialog className={styles.dialog} ref={dialog} tabIndex={-1} aria-busy={saving} onCancel={(event) => { event.preventDefault(); close(); }} aria-labelledby="treatment-dialog-title" data-testid={feeDraft ? "fee-editor" : "treatment-editor"}>
-      <div className={styles.dialogHeading}><h2 id="treatment-dialog-title">{feeDraft ? `Fees · ${feeDraft.treatment.name}` : treatmentDraft?.id === null ? "Add treatment" : "Treatment details"}</h2><button className={styles.smallButton} onClick={close} disabled={saving} aria-label="Close treatment editor">Close</button></div>
+    <dialog className={styles.dialog} ref={dialog} tabIndex={-1} aria-busy={saving} onCancel={(event) => { event.preventDefault(); close(); }} aria-labelledby="treatment-dialog-title" data-testid={routineOpen ? "routine-treatments-dialog" : feeDraft ? "fee-editor" : "treatment-editor"}>
+      <div className={styles.dialogHeading}><h2 id="treatment-dialog-title">{routineOpen ? "Add missing routine treatments" : feeDraft ? `Fees · ${feeDraft.treatment.name}` : treatmentDraft?.id === null ? "Add treatment" : "Treatment details"}</h2><button className={styles.smallButton} onClick={close} disabled={saving} aria-label="Close treatment editor">Close</button></div>
       {dialogError && <div className="notice" role="alert">{dialogError}</div>}
+      {routineOpen && <div className={styles.form}>
+        {routineResult ? <p className={styles.status} role="status" data-testid="routine-treatments-result">{routineResult}</p> : <>
+          <p>Check the standard routine list and add any missing treatments in the five levels. Existing treatments and fees will be kept. New prices will be left as Not set.</p>
+          <p className={styles.help}>To enter a different treatment of your own, cancel and use + Add treatment in its category.</p>
+          <div className={styles.actions}><button className="btn btn-secondary" onClick={close} disabled={saving}>Cancel</button><button className="btn btn-primary" data-testid="routine-treatments-confirm" disabled={saving} onClick={() => void addRoutineTreatments()}>{saving ? "Checking routine treatments…" : dialogError ? "Retry safely" : "Add missing treatments"}</button></div>
+        </>}
+      </div>}
       {treatmentDraft && <form className={styles.form} onSubmit={saveTreatment}><fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }} className={styles.form}>
         <label className={styles.field}>Treatment name<input className="input" data-testid="treatment-name" required maxLength={200} value={treatmentDraft.name} onChange={(e) => setTreatmentDraft({ ...treatmentDraft, name: e.target.value })} /></label>
         <div className={styles.twoColumns}><label className={styles.field}>Level<select className="input" data-testid="treatment-level" value={treatmentDraft.level} onChange={(e) => setTreatmentDraft({ ...treatmentDraft, level: e.target.value as Level | "" })}><option value="">Unassigned</option>{groups.slice(0, 5).map((group) => <option key={group.level} value={group.level}>{group.title.replace(" fees", "")}</option>)}</select></label><label className={styles.field}>Practice code (optional)<input className="input" maxLength={50} value={treatmentDraft.code} onChange={(e) => setTreatmentDraft({ ...treatmentDraft, code: e.target.value })} /></label></div>

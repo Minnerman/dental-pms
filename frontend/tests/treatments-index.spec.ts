@@ -34,13 +34,15 @@ async function auth(page: Page, request: APIRequestContext) {
 async function mock(page: Page, request: APIRequestContext) {
   await auth(page, request);
   const entries = [item(6, "Sample unassigned", null), item(3, "Sample crown", "crown"), item(2, "Sample root", "root"), item(5, "Sample general", "general"), item(4, "Sample surface", "surface"), item(1, "Sample tooth", "tooth"), item(7, "First tooth by practice order", "tooth", { display_order: 0 })];
-  const harness = { entries, reads: [] as string[], writes: [] as Write[], failIndex: false, failHistory: null as number | null,
+  const harness = { entries, reads: [] as string[], writes: [] as Write[], failIndex: false, indexGate: null as Promise<void> | null, failHistory: null as number | null,
+    routineResult: { created: 0, existing: 20, total: 20 }, routineItems: [] as IndexItem[],
     intercept: null as ((route: Route, write: Write) => Promise<boolean>) | null };
   await page.route("**/api/treatments**", async (route) => {
     const req = route.request(), url = new URL(req.url());
     if (req.method() === "GET") {
       harness.reads.push(url.pathname + url.search);
       if (url.pathname.endsWith("/index")) {
+        if (harness.indexGate) await harness.indexGate;
         if (harness.failIndex) { await route.fulfill({ status: 503, json: { detail: "Synthetic index unavailable" } }); return; }
         await route.fulfill({ json: { practice_today: today, timezone: "Europe/London", currency: "GBP", patient_category: url.searchParams.get("patient_category") ?? "CLINIC_PRIVATE", items: entries } }); return;
       }
@@ -53,6 +55,10 @@ async function mock(page: Page, request: APIRequestContext) {
     }
     const write: Write = { path: url.pathname, method: req.method(), body: req.postDataJSON(), requestId: req.headers()["request-id"] }; harness.writes.push(write);
     if (harness.intercept && await harness.intercept(route, write)) return;
+    if (url.pathname.endsWith("/routine-defaults")) {
+      for (const entry of harness.routineItems) if (!entries.some((existing) => existing.id === entry.id)) entries.push(entry);
+      await route.fulfill({ json: harness.routineResult }); return;
+    }
     const id = Number(url.pathname.endsWith("/fee-changes") ? url.pathname.split("/").at(-2) : url.pathname.split("/").at(-1));
     const selected = entries.find((entry) => entry.id === id);
     if (!selected) { await route.fulfill({ status: 404, json: { detail: "Synthetic treatment not found" } }); return; }
@@ -166,4 +172,66 @@ test("grouped current and scheduled practice fees fit light dark and mobile with
   await page.screenshot({ path: path.join(previews, "mobile-treatments.png"), fullPage: true }); await editFees(page, 2); await page.getByTestId("fee-history").locator(":scope > summary").click(); await expect(page.getByTestId("fee-history")).toContainText("£135.00");
   await page.getByTestId("fee-save").scrollIntoViewIfNeeded(); const save = (await page.getByTestId("fee-save").boundingBox())!; expect(save.x).toBeGreaterThanOrEqual(0); expect(save.x + save.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: path.join(previews, "mobile-fee-history.png") }); expect(harness.writes).toHaveLength(0);
+});
+
+test("routine treatment confirmation is in-page and cancellation never submits or opens a browser confirmation", async ({ page, request }) => {
+  const harness = await mock(page, request); await page.emulateMedia({ reducedMotion: "reduce" }); await open(page);
+  const browserDialogs: string[] = []; page.on("dialog", async (dialog) => { browserDialogs.push(dialog.type()); await dialog.dismiss(); });
+  const opener = page.getByTestId("treatments-add-routine"), confirmation = page.getByTestId("routine-treatments-dialog");
+  await opener.click(); await expect(confirmation).toBeVisible(); await expect(confirmation.getByRole("heading")).toHaveText("Add missing routine treatments");
+  await expect(page.getByTestId("routine-treatments-confirm")).toHaveText("Add missing treatments"); expect(harness.writes).toEqual([]); expect(browserDialogs).toEqual([]);
+  const previews = path.join(process.cwd(), ".run", "treatments-routine-previews"); await mkdir(previews, { recursive: true });
+  for (const theme of ["light", "dark"]) { await page.evaluate((value) => document.documentElement.dataset.theme = value, theme); await page.screenshot({ path: path.join(previews, `${theme}-routine-confirmation.png`) }); }
+  await page.setViewportSize({ width: 390, height: 844 }); const bounds = (await confirmation.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(390); expect(bounds.y).toBeGreaterThanOrEqual(0); expect(bounds.y + bounds.height).toBeLessThanOrEqual(844);
+  await page.screenshot({ path: path.join(previews, "mobile-routine-confirmation.png") }); await page.setViewportSize({ width: 1440, height: 1000 });
+  let releaseRead!: () => void; harness.indexGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  try {
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click(); await expect(confirmation).toBeHidden(); await expect(opener).toBeDisabled();
+  } finally { harness.indexGate = null; releaseRead(); }
+  await expect(opener).toBeFocused();
+  await opener.click(); await expect(confirmation).toBeVisible(); await page.keyboard.press("Escape"); await expect(confirmation).toBeHidden(); await expect(opener).toBeFocused();
+  expect(harness.writes).toEqual([]); expect(browserDialogs).toEqual([]);
+});
+
+test("routine confirmation reports newly added versus already present treatments without inventing fees", async ({ page, request }) => {
+  const harness = await mock(page, request); harness.routineResult = { created: 2, existing: 18, total: 20 };
+  harness.routineItems = [item(101, "Synthetic missing tooth routine", "tooth", { current_fee: null }), item(102, "Synthetic missing root routine", "root", { current_fee: null })];
+  const originalFees = harness.entries.map((entry) => ({ id: entry.id, fee: structuredClone(entry.current_fee) })); await open(page);
+  const browserDialogs: string[] = []; page.on("dialog", async (dialog) => { browserDialogs.push(dialog.type()); await dialog.dismiss(); });
+  await page.getByTestId("treatments-add-routine").click(); expect(harness.writes).toEqual([]);
+  await page.getByTestId("routine-treatments-confirm").click();
+  const confirmation = page.getByTestId("routine-treatments-dialog"), result = page.getByTestId("routine-treatments-result");
+  await expect(result).toHaveAttribute("role", "status"); await expect(result).toContainText("Added 2 missing routine treatments"); await expect(result).toContainText("Existing treatments and fees were kept");
+  await expect(confirmation).toBeVisible(); expect(harness.writes).toHaveLength(1); expect(harness.writes[0]).toMatchObject({ path: "/api/treatments/routine-defaults", method: "POST", body: {} });
+  await confirmation.getByRole("button", { name: "Close treatment editor", exact: true }).click(); await expect(confirmation).toBeHidden();
+  await expect(page.getByTestId("fee-current-101")).toHaveText("Not set"); await expect(page.getByTestId("fee-current-102")).toHaveText("Not set");
+  expect(harness.entries.filter((entry) => originalFees.some((original) => original.id === entry.id)).map((entry) => ({ id: entry.id, fee: entry.current_fee }))).toEqual(originalFees);
+  harness.routineResult = { created: 0, existing: 20, total: 20 };
+  await page.getByTestId("treatments-add-routine").click(); await page.getByTestId("routine-treatments-confirm").click();
+  await expect(result).toContainText("All 20 routine treatments are already in your index"); await expect(result).toContainText("Nothing needed adding"); await expect(result).toContainText("Add treatment");
+  expect(harness.writes).toHaveLength(2); expect(harness.entries.filter((entry) => entry.id >= 101)).toHaveLength(2); expect(browserDialogs).toEqual([]);
+});
+
+test("routine confirmation blocks duplicate pending saves and retries an unconfirmed response with the same request", async ({ page, request }) => {
+  const harness = await mock(page, request); await open(page);
+  const browserDialogs: string[] = []; page.on("dialog", async (dialog) => { browserDialogs.push(dialog.type()); await dialog.dismiss(); });
+  const confirmation = page.getByTestId("routine-treatments-dialog"), confirm = page.getByTestId("routine-treatments-confirm");
+  let release!: () => void; const gate = new Promise<void>((resolve) => { release = resolve; }); let first = true;
+  harness.intercept = async (route) => { if (!first) return false; first = false; await gate; await route.fulfill({ status: 503, json: { detail: "Synthetic routine result not confirmed" } }); return true; };
+  await page.getByTestId("treatments-add-routine").click();
+  try {
+    await confirm.evaluate((button) => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+    await expect(confirm).toBeDisabled(); await expect(confirmation).toContainText("Checking routine treatments"); await expect(confirmation.getByRole("button", { name: "Close treatment editor", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape"); await expect(confirmation).toBeVisible(); expect(harness.writes).toHaveLength(1); expect(browserDialogs).toEqual([]);
+  } finally { release(); }
+  await expect(confirmation.getByRole("alert")).toBeVisible(); await expect(confirm).toHaveText("Retry safely"); await expect(confirm).toBeEnabled();
+  await confirm.click(); await expect(page.getByTestId("routine-treatments-result")).toContainText("already in your index");
+  expect(harness.writes).toHaveLength(2); expect(harness.writes[0].requestId).toBeTruthy(); expect(harness.writes[1]).toEqual(harness.writes[0]);
+  await confirmation.getByRole("button", { name: "Close treatment editor", exact: true }).click(); await expect(confirmation).toBeHidden();
+  harness.intercept = async (route) => { await route.fulfill({ json: { created: 2, existing: 20, total: 20 } }); return true; };
+  await page.getByTestId("treatments-add-routine").click(); await confirm.click(); await expect(confirmation.getByRole("alert")).toBeVisible();
+  await expect(page.getByTestId("routine-treatments-result")).toHaveCount(0);
+  await confirmation.getByRole("button", { name: "Close treatment editor", exact: true }).click(); await expect(confirmation).toBeHidden();
+  expect(harness.writes).toHaveLength(3); expect(browserDialogs).toEqual([]);
 });

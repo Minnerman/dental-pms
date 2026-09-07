@@ -3,6 +3,18 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (routine-list button correction): Reproduced an inaccessible browser
+  JavaScript confirmation in the local in-app preview. Replaced this initializer's
+  prompt with a visible modal and persistent created/already-present result.
+  Cancel never submits; pending duplicate/close guards, idempotent retry, count
+  validation and focus restoration after refresh are covered. All nine focused
+  Treatments browser cases passed, plus typecheck, scoped lint, build, diff checks
+  and independent review; light/dark/mobile dialog inspected. Default ops wrappers
+  were not run because they target/start/migrate the default stack; isolated
+  frontend verification and health checks used instead. Only the local frontend
+  and proxy were refreshed; existing v7 API/database remain unchanged. Live browser
+  confirmation reported all 20 routines already present, with no additions or fee
+  changes. No backend change, migration, production deployment or R4 access.
 - 2026-09-07 (practice treatment index and effective-dated fees): Replaced the
   Treatments editor's selected-object/refetch loop with stable grouped rows and
   separate drafts. Five ordered levels support the owner's 20 routine names,
