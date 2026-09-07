@@ -109,11 +109,11 @@ test("reception shell search opens a patient record and sign-out re-locks protec
   await partialResponse;
 
   const targetResult = page
-    .locator(".app-top-bar button")
+    .getByRole("option")
     .filter({ hasText: `${firstName} ${lastName}` })
     .first();
   const distractorResult = page
-    .locator(".app-top-bar button")
+    .getByRole("option")
     .filter({ hasText: `OtherShell${stamp} Patient` });
   await expect(targetResult).toBeVisible({ timeout: 15_000 });
   await expect(distractorResult).toHaveCount(0);

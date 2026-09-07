@@ -261,7 +261,9 @@ def test_clinical_validation_ownership_and_archived_patient_guards_are_atomic(
         {"tooth": "UR4", "surface": "I", "note": "invalid posterior surface"},
         {"tooth": "UR1", "surface": "X", "note": "invalid surface"},
         {"tooth": "UR1", "surface": "I", "note": "   "},
-        {"tooth": "UR1", "surface": "I", "note": "x" * 2_001},
+        # Native narrative notes support longer entries; procedure-description
+        # limits remain separate and unchanged.
+        {"tooth": "UR1", "surface": "I", "note": "x" * 100_001},
     ]
     for payload in invalid_notes:
         response = api_client.post(
@@ -566,8 +568,11 @@ def test_clinical_mutations_are_audited_idempotent_and_refreshable(
         headers=note_headers,
         json={**note_payload, "note": "must not replace original"},
     )
-    assert duplicate_note.status_code == 201
-    assert duplicate_note.json()["id"] == note.json()["id"]
+    # A different note payload is a collision, not a successful replay.
+    assert duplicate_note.status_code == 409
+    exact_replay = api_client.post(f"/patients/{patient_id}/tooth-notes", headers=note_headers, json=note_payload)
+    assert exact_replay.status_code == 201
+    assert exact_replay.json()["id"] == note.json()["id"]
 
     procedure_headers = {**auth_headers, "Request-Id": f"procedure-{uuid4().hex}"}
     procedure = api_client.post(

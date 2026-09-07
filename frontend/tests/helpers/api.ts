@@ -5,6 +5,7 @@ import { ensureAuthReady, getBaseUrl } from "./auth";
 type PatientOverrides = {
   first_name?: string;
   last_name?: string;
+  date_of_birth?: string;
   address_line1?: string;
   city?: string;
   postcode?: string;
@@ -62,6 +63,7 @@ export async function createPatient(
   const payload = {
     first_name: overrides.first_name ?? "Test",
     last_name: overrides.last_name ?? `Patient ${unique}`,
+    date_of_birth: overrides.date_of_birth,
     address_line1: overrides.address_line1,
     city: overrides.city,
     postcode: overrides.postcode,

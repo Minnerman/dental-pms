@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import {
   createAppointment,
@@ -8,7 +8,7 @@ import {
 } from "./helpers/api";
 import { getBaseUrl, primePageAuth } from "./helpers/auth";
 
-async function openClinical(page: any, request: any, patientId: string) {
+async function openClinical(page: Page, request: APIRequestContext, patientId: string) {
   await primePageAuth(page, request);
   const baseUrl = getBaseUrl();
   await page.goto(`${baseUrl}/patients/${patientId}/clinical`, {
@@ -117,7 +117,13 @@ test("tooth badges remain stable across mode changes and refresh", async ({ page
     "true"
   );
   await expect(page).toHaveURL(/clinicalView=planned/);
-  await expect(page.getByTestId("tooth-badge-UL1")).toContainText("P");
+  await expect(page.getByTestId("planning-not-started")).toBeVisible();
+  await expect(page.getByTestId("treatment-planning-chart")).toHaveCount(0);
+  const earlier = page.getByTestId("planning-earlier-items");
+  await earlier.locator("summary").click();
+  await expect(earlier).toContainText("Planned UL1");
+  await expect(earlier.getByRole("button", { name: "Open earlier plan items", exact: true })).toBeVisible();
+  await expect(page.getByTestId("tooth-badge-UL1")).toHaveCount(0);
   await expect(page.getByTestId("tooth-badge-UR1")).toHaveCount(0);
 
   await page.getByTestId("clinical-chart-view-history").click();

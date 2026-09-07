@@ -35,7 +35,8 @@ test("patient list and detail are read-only without patient write permission", a
   });
   await expect(page.getByTestId("patient-tabs")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("patient-tab-Personal").click();
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
 
   await expect(page.getByText("You can view this patient, but you cannot change it.")).toBeVisible();
   await expect(page.getByTestId("patient-details-fields")).toHaveAttribute("disabled", "");
@@ -87,7 +88,8 @@ test("archived patient state is explicit and only restore remains available", as
   });
   await expect(page.getByTestId("patient-archived-badge")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("patient-tab-Personal").click();
-  await page.getByText("Patient details", { exact: true }).click();
+  await expect(page.getByTestId("patient-personal-details")).toBeVisible();
+  await page.getByTestId("patient-personal-notes").locator("summary").click();
   await expect(page.getByText("Archived patient details are read-only until restored.")).toBeVisible();
   await expect(page.getByTestId("patient-details-fields")).toHaveAttribute("disabled", "");
   await expect(page.getByTestId("patient-notes-field")).toBeDisabled();

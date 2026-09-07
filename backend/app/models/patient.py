@@ -48,6 +48,15 @@ class Patient(Base, AuditMixin, SoftDeleteMixin):
     last_name: Mapped[str] = mapped_column(String(120), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # The legacy phone remains the unspecified primary number. Labels describe
+    # whose number it is, not ownership, contact preference or messaging consent.
+    phone_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    home_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    home_phone_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    work_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    work_phone_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    mobile_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    mobile_phone_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     address_line1: Mapped[str | None] = mapped_column(String(200), nullable=True)
     address_line2: Mapped[str | None] = mapped_column(String(200), nullable=True)

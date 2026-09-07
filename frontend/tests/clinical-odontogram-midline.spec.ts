@@ -69,19 +69,9 @@ test("one dotted midline separates both arches and follows their shared horizont
     for (const tooth of ["UR1", "UL1", "LR1", "LL1"]) {
       const button = page.getByTestId(`tooth-button-${tooth}`);
       await button.scrollIntoViewIfNeeded();
-      const buttonBox = await button.boundingBox();
-      const anatomyBox = await page.getByTestId(`tooth-anatomy-${tooth}`).boundingBox();
-      expect(buttonBox).not.toBeNull();
-      expect(anatomyBox).not.toBeNull();
-      // Lower teeth have their surface map above the anatomy, so a fixed y
-      // would exercise the surface menu instead of the whole-tooth menu.
-      await button.click({
-        button: "right",
-        position: {
-          x: anatomyBox!.x + anatomyBox!.width / 2 - buttonBox!.x,
-          y: anatomyBox!.y + anatomyBox!.height / 2 - buttonBox!.y,
-        },
-      });
+      // Current roots now have their own menu; whole-tooth actions belong to
+      // the tooth number, which must remain reachable beside the separator.
+      await page.getByTestId(`tooth-label-${tooth}`).click({ button: "right" });
       await expect(button).toHaveAttribute("data-selected", "true");
       await expect(page.getByTestId("clinical-tooth-action-menu")).toContainText(`${tooth} · Whole tooth`);
       await page.keyboard.press("Escape");

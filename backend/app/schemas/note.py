@@ -5,8 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.note import NoteType
 from app.schemas.actor import ActorOut
+from app.schemas.clinical_note import MAX_NATIVE_NOTE_LENGTH, NoteMetadataCreate, NoteMetadataOut, NoteAmendmentFields, Revision
 
-MAX_NOTE_BODY_LENGTH = 2_000
+MAX_NOTE_BODY_LENGTH = MAX_NATIVE_NOTE_LENGTH
 
 
 def _required_note_body(value: str) -> str:
@@ -16,7 +17,7 @@ def _required_note_body(value: str) -> str:
     return value
 
 
-class NoteCreate(BaseModel):
+class NoteCreate(NoteMetadataCreate):
     patient_id: Optional[int] = None
     body: str = Field(max_length=MAX_NOTE_BODY_LENGTH)
     note_type: NoteType = NoteType.clinical
@@ -25,14 +26,14 @@ class NoteCreate(BaseModel):
     _normalize_body = field_validator("body")(_required_note_body)
 
 
-class AppointmentNoteCreate(BaseModel):
+class AppointmentNoteCreate(NoteMetadataCreate):
     body: str = Field(max_length=MAX_NOTE_BODY_LENGTH)
     note_type: NoteType = NoteType.clinical
 
     _normalize_body = field_validator("body")(_required_note_body)
 
 
-class NoteUpdate(BaseModel):
+class NoteUpdate(NoteAmendmentFields):
     body: Optional[str] = Field(default=None, max_length=MAX_NOTE_BODY_LENGTH)
     note_type: Optional[NoteType] = None
 
@@ -41,7 +42,9 @@ class NoteUpdate(BaseModel):
     def normalize_optional_body(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        return _required_note_body(value)
+        if not value.strip():
+            raise ValueError("body must not be blank")
+        return value
 
     @model_validator(mode="after")
     def reject_explicit_nulls(self):
@@ -51,7 +54,12 @@ class NoteUpdate(BaseModel):
         return self
 
 
-class NoteOut(BaseModel):
+class NoteAmendment(NoteUpdate):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: Revision
+
+
+class NoteOut(NoteMetadataOut):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

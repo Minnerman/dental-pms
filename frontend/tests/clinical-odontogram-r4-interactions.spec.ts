@@ -62,7 +62,7 @@ test("odontogram keeps its size and separates anatomy from the surface map", asy
   await expect(page.getByTestId("tooth-root-LR5-2")).toHaveCount(0);
 });
 
-test("whole-tooth and surface actions are available by click and right-click", async ({
+test("planned chart whole-tooth and surface actions are available by click and right-click", async ({
   page,
   request,
 }) => {
@@ -72,7 +72,7 @@ test("whole-tooth and surface actions are available by click and right-click", a
     last_name: `Menu ${Date.now()}`,
   });
 
-  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical`, {
+  await page.goto(`${getBaseUrl()}/patients/${patientId}/clinical?clinicalView=planned`, {
     waitUntil: "domcontentloaded",
   });
   await expect(page.getByTestId("clinical-chart")).toBeVisible({ timeout: 30_000 });
