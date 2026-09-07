@@ -42,7 +42,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [catalogueScope, setCatalogueScope] = useState<"target" | "all">("target");
+  const [catalogueScope, setCatalogueScope] = useState<"target" | "all">("all");
   const dialog = useRef<HTMLDialogElement>(null);
   const customProgressDialog = useRef<HTMLDialogElement>(null);
   const detailsDialog = useRef<HTMLDialogElement>(null);
@@ -92,8 +92,8 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
     const ticket = ++catalogueSequence.current;
     setCatalogueLoading(true); setCatalogueError(null); setCatalogue(null);
     try {
-      const parameters = new URLSearchParams({ q: search, limit: "50", offset: String(offset) });
-      if (catalogueScope === "target") { parameters.set("level", catalogueLevel); parameters.set("include_unassigned", "true"); }
+      const parameters = new URLSearchParams({ q: search, limit: "50", offset: String(offset), classified_only: "true", include_unassigned: "false" });
+      if (catalogueScope === "target") parameters.set("level", catalogueLevel);
       const response = await apiFetch(`${base}/catalogue?${parameters}`);
       if (response.status === 401) { unauthorised(); return; }
       if (!response.ok) throw new Error(response.status === 403 ? "You do not have permission to view the treatment catalogue." : "The treatment catalogue could not be loaded. Retry before adding treatment.");
@@ -127,7 +127,7 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
   };
   const openDraft = (target: PlanningTarget) => {
     if (!writable || !plan) return;
-    opener.current = document.activeElement; setQuery(""); setSearch(""); setOffset(0); setCatalogueScope("target"); setError(null); setNotice(null);
+    opener.current = document.activeElement; setQuery(""); setSearch(""); setOffset(0); setCatalogueScope("all"); setError(null); setNotice(null);
     setDraft({ ...blankDraft(), target, drawing: target.level === "general" ? "other" : "" });
   };
   const onSelect = (next: PlanningSelection, event: MouseEvent<SVGElement | HTMLButtonElement> | KeyboardEvent<SVGElement | HTMLButtonElement>) => {
@@ -313,12 +313,13 @@ export default function TreatmentPlanningPanel({ patientId, canWriteClinical, ca
             {!draft.custom && <>
               <div className={styles.formGrid}>
                 <label>Search treatment catalogue<input data-testid="planning-catalogue-search" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Treatment name or code" /></label>
-                <label>Show treatments<select data-testid="planning-catalogue-scope" value={catalogueScope} onChange={(event) => { setOffset(0); setCatalogueScope(event.target.value as "target" | "all"); }}><option value="target">Selected level + unassigned</option><option value="all">All levels</option></select></label>
+                <label>Show treatments<select data-testid="planning-catalogue-scope" value={catalogueScope} onChange={(event) => { setOffset(0); setCatalogueScope(event.target.value as "target" | "all"); }}><option value="all">All practice levels</option><option value="target">Selected level only</option></select></label>
               </div>
-              <small className={styles.muted}>Unassigned catalogue entries remain available without guessing their anatomical category.{catalogue?.practice_today && ` Prices shown for ${planningFeeDateLabel(catalogue.practice_today) ?? catalogue.practice_today}.`}</small>
+              <small className={styles.muted}>Treatments and current prices come from your five-level practice fee list. Unpriced treatments remain available with an explicitly agreed fee.{catalogue?.practice_today && ` Prices shown for ${planningFeeDateLabel(catalogue.practice_today) ?? catalogue.practice_today}.`}</small>
             {catalogueLoading && <p role="status">Loading catalogue…</p>}{catalogueError && <p role="alert" className={styles.error}>{catalogueError} <button type="button" onClick={() => void loadCatalogue()}>Retry catalogue</button></p>}
             {catalogue && <><div className={styles.catalogue} aria-label="Treatment catalogue" data-testid="planning-catalogue">{catalogue.items.map((treatment) => <button type="button" key={treatment.id} data-testid={`planning-catalogue-item-${treatment.id}`} aria-pressed={draft.treatment?.id === treatment.id} onClick={() => chooseTreatment(treatment)}><span><strong>{treatment.name}</strong><small>{treatment.code ?? "No catalogue code"} · {treatment.patient_category.replaceAll("_", " ")} · {treatment.level === "general" ? "General" : treatment.level ? `${treatment.level} level` : "Unassigned level"}</small></span><span>{planningFeeLabel(treatment.fee)}{treatment.fee.effective_from && <small>From {planningFeeDateLabel(treatment.fee.effective_from) ?? treatment.fee.effective_from}</small>}</span></button>)}{!catalogue.items.length && <p>No matching active treatment. Try another name or code, show all levels, or choose Other treatment.</p>}</div>{catalogue.total > 50 && <div className={styles.actions}><button type="button" className="btn btn-secondary" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 50))}>Previous treatments</button><span>{offset + 1}–{Math.min(offset + 50, catalogue.total)} of {catalogue.total}</span><button type="button" className="btn btn-secondary" disabled={offset + 50 >= catalogue.total} onClick={() => setOffset((value) => value + 50)}>Next treatments</button></div>}</>}
             {draft.treatment && <p className={styles.quote}>Selected: <strong>{draft.treatment.name}</strong>{draft.treatment.description && <><br />{draft.treatment.description}</>}</p>}
+            {categoryError && draft.treatment?.level && <div className={styles.quote} role="status"><p>{categoryError}</p><button type="button" className="btn btn-secondary" data-testid="planning-use-treatment-level" onClick={() => { const nextLevel = draft.treatment?.level; if (nextLevel) changeTarget({ level: nextLevel, tooth: nextLevel === "general" ? null : draft.target.tooth, surfaces: [] }); }}>Use {draft.treatment.level === "general" ? "General treatment" : planningLevels.find((entry) => entry.value === draft.treatment?.level)?.label}</button></div>}
             </>}
             {draft.custom && <label>Treatment description<textarea data-testid="planning-other-description" rows={3} maxLength={2000} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Describe the treatment for this selected target" /></label>}
             <div className={styles.formGrid}><label>Treatment level<select data-testid="planning-target-level" value={draft.target.level} onChange={(event) => changeTarget({ level: event.target.value as PlanningTarget["level"], tooth: event.target.value === "general" ? null : draft.target.tooth, surfaces: [] })}><option value="general">General treatment</option>{planningLevels.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label>

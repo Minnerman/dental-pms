@@ -246,7 +246,7 @@ test("shared actions stay bound to one selected item through pending uncomplete 
 test("real synthetic plan snapshots diagnosis and completes uncompletes and recompletes the saved fee with intact history", async ({ page, request }) => {
   const { id, headers } = await setup(page, request), base = getBaseUrl(), endpoint = `${base}/api/patients/${id}`;
   const recorded = await request.post(`${endpoint}/clinical/tooth-conditions`, { headers, data: { teeth: ["UR4"], condition: "missing", expected_revisions: { UR4: 0 } } }); expect(recorded.ok()).toBeTruthy();
-  const treatment = await request.post(`${base}/api/treatments`, { headers, data: { name: `Synthetic plan catalogue ${id}`, code: `SYN-${id}`, is_active: true } }); expect(treatment.ok()).toBeTruthy(); const treatmentId = (await treatment.json()).id;
+  const treatment = await request.post(`${base}/api/treatments`, { headers, data: { name: `Synthetic plan catalogue ${id}`, code: `SYN-${id}`, level: "tooth", is_active: true } }); expect(treatment.ok()).toBeTruthy(); const treatmentId = (await treatment.json()).id;
   const fees = await request.put(`${base}/api/treatments/${treatmentId}/fees`, { headers, data: [{ patient_category: "CLINIC_PRIVATE", fee_type: "FIXED", amount_pence: 8700 }] }); expect(fees.ok()).toBeTruthy();
   await open(page, id); await page.getByTestId("planning-start").click(); await expect(page.getByTestId("treatment-planning-chart")).toBeVisible();
   const changed = await request.post(`${endpoint}/clinical/tooth-conditions`, { headers, data: { teeth: ["UR4"], condition: "unrecorded", expected_revisions: { UR4: 1 } } }); expect(changed.ok()).toBeTruthy();

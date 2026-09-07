@@ -3,6 +3,23 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (planning practice catalogue correction): New plan-item searches use
+  the same active, classified five-level practice list as the fee index, across
+  all levels by default. Optional selected-level filtering remains available.
+  An explicit Use level action resolves a differing anatomical category without
+  inferring a drawing or changing the target silently. Unpriced routines remain
+  selectable with an explicitly agreed fee; old unassigned entries stay intact
+  in existing plans and quote edits but are excluded from new picker results.
+  The additive classified_only query filters before count/paging and preserves
+  legacy API defaults. Verification: 48 targeted backend checks and six distinct
+  browser cases passed (one test-only wording assertion corrected/rerun), plus
+  typecheck, lint, build, compilation and diff checks. Light/dark/mobile inspected.
+  Local compatible API/frontend refreshed against the unchanged persistent v7
+  database; old/new planning, diagnosis, fee index and default catalogue reads
+  matched. Live browser verified ex and sim show routines, not demo choices, from
+  Crown context. No patient/fee writes in the manual preview. Default stack ops
+  were avoided because they start/migrate the default stack; isolated equivalents
+  used. No migration, production deployment, R4 access or merge.
 - 2026-09-07 (routine fee index cleanup): Omitted the Other existing treatments
   section from the fees page, including search and inactive views. All underlying
   catalogue records, saved quotes and historical fees remain intact; no deletion

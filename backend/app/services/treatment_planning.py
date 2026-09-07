@@ -153,10 +153,14 @@ def catalogue_row(treatment, category, fee):
     return {**values, "quote_token": request_fingerprint(values)}
 
 
-def catalogue(db, patient_id, q, limit, offset, level=None, include_unassigned=False):
+def catalogue(db, patient_id, q, limit, offset, level=None, include_unassigned=False, classified_only=False):
     row = patient(db, patient_id)
     today = fee_service.practice_today()
     query = select(Treatment).options(lazyload(Treatment.fees)).where(Treatment.is_active.is_(True))
+    if classified_only:
+        # Opt-in practice index scope. Apply before count/paging so old demo
+        # or unclassified entries cannot hide a classified treatment page.
+        query = query.where(Treatment.level.in_(fee_service.LEVELS))
     if level is not None:
         query = query.where(or_(Treatment.level == level, Treatment.level.is_(None)) if include_unassigned else Treatment.level == level)
     if q.strip():

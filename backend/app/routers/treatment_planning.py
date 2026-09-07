@@ -21,8 +21,9 @@ def get_planning(patient_id: int, db: Session = Depends(get_db), user: User = De
 @router.get("/catalogue")
 def get_catalogue(patient_id: int, q: str = Query(default="", max_length=200), limit: int = Query(default=50, ge=1, le=100),
                   offset: int = Query(default=0, ge=0), level: TreatmentLevel | None = None, include_unassigned: bool = False,
+                  classified_only: bool = False,
                   db: Session = Depends(get_db), _user: User = Depends(VIEW)):
-    return service.catalogue(db, patient_id, q, limit, offset, level, include_unassigned)
+    return service.catalogue(db, patient_id, q, limit, offset, level, include_unassigned, classified_only)
 
 
 @router.post("/start", response_model=PlanningOut, status_code=201)

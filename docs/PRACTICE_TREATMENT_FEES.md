@@ -7,6 +7,16 @@ this page. Its uncategorised records are retained in storage for existing patien
 plans and history; this display change does not delete or deactivate treatments.
 Ordinary reads never infer or assign their level.
 
+The treatment-planning picker uses the same active, categorised practice list.
+It searches all five levels by default; **Selected level only** is an optional
+filter. Uncategorised demo/legacy entries are not offered for new selection, but
+existing saved items retain their captured identity, fee and editing/history path.
+Unpriced practice treatments are still offered and require an agreed fee or
+explicit waiver. Choosing another category does not silently move the clinical
+target: **Use Tooth level** (or its equivalent) explicitly changes the level,
+retains the selected tooth where applicable and clears incompatible surfaces and
+drawing selection. The dentist still chooses the drawing and any missing target.
+
 ## Routine list and day-to-day use
 
 **Add missing routine treatments** explicitly adds the owner's routine list. It

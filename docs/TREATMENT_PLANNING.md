@@ -33,9 +33,13 @@ The existing diagnostic bridge geometry remains part of the captured chart.
   provenance and agreed fee/reasoned waiver; no procedure drawing is inferred.
 - A clinical read-only picker uses the same active treatment/fee catalogue as
   Practice Treatments. Catalogue administration remains restricted as before.
-  It initially shows the selected level plus unassigned legacy entries. All
-  levels can be browsed, but an explicitly categorised treatment requires a
-  matching target. The current UK-date price is resolved consistently during
+  It initially searches all five practice levels, excluding unassigned demo/legacy
+  entries from new selection. Selected-level filtering remains optional. A
+  categorised treatment requires a matching target; an explicit Use level action
+  retains the tooth where applicable and resets surfaces/drawing, without guessing
+  clinical anatomy. Existing unassigned saved items keep their editing/history
+  path. The opt-in `classified_only` API filter runs before count/paging and leaves
+  older API queries compatible. The current UK-date price is resolved consistently during
   catalogue display and save; versions and effective dates are retained in new
   quotes. See [Practice treatment fees](PRACTICE_TREATMENT_FEES.md).
 - For catalogue items, the selected identity, name/code, patient category and
