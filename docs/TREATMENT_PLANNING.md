@@ -16,6 +16,9 @@ The existing diagnostic bridge geometry remains part of the captured chart.
 
 ## Planning and fees
 
+- One clinical navigation row provides Current · Diagnosis, Planned and History,
+  with Refresh alongside. Notes remain in the resizable sidebar and main patient
+  Notes tab; no duplicate clinical Notes or Treatment plan subtabs are needed.
 - Four compact levels target a tooth, its whole root area, its crown or selected
   surfaces. General examination, hygiene and visit items use Add treatment.
 - A clinical read-only picker uses the same active treatment/fee catalogue as

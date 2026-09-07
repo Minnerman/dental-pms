@@ -259,10 +259,11 @@
 
 .shell :global(.clinical-section-toolbar) {
   justify-content: space-between;
-}
-
-.shell :global(.clinical-section-toolbar .tab) {
-  padding: 5px 10px;
+  background: var(--badge-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 38px;
+  padding: 4px 6px;
 }
 
 .shell :global(.clinical-refresh-control) {

@@ -20,7 +20,7 @@ async function openEarlierPlanManager(page: Page) {
   await expect(page.getByRole("heading", { name: "Earlier treatment items", exact: true })).toBeVisible();
 }
 
-test("patient clinical route shows empty-state guidance when notes and procedures are empty", async ({
+test("patient clinical route shows sidebar empty-state guidance when notes and procedures are empty", async ({
   page,
   request,
 }) => {
@@ -35,13 +35,14 @@ test("patient clinical route shows empty-state guidance when notes and procedure
   });
   await waitForPatientClinicalPage(page, patientId);
 
-  const notesPanelButton = page.getByRole("button", { name: /^Notes \(\d+\)$/ });
-  await notesPanelButton.click();
-  await expect(page.getByText("Add clinical note", { exact: true })).toBeVisible({
+  const notesPanel = page.getByTestId("clinical-notes-panel");
+  await expect(notesPanel).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByText("No clinical notes recorded yet.")).toBeVisible();
-  await expect(page.getByText("No procedures recorded yet.")).toBeVisible();
+  await expect(notesPanel.getByTestId("clinical-notes-composer").locator(":scope > summary")).toHaveText("Add a note");
+  await expect(notesPanel.getByTestId("clinical-notes-empty")).toHaveText("No matching recorded entries.");
+  await expect(notesPanel.getByTestId("clinical-notes-save")).toBeDisabled();
+  await expect(notesPanel.locator('[data-testid^="clinical-notes-entry-"]')).toHaveCount(0);
 });
 
 test("patient notes tab allows selecting admin note type on create", async ({ page, request }) => {
@@ -152,14 +153,14 @@ test("patient clinical note entry shows in-flight state and guards repeat submit
   });
   await waitForPatientClinicalPage(page, patientId);
   await expect(page.getByTestId("patient-tab-Medical")).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: /^Notes \(\d+\)$/ }).click();
-  await expect(page.getByText("Add clinical note", { exact: true })).toBeVisible({
+  const notesPanel = page.getByTestId("clinical-notes-panel");
+  await expect(notesPanel).toBeVisible({
     timeout: 15_000,
   });
 
-  await page.getByTestId("patient-clinical-note-tooth").selectOption("UR6");
-  await page.getByTestId("patient-clinical-note-body").fill(noteBody);
-  const addNoteButton = page.getByTestId("patient-clinical-note-add");
+  await page.getByTestId("clinical-notes-tooth").selectOption("UR6");
+  await page.getByTestId("clinical-notes-body").fill(noteBody);
+  const addNoteButton = page.getByTestId("clinical-notes-save");
   await expect(addNoteButton).toBeEnabled();
 
   let requestCount = 0;
@@ -186,27 +187,24 @@ test("patient clinical note entry shows in-flight state and guards repeat submit
       response.url().includes(`/api/patients/${patientId}/tooth-notes`)
   );
 
-  const clickState = await addNoteButton.evaluate((button) => {
-    if (!(button instanceof HTMLButtonElement)) {
-      throw new Error("Clinical Add note button not found");
-    }
-    const beforeDisabled = button.disabled;
-    button.click();
-    const afterFirstDisabled = button.disabled;
-    button.click();
-    return { beforeDisabled, afterFirstDisabled, afterSecondDisabled: button.disabled };
-  });
-  await seenCreateRequestPromise;
-
-  expect(clickState.beforeDisabled).toBe(false);
-  expect(clickState.afterFirstDisabled).toBe(true);
-  expect(clickState.afterSecondDisabled).toBe(true);
-  await expect(addNoteButton).toBeDisabled();
-  await expect(addNoteButton).toHaveText("Saving...");
-  await page.waitForTimeout(250);
-  expect(requestCount).toBe(1);
-
-  releaseCreateRequest();
+  try {
+    // Exercise both clicks in one JavaScript turn; the sidebar's immediate
+    // mutation lock must prevent the second POST before React commits disabled.
+    const beforeDisabled = await addNoteButton.evaluate((button) => {
+      if (!(button instanceof HTMLButtonElement)) throw new Error("Clinical Save note button not found");
+      const disabled = button.disabled;
+      button.click(); button.click();
+      return disabled;
+    });
+    await seenCreateRequestPromise;
+    expect(beforeDisabled).toBe(false);
+    await expect(addNoteButton).toBeDisabled();
+    await expect(addNoteButton).toHaveText("Saving…");
+    await expect(page.getByTestId("clinical-notes-body")).toBeDisabled();
+    await expect(page.getByTestId("clinical-notes-tooth")).toBeDisabled();
+    await page.waitForTimeout(250);
+    expect(requestCount).toBe(1);
+  } finally { releaseCreateRequest(); }
 
   const createResponse = await createResponsePromise;
   expect(createResponse.ok()).toBeTruthy();
@@ -218,14 +216,12 @@ test("patient clinical note entry shows in-flight state and guards repeat submit
   await page.unroute(noteRoutePattern);
 
   await expect(page.getByText("Note saved.", { exact: true })).toBeVisible({ timeout: 15_000 });
-  const savedNoteCard = page
-    .getByText(noteBody, { exact: true })
-    .locator("xpath=ancestor::div[contains(@class, 'card')][1]");
+  const savedNoteCard = notesPanel.locator('[data-testid^="clinical-notes-entry-"]').filter({ hasText: noteBody });
   await expect(savedNoteCard).toBeVisible({ timeout: 15_000 });
   await expect(savedNoteCard).toContainText("UR6");
   await expect(savedNoteCard).toContainText("Tooth note");
-  await expect(page.getByTestId("patient-clinical-note-body")).toHaveValue("");
-  await expect(addNoteButton).toHaveText("Add note");
+  await expect(page.getByTestId("clinical-notes-body")).toHaveValue("");
+  await expect(addNoteButton).toHaveText("Save note");
 });
 
 test("patient chart tooth note add shows in-flight state and guards repeat submit", async ({

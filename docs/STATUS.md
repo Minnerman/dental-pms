@@ -3,6 +3,20 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- 2026-09-07 (single clinical navigation row): Removed the duplicate clinical
+  Chart / Treatment plan / Notes subtab row. Current · Diagnosis, Planned and
+  History now share one compact row with Refresh, retaining URL/view persistence,
+  read-only permissions, the notes sidebar/main Notes tab and Earlier items.
+  Removed only the obsolete duplicate notes form and its unused local state.
+  Verification: all 10 distinct focused browser cases passed, including light/dark
+  layout, view/URL/refresh and unsaved sidebar draft preservation, Earlier items,
+  notes access and duplicate-submit protection. One test-only nested-summary
+  selector was corrected and that case rerun. Typecheck, scoped lint, production
+  build, diff checks and independent source review passed. The localhost frontend
+  was refreshed against the unchanged v6 backend/database; saved planning,
+  clinical-summary and diagnosis responses matched through old/new frontends.
+  No clinical-record writes in the manual preview, migration, production/R4
+  access, deployment or merge. Updated durable private preview handover retained.
 - 2026-09-06 (compact planning rows and audited Uncomplete): Outstanding and
   completed work now uses two-line selectable rows with a single action toolbar
   beside the totals. Full quote/fee/target details remain available in Details;

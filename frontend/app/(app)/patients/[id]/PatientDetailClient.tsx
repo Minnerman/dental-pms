@@ -168,7 +168,6 @@ const downloadingInvoiceIds = new Set<number>();
 const downloadingEstimatePdfIds = new Set<number>();
 const downloadingRecallLetterIds = new Set<number>();
 const savingPatientNoteIds = new Set<string>();
-const savingClinicalNotePatientIds = new Set<string>();
 const savingTreatmentPlanPatientIds = new Set<string>();
 const savingPatientIds = new Set<string>();
 const savingRecallPatientIds = new Set<string>();
@@ -1020,7 +1019,7 @@ export default function PatientDetailClient({
   const [activeLockedTab, setActiveLockedTab] = useState<LockedPatientTabKey>(
     resolveLockedTabFromContentTab(initialTab ?? "summary")
   );
-  const [clinicalTab, setClinicalTab] = useState<"chart" | "treatment" | "notes">(
+  const [clinicalTab, setClinicalTab] = useState<"chart" | "treatment">(
     "chart"
   );
   const [loading, setLoading] = useState(true);
@@ -1206,11 +1205,6 @@ export default function PatientDetailClient({
   const [savingProcedure, setSavingProcedure] = useState(false);
   const [savingToothNote, setSavingToothNote] = useState(false);
   const [chartNoteNotice, setChartNoteNotice] = useState<string | null>(null);
-  const [notesTooth, setNotesTooth] = useState("");
-  const [notesSurface, setNotesSurface] = useState("");
-  const [notesBody, setNotesBody] = useState("");
-  const [savingClinicalNote, setSavingClinicalNote] = useState(false);
-  const [clinicalNoteNotice, setClinicalNoteNotice] = useState<string | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingTreatmentPlanId, setEditingTreatmentPlanId] = useState<number | null>(null);
   const [planTooth, setPlanTooth] = useState("");
@@ -1634,10 +1628,7 @@ export default function PatientDetailClient({
       setSelectedTooth(nextTooth);
       setSelectedToothSurfaces(normalizedSurfaces);
       setChartNoteSurface(normalizedSurfaces.join(""));
-      if (nextTooth) {
-        setNotesTooth(nextTooth);
-      } else {
-        setNotesTooth("");
+      if (!nextTooth) {
         setChartActionMenu(null);
         setActiveToothTool(null);
       }
@@ -1801,7 +1792,6 @@ export default function PatientDetailClient({
     setSelectedTooth(null);
     setSelectedToothSurfaces([]);
     setChartNoteSurface("");
-    setNotesTooth("");
   }, []);
 
   useEffect(() => {
@@ -1862,11 +1852,6 @@ export default function PatientDetailClient({
     setSelectedTooth(chartSelectionUndoState.tooth);
     setSelectedToothSurfaces(chartSelectionUndoState.surfaces);
     setChartNoteSurface(chartSelectionUndoState.surfaces.join(""));
-    if (chartSelectionUndoState.tooth) {
-      setNotesTooth(chartSelectionUndoState.tooth);
-    } else {
-      setNotesTooth("");
-    }
     setChartSelectionRedoState(current);
     setChartSelectionUndoState(null);
   }, [chartSelectionUndoState, selectedTooth, selectedToothSurfaces]);
@@ -1880,11 +1865,6 @@ export default function PatientDetailClient({
     setSelectedTooth(chartSelectionRedoState.tooth);
     setSelectedToothSurfaces(chartSelectionRedoState.surfaces);
     setChartNoteSurface(chartSelectionRedoState.surfaces.join(""));
-    if (chartSelectionRedoState.tooth) {
-      setNotesTooth(chartSelectionRedoState.tooth);
-    } else {
-      setNotesTooth("");
-    }
     setChartSelectionUndoState(current);
     setChartSelectionRedoState(null);
   }, [chartSelectionRedoState, selectedTooth, selectedToothSurfaces]);
@@ -3613,66 +3593,6 @@ export default function PatientDetailClient({
     }
   }
 
-  async function submitClinicalNote(button?: HTMLButtonElement | null) {
-    if (!canWriteClinical || clinicalPatientUnavailable) {
-      setClinicalError("Clinical records are read-only.");
-      return;
-    }
-    if (!notesTooth.trim() || !notesBody.trim()) return;
-    if (
-      notesBody.trim().length > clinicalTextMaxLength ||
-      !clinicalSurfaceIsValid(notesTooth.trim(), notesSurface)
-    ) {
-      setClinicalError("Check the clinical note and surface before saving.");
-      return;
-    }
-    if (
-      !button ||
-      savingClinicalNote ||
-      savingClinicalNotePatientIds.has(patientId) ||
-      button.disabled
-    ) {
-      return;
-    }
-    savingClinicalNotePatientIds.add(patientId);
-    button.disabled = true;
-    setSavingClinicalNote(true);
-    try {
-      const res = await apiFetch(`/api/patients/${patientId}/tooth-notes`, {
-        method: "POST",
-        headers: clinicalMutationHeaders(),
-        body: JSON.stringify({
-          tooth: notesTooth.trim(),
-          surface: notesSurface || null,
-          note: notesBody.trim(),
-        }),
-      });
-      if (res.status === 401) {
-        clearToken();
-        router.replace("/login");
-        return;
-      }
-      if (!res.ok) {
-        throw new Error(clinicalRequestError(res.status, "save the clinical note"));
-      }
-      setNotesBody("");
-      setNotesSurface("");
-      setClinicalNoteNotice("Note saved.");
-      await Promise.all([
-        refreshClinicalData(),
-        loadBaselineConditions(),
-        selectedTooth === notesTooth.trim()
-          ? loadToothHistory(notesTooth.trim())
-          : Promise.resolve(),
-      ]);
-    } catch (err) {
-      setClinicalError(err instanceof Error ? err.message : "Failed to save clinical note");
-    } finally {
-      savingClinicalNotePatientIds.delete(patientId);
-      setSavingClinicalNote(false);
-    }
-  }
-
   async function submitTreatmentPlanItem(button?: HTMLButtonElement | null) {
     if (!canWriteClinical || clinicalPatientUnavailable) {
       setClinicalError("Clinical records are read-only.");
@@ -4175,7 +4095,6 @@ export default function PatientDetailClient({
     setSelectedTooth(null);
     setSelectedToothSurfaces([]);
     setChartNoteSurface("");
-    setNotesTooth("");
     setChartSelectionUndoState(null);
     setChartSelectionRedoState(null);
   }, [patientId]);
@@ -5147,18 +5066,7 @@ export default function PatientDetailClient({
     return toothStateByTooth.get(selectedTooth) ?? { restorations: [], missing: false, extracted: false };
   }, [selectedTooth, toothStateByTooth]);
 
-  const sortedClinicalNotes = useMemo(() => {
-    return [...clinicalNotes].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-  }, [clinicalNotes]);
   const showClinicalLoadingPlaceholder = clinicalLoading && !clinicalLastUpdated;
-
-  const sortedClinicalProcedures = useMemo(() => {
-    return [...clinicalProcedures].sort(
-      (a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime()
-    );
-  }, [clinicalProcedures]);
 
   function getToothBadges(tooth: string) {
     const badges: { label: string; title: string }[] = [];
@@ -8825,37 +8733,24 @@ export default function PatientDetailClient({
                       history and treatment plan, but cannot make changes.
                     </div>
                   )}
-                  <div className="clinical-section-toolbar">
-                    <div className="tabs">
-                    <button
-                      className={`tab ${clinicalTab === "chart" && clinicalViewMode !== "planned" ? "active" : ""}`}
-                      onClick={() => { setClinicalTab("chart"); setClinicalViewMode("current"); }}
-                    >
-                      Chart
-                    </button>
-                    <button
-                      className={`tab ${clinicalTab === "treatment" || clinicalViewMode === "planned" && clinicalTab === "chart" ? "active" : ""}`}
-                      onClick={() => { setClinicalTab("chart"); setClinicalViewMode("planned"); }}
-                    >
-                      Treatment plan ({treatmentPlanItems.length})
-                    </button>
-                    <button
-                      className={`tab ${clinicalTab === "notes" ? "active" : ""}`}
-                      onClick={() => setClinicalTab("notes")}
-                    >
-                      Notes ({clinicalNotes.length})
-                    </button>
+                  <div className="clinical-section-toolbar" data-testid="clinical-navigation-toolbar">
+                    <div style={tabRowStyle} data-testid="clinical-chart-toggle" aria-label="Chart view">
+                      {([["current", "Current · Diagnosis"], ["planned", "Planned"], ["history", "History"]] as const).map(([view, label]) => (
+                        <button key={view} type="button"
+                          style={tabStyle(clinicalTab === "chart" && clinicalViewMode === view, true)}
+                          onClick={() => { setClinicalTab("chart"); setClinicalViewMode(view); }}
+                          data-testid={`clinical-chart-view-${view}`}
+                          data-active={clinicalTab === "chart" && clinicalViewMode === view}
+                          aria-pressed={clinicalTab === "chart" && clinicalViewMode === view}
+                        >{label}</button>
+                      ))}
                     </div>
                     <div className="clinical-refresh-control">
                       <span>Last updated: {formatDateTime(clinicalLastUpdated)}</span>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        onClick={refreshClinicalData}
-                        disabled={clinicalLoading}
-                      >
-                        {clinicalLoading ? "Refreshing..." : "Refresh"}
-                      </button>
+                      <button className="btn btn-secondary" type="button"
+                        data-testid="clinical-data-refresh"
+                        onClick={refreshClinicalData} disabled={clinicalLoading}
+                      >{clinicalLoading ? "Refreshing..." : "Refresh"}</button>
                     </div>
                   </div>
 
@@ -8886,43 +8781,9 @@ export default function PatientDetailClient({
                   data-planned-state={plannedTeeth.size > 0 ? "present" : "absent"}
                   data-completed-state={historyTeeth.size > 0 ? "present" : "absent"}
                 >
-                  <div className="clinical-chart-toolbar">
+                  {clinicalViewMode !== "planned" && <div className="clinical-chart-toolbar">
                   <div className="clinical-chart-primary-controls">
-                    <div className="clinical-control-group">
-                    <div style={tabRowStyle} data-testid="clinical-chart-toggle" aria-label="Chart view">
-                      <button
-                        type="button"
-                        style={tabStyle(clinicalViewMode === "current", true)}
-                        onClick={() => setClinicalViewMode("current")}
-                        data-testid="clinical-chart-view-current"
-                        data-active={clinicalViewMode === "current"}
-                        aria-pressed={clinicalViewMode === "current"}
-                      >
-                        Current · Diagnosis
-                      </button>
-                      <button
-                        type="button"
-                        style={tabStyle(clinicalViewMode === "planned", true)}
-                        onClick={() => setClinicalViewMode("planned")}
-                        data-testid="clinical-chart-view-planned"
-                        data-active={clinicalViewMode === "planned"}
-                        aria-pressed={clinicalViewMode === "planned"}
-                      >
-                        Planned
-                      </button>
-                      <button
-                        type="button"
-                        style={tabStyle(clinicalViewMode === "history", true)}
-                        onClick={() => setClinicalViewMode("history")}
-                        data-testid="clinical-chart-view-history"
-                        data-active={clinicalViewMode === "history"}
-                        aria-pressed={clinicalViewMode === "history"}
-                      >
-                        History
-                      </button>
-                    </div>
-                  </div>
-                  {clinicalViewMode !== "planned" && <div
+                  <div
                     className="row"
                     style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}
                     data-testid="clinical-selection-toolbar"
@@ -8932,9 +8793,9 @@ export default function PatientDetailClient({
                         ? clinicalViewMode === "current" ? `Tooth ${currentToothLabel(selectedTooth)} · Diagnosis` : `Tooth ${selectedTooth} · Surfaces ${selectedToothSurfaces.join("") || "None"}`
                         : "Select a tooth"}
                     </span>
-                  </div>}
                   </div>
-                  {clinicalViewMode !== "planned" && <details className="clinical-chart-options">
+                  </div>
+                  <details className="clinical-chart-options">
                     <summary><Icon name="settings" size={14} /> Chart options</summary>
                     <div className="clinical-chart-options-content">
                   <div className="clinical-state-legend">
@@ -9086,8 +8947,8 @@ export default function PatientDetailClient({
                     </div>
                   </details>
                     </div>
-                  </details>}
-                  </div>
+                  </details>
+                  </div>}
                   {clinicalViewMode !== "planned" && r4TreatmentOverlayError && (
                     <div className="notice">
                       <div
@@ -10336,7 +10197,7 @@ export default function PatientDetailClient({
                       </div>}
                 </ClinicalNotesWorkspace>
                     </div>
-                  ) : clinicalTab === "treatment" ? (
+                  ) : (
                     <div className="stack" data-testid="patient-treatment-plan-section">
                       <h3>Earlier treatment items</h3>
                       <p className="muted">These items predate the copied-chart planning workspace and have not been added to its chart.</p>
@@ -10541,136 +10402,6 @@ export default function PatientDetailClient({
                           </tbody>
                         </Table>
                       )}
-                    </div>
-                  ) : (
-                    <div className="stack">
-                      <Panel title="Add clinical note">
-                        <div className="stack" style={{ gap: 10 }}>
-                          <div
-                            style={{
-                              display: "grid",
-                              gap: 10,
-                              gridTemplateColumns: "1fr 1fr",
-                            }}
-                          >
-                            <div className="stack" style={{ gap: 8 }}>
-                              <label className="label">Tooth</label>
-                              <select
-                                className="input"
-                                data-testid="patient-clinical-note-tooth"
-                                value={notesTooth}
-                                onChange={(e) => setNotesTooth(e.target.value)}
-                                disabled={!canWriteClinical}
-                              >
-                                <option value="">Select tooth</option>
-                                {allTeeth.map((tooth) => (
-                                  <option key={tooth} value={tooth}>
-                                    {tooth}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="stack" style={{ gap: 8 }}>
-                              <label className="label">Surface</label>
-                              <input
-                                className="input"
-                                value={notesSurface}
-                                onChange={(e) => setNotesSurface(e.target.value.toUpperCase())}
-                                placeholder="e.g. MOD"
-                                maxLength={5}
-                                disabled={!canWriteClinical}
-                              />
-                            </div>
-                          </div>
-                          <div className="stack" style={{ gap: 8 }}>
-                            <label className="label">Note</label>
-                            <textarea
-                              className="input"
-                              data-testid="patient-clinical-note-body"
-                              rows={3}
-                              value={notesBody}
-                              maxLength={clinicalTextMaxLength}
-                              disabled={!canWriteClinical}
-                              onChange={(e) => {
-                                setNotesBody(e.target.value);
-                                setClinicalNoteNotice(null);
-                              }}
-                              placeholder="Date-stamped clinical note"
-                            />
-                          </div>
-                          <button
-                            className="btn btn-primary"
-                            type="button"
-                            data-testid="patient-clinical-note-add"
-                            onClick={(event) => void submitClinicalNote(event.currentTarget)}
-                            disabled={
-                              savingClinicalNote ||
-                              !canWriteClinical ||
-                              !notesTooth ||
-                              !notesBody.trim()
-                            }
-                          >
-                            {savingClinicalNote ? "Saving..." : "Add note"}
-                          </button>
-                          {clinicalNoteNotice && (
-                            <span className="badge">{clinicalNoteNotice}</span>
-                          )}
-                        </div>
-                      </Panel>
-
-                      {sortedClinicalNotes.length === 0 ? (
-                        <div className="notice">
-                          No clinical notes recorded yet. Add notes from the Clinical entry area.
-                        </div>
-                      ) : (
-                        <div className="stack">
-                          {sortedClinicalNotes.map((note) => (
-                            <div className="card" key={note.id}>
-                              <div className="row">
-                                <div>
-                                  <strong>
-                                    {note.tooth}
-                                    {note.surface ? ` · ${note.surface}` : ""}
-                                  </strong>
-                                  <div style={{ color: "var(--muted)" }}>
-                                  {formatDateTime(note.created_at)} · {note.created_by.email}
-                                </div>
-                                </div>
-                                <span className="badge">Tooth note</span>
-                              </div>
-                              <p style={{ marginBottom: 0 }} title={note.note}>
-                                {note.note}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <Panel title="Recent procedures">
-                        {sortedClinicalProcedures.length === 0 ? (
-                          <div className="notice">
-                            No procedures recorded yet. Add from the chart or treatment plan.
-                          </div>
-                        ) : (
-                          <div className="stack">
-                            {sortedClinicalProcedures.map((procedure) => (
-                              <div className="card" style={{ margin: 0 }} key={procedure.id}>
-                                <div className="row">
-                                  <div>
-                                    <strong>{procedure.procedure_code}</strong>
-                                    <div style={{ color: "var(--muted)" }}>
-                                      {formatShortDate(procedure.performed_at)} ·{" "}
-                                      {procedure.created_by.email}
-                                    </div>
-                                  </div>
-                                  <span className="badge">{procedure.tooth || "—"}</span>
-                                </div>
-                                <div title={procedure.description}>{procedure.description}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </Panel>
                     </div>
                   )}
                     </>

@@ -59,7 +59,7 @@ test("clinical viewers get a converged read-only chart and plan", async ({
 
   await page.keyboard.press("Escape");
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.getByRole("button", { name: /^Treatment plan/ }).click();
+  await page.getByTestId("clinical-chart-view-planned").click();
   await expect(page.getByTestId("treatment-planning-panel")).toBeVisible();
   await expect(page.getByTestId("planning-read-only")).toBeVisible();
   await expect(page.getByTestId("planning-start")).toBeDisabled();
