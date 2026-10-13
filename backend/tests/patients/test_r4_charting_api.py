@@ -305,7 +305,7 @@ def test_charting_endpoints_return_ordered_rows(api_client, auth_headers):
             f"/patients/{patient.id}/charting/fixed-notes", headers=auth_headers
         )
         assert fixed_res.status_code == 200, fixed_res.text
-        assert fixed_res.json()[0]["legacy_fixed_note_code"] == 500
+        assert fixed_res.json()[0]["legacy_fixed_note_code"] == fixed_note_code
     finally:
         session.rollback()
         if legacy_code is not None:
