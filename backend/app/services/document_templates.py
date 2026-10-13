@@ -17,6 +17,7 @@ PRESCRIPTION_CONTENT = (
     "Date: {{today}}\n\n"
     "Patient: {{patient.full_name}}\n"
     "Date of birth: {{patient.dob}}\n"
+    "Age: {{patient.age}}\n"
     "Address: {{patient.address}}\n\n"
     "Dentist: {{prescription.prescriber_name}}\n"
     "GDC number: {{prescription.prescriber_gdc}}\n\n"
@@ -107,6 +108,10 @@ def ensure_default_templates(db: Session, *, actor: User) -> int:
         },
     ]
 
+    stock = db.scalar(select(DocumentTemplate).where(DocumentTemplate.name == PRESCRIPTION_TEMPLATE))
+    if stock and stock.content == PRESCRIPTION_CONTENT.replace("Age: {{patient.age}}\n", ""):
+        stock.content = PRESCRIPTION_CONTENT
+        db.commit()
     created = 0
     for template in defaults:
         if _template_exists(db, name=template["name"], kind=template["kind"]):

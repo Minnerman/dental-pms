@@ -35,6 +35,18 @@ def _enum_value(value) -> str:
     return value.value if hasattr(value, "value") else str(value)
 
 
+def patient_age(patient: Patient) -> str:
+    dob = patient.date_of_birth
+    today = date.today()
+    if not dob or dob > today:
+        return ""
+    years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    if years < 2:
+        months = (today.year - dob.year) * 12 + today.month - dob.month - (today.day < dob.day)
+        return f"{months} months"
+    return f"{years} years"
+
+
 def _build_field_map(patient: Patient) -> dict[str, str]:
     full_name = " ".join(part for part in [patient.first_name, patient.last_name] if part)
     return {
@@ -42,6 +54,7 @@ def _build_field_map(patient: Patient) -> dict[str, str]:
         "patient.first_name": patient.first_name or "",
         "patient.last_name": patient.last_name or "",
         "patient.full_name": full_name,
+        "patient.age": patient_age(patient),
         "patient.dob": patient.date_of_birth.isoformat() if patient.date_of_birth else "",
         "patient.email": patient.email or "",
         "patient.phone": patient.phone or "",

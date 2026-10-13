@@ -51,6 +51,8 @@ class PatientDocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    document_kind: str = "unknown"
+    issue_blockers: list[str] | None = None
     patient_id: int
     template_id: Optional[int] = None
     attachment_id: Optional[int] = None

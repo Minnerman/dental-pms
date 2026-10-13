@@ -86,6 +86,9 @@ def generate_patient_document_pdf(
             pdf.showPage()
             page_num += 1
             y = top
+            pdf.setFont("Helvetica", 10)
+            pdf.drawString(left, y, f"Patient: {patient.first_name} {patient.last_name} | ID: {patient.id}")
+            y -= 8 * mm
             pdf.setFont("Helvetica", 11)
         pdf.drawString(left, y, line)
         y -= line_height

@@ -1,3 +1,4 @@
+from app.models.document_copy import DocumentCopy
 from app.models.base import Base
 from app.models.user import Role, User
 from app.models.audit_log import AuditLog

@@ -55,6 +55,7 @@ class NoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    document_copy_id: int | None = None
     patient_id: int
     appointment_id: Optional[int] = None
     body: str

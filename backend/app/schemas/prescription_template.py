@@ -6,6 +6,7 @@ from app.schemas.patient_document import PrescriptionMedication
 
 
 class PrescriptionTemplateWrite(PrescriptionMedication):
+    quantity: str = Field(default="", max_length=120)
     name: str = Field(min_length=1, max_length=200)
     is_active: bool = True
 

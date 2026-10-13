@@ -22,6 +22,7 @@ from app.schemas.patient_document import (
     PatientDocumentOut,
     PatientDocumentPreview,
 )
+from app.services.document_snapshot import freeze_document
 from app.services import storage
 from app.services.audit import log_event
 from app.services.document_render import PLACEHOLDER_PATTERN, render_template_with_warnings
@@ -194,6 +195,7 @@ def create_patient_document(
         rendered_content=rendered,
         created_by_user_id=user.id,
     )
+    freeze_document(db, document, patient, template, unknown_fields)
     try:
         db.add(document)
         db.flush()
@@ -250,7 +252,7 @@ def download_patient_document(
     if format == "pdf":
         filename = f"{safe_title}_{safe_patient_name}_{date_suffix}.pdf"
         profile = load_profile(db)
-        pdf_bytes = generate_patient_document_pdf(
+        pdf_bytes = document.frozen_pdf or generate_patient_document_pdf(
             patient, document.title, document.rendered_content, profile
         )
         headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
@@ -355,7 +357,7 @@ def attach_patient_document_pdf(
             )
         return existing
     profile = load_profile(db)
-    pdf_bytes = generate_patient_document_pdf(
+    pdf_bytes = document.frozen_pdf or generate_patient_document_pdf(
         patient, document.title, document.rendered_content, profile
     )
     try:

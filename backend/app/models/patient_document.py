@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, JSON, LargeBinary, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -19,6 +19,9 @@ class PatientDocument(Base):
     attachment_id: Mapped[int | None] = mapped_column(
         ForeignKey("attachments.id"), nullable=True
     )
+    document_kind: Mapped[str] = mapped_column(String(30), default="unknown", server_default="unknown", nullable=False)
+    frozen_pdf: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    issue_blockers: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     rendered_content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
