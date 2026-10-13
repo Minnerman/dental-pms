@@ -64,8 +64,10 @@ from app.models.r4_patient_mapping import R4PatientMapping
 from app.models.r4_linkage_issue import R4LinkageIssue
 from app.models.r4_manual_mapping import R4ManualMapping
 from app.models.r4_charting_canonical import R4ChartingCanonicalRecord
+from app.models.prescription_template import PrescriptionTemplate
 
 __all__ = [
+    "PrescriptionTemplate",
     "Base",
     "Role",
     "User",

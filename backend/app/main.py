@@ -23,6 +23,7 @@ from app.routers.settings import router as settings_router
 from app.routers.timeline import router as timeline_router
 from app.routers.users import router as users_router
 from app.routers.document_templates import router as document_templates_router
+from app.routers.prescription_templates import router as prescription_templates_router
 from app.routers.attachments import (
     router as patient_attachments_router,
     attachments_router as attachments_router,
@@ -88,6 +89,7 @@ def health():
 
 
 app.include_router(auth_router)
+app.include_router(prescription_templates_router)
 app.include_router(config_router)
 app.include_router(me_router)
 app.include_router(users_router)

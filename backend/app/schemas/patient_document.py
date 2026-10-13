@@ -6,16 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.actor import ActorOut
 
 
-class PrescriptionDetails(BaseModel):
+class PrescriptionMedication(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     medicine: str = Field(min_length=1, max_length=500)
     directions: str = Field(min_length=1, max_length=2000)
     quantity: str = Field(min_length=1, max_length=120)
-    prescriber_name: str = Field(min_length=1, max_length=200)
-    prescriber_gdc: str = Field(min_length=1, max_length=50)
-
-    @field_validator("medicine", "directions", "quantity", "prescriber_name", "prescriber_gdc", mode="before")
+    @field_validator(
+        "medicine", "directions", "quantity", "prescriber_name", "prescriber_gdc",
+        mode="before", check_fields=False,
+    )
     @classmethod
     def normalize_details(cls, value):
         if not isinstance(value, str):
@@ -24,6 +24,11 @@ class PrescriptionDetails(BaseModel):
         if any(ord(char) < 32 and char not in "\n\t" for char in value):
             raise ValueError("Prescription details contain unsupported control characters")
         return value
+
+
+class PrescriptionDetails(PrescriptionMedication):
+    prescriber_name: str = Field(min_length=1, max_length=200)
+    prescriber_gdc: str = Field(min_length=1, max_length=50)
 
 
 class PatientDocumentCreate(BaseModel):
