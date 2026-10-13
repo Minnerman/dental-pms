@@ -35,6 +35,7 @@ from app.models.patient_document import PatientDocument
 from app.services.audit import log_event
 from app.services.document_render import render_template_with_warnings
 from app.services.recall_letter_pdf import build_recall_letter_pdf
+from app.services.document_snapshot import freeze_document
 from app.services.recall_communications import log_recall_communication
 from app.services.recalls_audit import (
     build_export_filters,
@@ -1317,6 +1318,8 @@ def generate_recall_document(
     if not template or template.deleted_at is not None or not template.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
+    if template.kind.value == "prescription":
+        raise HTTPException(status_code=400, detail="Use Documents to create a prescription")
     title_input = payload.title or template.name
     rendered_title, title_unknown = render_template_with_warnings(title_input, patient)
     rendered, content_unknown = render_template_with_warnings(template.content, patient)
@@ -1329,6 +1332,7 @@ def generate_recall_document(
         rendered_content=rendered,
         created_by_user_id=user.id,
     )
+    freeze_document(db, document, patient, template, unknown_fields)
     db.add(document)
     db.flush()
     log_event(

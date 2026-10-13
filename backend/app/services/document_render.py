@@ -35,13 +35,31 @@ def _enum_value(value) -> str:
     return value.value if hasattr(value, "value") else str(value)
 
 
+def patient_age(patient: Patient) -> str:
+    dob = patient.date_of_birth
+    today = date.today()
+    if not dob or dob > today:
+        return ""
+    years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    if years < 2:
+        months = (today.year - dob.year) * 12 + today.month - dob.month - (today.day < dob.day)
+        return f"{months} months"
+    return f"{years} years"
+
+
+def patient_document_name(patient: Patient) -> str:
+    return " ".join(part.strip() for part in (patient.title, patient.first_name, patient.last_name)
+                    if part and part.strip())
+
+
 def _build_field_map(patient: Patient) -> dict[str, str]:
-    full_name = " ".join(part for part in [patient.first_name, patient.last_name] if part)
+    full_name = patient_document_name(patient)
     return {
         "patient.id": str(patient.id),
         "patient.first_name": patient.first_name or "",
         "patient.last_name": patient.last_name or "",
         "patient.full_name": full_name,
+        "patient.age": patient_age(patient),
         "patient.dob": patient.date_of_birth.isoformat() if patient.date_of_birth else "",
         "patient.email": patient.email or "",
         "patient.phone": patient.phone or "",
@@ -74,8 +92,13 @@ def _build_field_map(patient: Patient) -> dict[str, str]:
     }
 
 
-def render_template_with_warnings(content: str, patient: Patient) -> tuple[str, list[str]]:
+def render_template_with_warnings(
+    content: str, patient: Patient, *, prescription_fields: dict[str, str] | None = None
+) -> tuple[str, list[str]]:
     mapping = _build_field_map(patient)
+    # User-entered values are substituted once, never interpreted as merge fields.
+    if prescription_fields:
+        mapping.update({f"prescription.{key}": value for key, value in prescription_fields.items()})
     unknown: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:

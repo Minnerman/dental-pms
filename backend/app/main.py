@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.settings import settings, validate_settings
 from app.db.session import SessionLocal
+from app.routers.document_copies import router as document_copies_router
 from app.routers.auth import router as auth_router
 from app.routers.appointments import router as appointments_router
 from app.routers.invoices import router as invoices_router
@@ -23,6 +24,7 @@ from app.routers.settings import router as settings_router
 from app.routers.timeline import router as timeline_router
 from app.routers.users import router as users_router
 from app.routers.document_templates import router as document_templates_router
+from app.routers.prescription_templates import router as prescription_templates_router
 from app.routers.attachments import (
     router as patient_attachments_router,
     attachments_router as attachments_router,
@@ -37,6 +39,7 @@ from app.routers.config import router as config_router
 from app.services.users import seed_initial_admin
 from app.services.capabilities import ensure_capabilities
 from app.services.document_templates import ensure_default_templates
+from app.services.prescription_defaults import ensure_prescription_defaults
 from app.models.user import User
 from sqlalchemy import select
 from app.routers.r4_calendar import router as r4_calendar_router
@@ -75,6 +78,7 @@ def startup():
             logger.info("Capabilities ensured (%s total).", len(ensured))
         actor = db.scalar(select(User).order_by(User.id.asc()).limit(1))
         if actor:
+            ensure_prescription_defaults(db, actor=actor)
             created_templates = ensure_default_templates(db, actor=actor)
             if created_templates:
                 logger.info("Default document templates ensured (%s added).", created_templates)
@@ -87,7 +91,9 @@ def health():
     return {"status": "ok"}
 
 
+app.include_router(document_copies_router)
 app.include_router(auth_router)
+app.include_router(prescription_templates_router)
 app.include_router(config_router)
 app.include_router(me_router)
 app.include_router(users_router)

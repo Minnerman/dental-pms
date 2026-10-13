@@ -1,4 +1,8 @@
+from uuid import uuid4
+
+
 def test_patient_create_edit_archive_restore_lifecycle(api_client, auth_headers):
+    email = f"lifecycle-{uuid4().hex}@example.com"
     create_response = api_client.post(
         "/patients",
         headers=auth_headers,
@@ -6,7 +10,7 @@ def test_patient_create_edit_archive_restore_lifecycle(api_client, auth_headers)
             "first_name": "Lifecycle",
             "last_name": "Regression",
             "date_of_birth": "1990-04-15",
-            "email": "lifecycle.regression@example.com",
+            "email": email,
             "phone": "02079460000",
             "patient_category": "CLINIC_PRIVATE",
             "care_setting": "CLINIC",
@@ -35,7 +39,7 @@ def test_patient_create_edit_archive_restore_lifecycle(api_client, auth_headers)
     assert updated["phone"] == "02079460001"
     assert updated["care_setting"] == "HOME"
 
-    active_list_response = api_client.get("/patients", headers=auth_headers)
+    active_list_response = api_client.get("/patients", params={"email": email}, headers=auth_headers)
     assert active_list_response.status_code == 200, active_list_response.text
     assert patient_id in {patient["id"] for patient in active_list_response.json()}
 
@@ -52,7 +56,7 @@ def test_patient_create_edit_archive_restore_lifecycle(api_client, auth_headers)
     )
     assert hidden_response.status_code == 404
 
-    hidden_list_response = api_client.get("/patients", headers=auth_headers)
+    hidden_list_response = api_client.get("/patients", params={"email": email}, headers=auth_headers)
     assert hidden_list_response.status_code == 200, hidden_list_response.text
     assert patient_id not in {
         patient["id"] for patient in hidden_list_response.json()
@@ -60,7 +64,7 @@ def test_patient_create_edit_archive_restore_lifecycle(api_client, auth_headers)
 
     archived_list_response = api_client.get(
         "/patients",
-        params={"include_deleted": True, "limit": 200},
+        params={"include_deleted": True, "email": email},
         headers=auth_headers,
     )
     assert archived_list_response.status_code == 200, archived_list_response.text

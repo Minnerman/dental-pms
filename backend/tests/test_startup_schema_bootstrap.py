@@ -50,6 +50,11 @@ def test_startup_does_not_call_metadata_create_all(monkeypatch):
         calls.append("ensure_default_templates")
         return 0
 
+    def fake_ensure_prescription_defaults(db, *, actor):
+        assert db is session
+        assert actor is session.actor
+        calls.append("ensure_prescription_defaults")
+
     def fake_create_all(self, *args, **kwargs):
         create_all_calls.append((args, kwargs))
 
@@ -58,6 +63,7 @@ def test_startup_does_not_call_metadata_create_all(monkeypatch):
     monkeypatch.setattr(app_main, "seed_initial_admin", fake_seed_initial_admin)
     monkeypatch.setattr(app_main, "ensure_capabilities", fake_ensure_capabilities)
     monkeypatch.setattr(app_main, "ensure_default_templates", fake_ensure_default_templates)
+    monkeypatch.setattr(app_main, "ensure_prescription_defaults", fake_ensure_prescription_defaults)
     monkeypatch.setattr(MetaData, "create_all", fake_create_all)
 
     app_main.startup()
@@ -68,6 +74,7 @@ def test_startup_does_not_call_metadata_create_all(monkeypatch):
         "session_open",
         "seed_initial_admin",
         "ensure_capabilities",
+        "ensure_prescription_defaults",
         "ensure_default_templates",
     ]
     assert session.scalar_calls == 1

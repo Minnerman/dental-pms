@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import DocumentPrintActions from "@/components/DocumentPrintActions";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { safeDocumentError } from "@/lib/document-errors";
+import {
+  emptyPrescription, prescriptionInputs, savedPrescribers, PrescriptionDetails, PrescriptionTemplate,
+} from "@/lib/prescriptions";
 
 type DocumentTemplateKind = "letter" | "prescription";
 
@@ -12,10 +16,12 @@ type DocumentTemplate = {
   name: string;
   kind: DocumentTemplateKind;
   is_active: boolean;
+  content?: string;
 };
 
 type PatientDocument = {
   id: number;
+  document_kind: string;
   template_id?: number | null;
   attachment_id?: number | null;
   title: string;
@@ -140,6 +146,10 @@ export default function PatientDocuments({
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
+  const [prescription, setPrescription] = useState<PrescriptionDetails>(emptyPrescription);
+  const [prescriptionTemplates, setPrescriptionTemplates] = useState<PrescriptionTemplate[]>([]);
+  const [prescriptionTemplateId, setPrescriptionTemplateId] = useState("");
+  const [prescriptionTemplatesError, setPrescriptionTemplatesError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
@@ -151,6 +161,27 @@ export default function PatientDocuments({
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
   const previewingDocumentRef = useRef(false);
   const savingDocumentRef = useRef(false);
+  const draftVersionRef = useRef(0);
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+  const isTypedPrescription = selectedTemplate?.kind === "prescription" &&
+    /\{\{\s*prescription\./.test(selectedTemplate.content ?? "");
+  const documentBusy = previewing || saving;
+
+  function clearPreview() {
+    draftVersionRef.current += 1;
+    setPreview(null);
+    setUnknownFields([]);
+  }
+
+  function validatePrescription() {
+    if (!isTypedPrescription) return true;
+    const missing = prescriptionInputs.find((input) => !prescription[input.key].trim());
+    if (missing) {
+      setError(`Enter ${missing.label.toLowerCase()} before previewing or saving.`);
+      return false;
+    }
+    return true;
+  }
   const capabilitiesReady = capabilities !== null;
   const canDownload = Boolean(capabilities?.includes("documents.download"));
   const canUpload = Boolean(canDownload && capabilities?.includes("documents.upload"));
@@ -271,13 +302,15 @@ export default function PatientDocuments({
   }
 
   async function previewDocument() {
-    if (!canUpload || patientArchived || previewingDocumentRef.current) {
+    if (!canUpload || patientArchived || previewingDocumentRef.current || savingDocumentRef.current) {
       return;
     }
     if (!selectedTemplateId) {
       setError("Select a template to preview.");
       return;
     }
+    if (!validatePrescription()) return;
+    const draftVersion = draftVersionRef.current;
     previewingDocumentRef.current = true;
     setPreviewing(true);
     setError(null);
@@ -287,6 +320,7 @@ export default function PatientDocuments({
         body: JSON.stringify({
           template_id: selectedTemplateId,
           title: title || null,
+          ...(isTypedPrescription ? { prescription } : {}),
         }),
       });
       if (res.status === 401) {
@@ -302,6 +336,7 @@ export default function PatientDocuments({
         rendered_content: string;
         unknown_fields?: string[];
       };
+      if (draftVersionRef.current !== draftVersion) return;
       setPreview(data.rendered_content);
       setUnknownFields(data.unknown_fields ?? []);
       if (!title) {
@@ -316,13 +351,14 @@ export default function PatientDocuments({
   }
 
   async function saveDocument() {
-    if (!canUpload || patientArchived || savingDocumentRef.current) {
+    if (!canUpload || patientArchived || savingDocumentRef.current || previewingDocumentRef.current) {
       return;
     }
     if (!selectedTemplateId) {
       setError("Select a template to save.");
       return;
     }
+    if (!validatePrescription()) return;
     savingDocumentRef.current = true;
     setSaving(true);
     setError(null);
@@ -333,6 +369,7 @@ export default function PatientDocuments({
         body: JSON.stringify({
           template_id: selectedTemplateId,
           title: title || null,
+          ...(isTypedPrescription ? { prescription } : {}),
         }),
       });
       if (res.status === 401) {
@@ -346,6 +383,8 @@ export default function PatientDocuments({
       setPreview(null);
       setUnknownFields([]);
       setTitle("");
+      setPrescription(emptyPrescription());
+      setPrescriptionTemplateId("");
       await loadDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save document");
@@ -534,6 +573,42 @@ export default function PatientDocuments({
     void loadDocuments();
   }, [loadDocuments]);
 
+  useEffect(() => {
+    if (!isTypedPrescription || !canUpload || patientArchived) return;
+    let cancelled = false;
+    setPrescriptionTemplates([]);
+    setPrescriptionTemplatesError(null);
+    async function loadPrescriptionTemplates() {
+      try {
+        const res = await apiFetch("/api/prescription-templates");
+        if (!res.ok) throw new Error("Saved prescriptions could not be loaded. You can still enter details manually.");
+        const data = (await res.json()) as PrescriptionTemplate[];
+        if (!cancelled) {
+          setPrescriptionTemplates(data);
+          setPrescriptionTemplatesError(null);
+        }
+      } catch (err) {
+        if (!cancelled) setPrescriptionTemplatesError(err instanceof Error ? err.message : "Could not load saved prescriptions.");
+      }
+    }
+    void loadPrescriptionTemplates();
+    window.addEventListener("focus", loadPrescriptionTemplates);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", loadPrescriptionTemplates);
+    };
+  }, [isTypedPrescription, canUpload, patientArchived, patientId]);
+
+  useEffect(() => {
+    draftVersionRef.current += 1;
+    setSelectedTemplateId(null);
+    setTitle("");
+    setPrescription(emptyPrescription());
+    setPrescriptionTemplateId("");
+    setPreview(null);
+    setUnknownFields([]);
+  }, [patientId]);
+
   const content = (
     <div
       className="stack"
@@ -544,7 +619,7 @@ export default function PatientDocuments({
           <div>
             <h4 style={{ marginTop: 0 }}>Documents</h4>
             <div style={{ color: "var(--muted)" }}>
-              Download a letter or prescription template.
+              Create a letter or prescription, then use Print & record to save its clinical-note entry.
             </div>
           </div>
           {canDownload && !patientArchived && (
@@ -584,11 +659,14 @@ export default function PatientDocuments({
                 <select
                   className="input"
                   value={selectedTemplateId ?? ""}
+                  disabled={documentBusy}
                   onChange={(e) => {
                     const value = e.target.value ? Number(e.target.value) : null;
                     setSelectedTemplateId(value);
-                    setPreview(null);
-                    setUnknownFields([]);
+                    setTitle("");
+                    setPrescription(emptyPrescription());
+                    setPrescriptionTemplateId("");
+                    clearPreview();
                   }}
                   data-testid="patient-document-template-select"
                 >
@@ -605,12 +683,91 @@ export default function PatientDocuments({
                 <input
                   className="input"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={documentBusy}
+                  onChange={(e) => { setTitle(e.target.value); clearPreview(); }}
                   maxLength={200}
                   data-testid="patient-document-title-input"
                 />
               </div>
             </div>
+            {isTypedPrescription && (
+              <fieldset className="stack" disabled={documentBusy} style={{ border: 0, padding: 0, margin: 0 }}>
+                <legend style={{ fontWeight: 600 }}>Prescription details</legend>
+                <div style={{ color: "var(--muted)" }}>Review the medicine, directions and quantity for this patient. Save the document, then use Print & record and sign the paper in ink.</div>
+                <label className="stack" style={{ gap: 6 }}>
+                  <span className="label">Saved prescription</span>
+                  <select
+                    className="input"
+                    value={prescriptionTemplateId}
+                    data-testid="prescription-saved-template"
+                    onChange={(event) => {
+                      const id = event.target.value;
+                      const saved = prescriptionTemplates.find((item) => String(item.id) === id);
+                      setPrescriptionTemplateId(id);
+                      setPrescription((current) => ({
+                        ...current,
+                        medicine: saved?.medicine ?? "",
+                        directions: saved?.directions ?? "",
+                        quantity: saved?.quantity ?? "",
+                      }));
+                      clearPreview();
+                    }}
+                  >
+                    <option value="">Enter manually</option>
+                    {prescriptionTemplates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+                <div style={{ color: "var(--muted)" }}>
+                  Choose a saved prescription, then adjust the details for this patient.
+                  {" "}<a href="/templates?tab=prescriptions" target="_blank" rel="noreferrer">Manage prescription templates</a>
+                </div>
+                {prescriptionTemplatesError && <div className="notice">{prescriptionTemplatesError}</div>}
+                <label className="stack" style={{ gap: 6 }}>
+                  <span className="label">Saved prescriber</span>
+                  <select
+                    className="input"
+                    data-testid="prescription-saved-prescriber"
+                    value={savedPrescribers.find((item) =>
+                      item.prescriber_name === prescription.prescriber_name &&
+                      item.prescriber_gdc === prescription.prescriber_gdc)?.id ?? ""}
+                    onChange={(event) => {
+                      const saved = savedPrescribers.find((item) => item.id === event.target.value);
+                      setPrescription((current) => ({
+                        ...current,
+                        prescriber_name: saved?.prescriber_name ?? "",
+                        prescriber_gdc: saved?.prescriber_gdc ?? "",
+                      }));
+                      clearPreview();
+                    }}
+                  >
+                    <option value="">Enter prescriber details manually</option>
+                    {savedPrescribers.map((item) => <option key={item.id} value={item.id}>
+                      {item.prescriber_name} — GDC {item.prescriber_gdc}
+                    </option>)}
+                  </select>
+                </label>
+                {prescriptionInputs.map((input) => (
+                  <label className="stack" style={{ gap: 6 }} key={input.key}>
+                    <span className="label">{input.label}</span>
+                    {input.key === "quantity" && /oral suspension/i.test(prescription.medicine) &&
+                      <span style={{ color: "var(--muted)" }}>Enter the total volume to supply in mL.</span>}
+                    <textarea
+                      className="input"
+                      rows={input.rows}
+                      maxLength={input.maxLength}
+                      required
+                      value={prescription[input.key]}
+                      onChange={(event) => {
+                        setPrescription((current) => ({ ...current, [input.key]: event.target.value }));
+                        if (["medicine", "directions", "quantity"].includes(input.key)) setPrescriptionTemplateId("");
+                        clearPreview();
+                      }}
+                      data-testid={`prescription-${input.key}`}
+                    />
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <div className="row" style={{ alignItems: "flex-end" }}>
               <div className="stack" style={{ gap: 8 }}>
                 <label className="label">Insert field</label>
@@ -629,8 +786,10 @@ export default function PatientDocuments({
               <button
                 className="btn btn-secondary"
                 type="button"
+                disabled={documentBusy}
                 onClick={() => {
                   setTitle((prev) => (prev ? `${prev} ${selectedField}` : selectedField));
+                  clearPreview();
                 }}
               >
                 Insert
@@ -641,7 +800,7 @@ export default function PatientDocuments({
                 className="btn btn-secondary"
                 type="button"
                 onClick={previewDocument}
-                disabled={previewing}
+                disabled={documentBusy}
                 data-testid="patient-document-preview"
               >
                 {previewing ? "Rendering..." : "Preview"}
@@ -650,7 +809,7 @@ export default function PatientDocuments({
                 className="btn btn-primary"
                 type="button"
                 onClick={saveDocument}
-                disabled={saving}
+                disabled={documentBusy}
                 data-testid="patient-document-save"
               >
                 {saving ? "Saving..." : "Save document"}
@@ -673,6 +832,7 @@ export default function PatientDocuments({
         {canDownload && !patientArchived && <div className="card" style={{ margin: 0 }}>
           <div className="stack">
             <h4 style={{ marginTop: 0 }}>Generated documents</h4>
+            <p>Use Print &amp; record to keep the printed PDF in clinical notes. Downloading alone does not record printing.</p>
             {loadingDocs && <div className="badge">Loading documents…</div>}
             {documents.length === 0 && !loadingDocs ? (
               <div className="notice">
@@ -697,7 +857,9 @@ export default function PatientDocuments({
                         {doc.created_by?.email || "—"}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <DocumentPrintActions documentId={doc.id} kind={doc.document_kind}
+                        canRecord={canDownload && Boolean(capabilities?.includes("notes.write") && capabilities?.includes("notes.view"))} />
                       {canDownload && <button
                         className="btn btn-secondary"
                         type="button"

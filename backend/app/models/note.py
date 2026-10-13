@@ -21,6 +21,9 @@ class Note(Base, AuditMixin, SoftDeleteMixin):
     appointment_id: Mapped[int | None] = mapped_column(
         ForeignKey("appointments.id"), nullable=True
     )
+    document_copy_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_copies.id"), nullable=True, unique=True
+    )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     note_type: Mapped[NoteType] = mapped_column(
         Enum(NoteType, name="note_type"), default=NoteType.clinical, nullable=False

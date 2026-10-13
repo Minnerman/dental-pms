@@ -9,6 +9,13 @@ logger = logging.getLogger("dental_pms.config")
 
 
 class Settings(BaseSettings):
+    recall_email_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: EmailStr = "clinicforimplant@gmail.com"
+    smtp_ssl: bool = False
     app_env: str = "development"
     secret_key: str | None = None
     jwt_secret: str | None = None

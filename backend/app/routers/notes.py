@@ -211,6 +211,8 @@ def _update_note_record(
     user: User,
     request_id: str | None,
 ) -> Note:
+    if note.document_copy_id is not None:
+        raise HTTPException(status_code=409, detail="Document records cannot be edited; add a correction note")
     updates = payload.model_dump(exclude_unset=True)
     changed_fields = {
         field for field, value in updates.items() if getattr(note, field) != value
@@ -247,6 +249,8 @@ def _set_note_archived(
     user: User,
     request_id: str | None,
 ) -> Note:
+    if note.document_copy_id is not None:
+        raise HTTPException(status_code=409, detail="Document records cannot be archived; add a correction note")
     if (note.deleted_at is not None) == archived:
         return note
     before_data = _safe_note_values(note, changed_fields={"archived"})

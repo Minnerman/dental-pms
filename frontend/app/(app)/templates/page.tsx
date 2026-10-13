@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import HeaderBar from "@/components/ui/HeaderBar";
+import PrescriptionTemplates from "./PrescriptionTemplates";
 
 type DocumentTemplateKind = "letter" | "prescription";
 
@@ -74,6 +75,43 @@ const templateEditLocks = new Set<number>();
 const templateDeleteLocks = new Set<number>();
 
 export default function TemplatesPage() {
+  const [tab, setTab] = useState("documents");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "prescriptions") setTab("prescriptions");
+  }, []);
+  function chooseTab(next: string) {
+    setTab(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url);
+  }
+  return (
+    <div className="stack">
+      <div className="row" role="tablist" aria-label="Template types" onKeyDown={(event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? "documents" : event.key === "End" ? "prescriptions"
+          : tab === "documents" ? "prescriptions" : "documents";
+        chooseTab(next);
+        document.getElementById(next === "documents" ? "document-templates-tab" : "prescription-templates-tab")?.focus();
+      }}>
+        <button type="button" role="tab" id="document-templates-tab" aria-selected={tab === "documents"}
+          tabIndex={tab === "documents" ? 0 : -1}
+          aria-controls="document-templates-panel" className={tab === "documents" ? "btn btn-primary" : "btn btn-secondary"}
+          onClick={() => chooseTab("documents")}>Letters &amp; documents</button>
+        <button type="button" role="tab" id="prescription-templates-tab" aria-selected={tab === "prescriptions"}
+          tabIndex={tab === "prescriptions" ? 0 : -1}
+          aria-controls="prescription-templates-panel" className={tab === "prescriptions" ? "btn btn-primary" : "btn btn-secondary"}
+          onClick={() => chooseTab("prescriptions")}>Prescriptions</button>
+      </div>
+      {tab === "prescriptions"
+        ? <div role="tabpanel" id="prescription-templates-panel" aria-labelledby="prescription-templates-tab"><PrescriptionTemplates /></div>
+        : <div role="tabpanel" id="document-templates-panel" aria-labelledby="document-templates-tab"><DocumentTemplatesPanel /></div>}
+    </div>
+  );
+}
+
+function DocumentTemplatesPanel() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
