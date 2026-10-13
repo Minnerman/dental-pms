@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.deps import require_capabilities
 from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
-from app.models.document_template import DocumentTemplate
+from app.models.document_template import DocumentTemplate, DocumentTemplateKind
 from app.models.patient import Patient
 from app.models.patient_document import PatientDocument
 from app.models.user import User
@@ -24,7 +24,7 @@ from app.schemas.patient_document import (
 )
 from app.services import storage
 from app.services.audit import log_event
-from app.services.document_render import render_template_with_warnings
+from app.services.document_render import PLACEHOLDER_PATTERN, render_template_with_warnings
 from app.services.pdf_documents import generate_patient_document_pdf
 from app.services.practice_profile import load_profile
 
@@ -73,6 +73,36 @@ def get_document_or_404(db: Session, document_id: int) -> PatientDocument:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     get_patient_or_404(db, document.patient_id)
     return document
+
+
+def render_document_input(
+    template: DocumentTemplate, patient: Patient, payload: PatientDocumentCreate
+) -> tuple[str, str, list[str]]:
+    fields = {match.group(1).strip() for match in PLACEHOLDER_PATTERN.finditer(template.content)}
+    prescription_fields = {
+        "prescription." + key
+        for key in ("medicine", "directions", "quantity", "prescriber_name", "prescriber_gdc")
+    }
+    expects_prescription = bool(fields & prescription_fields)
+    if payload.prescription is not None or expects_prescription:
+        if template.kind != DocumentTemplateKind.prescription:
+            raise HTTPException(
+                status_code=400, detail="Prescription details require a prescription template"
+            )
+        if not prescription_fields <= fields:
+            raise HTTPException(status_code=400, detail="Select a template with all prescription fields")
+        if payload.prescription is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Complete the prescription details before previewing or saving",
+            )
+    title, title_unknown = render_template_with_warnings(payload.title or template.name, patient)
+    content, content_unknown = render_template_with_warnings(
+        template.content,
+        patient,
+        prescription_fields=payload.prescription.model_dump() if payload.prescription else None,
+    )
+    return validate_rendered_title(title), content, sorted({*title_unknown, *content_unknown})
 
 
 def replayed_document_create(
@@ -128,11 +158,7 @@ def preview_patient_document(
 ):
     patient = get_patient_or_404(db, patient_id)
     template = get_template_or_404(db, payload.template_id)
-    title_input = payload.title or template.name
-    rendered_title, title_unknown = render_template_with_warnings(title_input, patient)
-    rendered_title = validate_rendered_title(rendered_title)
-    rendered, content_unknown = render_template_with_warnings(template.content, patient)
-    unknown_fields = sorted({*title_unknown, *content_unknown})
+    rendered_title, rendered, unknown_fields = render_document_input(template, patient, payload)
     return PatientDocumentPreview(
         title=rendered_title,
         rendered_content=rendered,
@@ -160,11 +186,7 @@ def create_patient_document(
     if replay is not None:
         return replay
     template = get_template_or_404(db, payload.template_id)
-    title_input = payload.title or template.name
-    rendered_title, title_unknown = render_template_with_warnings(title_input, patient)
-    rendered_title = validate_rendered_title(rendered_title)
-    rendered, content_unknown = render_template_with_warnings(template.content, patient)
-    unknown_fields = sorted({*title_unknown, *content_unknown})
+    rendered_title, rendered, unknown_fields = render_document_input(template, patient, payload)
     document = PatientDocument(
         patient_id=patient_id,
         template_id=template.id,

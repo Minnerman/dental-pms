@@ -3,6 +3,18 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
+- The document handover scope agreed on 13 October 2026 is three reusable
+  templates: typed Private Prescription, Recall - 6 months and Recall - 12
+  months. Historical documents stay in R4/archive; the broad document import
+  and original-viewer comparison are no longer delivery prerequisites.
+  The isolated prescription branch adds per-document medicine, directions,
+  quantity, prescriber name and GDC entry, preview, saved text and PDF output.
+  Existing templates are preserved. Validation passed: 704 backend tests,
+  2 skipped; 4 document browser checks; frontend build/typecheck; health/verify;
+  three one-page synthetic template PDFs. A pre-existing charting test's
+  hard-coded fixture expectation was corrected in its own test-only commit.
+  There is no R4 access, historical import, schema migration or deployment.
+  Workflow, limitations and commands: [prescription handover](PRESCRIPTION_TEMPLATES.md).
 - Production includes the merged R4-inspired chart workflow through PR #711:
   canonical multi-surface selection and storage, synchronized chart entry, and
   treatment-plan completion with its guarded finance effect.

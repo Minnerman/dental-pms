@@ -7028,6 +7028,7 @@ export default function PatientDetailClient({
                         <summary className="label">Documents</summary>
                         <div className="stack" style={{ marginTop: 12 }}>
                           <PatientDocuments
+                            key={patientId}
                             patientId={patientId}
                             patientLastName={patient?.last_name ?? null}
                             capabilities={capabilities}
@@ -10676,6 +10677,7 @@ export default function PatientDetailClient({
               ) : tab === "documents" ? (
                 <div className="stack">
                   <PatientDocuments
+                    key={patientId}
                     patientId={patientId}
                     patientLastName={patient?.last_name ?? null}
                     capabilities={capabilities}

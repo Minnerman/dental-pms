@@ -74,8 +74,13 @@ def _build_field_map(patient: Patient) -> dict[str, str]:
     }
 
 
-def render_template_with_warnings(content: str, patient: Patient) -> tuple[str, list[str]]:
+def render_template_with_warnings(
+    content: str, patient: Patient, *, prescription_fields: dict[str, str] | None = None
+) -> tuple[str, list[str]]:
     mapping = _build_field_map(patient)
+    # User-entered values are substituted once, never interpreted as merge fields.
+    if prescription_fields:
+        mapping.update({f"prescription.{key}": value for key, value in prescription_fields.items()})
     unknown: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:

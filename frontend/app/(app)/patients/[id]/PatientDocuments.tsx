@@ -12,7 +12,20 @@ type DocumentTemplate = {
   name: string;
   kind: DocumentTemplateKind;
   is_active: boolean;
+  content?: string;
 };
+
+const prescriptionInputs = [
+  { key: "medicine", label: "Medicine name, strength and form", maxLength: 500, rows: 2 },
+  { key: "directions", label: "Directions for use", maxLength: 2000, rows: 4 },
+  { key: "quantity", label: "Quantity", maxLength: 120, rows: 1 },
+  { key: "prescriber_name", label: "Prescriber name", maxLength: 200, rows: 1 },
+  { key: "prescriber_gdc", label: "Prescriber GDC number", maxLength: 50, rows: 1 },
+] as const;
+type PrescriptionDetails = Record<(typeof prescriptionInputs)[number]["key"], string>;
+const emptyPrescription = (): PrescriptionDetails => ({
+  medicine: "", directions: "", quantity: "", prescriber_name: "", prescriber_gdc: "",
+});
 
 type PatientDocument = {
   id: number;
@@ -140,6 +153,7 @@ export default function PatientDocuments({
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
+  const [prescription, setPrescription] = useState<PrescriptionDetails>(emptyPrescription);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
@@ -151,6 +165,27 @@ export default function PatientDocuments({
   const [downloadingTemplateId, setDownloadingTemplateId] = useState<number | null>(null);
   const previewingDocumentRef = useRef(false);
   const savingDocumentRef = useRef(false);
+  const draftVersionRef = useRef(0);
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+  const isTypedPrescription = selectedTemplate?.kind === "prescription" &&
+    /\{\{\s*prescription\./.test(selectedTemplate.content ?? "");
+  const documentBusy = previewing || saving;
+
+  function clearPreview() {
+    draftVersionRef.current += 1;
+    setPreview(null);
+    setUnknownFields([]);
+  }
+
+  function validatePrescription() {
+    if (!isTypedPrescription) return true;
+    const missing = prescriptionInputs.find((input) => !prescription[input.key].trim());
+    if (missing) {
+      setError(`Enter ${missing.label.toLowerCase()} before previewing or saving.`);
+      return false;
+    }
+    return true;
+  }
   const capabilitiesReady = capabilities !== null;
   const canDownload = Boolean(capabilities?.includes("documents.download"));
   const canUpload = Boolean(canDownload && capabilities?.includes("documents.upload"));
@@ -271,13 +306,15 @@ export default function PatientDocuments({
   }
 
   async function previewDocument() {
-    if (!canUpload || patientArchived || previewingDocumentRef.current) {
+    if (!canUpload || patientArchived || previewingDocumentRef.current || savingDocumentRef.current) {
       return;
     }
     if (!selectedTemplateId) {
       setError("Select a template to preview.");
       return;
     }
+    if (!validatePrescription()) return;
+    const draftVersion = draftVersionRef.current;
     previewingDocumentRef.current = true;
     setPreviewing(true);
     setError(null);
@@ -287,6 +324,7 @@ export default function PatientDocuments({
         body: JSON.stringify({
           template_id: selectedTemplateId,
           title: title || null,
+          ...(isTypedPrescription ? { prescription } : {}),
         }),
       });
       if (res.status === 401) {
@@ -302,6 +340,7 @@ export default function PatientDocuments({
         rendered_content: string;
         unknown_fields?: string[];
       };
+      if (draftVersionRef.current !== draftVersion) return;
       setPreview(data.rendered_content);
       setUnknownFields(data.unknown_fields ?? []);
       if (!title) {
@@ -316,13 +355,14 @@ export default function PatientDocuments({
   }
 
   async function saveDocument() {
-    if (!canUpload || patientArchived || savingDocumentRef.current) {
+    if (!canUpload || patientArchived || savingDocumentRef.current || previewingDocumentRef.current) {
       return;
     }
     if (!selectedTemplateId) {
       setError("Select a template to save.");
       return;
     }
+    if (!validatePrescription()) return;
     savingDocumentRef.current = true;
     setSaving(true);
     setError(null);
@@ -333,6 +373,7 @@ export default function PatientDocuments({
         body: JSON.stringify({
           template_id: selectedTemplateId,
           title: title || null,
+          ...(isTypedPrescription ? { prescription } : {}),
         }),
       });
       if (res.status === 401) {
@@ -346,6 +387,7 @@ export default function PatientDocuments({
       setPreview(null);
       setUnknownFields([]);
       setTitle("");
+      setPrescription(emptyPrescription());
       await loadDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save document");
@@ -534,6 +576,15 @@ export default function PatientDocuments({
     void loadDocuments();
   }, [loadDocuments]);
 
+  useEffect(() => {
+    draftVersionRef.current += 1;
+    setSelectedTemplateId(null);
+    setTitle("");
+    setPrescription(emptyPrescription());
+    setPreview(null);
+    setUnknownFields([]);
+  }, [patientId]);
+
   const content = (
     <div
       className="stack"
@@ -544,7 +595,7 @@ export default function PatientDocuments({
           <div>
             <h4 style={{ marginTop: 0 }}>Documents</h4>
             <div style={{ color: "var(--muted)" }}>
-              Download a letter or prescription template.
+              Create a letter or enter a prescription, then save and download its PDF.
             </div>
           </div>
           {canDownload && !patientArchived && (
@@ -584,11 +635,13 @@ export default function PatientDocuments({
                 <select
                   className="input"
                   value={selectedTemplateId ?? ""}
+                  disabled={documentBusy}
                   onChange={(e) => {
                     const value = e.target.value ? Number(e.target.value) : null;
                     setSelectedTemplateId(value);
-                    setPreview(null);
-                    setUnknownFields([]);
+                    setTitle("");
+                    setPrescription(emptyPrescription());
+                    clearPreview();
                   }}
                   data-testid="patient-document-template-select"
                 >
@@ -605,12 +658,36 @@ export default function PatientDocuments({
                 <input
                   className="input"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={documentBusy}
+                  onChange={(e) => { setTitle(e.target.value); clearPreview(); }}
                   maxLength={200}
                   data-testid="patient-document-title-input"
                 />
               </div>
             </div>
+            {isTypedPrescription && (
+              <fieldset className="stack" disabled={documentBusy} style={{ border: 0, padding: 0, margin: 0 }}>
+                <legend style={{ fontWeight: 600 }}>Prescription details</legend>
+                <div style={{ color: "var(--muted)" }}>Enter the prescription, review the preview, then save and download the PDF for signing.</div>
+                {prescriptionInputs.map((input) => (
+                  <label className="stack" style={{ gap: 6 }} key={input.key}>
+                    <span className="label">{input.label}</span>
+                    <textarea
+                      className="input"
+                      rows={input.rows}
+                      maxLength={input.maxLength}
+                      required
+                      value={prescription[input.key]}
+                      onChange={(event) => {
+                        setPrescription((current) => ({ ...current, [input.key]: event.target.value }));
+                        clearPreview();
+                      }}
+                      data-testid={`prescription-${input.key}`}
+                    />
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <div className="row" style={{ alignItems: "flex-end" }}>
               <div className="stack" style={{ gap: 8 }}>
                 <label className="label">Insert field</label>
@@ -629,8 +706,10 @@ export default function PatientDocuments({
               <button
                 className="btn btn-secondary"
                 type="button"
+                disabled={documentBusy}
                 onClick={() => {
                   setTitle((prev) => (prev ? `${prev} ${selectedField}` : selectedField));
+                  clearPreview();
                 }}
               >
                 Insert
@@ -641,7 +720,7 @@ export default function PatientDocuments({
                 className="btn btn-secondary"
                 type="button"
                 onClick={previewDocument}
-                disabled={previewing}
+                disabled={documentBusy}
                 data-testid="patient-document-preview"
               >
                 {previewing ? "Rendering..." : "Preview"}
@@ -650,7 +729,7 @@ export default function PatientDocuments({
                 className="btn btn-primary"
                 type="button"
                 onClick={saveDocument}
-                disabled={saving}
+                disabled={documentBusy}
                 data-testid="patient-document-save"
               >
                 {saving ? "Saving..." : "Save document"}
