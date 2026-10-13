@@ -9,11 +9,16 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   and original-viewer comparison are no longer delivery prerequisites.
   The isolated prescription branch adds per-document medicine, directions,
   quantity, prescriber name and GDC entry, preview, saved text and PDF output.
-  Existing templates are preserved. Validation passed: 704 backend tests,
-  2 skipped; 4 document browser checks; frontend build/typecheck; health/verify;
+  Templates now has a Prescriptions tab for the practice's usual named medicine,
+  directions and quantity choices. The patient prescription dropdown copies a
+  choice into an editable draft without changing the reusable template.
+  The shared library starts empty and supports editing and deactivation.
+  Existing templates are preserved. Validation passed: 707 backend tests,
+  2 skipped; 7 document/template browser checks; frontend build/typecheck; health/verify;
   three one-page synthetic template PDFs. A pre-existing charting test's
   hard-coded fixture expectation was corrected in its own test-only commit.
-  There is no R4 access, historical import, schema migration or deployment.
+  Additive PMS migration `0049_prescription_templates` creates the shared library.
+  There is no R4 access, historical import or deployment.
   Workflow, limitations and commands: [prescription handover](PRESCRIPTION_TEMPLATES.md).
 - Production includes the merged R4-inspired chart workflow through PR #711:
   canonical multi-surface selection and storage, synchronized chart entry, and

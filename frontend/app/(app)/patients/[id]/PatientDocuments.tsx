@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { safeDocumentError } from "@/lib/document-errors";
+import {
+  emptyPrescription, prescriptionInputs, PrescriptionDetails, PrescriptionTemplate,
+} from "@/lib/prescriptions";
 
 type DocumentTemplateKind = "letter" | "prescription";
 
@@ -14,18 +17,6 @@ type DocumentTemplate = {
   is_active: boolean;
   content?: string;
 };
-
-const prescriptionInputs = [
-  { key: "medicine", label: "Medicine name, strength and form", maxLength: 500, rows: 2 },
-  { key: "directions", label: "Directions for use", maxLength: 2000, rows: 4 },
-  { key: "quantity", label: "Quantity", maxLength: 120, rows: 1 },
-  { key: "prescriber_name", label: "Prescriber name", maxLength: 200, rows: 1 },
-  { key: "prescriber_gdc", label: "Prescriber GDC number", maxLength: 50, rows: 1 },
-] as const;
-type PrescriptionDetails = Record<(typeof prescriptionInputs)[number]["key"], string>;
-const emptyPrescription = (): PrescriptionDetails => ({
-  medicine: "", directions: "", quantity: "", prescriber_name: "", prescriber_gdc: "",
-});
 
 type PatientDocument = {
   id: number;
@@ -154,6 +145,9 @@ export default function PatientDocuments({
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [prescription, setPrescription] = useState<PrescriptionDetails>(emptyPrescription);
+  const [prescriptionTemplates, setPrescriptionTemplates] = useState<PrescriptionTemplate[]>([]);
+  const [prescriptionTemplateId, setPrescriptionTemplateId] = useState("");
+  const [prescriptionTemplatesError, setPrescriptionTemplatesError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedField, setSelectedField] = useState(mergeFields[0].value);
   const [unknownFields, setUnknownFields] = useState<string[]>([]);
@@ -388,6 +382,7 @@ export default function PatientDocuments({
       setUnknownFields([]);
       setTitle("");
       setPrescription(emptyPrescription());
+      setPrescriptionTemplateId("");
       await loadDocuments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save document");
@@ -577,10 +572,37 @@ export default function PatientDocuments({
   }, [loadDocuments]);
 
   useEffect(() => {
+    if (!isTypedPrescription || !canUpload || patientArchived) return;
+    let cancelled = false;
+    setPrescriptionTemplates([]);
+    setPrescriptionTemplatesError(null);
+    async function loadPrescriptionTemplates() {
+      try {
+        const res = await apiFetch("/api/prescription-templates");
+        if (!res.ok) throw new Error("Saved prescriptions could not be loaded. You can still enter details manually.");
+        const data = (await res.json()) as PrescriptionTemplate[];
+        if (!cancelled) {
+          setPrescriptionTemplates(data);
+          setPrescriptionTemplatesError(null);
+        }
+      } catch (err) {
+        if (!cancelled) setPrescriptionTemplatesError(err instanceof Error ? err.message : "Could not load saved prescriptions.");
+      }
+    }
+    void loadPrescriptionTemplates();
+    window.addEventListener("focus", loadPrescriptionTemplates);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", loadPrescriptionTemplates);
+    };
+  }, [isTypedPrescription, canUpload, patientArchived, patientId]);
+
+  useEffect(() => {
     draftVersionRef.current += 1;
     setSelectedTemplateId(null);
     setTitle("");
     setPrescription(emptyPrescription());
+    setPrescriptionTemplateId("");
     setPreview(null);
     setUnknownFields([]);
   }, [patientId]);
@@ -641,6 +663,7 @@ export default function PatientDocuments({
                     setSelectedTemplateId(value);
                     setTitle("");
                     setPrescription(emptyPrescription());
+                    setPrescriptionTemplateId("");
                     clearPreview();
                   }}
                   data-testid="patient-document-template-select"
@@ -669,6 +692,34 @@ export default function PatientDocuments({
               <fieldset className="stack" disabled={documentBusy} style={{ border: 0, padding: 0, margin: 0 }}>
                 <legend style={{ fontWeight: 600 }}>Prescription details</legend>
                 <div style={{ color: "var(--muted)" }}>Enter the prescription, review the preview, then save and download the PDF for signing.</div>
+                <label className="stack" style={{ gap: 6 }}>
+                  <span className="label">Saved prescription</span>
+                  <select
+                    className="input"
+                    value={prescriptionTemplateId}
+                    data-testid="prescription-saved-template"
+                    onChange={(event) => {
+                      const id = event.target.value;
+                      const saved = prescriptionTemplates.find((item) => String(item.id) === id);
+                      setPrescriptionTemplateId(id);
+                      setPrescription((current) => ({
+                        ...current,
+                        medicine: saved?.medicine ?? "",
+                        directions: saved?.directions ?? "",
+                        quantity: saved?.quantity ?? "",
+                      }));
+                      clearPreview();
+                    }}
+                  >
+                    <option value="">Enter manually</option>
+                    {prescriptionTemplates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+                <div style={{ color: "var(--muted)" }}>
+                  Choose a saved prescription, then adjust the details for this patient.
+                  {" "}<a href="/templates?tab=prescriptions" target="_blank" rel="noreferrer">Manage prescription templates</a>
+                </div>
+                {prescriptionTemplatesError && <div className="notice">{prescriptionTemplatesError}</div>}
                 {prescriptionInputs.map((input) => (
                   <label className="stack" style={{ gap: 6 }} key={input.key}>
                     <span className="label">{input.label}</span>
@@ -680,6 +731,7 @@ export default function PatientDocuments({
                       value={prescription[input.key]}
                       onChange={(event) => {
                         setPrescription((current) => ({ ...current, [input.key]: event.target.value }));
+                        if (["medicine", "directions", "quantity"].includes(input.key)) setPrescriptionTemplateId("");
                         clearPreview();
                       }}
                       data-testid={`prescription-${input.key}`}
