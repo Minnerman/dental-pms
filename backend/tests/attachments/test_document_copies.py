@@ -124,7 +124,16 @@ def test_email_off_by_default_and_prescriptions_never_emailed(api_client, auth_h
     assert notes(api_client, auth_headers, patient_id) == []
 
 
-def test_email_sends_exact_attachment_and_records_once(api_client, auth_headers, monkeypatch):
+@pytest.fixture
+def email_api_client():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as client:
+        yield client
+
+
+def test_email_sends_exact_attachment_and_records_once(email_api_client, auth_headers, monkeypatch):
+    api_client = email_api_client
     enable_email(monkeypatch)
     sent = []
     monkeypatch.setattr(recall_email, 'send_recall', lambda copy: sent.append((copy.recipient, copy.pdf_bytes)))
@@ -143,7 +152,8 @@ def test_email_sends_exact_attachment_and_records_once(api_client, auth_headers,
     assert len(records) == 1 and 'accepted by mail server' in records[0]['body']
 
 
-def test_uncertain_email_never_creates_success_note_or_auto_retries(api_client, auth_headers, monkeypatch):
+def test_uncertain_email_never_creates_success_note_or_auto_retries(email_api_client, auth_headers, monkeypatch):
+    api_client = email_api_client
     enable_email(monkeypatch)
     calls = []
     def fail(copy):
@@ -159,7 +169,8 @@ def test_uncertain_email_never_creates_success_note_or_auto_retries(api_client, 
     assert len(calls) == 1 and notes(api_client, auth_headers, patient_id) == []
 
 
-def test_sender_or_recipient_change_requires_new_review(api_client, auth_headers, monkeypatch):
+def test_sender_or_recipient_change_requires_new_review(email_api_client, auth_headers, monkeypatch):
+    api_client = email_api_client
     enable_email(monkeypatch)
     patient_id, doc = document(api_client, auth_headers)
     copy_id = prepare(api_client, auth_headers, doc, 'email').json()['id']
