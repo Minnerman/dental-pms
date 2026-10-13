@@ -3,23 +3,35 @@
 R4 investigation remains blocked and R4 writes remain permanently prohibited.
 
 ## Current continuity / handover
-- The document handover scope agreed on 13 October 2026 is three reusable
-  templates: typed Private Prescription, Recall - 6 months and Recall - 12
-  months. Historical documents stay in R4/archive; the broad document import
-  and original-viewer comparison are no longer delivery prerequisites.
-  The isolated prescription branch adds per-document medicine, directions,
-  quantity, prescriber name and GDC entry, preview, saved text and PDF output.
-  Templates now has a Prescriptions tab for the practice's usual named medicine,
-  directions and quantity choices. The patient prescription dropdown copies a
-  choice into an editable draft without changing the reusable template.
-  The shared library starts empty and supports editing and deactivation.
-  Existing templates are preserved. Validation passed: 707 backend tests,
-  2 skipped; 7 document/template browser checks; frontend build/typecheck; health/verify;
-  three one-page synthetic template PDFs. A pre-existing charting test's
-  hard-coded fixture expectation was corrected in its own test-only commit.
-  Additive PMS migration `0049_prescription_templates` creates the shared library.
-  There is no R4 access, historical import or deployment.
-  Workflow, limitations and commands: [prescription handover](PRESCRIPTION_TEMPLATES.md).
+- The document handover scope is typed Private Prescription, Recall - 6 months
+  and Recall - 12 months; historical records stay in R4/archive. PR #718's isolated
+  branch `codex/prescription-entry-templates` adds a Prescriptions tab and seven
+  owner-requested medicine favourites. Clindamycin 150/300 mg are separate choices,
+  each every six hours, with quantity required per patient because none was given.
+  Complete PDFs are frozen when saved. **Print & record** prepares a copy and
+  explicit successful-print confirmation adds a clinical note linking that PDF.
+  Copies survive source-document deletion; duplicate confirmations create one note.
+  Printed prescription copies precede the ink signature. Plain downloads do not
+  record printing. Existing recall-dashboard batch/download flows are separate.
+  Recall SMTP support is prepared but OFF by default, with planned sender
+  `clinicforimplant@gmail.com`. No credentials or actual sends were used. Only
+  recall PDFs can be emailed after later activation; prescriptions are print-only.
+  Additive PMS migrations are `0049_prescription_templates` and `0050_document_copies`.
+  Validation: `bash ops/health.sh` passed; `SKIP_DOCKER_BUILD=1 bash ops/verify.sh`
+  passed (current-source production frontend build/typecheck, migrations and service
+  checks); `docker compose exec -T backend pytest -q` passed with **719 passed,
+  2 skipped** on a fresh synthetic database; **9 browser checks passed**. New copy
+  API tests: **12 passed**, including concurrent replay, immutable PDFs, permission
+  guards, disabled email and simulated SMTP outcomes. Synthetic prescription PDF
+  inspected: one page with age, signature space and all fields present.
+  The startup test now covers prescription seeding; the patient lifecycle test uses
+  its unique email instead of assuming its patient is on the first results page.
+  The earlier charting fixture assertion fix remains a separate test-only commit.
+  A reused-database rerun exposed stale charting fixture data; the final fresh run
+  passed. No application charting behaviour or R4 data was changed.
+  Receipts: ignored `.run/document-copy-{full-clean,verify,health-final,browser-final,api}.log`.
+  No deployment. Workflow, sources, commands and limits:
+  [prescription handover](PRESCRIPTION_TEMPLATES.md).
 - Production includes the merged R4-inspired chart workflow through PR #711:
   canonical multi-surface selection and storage, synchronized chart entry, and
   treatment-plan completion with its guarded finance effect.

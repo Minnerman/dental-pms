@@ -1,128 +1,153 @@
 # Prescription and recall template handover
 
-On 13 October 2026 the owner selected three reusable templates for future use:
-Private Prescription, Recall - 6 months and Recall - 12 months. The prescription
-must be typed in the PMS before printing. Historical documents remain in R4 or
-the archive; this feature does not import them. The owner subsequently requested
-a Prescriptions tab and a dropdown for the four or five prescriptions commonly
-used at the practice.
+The agreed scope is three reusable document layouts: **Private Prescription -
+typed**, **Recall - 6 months**, and **Recall - 12 months**. Historical records
+stay in R4/archive. No historical import or R4 connection is part of this change.
 
-## Set up usual prescriptions
+## Practice favourites
 
-In **Templates → Prescriptions**, create a named template containing medicine
-name/strength/form, directions and quantity. Save it, then use **New template**
-to add another. Existing entries can be selected from the dropdown and edited.
-Uncheck **Available in the prescription dropdown** to deactivate an entry;
-it can be reactivated later. There is no limit of five templates.
+**Templates → Prescriptions** manages the shared library. Superadmins can add,
+edit, deactivate and reactivate entries. Selecting one in a patient's Documents
+view copies its values into an editable prescription without changing the library.
+Seven owner-requested favourites are supplied:
 
-The library starts empty: the practice enters its own usual prescriptions.
-Entries are shared through the PMS database across practice computers. As with
-the existing document-template editor, only superadmins can create or edit
-them; reading requires the document download capability.
+| Medicine | Directions | Quantity |
+| --- | --- | --- |
+| Amoxicillin 250 mg capsules | One capsule three times a day | 21 capsules |
+| Amoxicillin 500 mg capsules | One capsule three times a day | 21 capsules |
+| Metronidazole 200 mg tablets | One tablet three times a day | 21 tablets |
+| Metronidazole 400 mg tablets | One tablet three times a day | 21 tablets |
+| Erythromycin 250 mg tablets | One tablet four times a day | 28 tablets |
+| Clindamycin 150 mg capsules | One capsule every six hours | Enter for each prescription |
+| Clindamycin 300 mg capsules | One capsule every six hours | Enter for each prescription |
 
-## Workflow
+Clindamycin quantities were not supplied, so neither is inferred. A library
+quantity can be blank; a patient prescription cannot be saved without quantity.
+Startup uses stable stock keys, preserving renamed, edited or deactivated entries.
 
-1. Open the patient's Documents view and select **Private Prescription - typed**.
-2. Choose a **Saved prescription** to fill the medicine, directions and quantity,
-   or enter those details manually. Adjust them for this patient and enter the
-   prescriber name and GDC number. All five fields are required.
-3. Preview the merged patient details and entered prescription, then save.
-4. Download the saved document as PDF for printing and signing. The signature
-   and practice-stamp spaces are blank.
+These are practice favourites, not recommended antibiotic courses. The owner’s
+quantities are retained. Current [SDCEP amoxicillin guidance](https://sdcepdentalprescribing.nhs.scot/guidance/bacterial-infections/dental-abscess/first-line-antibiotics/amoxicillin/)
+describes shorter courses for dental abscess than the seven days implied by 21
+capsules at three per day; the clinician must choose the regimen for the patient.
 
-Editing the draft clears its preview. Saving, selecting another template or
-navigating to another patient clears the prescription entry. The saved body is
-a text snapshot: later edits to the shared template do not alter it. Entered
-text is not recursively interpreted as a merge field. Existing document
-capabilities, audit events and request-ID replay behaviour remain in place.
-Selecting a saved prescription copies its values into the patient draft;
-patient-specific edits never update the shared library. Later editing or
-deactivating that library entry does not change already saved documents.
-The **Manage prescription templates** link opens the library separately; the
-patient dropdown refreshes when returning to that window.
+## Print and clinical notes
 
-Choose **Recall - 6 months** or **Recall - 12 months** in the same template list
-for a routine reminder. These templates do not select a clinical interval,
-calculate due dates or change the separate recall-dashboard letter generator.
+1. Open the patient's **Documents**, choose the prescription or recall layout,
+   and complete its fields. Prescriptions require medicine, directions, quantity,
+   prescriber name and GDC number. Review the patient details and preview.
+2. **Save document** stores its text and complete PDF, including its header and
+   date. Later template, patient or practice-profile changes cannot alter that PDF.
+3. Select **Print & record**. Review the saved PDF and choose **Print PDF**.
+   If the browser cannot display an embedded PDF, open or download the saved
+   copy using the links on this screen and print it with a PDF reader.
+4. After printing succeeds, select **Printed — add clinical note**. This creates
+   one clinical note linked to that exact copy. If printing is cancelled, leave
+   without confirming. A browser cannot verify physical printer output.
+5. The entry is clickable in patient Notes, the clinical notes pane, and central
+   Notes. Reopening it creates no new note. Prescription copies are before the
+   handwritten signature; print and sign in ink.
 
-## Installation and limits
+Print confirmation is idempotent, including concurrent duplicate requests.
+Deleting the source generated document does not delete issued copies. These
+clinical entries cannot be edited or archived; add a separate correction note.
+A separate later print preparation can record another print. Plain PDF/text
+**Download** and attachment actions do not claim printing occurred.
 
-The existing backend startup seeder adds the three named templates if absent,
-preserving existing templates and edits. Run the additive PMS migration
-`0049_prescription_templates` before starting the updated application. It creates
-the shared prescription library and does not alter patient documents or R4.
-The typed form requires all five `prescription.*` fields in the prescription
-template body. Legacy templates without these fields continue to work as before.
+The two recall layouts are used from Documents. They do not choose the patient's
+recall interval, calculate due dates, or replace the separate recall-dashboard
+batch/download workflow.
 
-The PDF uses the existing practice header and plain-text document layout;
-it does not reproduce the R4 Word table. Body lines wrap to the printable width,
-including long unbroken words. Longer prescriptions can span multiple pages.
-The PDF header's patient/practice details and Generated date are resolved when
-exported; only the saved document body is frozen. The feature does not validate
-medicine choice, dose or registration, and does not apply an electronic signature.
+## Prescription writing
 
-This branch has not been deployed. After merge and the separate deployment
-instruction, check practice settings and print one synthetic example for owner
-review before using the templates with patients.
+The format follows the fields in [SDCEP's prescription-writing guide](https://www.sdcepdentalprescribing.nhs.scot/guidance/introduction/prescription-writing/guide-to-prescription-writing/):
+patient name/address, DOB and age, date, practice address, medicine name/form/
+strength, explicit directions, quantity, and a space for the ink signature.
+Dentist name and GDC number are also included. The approved generic spelling
+**amoxicillin** is used; T.D.S./Q.D.S. are expanded into English. Medicine forms
+were checked against SDCEP and manufacturer information, including
+[erythromycin](https://www.medicines.org.uk/emc/product/502/smpc) and
+[clindamycin](https://www.medicines.org.uk/emc/product/11663/smpc).
 
-## Validation
+The app checks required text, patient DOB/address and required layout fields
+before preparing a prescription for printing. It does not validate clinical
+suitability, allergy/interactions, dosing or registration. Existing custom
+layouts are preserved; only the exact untouched stock prescription layout is
+updated to include age. Longer documents wrap and repeat patient identity on
+continuation pages. This is a private prescription, not an NHS FP10 form or an
+electronic signature.
 
-All data used here is synthetic. The isolated worktree is
-`/home/amir/dental-pms-prescription-entry`, Compose project
-`dental_prescription_entry`, with separate database/attachment volumes and
-loopback ports 8187/3187. No R4 connection or production data was used.
+## Recall email: prepared, switched off
 
-Run these only from the configured isolated worktree:
+The owner requested printing only for now. `RECALL_EMAIL_ENABLED=false` is the
+default; the UI displays **Email recall (off)** and the backend rejects sends.
+The planned sender is `clinicforimplant@gmail.com`. No credentials were configured
+and no actual email was sent during development.
+
+For a later explicitly requested activation, configure the SMTP variables in
+`.env.example` through the server's secure configuration. Both username and
+password are required. The transport requires STARTTLS (normally port 587) or
+implicit TLS (`SMTP_SSL=true`, normally port 465); there is no plaintext fallback.
+Do not put credentials in source control or chat. Test with a synthetic recipient
+before switching on for practice use.
+
+When enabled, only saved 6/12-month recall documents can prepare an email. Staff
+review the sender, patient recipient and exact PDF before sending. Prescription
+email is rejected on the server as well as absent from the UI. A changed email
+address requires a new preparation. A clinical note is created only after the
+mail server accepts the message; that is not confirmation of inbox delivery.
+
+The app durably marks sending before contacting SMTP. A timeout, process crash,
+or database failure after SMTP acceptance must not trigger an automatic resend.
+Such records stay `sending`/`uncertain`, with no success note. Check the mail
+provider before deliberately preparing another copy. There is no automatic
+reconciliation or delivery/bounce tracking in this slice.
+
+## Installation and preservation
+
+Apply Alembic through `0050_document_copies` before starting this version:
+`0049_prescription_templates` creates the library; `0050_document_copies` adds
+stock keys, PDF snapshots, issued copies and note links. PDFs are stored in the
+PMS PostgreSQL database and are included in its backups. R4 is untouched.
+
+Older generated documents without a complete frozen PDF remain downloadable,
+but require a new template-generated document for this print/email workflow.
+They are not backfilled by guessing historical headers or prescription details.
+Normal capability checks apply: viewing copies requires `documents.download`
+and `notes.view`; recording also requires `notes.write`. Archived patients are
+unavailable. PDF retrieval is audited and returned with `Cache-Control: no-store`.
+
+This branch is not deployed. Review/merge and a separate deployment instruction
+are still required. Check practice settings and a synthetic paper print on the
+practice printer before using the feature with patients.
+
+## Verification receipts
+
+The isolated worktree is `/home/amir/dental-pms-prescription-entry`, Compose project
+`dental_prescription_entry`, with separate synthetic database/storage and loopback
+ports 8187/3187. Commands and final results are recorded in `docs/STATUS.md`.
 
 ```sh
 cd /home/amir/dental-pms-prescription-entry
 bash ops/health.sh
 SKIP_DOCKER_BUILD=1 bash ops/verify.sh
 docker compose exec -T backend pytest -q
-```
 
-- Health: passed.
-- Verify: passed, including production frontend build, typecheck and health.
-  `SKIP_DOCKER_BUILD=1` reused dependency images with the current worktree source
-  mounted; it did not skip the frontend production build or other verify checks.
-- Full backend suite on a fresh synthetic database: **707 passed, 2 skipped**.
-- Focused prescription/template/document reliability suite: **18 passed** using
-  `docker compose exec -T backend pytest -q tests/attachments/test_prescription_templates.py tests/attachments/test_prescription_entry.py tests/attachments/test_document_reliability.py`.
-- Seven document/template browser checks: **7 passed** using:
-
-```sh
 set -a
 . ./.env
 set +a
 cd frontend
-PLAYWRIGHT_HTML_OUTPUT_DIR=../.run/library-browser-report-2 \
-npx playwright test tests/prescription-templates.spec.ts \
-  tests/patient-prescription-entry.spec.ts tests/templates-save.spec.ts \
-  tests/patient-document-preview.spec.ts tests/patient-document-save.spec.ts \
-  --workers=1 --output=../.run/library-browser-2
+PLAYWRIGHT_HTML_OUTPUT_DIR=../.run/document-copy-browser-final-report \
+npx playwright test tests/document-print-record.spec.ts \
+  tests/patient-prescription-entry.spec.ts tests/prescription-templates.spec.ts \
+  tests/templates-save.spec.ts tests/patient-document-preview.spec.ts \
+  tests/patient-document-save.spec.ts --workers=1 \
+  --output=../.run/document-copy-browser-final
 ```
 
-The networkless print check rendered all three defaults with synthetic details:
-one page each, no unknown placeholders, and all entered prescription values and
-the final manufacturer field present in extracted PDF text. Long unbroken text
-also has unit coverage for printable width. Receipts are in the isolated
-worktree's ignored `.run/` directory: `prescription-library-full.log`,
-`prescription-library-verify.log`, `prescription-library-api.log`,
-`prescription-library-browser-2.log` and `template-print-check.log`.
-The library tests cover persistence, editing, activation, permissions, audit
-metadata, patient-specific overrides and saved-document preservation.
-
-The first full-suite run against a reused database failed an existing lifecycle
-test that assumes its patient is on the first page, plus a charting fixture
-assertion expecting `500` despite generating a different code. Fresh baseline
-`d81bb96` and feature runs both reproduced the charting assertion alone
-(697 and 703 passes respectively). The assertion now compares with its generated
-fixture code, in a separate test-only commit. The final fresh run passes with
-charting enabled; no application charting behaviour was changed.
-
-An initial browser run failed because the isolated frontend's development server
-inherited `NODE_ENV=production`. Correcting the ignored test Compose override
-resolved this; the passing browser/build receipts are from the corrected setup.
-During the library extension an initial browser request overlapped restarting
-the isolated backend to load its new routes; six checks passed and that request
-failed. The rerun after startup passed all seven checks.
+`SKIP_DOCKER_BUILD=1` reuses dependency images with current source mounted; verify
+still runs the production frontend build/typecheck, migrations and service checks.
+Browser tests exercise cancellation, print confirmation, clinical-note links,
+PDF byte identity and required Clindamycin quantities. API coverage includes
+concurrent replay, source deletion, permissions, archive guards, immutable copies,
+disabled emailing, simulated successful/uncertain sending, and TLS attachment
+construction. A synthetic one-page prescription PDF was visually inspected.
