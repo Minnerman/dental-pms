@@ -67,8 +67,8 @@ export default function PrescriptionTemplates() {
       name: draft.name.trim(), medicine: draft.medicine.trim(), directions: draft.directions.trim(),
       quantity: draft.quantity.trim(), is_active: draft.is_active,
     };
-    if (!payload.name || !payload.medicine || !payload.directions || !payload.quantity) {
-      setError("Enter a name, medicine, directions and quantity.");
+    if (!payload.name || !payload.medicine || !payload.directions) {
+      setError("Enter a name, medicine and directions.");
       return;
     }
     savingRef.current = true;
@@ -123,6 +123,7 @@ export default function PrescriptionTemplates() {
         </label>
         {templates.length === 0 && <div className="notice">No saved prescriptions yet. Add your first template below.</div>}
         {!canManage && <div className="notice">Only superadmins can create or edit prescription templates.</div>}
+        <p>Quantity may be left blank here; it must be entered for each patient prescription. Review each favourite against the patient’s needs and current prescribing guidance.</p>
         <form onSubmit={save}>
           <fieldset className="stack" disabled={saving || !canManage} style={{ border: 0, padding: 0, margin: 0 }}>
             <label className="stack" style={{ gap: 6 }}>
@@ -133,7 +134,7 @@ export default function PrescriptionTemplates() {
             </label>
             {medicationInputs.map((input) => <label className="stack" style={{ gap: 6 }} key={input.key}>
               <span className="label">{input.label}</span>
-              <textarea className="input" required rows={input.rows} maxLength={input.maxLength}
+              <textarea className="input" required={input.key !== "quantity"} rows={input.rows} maxLength={input.maxLength}
                 value={draft[input.key]}
                 onChange={(event) => setDraft((current) => ({ ...current, [input.key]: event.target.value }))}
                 data-testid={`prescription-template-${input.key}`} />

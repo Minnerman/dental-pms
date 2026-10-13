@@ -13,6 +13,7 @@ type Actor = { id: number; email: string; role: string };
 
 type Note = {
   id: number;
+  document_copy_id?: number | null;
   patient_id: number;
   appointment_id?: number | null;
   body: string;
@@ -430,7 +431,7 @@ export default function NotesPage() {
                       <div>
                         <h3 style={{ marginTop: 0 }}>Note detail</h3>
                         <p style={{ color: "var(--muted)" }}>
-                          {selectedNote.deleted_at
+                          {selectedNote.document_copy_id ? "Saved document record. Add a separate note for corrections." : selectedNote.deleted_at
                             ? "Archived note (read-only)."
                             : canWriteNotes
                               ? "Edit note content and metadata."
@@ -445,7 +446,7 @@ export default function NotesPage() {
                         >
                           View audit
                         </Link>
-                        {canWriteNotes && (
+                        {canWriteNotes && !selectedNote.document_copy_id && (
                           <button
                             className="btn btn-secondary"
                             onClick={(event) => void toggleArchive(selectedNote, event.currentTarget)}
@@ -463,7 +464,7 @@ export default function NotesPage() {
                         )}
                       </div>
                     </div>
-                    {selectedNote.deleted_at || !canWriteNotes ? (
+                    {selectedNote.deleted_at || selectedNote.document_copy_id || !canWriteNotes ? (
                       <div className="stack" data-testid="note-detail-readonly">
                         <div>
                           <strong>Note type</strong>
@@ -471,7 +472,7 @@ export default function NotesPage() {
                         </div>
                         <div>
                           <strong>Note body</strong>
-                          <p style={{ whiteSpace: "pre-wrap" }}>{selectedNote.body}</p>
+                          <p style={{ whiteSpace: "pre-wrap" }}>{selectedNote.document_copy_id ? <Link href={`/document-copies/${selectedNote.document_copy_id}`}>{selectedNote.body}</Link> : selectedNote.body}</p>
                         </div>
                       </div>
                     ) : (

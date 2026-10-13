@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import DocumentPrintActions from "@/components/DocumentPrintActions";
 import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { safeDocumentError } from "@/lib/document-errors";
@@ -20,6 +21,7 @@ type DocumentTemplate = {
 
 type PatientDocument = {
   id: number;
+  document_kind: string;
   template_id?: number | null;
   attachment_id?: number | null;
   title: string;
@@ -617,7 +619,7 @@ export default function PatientDocuments({
           <div>
             <h4 style={{ marginTop: 0 }}>Documents</h4>
             <div style={{ color: "var(--muted)" }}>
-              Create a letter or enter a prescription, then save and download its PDF.
+              Create a letter or prescription, then use Print & record to save its clinical-note entry.
             </div>
           </div>
           {canDownload && !patientArchived && (
@@ -691,7 +693,7 @@ export default function PatientDocuments({
             {isTypedPrescription && (
               <fieldset className="stack" disabled={documentBusy} style={{ border: 0, padding: 0, margin: 0 }}>
                 <legend style={{ fontWeight: 600 }}>Prescription details</legend>
-                <div style={{ color: "var(--muted)" }}>Enter the prescription, review the preview, then save and download the PDF for signing.</div>
+                <div style={{ color: "var(--muted)" }}>Review the medicine, directions and quantity for this patient. Save the document, then use Print & record and sign the paper in ink.</div>
                 <label className="stack" style={{ gap: 6 }}>
                   <span className="label">Saved prescription</span>
                   <select
@@ -804,6 +806,7 @@ export default function PatientDocuments({
         {canDownload && !patientArchived && <div className="card" style={{ margin: 0 }}>
           <div className="stack">
             <h4 style={{ marginTop: 0 }}>Generated documents</h4>
+            <p>Use Print &amp; record to keep the printed PDF in clinical notes. Downloading alone does not record printing.</p>
             {loadingDocs && <div className="badge">Loading documents…</div>}
             {documents.length === 0 && !loadingDocs ? (
               <div className="notice">
@@ -828,7 +831,9 @@ export default function PatientDocuments({
                         {doc.created_by?.email || "—"}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <DocumentPrintActions documentId={doc.id} kind={doc.document_kind}
+                        canRecord={canDownload && Boolean(capabilities?.includes("notes.write") && capabilities?.includes("notes.view"))} />
                       {canDownload && <button
                         className="btn btn-secondary"
                         type="button"

@@ -128,6 +128,7 @@ type Patient = {
 
 type Note = {
   id: number;
+  document_copy_id?: number | null;
   body: string;
   note_type: "clinical" | "admin";
   created_at: string;
@@ -10616,6 +10617,12 @@ export default function PatientDetailClient({
                         </div>
                       </Panel>
 
+                      {canViewNotes && notes.some((note) => note.document_copy_id) && <Panel title="Printed and emailed documents">
+                        {notes.filter((note) => note.document_copy_id).map((note) => <div className="card" key={note.id}>
+                          <div style={{ color: "var(--muted)" }}>{formatDateTime(note.created_at)} · {note.created_by.email}</div>
+                          <Link href={`/document-copies/${note.document_copy_id}`}>{note.body}</Link>
+                        </div>)}
+                      </Panel>}
                       {sortedClinicalNotes.length === 0 ? (
                         <div className="notice">
                           No clinical notes recorded yet. Add notes from the Clinical entry area.
@@ -10813,7 +10820,9 @@ export default function PatientDetailClient({
                                   </Link>
                                 </div>
                               </div>
-                              <p style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>{note.body}</p>
+                              <p style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
+                                {note.document_copy_id ? <Link href={`/document-copies/${note.document_copy_id}`}>{note.body}</Link> : note.body}
+                              </p>
                             </div>
                           ))
                         )}
