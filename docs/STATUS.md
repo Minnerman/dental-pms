@@ -9,8 +9,11 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   owner-requested medicine favourites. Clindamycin 150/300 mg are separate choices,
   each every six hours, with quantity required per patient because none was given.
   Amoxicillin 250 mg/5 mL (sugar free) and 500 mg/5 mL oral suspensions are separate
-  choices, both with owner-confirmed directions of 5 mL three times a day and total
-  supply required per patient. Printed names include the recorded title; all saved
+  choices, both with owner-confirmed directions of 5 mL three times a day and
+  editable 100 mL total supply. Startup upgrades only untouched blank liquid
+  favourites and preserves explicit edits. Saved prescriber selection fills
+  **Dr Amir Mostofi — GDC 73080** together; it is explicitly selected for each new
+  prescription and remains editable. Printed names include the recorded title; all saved
   address lines and postcode are retained. A one-page liquid prescription sample
   was visually checked against the supplied information example.
   Complete PDFs are frozen when saved. **Print & record** prepares a copy and
@@ -24,11 +27,13 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   Additive PMS migrations are `0049_prescription_templates` and `0050_document_copies`.
   Validation: `bash ops/health.sh` passed; `SKIP_DOCKER_BUILD=1 bash ops/verify.sh`
   passed (current-source production frontend build/typecheck, migrations and service
-  checks); `docker compose exec -T backend pytest -q` passed with **722 passed,
-  2 skipped** on a fresh synthetic database; **3 focused browser checks passed**
-  for recorded printing, Clindamycin quantities and both liquid choices (the prior
-  broader document/template run had 9 passes). Focused API tests: **20 passed**;
-  external-server copy API check: **14 passed**. Coverage includes concurrent
+  checks); `docker compose exec -T backend pytest -q` passed with **730 passed,
+  2 skipped** on a fresh synthetic database; **4 focused browser checks passed**
+  in `tests/document-print-record.spec.ts` and `tests/patient-prescription-entry.spec.ts`
+  for recorded printing, Clindamycin quantities, editable liquid supply, explicit
+  GDC selection, manual overrides, reset and saved PDF download. The prior broader
+  document/template run had 9 passes; prior focused API tests had 20 passes and
+  the external-server copy API check had 14 passes. Coverage includes concurrent
   replay, immutable PDFs, full patient identity/address, missing supply, permission
   guards, disabled email and simulated SMTP outcomes. The email simulation tests
   now use their patched in-process client, fixing the prior recalls-api CI failure
@@ -39,7 +44,7 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   The earlier charting fixture assertion fix remains a separate test-only commit.
   A reused-database rerun exposed stale charting fixture data; the final fresh run
   passed. No application charting behaviour or R4 data was changed.
-  Latest receipts: ignored `.run/liquid-prescription-{full,verify,health,browser,api,external-api}.log`.
+  Latest receipts: ignored `.run/prescription-owner-{full,verify,health,browser}.log`.
   No deployment. Workflow, sources, commands and limits:
   [prescription handover](PRESCRIPTION_TEMPLATES.md).
 - Production includes the merged R4-inspired chart workflow through PR #711:

@@ -15,8 +15,8 @@ Nine owner-requested favourites are supplied:
 | --- | --- | --- |
 | Amoxicillin 250 mg capsules | One capsule three times a day | 21 capsules |
 | Amoxicillin 500 mg capsules | One capsule three times a day | 21 capsules |
-| Amoxicillin 250 mg/5 mL oral suspension (sugar free) | 5 mL three times a day | Enter total supply in mL |
-| Amoxicillin 500 mg/5 mL oral suspension | 5 mL three times a day | Enter total supply in mL |
+| Amoxicillin 250 mg/5 mL oral suspension (sugar free) | 5 mL three times a day | 100 mL, editable |
+| Amoxicillin 500 mg/5 mL oral suspension | 5 mL three times a day | 100 mL, editable |
 | Metronidazole 200 mg tablets | One tablet three times a day | 21 tablets |
 | Metronidazole 400 mg tablets | One tablet three times a day | 21 tablets |
 | Erythromycin 250 mg tablets | One tablet four times a day | 28 tablets |
@@ -27,13 +27,24 @@ Clindamycin quantities were not supplied, so neither is inferred. A library
 quantity can be blank; a patient prescription cannot be saved without quantity.
 The liquid dose was explicitly confirmed as 5 mL three times a day for both
 strengths. Concentration and dose volume are distinct: 5 mL of these formulations
-contains 250 mg or 500 mg respectively. Total supply has no default and remains
-required for each patient. The form prompts for the total volume in mL. The
+contains 250 mg or 500 mg respectively. The owner-confirmed usual total supply is
+**100 mL** for both liquids, editable for each patient; clearing it prevents saving.
+This is supply volume, not the dose or an inferred treatment duration. The form
+prompts for the total volume in mL. The
 250 mg/5 mL favourite specifies sugar free; the 500 mg/5 mL favourite does not
 assume this product attribute. Strength/form references:
 [250 mg/5 mL manufacturer information](https://www.medicines.org.uk/emc/product/10891/smpc) and
 [500 mg/5 mL manufacturer information](https://www.medicines.org.uk/emc/product/12494/smpc).
 Startup uses stable stock keys, preserving renamed, edited or deactivated entries.
+It upgrades only untouched initial liquid favourites from blank supply to 100 mL;
+an explicitly saved blank quantity also survives subsequent startups.
+
+**Saved prescriber** offers **Dr Amir Mostofi — GDC 73080**, using the number
+supplied by the owner. Selecting it fills both editable prescriber fields together.
+The choice is explicit for each new prescription, so other clinicians do not
+automatically inherit this identity. Saving or changing patient/layout clears it;
+changing the medicine retains the selected prescriber. Manual entry remains
+available. This is a practice-specific shortcut, not a registration check.
 
 These are practice favourites, not recommended antibiotic courses. The owner’s
 quantities are retained. Current [SDCEP amoxicillin guidance](https://sdcepdentalprescribing.nhs.scot/guidance/bacterial-infections/dental-abscess/first-line-antibiotics/amoxicillin/)
@@ -137,12 +148,14 @@ The isolated worktree is `/home/amir/dental-pms-prescription-entry`, Compose pro
 `dental_prescription_entry`, with separate synthetic database/storage and loopback
 ports 8187/3187. Commands and final results are recorded in `docs/STATUS.md`.
 
-Latest extension: 722 backend tests passed, 2 skipped; health and verify passed;
-3 focused browser checks passed with `tests/document-print-record.spec.ts`. The
-prior broader browser command below passed all 9 checks before the liquid addition.
-The two new liquid API cases and prescription suite passed 20 checks; the external
-API copy run passed 14 checks before the whitespace-address case was added to the
-final full run. Receipts use the ignored `.run/liquid-prescription-*.log` paths.
+Latest extension: **730 backend tests passed, 2 skipped**; health and verify passed;
+**4 focused browser checks passed** using the command below. These cover the
+editable 100 mL liquid defaults, explicit GDC/name selection, manual overrides,
+draft reset, print/clinical-note workflow and saved PDF download. Startup upgrade
+tests cover both strengths, explicit blank supply, custom supply, renamed/inactive
+favourites and repeated startup. Receipts use ignored `.run/prescription-owner-*.log`.
+Earlier verification included 9 broader document/template browser checks,
+20 focused API checks and 14 external-server copy API checks.
 
 ```sh
 cd /home/amir/dental-pms-prescription-entry
@@ -154,12 +167,10 @@ set -a
 . ./.env
 set +a
 cd frontend
-PLAYWRIGHT_HTML_OUTPUT_DIR=../.run/document-copy-browser-final-report \
+PLAYWRIGHT_HTML_OUTPUT_DIR=../.run/prescription-owner-browser-report \
 npx playwright test tests/document-print-record.spec.ts \
-  tests/patient-prescription-entry.spec.ts tests/prescription-templates.spec.ts \
-  tests/templates-save.spec.ts tests/patient-document-preview.spec.ts \
-  tests/patient-document-save.spec.ts --workers=1 \
-  --output=../.run/document-copy-browser-final
+  tests/patient-prescription-entry.spec.ts --workers=1 \
+  --output=../.run/prescription-owner-browser
 ```
 
 `SKIP_DOCKER_BUILD=1` reuses dependency images with current source mounted; verify
