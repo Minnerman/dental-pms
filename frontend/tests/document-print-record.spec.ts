@@ -62,3 +62,28 @@ test("both Clindamycin strengths populate separately and require a patient quant
     await expect(page.getByText(/Enter quantity before previewing or saving/i)).toBeVisible();
   }
 });
+
+test("liquid amoxicillin choices use 5 mL three times a day and require total supply", async ({ page, request }) => {
+  const base = getBaseUrl();
+  const patientId = await createPatient(request, { first_name: "Synthetic", last_name: "LiquidPrescription" });
+  await primePageAuth(page, request);
+  await page.goto(`${base}/patients/${patientId}/documents`);
+  await page.getByTestId("patient-document-template-select").selectOption({ label: "Private Prescription - typed (Prescription)" });
+  const library = page.getByTestId("prescription-saved-template");
+  for (const medicine of ["Amoxicillin 250 mg/5 mL oral suspension (sugar free)", "Amoxicillin 500 mg/5 mL oral suspension"]) {
+    await library.selectOption({ label: medicine });
+    await expect(page.getByTestId("prescription-medicine")).toHaveValue(medicine);
+    await expect(page.getByTestId("prescription-directions")).toHaveValue("Take 5 mL three times a day.");
+    await expect(page.getByTestId("prescription-quantity")).toHaveValue("");
+    await expect(page.getByText("Enter the total volume to supply in mL.")).toBeVisible();
+    await page.getByTestId("patient-document-save").click();
+    await expect(page.getByText(/Enter quantity before previewing or saving/i)).toBeVisible();
+    // Choosing the next liquid must clear the previous patient's/draft's supply.
+    await page.getByTestId("prescription-quantity").fill("100 mL");
+  }
+  await page.getByTestId("prescription-prescriber_name").fill("Synthetic Dentist");
+  await page.getByTestId("prescription-prescriber_gdc").fill("TEST ONLY");
+  await page.getByTestId("patient-document-preview").click();
+  await expect(page.locator("textarea[readonly]")).toHaveValue(/Take 5 mL three times a day\./);
+  await expect(page.locator("textarea[readonly]")).toHaveValue(/Quantity: 100 mL/);
+});

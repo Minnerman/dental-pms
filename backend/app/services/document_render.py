@@ -47,8 +47,13 @@ def patient_age(patient: Patient) -> str:
     return f"{years} years"
 
 
+def patient_document_name(patient: Patient) -> str:
+    return " ".join(part.strip() for part in (patient.title, patient.first_name, patient.last_name)
+                    if part and part.strip())
+
+
 def _build_field_map(patient: Patient) -> dict[str, str]:
-    full_name = " ".join(part for part in [patient.first_name, patient.last_name] if part)
+    full_name = patient_document_name(patient)
     return {
         "patient.id": str(patient.id),
         "patient.first_name": patient.first_name or "",

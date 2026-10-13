@@ -9,6 +9,7 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
 from app.models.patient import Patient
+from app.services.document_render import patient_document_name
 from app.services.pdf import CLINIC_ADDRESS_LINES, CLINIC_NAME, CLINIC_PHONE
 
 
@@ -67,7 +68,7 @@ def generate_patient_document_pdf(
     y -= 6 * mm
 
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(left, y, f"Patient: {patient.first_name} {patient.last_name}")
+    pdf.drawString(left, y, f"Patient: {patient_document_name(patient)}")
     y -= 5 * mm
     pdf.drawString(left, y, f"Generated: {date.today().isoformat()}")
     y -= 10 * mm
@@ -87,7 +88,7 @@ def generate_patient_document_pdf(
             page_num += 1
             y = top
             pdf.setFont("Helvetica", 10)
-            pdf.drawString(left, y, f"Patient: {patient.first_name} {patient.last_name} | ID: {patient.id}")
+            pdf.drawString(left, y, f"Patient: {patient_document_name(patient)} | ID: {patient.id}")
             y -= 8 * mm
             pdf.setFont("Helvetica", 11)
         pdf.drawString(left, y, line)

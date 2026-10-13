@@ -725,6 +725,8 @@ export default function PatientDocuments({
                 {prescriptionInputs.map((input) => (
                   <label className="stack" style={{ gap: 6 }} key={input.key}>
                     <span className="label">{input.label}</span>
+                    {input.key === "quantity" && /oral suspension/i.test(prescription.medicine) &&
+                      <span style={{ color: "var(--muted)" }}>Enter the total volume to supply in mL.</span>}
                     <textarea
                       className="input"
                       rows={input.rows}

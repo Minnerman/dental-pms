@@ -15,7 +15,7 @@ def freeze_document(db, document, patient, template, unknown_fields):
     if unknown_fields:
         blockers.append("Resolve the unknown merge fields and create a new document")
     if document.document_kind == "prescription":
-        if not patient.address_line1 or not patient.postcode:
+        if not (patient.address_line1 or "").strip() or not (patient.postcode or "").strip():
             blockers.append("Complete the patient's address and postcode, then create a new prescription")
         if not patient.date_of_birth or patient.date_of_birth > date.today():
             blockers.append("Complete a valid patient date of birth, then create a new prescription")

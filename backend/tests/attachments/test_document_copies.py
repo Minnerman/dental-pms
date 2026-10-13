@@ -97,8 +97,9 @@ def test_concurrent_preparation_and_confirmation_are_idempotent(api_client, auth
     assert len(notes(api_client, auth_headers, patient_id)) == 1
 
 
-def test_missing_identity_and_legacy_prescriptions_cannot_be_issued(api_client, auth_headers):
-    _, doc = document(api_client, auth_headers, PRESCRIPTION_TEMPLATE, postcode=None, date_of_birth=None)
+@pytest.mark.parametrize("missing", [{"postcode": None, "date_of_birth": None}, {"postcode": "   "}])
+def test_missing_identity_and_legacy_prescriptions_cannot_be_issued(api_client, auth_headers, missing):
+    _, doc = document(api_client, auth_headers, PRESCRIPTION_TEMPLATE, **missing)
     assert prepare(api_client, auth_headers, doc).status_code == 409
     with SessionLocal() as db:
         record = db.get(PatientDocument, doc['id'])
@@ -195,7 +196,7 @@ def test_presets_preserve_edits_and_require_patient_quantity(api_client, auth_he
             ensure_prescription_defaults(db, actor=actor)
             db.refresh(preset)
             assert preset.name == 'Synthetic renamed favourite'
-            assert len(list(db.scalars(select(PrescriptionTemplate).where(PrescriptionTemplate.stock_key.is_not(None))))) == 7
+            assert len(list(db.scalars(select(PrescriptionTemplate).where(PrescriptionTemplate.stock_key.is_not(None))))) == 9
         finally:
             preset.name = original
             db.commit()
@@ -257,3 +258,29 @@ def test_smtp_requires_tls_and_attaches_pdf(monkeypatch):
     message = messages[0]
     assert message['To'] == 'synthetic-patient@example.com'
     assert list(message.iter_attachments())[0].get_payload(decode=True) == b'%PDF-synthetic'
+
+
+@pytest.mark.parametrize('strength', ['250', '500'])
+def test_liquid_presets_require_supply_and_preserve_full_patient_details(api_client, auth_headers, strength):
+    rows = api_client.get('/prescription-templates', headers=auth_headers).json()
+    liquid = next(r for r in rows if r['medicine'].startswith(f'Amoxicillin {strength} mg/5 mL oral suspension'))
+    assert liquid['directions'] == 'Take 5 mL three times a day.'
+    assert liquid['quantity'] == ''
+    patient_id, initial = document(api_client, auth_headers, PRESCRIPTION_TEMPLATE,
+                                  title='Ms', first_name='Synthetic Sarah', last_name='Example',
+                                  address_line1='Flat 2', address_line2='12 Example Lane',
+                                  city='Synthetic Town', postcode='ZZ1 1ZZ')
+    prescription = {**DETAILS, **{key: liquid[key] for key in ('medicine', 'directions', 'quantity')}}
+    path = f'/patients/{patient_id}/documents'
+    payload = {'template_id': initial['template_id'], 'prescription': prescription}
+    assert api_client.post(path, headers=auth_headers, json=payload).status_code == 422
+    prescription['quantity'] = '100 mL'  # Synthetic test supply; never a default.
+    saved = api_client.post(path, headers=auth_headers, json=payload)
+    assert saved.status_code == 201, saved.text
+    doc = saved.json()
+    assert not doc['issue_blockers']
+    for text in ('Ms Synthetic Sarah Example', 'Flat 2', '12 Example Lane', 'Synthetic Town',
+                 'ZZ1 1ZZ', '1980-01-01', 'Age:', liquid['medicine'], liquid['directions'],
+                 'Quantity: 100 mL', DETAILS['prescriber_name'], DETAILS['prescriber_gdc'], "Prescriber's signature"):
+        assert text in doc['rendered_content']
+    assert prepare(api_client, auth_headers, doc).status_code == 201

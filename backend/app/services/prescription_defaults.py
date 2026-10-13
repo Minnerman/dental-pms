@@ -5,6 +5,8 @@ from app.models.prescription_template import PrescriptionTemplate
 DEFAULTS = [
     ("amoxicillin-250", "Amoxicillin 250 mg capsules", "Take one capsule three times a day.", "21 capsules"),
     ("amoxicillin-500", "Amoxicillin 500 mg capsules", "Take one capsule three times a day.", "21 capsules"),
+    ("amoxicillin-liquid-250", "Amoxicillin 250 mg/5 mL oral suspension (sugar free)", "Take 5 mL three times a day.", ""),
+    ("amoxicillin-liquid-500", "Amoxicillin 500 mg/5 mL oral suspension", "Take 5 mL three times a day.", ""),
     ("metronidazole-200", "Metronidazole 200 mg tablets", "Take one tablet three times a day.", "21 tablets"),
     ("metronidazole-400", "Metronidazole 400 mg tablets", "Take one tablet three times a day.", "21 tablets"),
     ("erythromycin-250", "Erythromycin 250 mg tablets", "Take one tablet four times a day.", "28 tablets"),
