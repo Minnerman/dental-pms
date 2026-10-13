@@ -1,14 +1,51 @@
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import select
 
 from app.core.security import create_access_token
 from app.core.settings import settings
 from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
-from app.models.user import Role
+from app.models.prescription_template import PrescriptionTemplate
+from app.models.user import Role, User
 from app.services.capabilities import replace_user_capabilities
+from app.services.prescription_defaults import ensure_prescription_defaults
 from app.services.users import create_user
+
+
+@pytest.mark.parametrize("strength", ["250", "500"])
+@pytest.mark.parametrize("state", ["untouched", "explicit_blank", "custom_supply", "renamed_inactive"])
+def test_liquid_default_upgrade_preserves_practice_edits(auth_headers, strength, state):
+    with SessionLocal() as db:
+        actor = db.scalar(select(User).order_by(User.id))
+        preset = db.scalar(select(PrescriptionTemplate).where(
+            PrescriptionTemplate.stock_key == f"amoxicillin-liquid-{strength}"
+        ))
+        fields = ("name", "quantity", "is_active", "updated_by_user_id")
+        original = {field: getattr(preset, field) for field in fields}
+        try:
+            preset.quantity = ""
+            preset.updated_by_user_id = None
+            if state == "explicit_blank":
+                preset.updated_by_user_id = actor.id
+            elif state == "custom_supply":
+                preset.quantity = "75 mL"
+            elif state == "renamed_inactive":
+                preset.name = "Synthetic custom liquid"
+                preset.is_active = False
+            db.commit()
+            expected = {field: getattr(preset, field) for field in fields}
+            if state == "untouched":
+                expected["quantity"] = "100 mL"
+            for _ in range(2):
+                ensure_prescription_defaults(db, actor=actor)
+                db.refresh(preset)
+                assert {field: getattr(preset, field) for field in fields} == expected
+        finally:
+            for field, value in original.items():
+                setattr(preset, field, value)
+            db.commit()
 
 
 def template_payload(**changes):

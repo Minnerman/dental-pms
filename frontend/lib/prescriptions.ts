@@ -18,6 +18,12 @@ export type PrescriptionTemplate = PrescriptionMedication & {
   is_active: boolean;
 };
 
+// Owner-provided practice favourite; selecting it explicitly keeps the name and
+// GDC together without assigning this identity to every signed-in clinician.
+export const savedPrescribers = [
+  { id: "amir-mostofi", prescriber_name: "Dr Amir Mostofi", prescriber_gdc: "73080" },
+] as const;
+
 export const emptyPrescription = (): PrescriptionDetails => ({
   medicine: "", directions: "", quantity: "", prescriber_name: "", prescriber_gdc: "",
 });

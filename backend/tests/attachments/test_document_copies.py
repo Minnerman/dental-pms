@@ -265,7 +265,7 @@ def test_liquid_presets_require_supply_and_preserve_full_patient_details(api_cli
     rows = api_client.get('/prescription-templates', headers=auth_headers).json()
     liquid = next(r for r in rows if r['medicine'].startswith(f'Amoxicillin {strength} mg/5 mL oral suspension'))
     assert liquid['directions'] == 'Take 5 mL three times a day.'
-    assert liquid['quantity'] == ''
+    assert liquid['quantity'] == '100 mL'
     patient_id, initial = document(api_client, auth_headers, PRESCRIPTION_TEMPLATE,
                                   title='Ms', first_name='Synthetic Sarah', last_name='Example',
                                   address_line1='Flat 2', address_line2='12 Example Lane',
@@ -273,14 +273,18 @@ def test_liquid_presets_require_supply_and_preserve_full_patient_details(api_cli
     prescription = {**DETAILS, **{key: liquid[key] for key in ('medicine', 'directions', 'quantity')}}
     path = f'/patients/{patient_id}/documents'
     payload = {'template_id': initial['template_id'], 'prescription': prescription}
+    default_saved = api_client.post(path, headers=auth_headers, json=payload)
+    assert default_saved.status_code == 201, default_saved.text
+    assert 'Quantity: 100 mL' in default_saved.json()['rendered_content']
+    prescription['quantity'] = ''
     assert api_client.post(path, headers=auth_headers, json=payload).status_code == 422
-    prescription['quantity'] = '100 mL'  # Synthetic test supply; never a default.
+    prescription['quantity'] = '75 mL'  # A patient-specific override is preserved.
     saved = api_client.post(path, headers=auth_headers, json=payload)
     assert saved.status_code == 201, saved.text
     doc = saved.json()
     assert not doc['issue_blockers']
     for text in ('Ms Synthetic Sarah Example', 'Flat 2', '12 Example Lane', 'Synthetic Town',
                  'ZZ1 1ZZ', '1980-01-01', 'Age:', liquid['medicine'], liquid['directions'],
-                 'Quantity: 100 mL', DETAILS['prescriber_name'], DETAILS['prescriber_gdc'], "Prescriber's signature"):
+                 'Quantity: 75 mL', DETAILS['prescriber_name'], DETAILS['prescriber_gdc'], "Prescriber's signature"):
         assert text in doc['rendered_content']
     assert prepare(api_client, auth_headers, doc).status_code == 201

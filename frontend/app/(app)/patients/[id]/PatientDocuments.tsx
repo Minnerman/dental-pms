@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch, clearToken } from "@/lib/auth";
 import { safeDocumentError } from "@/lib/document-errors";
 import {
-  emptyPrescription, prescriptionInputs, PrescriptionDetails, PrescriptionTemplate,
+  emptyPrescription, prescriptionInputs, savedPrescribers, PrescriptionDetails, PrescriptionTemplate,
 } from "@/lib/prescriptions";
 
 type DocumentTemplateKind = "letter" | "prescription";
@@ -722,6 +722,30 @@ export default function PatientDocuments({
                   {" "}<a href="/templates?tab=prescriptions" target="_blank" rel="noreferrer">Manage prescription templates</a>
                 </div>
                 {prescriptionTemplatesError && <div className="notice">{prescriptionTemplatesError}</div>}
+                <label className="stack" style={{ gap: 6 }}>
+                  <span className="label">Saved prescriber</span>
+                  <select
+                    className="input"
+                    data-testid="prescription-saved-prescriber"
+                    value={savedPrescribers.find((item) =>
+                      item.prescriber_name === prescription.prescriber_name &&
+                      item.prescriber_gdc === prescription.prescriber_gdc)?.id ?? ""}
+                    onChange={(event) => {
+                      const saved = savedPrescribers.find((item) => item.id === event.target.value);
+                      setPrescription((current) => ({
+                        ...current,
+                        prescriber_name: saved?.prescriber_name ?? "",
+                        prescriber_gdc: saved?.prescriber_gdc ?? "",
+                      }));
+                      clearPreview();
+                    }}
+                  >
+                    <option value="">Enter prescriber details manually</option>
+                    {savedPrescribers.map((item) => <option key={item.id} value={item.id}>
+                      {item.prescriber_name} — GDC {item.prescriber_gdc}
+                    </option>)}
+                  </select>
+                </label>
                 {prescriptionInputs.map((input) => (
                   <label className="stack" style={{ gap: 6 }} key={input.key}>
                     <span className="label">{input.label}</span>

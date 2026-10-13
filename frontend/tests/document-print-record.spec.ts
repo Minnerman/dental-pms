@@ -63,27 +63,46 @@ test("both Clindamycin strengths populate separately and require a patient quant
   }
 });
 
-test("liquid amoxicillin choices use 5 mL three times a day and require total supply", async ({ page, request }) => {
+test("liquid favourites use editable 100 mL supply and an explicitly selected prescriber", async ({ page, request }) => {
   const base = getBaseUrl();
   const patientId = await createPatient(request, { first_name: "Synthetic", last_name: "LiquidPrescription" });
   await primePageAuth(page, request);
   await page.goto(`${base}/patients/${patientId}/documents`);
   await page.getByTestId("patient-document-template-select").selectOption({ label: "Private Prescription - typed (Prescription)" });
   const library = page.getByTestId("prescription-saved-template");
+  const prescriber = page.getByTestId("prescription-saved-prescriber");
+  await expect(page.getByTestId("prescription-prescriber_name")).toHaveValue("");
+  await expect(page.getByTestId("prescription-prescriber_gdc")).toHaveValue("");
+  await prescriber.selectOption({ label: "Dr Amir Mostofi — GDC 73080" });
   for (const medicine of ["Amoxicillin 250 mg/5 mL oral suspension (sugar free)", "Amoxicillin 500 mg/5 mL oral suspension"]) {
     await library.selectOption({ label: medicine });
     await expect(page.getByTestId("prescription-medicine")).toHaveValue(medicine);
     await expect(page.getByTestId("prescription-directions")).toHaveValue("Take 5 mL three times a day.");
-    await expect(page.getByTestId("prescription-quantity")).toHaveValue("");
+    await expect(page.getByTestId("prescription-quantity")).toHaveValue("100 mL");
+    await expect(page.getByTestId("prescription-prescriber_name")).toHaveValue("Dr Amir Mostofi");
+    await expect(page.getByTestId("prescription-prescriber_gdc")).toHaveValue("73080");
     await expect(page.getByText("Enter the total volume to supply in mL.")).toBeVisible();
+    await page.getByTestId("prescription-quantity").fill("");
     await page.getByTestId("patient-document-save").click();
     await expect(page.getByText(/Enter quantity before previewing or saving/i)).toBeVisible();
-    // Choosing the next liquid must clear the previous patient's/draft's supply.
-    await page.getByTestId("prescription-quantity").fill("100 mL");
+    // Selecting another favourite replaces a draft's override with its default.
+    await page.getByTestId("prescription-quantity").fill("75 mL");
   }
+  await page.getByTestId("patient-document-preview").click();
+  await expect(page.locator("textarea[readonly]")).toHaveValue(/Dr Amir Mostofi/);
+  await expect(page.locator("textarea[readonly]")).toHaveValue(/73080/);
+  await expect(page.locator("textarea[readonly]")).toHaveValue(/Quantity: 75 mL/);
+  // Another clinician can replace the saved identity, with no stale preview.
   await page.getByTestId("prescription-prescriber_name").fill("Synthetic Dentist");
+  await expect(prescriber).toHaveValue("");
+  await expect(page.locator("textarea[readonly]")).toHaveCount(0);
   await page.getByTestId("prescription-prescriber_gdc").fill("TEST ONLY");
   await page.getByTestId("patient-document-preview").click();
   await expect(page.locator("textarea[readonly]")).toHaveValue(/Take 5 mL three times a day\./);
-  await expect(page.locator("textarea[readonly]")).toHaveValue(/Quantity: 100 mL/);
+  await expect(page.locator("textarea[readonly]")).toHaveValue(/Quantity: 75 mL/);
+  await expect(page.locator("textarea[readonly]")).not.toHaveValue(/73080/);
+  await page.getByTestId("patient-document-save").click();
+  await expect(page.getByTestId("prescription-prescriber_name")).toHaveValue("");
+  await expect(page.getByTestId("prescription-prescriber_gdc")).toHaveValue("");
+  await expect(prescriber).toHaveValue("");
 });
