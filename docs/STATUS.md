@@ -5,9 +5,14 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
 ## Current continuity / handover
 - The document handover scope is typed Private Prescription, Recall - 6 months
   and Recall - 12 months; historical records stay in R4/archive. PR #718's isolated
-  branch `codex/prescription-entry-templates` adds a Prescriptions tab and seven
+  branch `codex/prescription-entry-templates` adds a Prescriptions tab and nine
   owner-requested medicine favourites. Clindamycin 150/300 mg are separate choices,
   each every six hours, with quantity required per patient because none was given.
+  Amoxicillin 250 mg/5 mL (sugar free) and 500 mg/5 mL oral suspensions are separate
+  choices, both with owner-confirmed directions of 5 mL three times a day and total
+  supply required per patient. Printed names include the recorded title; all saved
+  address lines and postcode are retained. A one-page liquid prescription sample
+  was visually checked against the supplied information example.
   Complete PDFs are frozen when saved. **Print & record** prepares a copy and
   explicit successful-print confirmation adds a clinical note linking that PDF.
   Copies survive source-document deletion; duplicate confirmations create one note.
@@ -19,17 +24,22 @@ R4 investigation remains blocked and R4 writes remain permanently prohibited.
   Additive PMS migrations are `0049_prescription_templates` and `0050_document_copies`.
   Validation: `bash ops/health.sh` passed; `SKIP_DOCKER_BUILD=1 bash ops/verify.sh`
   passed (current-source production frontend build/typecheck, migrations and service
-  checks); `docker compose exec -T backend pytest -q` passed with **719 passed,
-  2 skipped** on a fresh synthetic database; **9 browser checks passed**. New copy
-  API tests: **12 passed**, including concurrent replay, immutable PDFs, permission
-  guards, disabled email and simulated SMTP outcomes. Synthetic prescription PDF
+  checks); `docker compose exec -T backend pytest -q` passed with **722 passed,
+  2 skipped** on a fresh synthetic database; **3 focused browser checks passed**
+  for recorded printing, Clindamycin quantities and both liquid choices (the prior
+  broader document/template run had 9 passes). Focused API tests: **20 passed**;
+  external-server copy API check: **14 passed**. Coverage includes concurrent
+  replay, immutable PDFs, full patient identity/address, missing supply, permission
+  guards, disabled email and simulated SMTP outcomes. The email simulation tests
+  now use their patched in-process client, fixing the prior recalls-api CI failure
+  when ordinary tests target a separately running server. Synthetic prescription PDF
   inspected: one page with age, signature space and all fields present.
   The startup test now covers prescription seeding; the patient lifecycle test uses
   its unique email instead of assuming its patient is on the first results page.
   The earlier charting fixture assertion fix remains a separate test-only commit.
   A reused-database rerun exposed stale charting fixture data; the final fresh run
   passed. No application charting behaviour or R4 data was changed.
-  Receipts: ignored `.run/document-copy-{full-clean,verify,health-final,browser-final,api}.log`.
+  Latest receipts: ignored `.run/liquid-prescription-{full,verify,health,browser,api,external-api}.log`.
   No deployment. Workflow, sources, commands and limits:
   [prescription handover](PRESCRIPTION_TEMPLATES.md).
 - Production includes the merged R4-inspired chart workflow through PR #711:

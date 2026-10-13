@@ -9,12 +9,14 @@ stay in R4/archive. No historical import or R4 connection is part of this change
 **Templates → Prescriptions** manages the shared library. Superadmins can add,
 edit, deactivate and reactivate entries. Selecting one in a patient's Documents
 view copies its values into an editable prescription without changing the library.
-Seven owner-requested favourites are supplied:
+Nine owner-requested favourites are supplied:
 
 | Medicine | Directions | Quantity |
 | --- | --- | --- |
 | Amoxicillin 250 mg capsules | One capsule three times a day | 21 capsules |
 | Amoxicillin 500 mg capsules | One capsule three times a day | 21 capsules |
+| Amoxicillin 250 mg/5 mL oral suspension (sugar free) | 5 mL three times a day | Enter total supply in mL |
+| Amoxicillin 500 mg/5 mL oral suspension | 5 mL three times a day | Enter total supply in mL |
 | Metronidazole 200 mg tablets | One tablet three times a day | 21 tablets |
 | Metronidazole 400 mg tablets | One tablet three times a day | 21 tablets |
 | Erythromycin 250 mg tablets | One tablet four times a day | 28 tablets |
@@ -23,6 +25,14 @@ Seven owner-requested favourites are supplied:
 
 Clindamycin quantities were not supplied, so neither is inferred. A library
 quantity can be blank; a patient prescription cannot be saved without quantity.
+The liquid dose was explicitly confirmed as 5 mL three times a day for both
+strengths. Concentration and dose volume are distinct: 5 mL of these formulations
+contains 250 mg or 500 mg respectively. Total supply has no default and remains
+required for each patient. The form prompts for the total volume in mL. The
+250 mg/5 mL favourite specifies sugar free; the 500 mg/5 mL favourite does not
+assume this product attribute. Strength/form references:
+[250 mg/5 mL manufacturer information](https://www.medicines.org.uk/emc/product/10891/smpc) and
+[500 mg/5 mL manufacturer information](https://www.medicines.org.uk/emc/product/12494/smpc).
 Startup uses stable stock keys, preserving renamed, edited or deactivated entries.
 
 These are practice favourites, not recommended antibiotic courses. The owner’s
@@ -60,7 +70,8 @@ batch/download workflow.
 ## Prescription writing
 
 The format follows the fields in [SDCEP's prescription-writing guide](https://www.sdcepdentalprescribing.nhs.scot/guidance/introduction/prescription-writing/guide-to-prescription-writing/):
-patient name/address, DOB and age, date, practice address, medicine name/form/
+patient title (where recorded), full name and all saved address lines including
+postcode, DOB and age, date, practice address, medicine name/form/
 strength, explicit directions, quantity, and a space for the ink signature.
 Dentist name and GDC number are also included. The approved generic spelling
 **amoxicillin** is used; T.D.S./Q.D.S. are expanded into English. Medicine forms
@@ -126,6 +137,13 @@ The isolated worktree is `/home/amir/dental-pms-prescription-entry`, Compose pro
 `dental_prescription_entry`, with separate synthetic database/storage and loopback
 ports 8187/3187. Commands and final results are recorded in `docs/STATUS.md`.
 
+Latest extension: 722 backend tests passed, 2 skipped; health and verify passed;
+3 focused browser checks passed with `tests/document-print-record.spec.ts`. The
+prior broader browser command below passed all 9 checks before the liquid addition.
+The two new liquid API cases and prescription suite passed 20 checks; the external
+API copy run passed 14 checks before the whitespace-address case was added to the
+final full run. Receipts use the ignored `.run/liquid-prescription-*.log` paths.
+
 ```sh
 cd /home/amir/dental-pms-prescription-entry
 bash ops/health.sh
@@ -150,4 +168,11 @@ Browser tests exercise cancellation, print confirmation, clinical-note links,
 PDF byte identity and required Clindamycin quantities. API coverage includes
 concurrent replay, source deletion, permissions, archive guards, immutable copies,
 disabled emailing, simulated successful/uncertain sending, and TLS attachment
-construction. A synthetic one-page prescription PDF was visually inspected.
+construction. A synthetic one-page liquid prescription PDF was visually inspected, including
+all patient address lines, title, full name and prescriber details. Existing saved
+PDFs remain unchanged when this display-name improvement is installed. No new
+migration is required beyond `0050_document_copies`; startup adds the two liquids.
+
+Email simulations use an in-process test client so their mocked transport also
+works when CI points ordinary API tests at a separately running backend. The
+external-API check passed; no SMTP configuration was enabled on that server.
